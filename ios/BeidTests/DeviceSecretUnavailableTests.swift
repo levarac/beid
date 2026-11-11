@@ -13,10 +13,17 @@ import XCTest
 final class DeviceSecretUnavailableTests: XCTestCase {
   private let canonicalEventIdHex = "0x\(String(repeating: "a", count: 64))"
 
-  func testDiscardCopyDoesNotAssumeTheDeviceKeyChanged() {
+  func testChangedKeyDiscardCopyExplainsTheEstablishedCause() {
     XCTAssertEqual(
       EventSigningKeyFailure.changed.message,
-      "A record from an earlier session could not be saved and was discarded."
+      "A record from an earlier session could not be saved because this device's signing key changed. It was discarded."
+    )
+  }
+
+  func testUnverifiableDiscardCopyUsesCatalogEntry() {
+    XCTAssertEqual(
+      Bundle.main.localizedString(forKey: "eventSigningKeyFailure.unverifiable", value: nil, table: nil),
+      "A record from an earlier session could not be checked and was discarded."
     )
   }
 

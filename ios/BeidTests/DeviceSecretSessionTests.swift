@@ -30,7 +30,10 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
     XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
     XCTAssertEqual(keychain.readCount, reads)
-    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(
+      coordinator.eventSigningKeyFailure?.message,
+      "A record from an earlier session could not be checked and was discarded."
+    )
     coordinator.useDemoEventMode = false
     coordinator.startSensing(eventCode: "NEXT")
     XCTAssertTrue(engine.isHoldingPermissionRequest)
@@ -488,13 +491,14 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertNotEqual(coordinator.eventSigningKeyFailure, .unavailable)
     XCTAssertEqual(
       coordinator.eventSigningKeyFailure?.message,
-      "A record from an earlier session could not be saved and was discarded."
+      "A record from an earlier session could not be saved because this device's signing key changed. It was discarded."
     )
     let parent = try XCTUnwrap(ProofStore(fileURL: directory.appendingPathComponent("proofs.json")).proof(withId: proofId))
     XCTAssertTrue(parent.selfProofDiscardedForKeyChange)
     XCTAssertFalse(parent.signingKeyChangeNoticeAcknowledged)
     let interrupted = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
     XCTAssertEqual(interrupted.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(interrupted.eventSigningKeyFailure?.message, coordinator.eventSigningKeyFailure?.message)
     interrupted.dismissEventSigningKeyFailure()
     let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
     XCTAssertNil(relaunched.eventSigningKeyFailure)
@@ -564,11 +568,12 @@ final class DeviceSecretSessionTests: XCTestCase {
 
     XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
     XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
-    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
     XCTAssertEqual(
       coordinator.eventSigningKeyFailure?.message,
-      "A record from an earlier session could not be saved and was discarded."
+      "A record from an earlier session could not be checked and was discarded."
     )
+    let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertEqual(relaunched.eventSigningKeyFailure?.message, coordinator.eventSigningKeyFailure?.message)
     XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
   }
 
@@ -860,11 +865,19 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertNotEqual(runtime.eventSigningKeyFailure, .unavailable)
     XCTAssertEqual(
       runtime.eventSigningKeyFailure?.message,
-      "A record from an earlier session could not be saved and was discarded."
+      captureKeyIsMissing
+        ? "A record from an earlier session could not be checked and was discarded."
+        : "A record from an earlier session could not be saved because this device's signing key changed. It was discarded."
     )
     XCTAssertNil(provider.completion)
     runtime.submitPending()
     XCTAssertEqual(notices, 1)
+    let relaunched = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: ReportSubmissionStore(fileURL: fileURL)
+    ))
+    defer { relaunched.stop() }
+    XCTAssertEqual(relaunched.eventSigningKeyFailure?.message, runtime.eventSigningKeyFailure?.message)
   }
 
   private func seedCheckpoint(in directory: URL, publicKey: Data?) throws -> UUID {
