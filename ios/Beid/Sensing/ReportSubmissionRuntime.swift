@@ -590,8 +590,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
         reasonCode: "signing-key-changed", createdAt: Date(),
         signingKeyChangeNoticeAcknowledged: isSigningKeyChangeAcknowledged?(capture.eventCode) == true
       ))
-      notifySigningKeyChange(forEventCode: capture.eventCode)
       try store.removePendingCapture(id: capture.id)
+      notifySigningKeyChange(forEventCode: capture.eventCode)
     } catch {
       recordSigningKeyFailure(.discardFailed)
       Self.log.error("Unable to remove an unsigned window after its signing key changed")
@@ -601,6 +601,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   private func removeExcludedCapture(_ capture: ReportSubmissionCapture) {
     do {
       try store.removePendingCapture(id: capture.id)
+      notifySigningKeyChange(forEventCode: capture.eventCode)
     } catch {
       recordSigningKeyFailure(.discardFailed)
       Self.log.error("Unable to remove an excluded unsigned window")

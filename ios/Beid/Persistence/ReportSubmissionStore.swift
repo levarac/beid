@@ -375,7 +375,10 @@ final class ReportSubmissionStore: ObservableObject {
   }
 
   var signingKeyChangeEventCodes: Set<String> {
-    Set(exclusions.filter { $0.reasonCode == "signing-key-changed" }.map(\.eventCode))
+    let pendingIds = Set(pendingCaptures.map(\.id))
+    return Set(exclusions.filter {
+      $0.reasonCode == "signing-key-changed" && !pendingIds.contains($0.id)
+    }.map(\.eventCode))
   }
 
   var acknowledgedSigningKeyChangeEventCodes: Set<String> {
