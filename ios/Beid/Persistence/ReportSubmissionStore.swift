@@ -383,6 +383,7 @@ final class ReportSubmissionStore: ObservableObject {
   }
 
   var signingKeyChangeEventCodes: Set<String> {
+    guard pendingCaptureLoadError == nil else { return [] }
     let pendingIds = Set(pendingCaptures.map(\.id))
     return Set(exclusions.filter {
       $0.signingDiscardReason != nil && !pendingIds.contains($0.id)
