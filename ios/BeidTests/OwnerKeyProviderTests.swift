@@ -82,15 +82,15 @@ final class UserDefaultsDataForKeyTypeMismatchTests: XCTestCase {
     let defaults = UserDefaults(suiteName: suiteName)!
     addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
 
-    XCTAssertNil(defaults.data(forKey: "seed"), "nothing stored yet")
+    XCTAssertFalse(defaults.data(forKey: "seed") != nil, "nothing stored yet")
 
     defaults.set("not-a-data-value", forKey: "seed")
-    XCTAssertNotNil(
-      defaults.object(forKey: "seed"),
+    XCTAssertTrue(
+      defaults.object(forKey: "seed") != nil,
       "something IS stored under this key now"
     )
-    XCTAssertNil(
-      defaults.data(forKey: "seed"),
+    XCTAssertFalse(
+      defaults.data(forKey: "seed") != nil,
       """
       Apple's own type-safe accessor must return nil for a non-Data stored \
       value, indistinguishable from unset — this is the exact ambiguity \
@@ -113,7 +113,7 @@ final class BeidUserDefaultsKeyStorageTests: XCTestCase {
   func testBytesForKeyReturnsNilWhenNothingStored() {
     let storage = makeIsolatedStorage()
 
-    XCTAssertNil(storage.bytes(forKey: seedKey))
+    XCTAssertFalse(storage.bytes(forKey: seedKey) != nil)
     XCTAssertNil(storage.lastQuarantinedSeedKey, "nothing was there to quarantine")
   }
 
@@ -121,17 +121,16 @@ final class BeidUserDefaultsKeyStorageTests: XCTestCase {
     let storage = makeIsolatedStorage()
     storage.defaults.set("not-a-seed", forKey: seedKey)
 
-    XCTAssertNil(storage.bytes(forKey: seedKey), "a wrong-typed value must not pass through")
+    XCTAssertFalse(storage.bytes(forKey: seedKey) != nil, "a wrong-typed value must not pass through")
 
     let quarantineKey = try! XCTUnwrap(storage.lastQuarantinedSeedKey)
     XCTAssertTrue(quarantineKey.hasPrefix("\(seedKey).quarantine."))
-    XCTAssertEqual(
-      storage.defaults.object(forKey: quarantineKey) as? String,
-      "not-a-seed",
+    XCTAssertTrue(
+      storage.defaults.object(forKey: quarantineKey) as? String == "not-a-seed",
       "the original value must survive verbatim under the quarantine key"
     )
-    XCTAssertNil(
-      storage.defaults.object(forKey: seedKey),
+    XCTAssertFalse(
+      storage.defaults.object(forKey: seedKey) != nil,
       "the canonical key must be genuinely empty afterward, not just failing data(forKey:)"
     )
   }
@@ -141,11 +140,11 @@ final class BeidUserDefaultsKeyStorageTests: XCTestCase {
     let tooShort = Data(repeating: 0xAB, count: 16)
     storage.defaults.set(tooShort, forKey: seedKey)
 
-    XCTAssertNil(storage.bytes(forKey: seedKey), "< 32 bytes must not pass through")
+    XCTAssertFalse(storage.bytes(forKey: seedKey) != nil, "< 32 bytes must not pass through")
 
     let quarantineKey = try! XCTUnwrap(storage.lastQuarantinedSeedKey)
-    XCTAssertEqual(storage.defaults.object(forKey: quarantineKey) as? Data, tooShort)
-    XCTAssertNil(storage.defaults.object(forKey: seedKey))
+    XCTAssertTrue(storage.defaults.object(forKey: quarantineKey) as? Data == tooShort)
+    XCTAssertFalse(storage.defaults.object(forKey: seedKey) != nil)
   }
 
   func testBytesForKeyQuarantinesAndReturnsNilForTooLongSeed() {
@@ -153,15 +152,15 @@ final class BeidUserDefaultsKeyStorageTests: XCTestCase {
     let tooLong = Data(repeating: 0xCD, count: 40)
     storage.defaults.set(tooLong, forKey: seedKey)
 
-    XCTAssertNil(
-      storage.bytes(forKey: seedKey),
+    XCTAssertFalse(
+      storage.bytes(forKey: seedKey) != nil,
       "> 32 bytes must not pass through — loadOrCreate's own `>= minimumByteCount` " +
         "check alone would have accepted this and crashed deriveOwnerKeyPair (§7)"
     )
 
     let quarantineKey = try! XCTUnwrap(storage.lastQuarantinedSeedKey)
-    XCTAssertEqual(storage.defaults.object(forKey: quarantineKey) as? Data, tooLong)
-    XCTAssertNil(storage.defaults.object(forKey: seedKey))
+    XCTAssertTrue(storage.defaults.object(forKey: quarantineKey) as? Data == tooLong)
+    XCTAssertFalse(storage.defaults.object(forKey: seedKey) != nil)
   }
 
   /// Criterion 6: no regression for an already-valid stored seed — the
@@ -171,7 +170,7 @@ final class BeidUserDefaultsKeyStorageTests: XCTestCase {
     let validSeed = Data(repeating: 0x11, count: 32)
     storage.defaults.set(validSeed, forKey: seedKey)
 
-    XCTAssertEqual(storage.bytes(forKey: seedKey), Array(validSeed))
+    XCTAssertTrue(storage.bytes(forKey: seedKey) == Array(validSeed))
     XCTAssertNil(storage.lastQuarantinedSeedKey, "a valid seed must never be quarantined")
   }
 
@@ -251,9 +250,8 @@ final class OwnerKeyProviderRegenerationTests: XCTestCase {
     let quarantineKey = provider.quarantinedSeedKey
     XCTAssertNotNil(quarantineKey, "Signal A must be readable and non-nil", file: file, line: line)
     if let quarantineKey {
-      XCTAssertEqual(
-        defaults.object(forKey: quarantineKey) as? NSObject,
-        original,
+      XCTAssertTrue(
+        defaults.object(forKey: quarantineKey) as? NSObject == original,
         "the original value must survive verbatim under the quarantine key",
         file: file,
         line: line
@@ -268,9 +266,8 @@ final class OwnerKeyProviderRegenerationTests: XCTestCase {
       file: file,
       line: line
     )
-    XCTAssertNotEqual(
-      regenerated as NSObject?,
-      original,
+    XCTAssertFalse(
+      regenerated as NSObject? == original,
       "the regenerated seed must be distinct from the discarded original",
       file: file,
       line: line

@@ -1,6 +1,10 @@
 # Design — Keychain/iCloud storage for DeviceSecret and the owner-key seed (gh#77)
 
-Status: **DESIGN DOCUMENT ONLY — no code written.** Per the PM's instruction
+The owner-key analysis below records an earlier implementation snapshot.
+Sections 2.2 and 2.3 describe the iOS 1.1 device-secret storage decision and
+supersede older claims about Barnard's injection points and key caching.
+
+Historical status: **DESIGN DOCUMENT ONLY — no code written.** Per the PM's instruction
 relayed through SubPM `a-20260809-001`: "moving the DeviceSecret and
 owner-key seed into the Keychain is a security change and also reserved. It
 is on the list but bring me the design before implementing. It must include
@@ -47,16 +51,9 @@ rather than assume the briefing is current.
    `origin/main`-based HEAD. This document treats #156 as a **pending,
    not-yet-landed dependency**, and §3.4 below designs for both possible
    landing orders rather than assuming #156 is already in place.
-2. **DECISIONS 2026-07-30's "Barnard(直江さん)側で検討" framing describes
-   only part of this issue correctly.** That entry says `DeviceSecret`'s
-   Keychain/iCloud hardening should be considered "on Barnard's side." Read
-   against the actual code (§2 below), that is accurate for `DeviceSecret`
-   itself — but gh#77's title bundles `DeviceSecret` together with the
-   **owner-key seed**, which is a separate, **beid-owned** value with its
-   own separate storage adapter that beid controls directly today. The two
-   halves of this issue have different owners and different actionability.
-   This is the single most important scoping finding in this document —
-   see §2.
+2. **The storage policy belongs to the app for both secrets.** Barnard
+   0.9.2 accepts injected device-secret storage (§2.2). The owner-key seed
+   remains a separate value with its own storage and continuity policy.
 
 ## 1. Scope: local-only Keychain vs. iCloud-synced Keychain
 
@@ -145,102 +142,31 @@ inside the new struct (`SecItemAdd`/`SecItemCopyMatching`/`SecItemUpdate`)
 are also synchronous, so the two methods' signatures need no change either.
 **This half of gh#77 is fully actionable by beid alone, today.**
 
-### 2.2 `DeviceSecret` — fully internal to Barnard, zero injection point
+### 2.2 `DeviceSecret` — injected Keychain storage in iOS 1.1
 
-`DeviceSecret` is not a beid type. Grepping this repo confirms it appears
-**only inside `OwnerKeyProvider.swift`'s doc comments** (e.g.
-`OwnerKeyProvider.swift:11-13`) as a reference to a different, external
-concept — beid has no `DeviceSecret` type, field, or storage call
-anywhere in `ios/`. Reading the pinned Barnard source directly:
+Barnard 0.9.2 exposes `BarnardIdentity(keyStorage:)` and
+`BarnardEngine(keyStorage:)`, both accepting `BarnardCoreKeyStorage` for
+`barnard.rpidSeed`. The earlier assertion that no injection point exists is
+obsolete. The maintainer decision is a fresh device secret in the Keychain,
+without importing the old UserDefaults value; startup deletes that value.
+The app resolves not-found versus read failure before passing immutable
+storage to the SDK. It uses `AfterFirstUnlockThisDeviceOnly`, without sync,
+for locked-device background sensing without backup or device transfer.
+The owner-key seed separately uses `AfterFirstUnlock` to allow its existing
+backup and transfer policy; it does not set the device-secret policy.
+This is an iOS storage effect; Android's Keystore integration is unchanged.
 
-- `DeviceSecret` is generated/stored by `BarnardIdentity`
-  (`packages/swift/barnard/Sources/Barnard/BarnardIdentity.swift`) and
-  independently by `BarnardRpidGenerator`
-  (`.../BarnardRpidGenerator.swift`), both under the same storage key
-  `"barnard.rpidSeed"` (`BarnardIdentity.swift:33`,
-  `BarnardRpidGenerator.swift:16`) — a doc comment on `BarnardIdentity`
-  confirms this is intentional: "shares the same on-device `DeviceSecret`
-  storage... as `BarnardEngine`/`BarnardRpidGenerator`."
-- `BarnardIdentity`'s public initializer takes **no parameters at all** —
-  `public init() { keyStorage = BarnardUserDefaultsKeyStorage() ... }`
-  (`BarnardIdentity.swift:37-38`). There is no overload, no default
-  parameter, nothing a caller outside the `Barnard` module can pass to
-  substitute a different storage.
-- `BarnardUserDefaultsKeyStorage` itself
-  (`packages/swift/barnard/Sources/Barnard/BarnardPlatformDependencies.swift:17-30`)
-  has no `public` modifier — it is not part of Barnard's public API surface
-  at all, only visible inside the `Barnard` module.
-- `BarnardEngine` (the sensing client) hardcodes
-  `private let rpid = BarnardRpidGenerator()` (`BarnardEngine.swift:188`)
-  with its own public initializer, `override public init()`
-  (`BarnardEngine.swift:329`), also taking no storage parameter.
-  `BarnardRpidGenerator`'s own initializer (`BarnardRpidGenerator.swift:38-41`)
-  *does* technically accept an injectable `keyStorage` argument, but
-  `BarnardRpidGenerator` itself is declared `final class` with no `public`
-  modifier (`BarnardRpidGenerator.swift:13`) — it is not visible outside
-  the `Barnard` module either, so that injection point is unreachable from
-  beid regardless.
+### 2.3 Device-secret resolution and session lifetime
 
-**Conclusion: beid has no code-level hook to change where `DeviceSecret`
-is stored.** This is not a case of beid choosing not to use an available
-seam — the seam does not exist in Barnard's current public API. Per
-`AGENTS.md`'s KMP-002 ("Barnard remains native on both platforms...
-`shared/` may check only boundary shape"), and per the plain fact that
-`BarnardIdentity`/`BarnardEngine`'s public surface offers nothing to
-inject, **the `DeviceSecret` portion of gh#77 is not actionable from
-beid's side alone.** It requires a Barnard-side change — either Barnard
-adding a `keyStorage:`/`randomSource:` parameter to `BarnardIdentity.init`
-and `BarnardEngine.init` (mirroring the pattern beid already uses for the
-owner key via `BarnardCoreKeyManager.loadOrCreate`'s `storage:` argument),
-or Barnard switching its own internal default away from
-`BarnardUserDefaultsKeyStorage` itself. Either way, this is a scope
-decision for Barnard's maintainer (直江さん), and this document does not
-propose crossing KMP-002 to work around it. This matches, independently,
-what `docs/specs/scan-slice2-redesign.md` §9.1 already found in 2026-07-30
-when it considered deriving the owner key from `DeviceSecret`: "This is a
-`BarnardCore`/SDK-level storage change... likely needs a Barnard SDK
-change, which is outside this app repo's control."
-
-**Practical framing for whoever coordinates with Barnard**: the ask is not
-"please move `DeviceSecret` to Keychain for us" in the abstract — it is
-concretely "please add an injectable `BarnardCoreKeyStorage` (and, for
-symmetry, `BarnardCoreRandomSource`) parameter to `BarnardIdentity.init`
-and `BarnardEngine.init`, mirroring the pattern `BarnardCoreKeyManager
-.loadOrCreate` already exposes for consumers like beid's own owner key."
-That is a small, additive, backward-compatible SDK change (a new
-defaulted initializer parameter) — not a request that Barnard itself
-adopt Keychain, which keeps the choice of accessibility class /
-sync-or-not on beid's side, consistent with §1's scope decision living in
-the app that has the product-level continuity stance, not the SDK.
-
-### 2.3 A secondary finding: `DeviceSecret` is read on every signing call, not cached
-
-Independent of the injection-point question, `BarnardIdentity.sign(
-eventCode:bytes:)` and `.signingPublicKey(eventCode:)` both call
-`getOrCreateDeviceSecret()` inline on every invocation
-(`BarnardIdentity.swift:43,50` call `getOrCreateDeviceSecret()` directly;
-`getOrCreateDeviceSecret()` itself, `BarnardIdentity.swift:94`, has no
-memoization — it re-runs `BarnardCoreKeyManager.loadOrCreate` against
-storage every time). In beid, `signWindowReport` (backed by
-`identity.sign`) fires from `SensingCoordinator.closeWindow`
-(`SensingCoordinator.swift:1089`) on **every ENIN window close** — the
-surrounding doc comment calls this "high frequency, per the protocol
-model" (`SensingCoordinator.swift:1061-1062`). `eventSigningPublicKey`
-(backed by `identity.signingPublicKey`) is also called at
-`SensingCoordinator.swift:768,914,1194`.
-
-This means that if `DeviceSecret`'s storage moves to Keychain on Barnard's
-side, every one of those per-window calls becomes a Keychain read, not a
-`UserDefaults` read — a materially larger cost surface than the owner
-key's cache-after-first-derivation pattern (§4). This document cannot fix
-that (§2.2 — no beid-side hook), but it is worth surfacing explicitly as
-input to the Barnard-side coordination: if Barnard implements the
-injectable-storage change, Barnard should also consider caching the
-derived signing key pair per `eventCode` the way beid already does for
-the owner key (§4), or the per-window signing path could pick up a
-Keychain round-trip on every window close. This is a finding for
-Barnard's side to weigh, not a beid-side design decision this document
-makes.
+Barnard 0.9.2 rereads its injected storage on each signing call and caches
+the most recent derived event key pair in each identity instance. The app
+passes immutable resolved storage, so these SDK reads do not access the
+Keychain. Before participation starts, the app resolves the secret for
+both its engine and signer. Window signatures, wallet binding and session
+finalization retain that value. An asynchronous canonical submission takes
+its own snapshot before looking up the event definition. Each venue start
+also resolves fresh storage. A read, creation or validation failure refuses
+the start with a device-key error; it never requests SDK regeneration.
 
 ## 3. Design for the migration itself (owner-key seed only, per §2)
 
@@ -471,13 +397,10 @@ Keychain's own protections at all.
 private key for the process lifetime unchanged.** Two options, real
 tradeoffs:
 
-**Option A — remove the cache; re-derive from Keychain on every call
-(matching `BarnardIdentity`'s own no-cache pattern for `DeviceSecret`,
-§2.3).**
+**Option A — remove the owner-key cache; re-derive from Keychain on every call.**
 - *For*: the private key genuinely never sits in memory longer than a
-  single call's stack frame. Structurally the strongest option, and
-  consistent with how Barnard's own `DeviceSecret`-derived signing already
-  behaves (no beid-side inconsistency introduced).
+  single call's stack frame. This owner-key policy is independent of the
+  device-secret session lifetime in §2.3.
 - *Against*: `keyPair()` is called on every `publicKeyCompressed()`,
   `signSelfProof`, and `signWalletAcknowledgement` invocation — including
   `beginEventFound`'s `ownerPublicKey()` call once per event
@@ -520,13 +443,9 @@ re-derived per signing call).**
   that made the simpler, riskier cache acceptable in the first place goes
   away.
 
-**Recommendation: Option A.** Return `OwnerKeyProvider` to deriving the key
-pair fresh on every call (mirroring `BarnardIdentity`'s own no-cache
-pattern for `DeviceSecret`-derived keys, so beid and Barnard's two
-key-derivation call patterns become consistent with each other rather than
-diverging), once the seed itself is Keychain-backed. This is exactly what
-the gh#77 comment (§4.3) itself suggests as one of its two options ("
-`BarnardIdentity` と同じ都度導出に戻すか"). If a future profiling pass
+**Recommendation: Option A.** Derive the owner key pair fresh on every call
+once its seed is Keychain-backed. This is separate from the device-secret
+session policy in §2.3. If a future profiling pass
 shows this is a measurable cost at actual production call frequencies, a
 narrower cache (Option B) can be reintroduced then, informed by real
 numbers instead of intuition — but that is not a reason to keep today's
@@ -610,11 +529,9 @@ preserve the "silent, unattended per-event signing" product requirement —
    absent-vs-wrong-shape using the same `object(forKey:)`-before-
    `data(forKey:)` pattern, so a later #156 merge does not have to
    reconcile two independently-grown read-failure paths (§3.4).
-10. This document's finding that the `DeviceSecret` portion of gh#77 is not
-    actionable by beid alone (§2.2) is communicated to whoever owns
-    coordination with Barnard (直江さん) before any Barnard-side work is
-    requested or assumed — this document does not itself constitute that
-    coordination.
+10. Every app construction of `BarnardIdentity` and `BarnardEngine` receives
+    resolved device-secret storage (§2.2); construction tests guard against
+    falling back to the SDK's UserDefaults storage.
 
 ## 6. Explicitly out of scope
 
@@ -625,11 +542,8 @@ preserve the "silent, unattended per-event signing" product requirement —
   *current* device, not about giving the product a continuity guarantee it
   does not have today. §1 names the tension (iCloud sync would grant
   continuity as a side effect) explicitly rather than deciding it here.
-- **`DeviceSecret`'s actual storage migration.** Per §2.2, this is not
-  actionable from beid's side without a Barnard SDK change. This document
-  states the finding and the concrete shape of the ask for Barnard's side
-  (§2.2's closing paragraph); it does not design that SDK change itself,
-  since that is Barnard's design surface, not beid's.
+- **Changing Barnard's storage defaults.** The app uses the existing
+  injection API (§2.2) rather than changing SDK internals.
 - **`BarnardCoreKeyManager.loadOrCreate`'s or `BarnardCoreSigning
   .deriveOwnerKeyPair`'s internals.** Both remain untouched (§2.1) — this
   design only changes which `BarnardCoreKeyStorage` implementation beid

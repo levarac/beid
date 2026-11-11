@@ -245,6 +245,9 @@ final class SensingCoordinator: ObservableObject {
   /// Cleared only by explicit user acknowledgement.
   @Published private(set) var ownerKeyRestorationNotice: OwnerKeyRestorationNotice?
   @Published private(set) var ownerKeyOperationFailure: OwnerKeyOperationFailure?
+  /// Reports a failed device-key resolution before starting or recovering
+  /// signing work. An active session keeps its already resolved secret.
+  @Published private(set) var eventSigningKeyFailure: EventSigningKeyFailure?
   /// Wallet connect+binding lifecycle for the event currently being
   /// recorded — see `EventBindingState`. Sub-slice 2a only sets this to
   /// `.pendingConnect`; the interstitial that drives the rest is 2b.
@@ -693,6 +696,7 @@ final class SensingCoordinator: ObservableObject {
   /// there is no method to call. Holding the concrete engine here is what
   /// previously left both doors open.
   private let engine: any EventJoinControlling
+  private let keychainEngine: KeychainSensingEngine?
 
   /// The Barnard relay operations this coordinator drives. Defaults to the
   /// same Barnard engine `engine` forwards to; injected in tests, which
@@ -1559,7 +1563,8 @@ final class SensingCoordinator: ObservableObject {
     },
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
-    relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
+    relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds,
+    deviceSecretStore: DeviceSecretKeychainStore = .shared
   ) {
     guard
       let store = try? UnsentWindowLedgerStore(fileURL: unsentWindowLedgerFileURL),
@@ -1586,7 +1591,8 @@ final class SensingCoordinator: ObservableObject {
       nearbyDiscoveryStore: nearbyDiscoveryStore,
       joinDiagnosticLog: joinDiagnosticLog,
       participantRelayControl: participantRelayControl,
-      relayCadenceNanoseconds: relayCadenceNanoseconds
+      relayCadenceNanoseconds: relayCadenceNanoseconds,
+      deviceSecretStore: deviceSecretStore
     )
   }
 
@@ -1616,7 +1622,8 @@ final class SensingCoordinator: ObservableObject {
       ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore? = nil,
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
-    relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
+    relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds,
+    deviceSecretStore: DeviceSecretKeychainStore = .shared
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
     var ledgerFailure = initialLedgerFailure
@@ -1679,7 +1686,8 @@ final class SensingCoordinator: ObservableObject {
     // single instance it has always had. Either seam can be injected on its
     // own; a test that injects only one still gets the real engine behind the
     // other, exactly as before.
-    let barnardEngine = BarnardEngine()
+    let barnardEngine = KeychainSensingEngine(store: deviceSecretStore)
+    self.keychainEngine = eventJoinControl == nil ? barnardEngine : nil
     self.engine = eventJoinControl ?? barnardEngine
     self.relayControl = participantRelayControl ?? barnardEngine
     self.relayCadenceNanoseconds = relayCadenceNanoseconds
@@ -1689,6 +1697,9 @@ final class SensingCoordinator: ObservableObject {
     engine.onEvent = { [weak self] event in
       guard let self else { return }
       Task { @MainActor in self.handle(event) }
+    }
+    self.reportSubmissionRuntime?.onEventSigningKeyFailure = { [weak self] failure in
+      self?.eventSigningKeyFailure = failure
     }
     reconcileSelfProofCheckpointIfNeeded()
   }
@@ -2564,6 +2575,7 @@ final class SensingCoordinator: ObservableObject {
       }
       runDemoScenario(selectedScenario, stepDelayNanos: demoStepDelayNanos)
     } else {
+      guard prepareDeviceSecret() else { return }
       engine.requestJoinPermissions { [weak self] canScan, canAdvertise in
         guard let self else { return }
         Task { @MainActor in
@@ -2795,6 +2807,8 @@ final class SensingCoordinator: ObservableObject {
   func applyJoinGateDecision(_ decision: JoinGateDecision) {
     switch decision {
     case .admit(let context):
+      // The attempt prepared the engine and signer before requesting
+      // permissions. Keep that resolved storage across both join waits.
       joinRefusal = nil
       pendingEventName = context.eventName
       emitJoinStageDiagnostic(
@@ -2879,6 +2893,11 @@ final class SensingCoordinator: ObservableObject {
       // the verdict's own key, which the gate always does.
       return ExportedKotlinPackages.org.levarac.beid.shared.event
         .EventJoinFailureReason.VERIFICATION_FAILED
+    case .eventSigningKeyUnavailable:
+      // Shared event reasons do not describe device-key availability.
+      // Native presentation uses the device-key failure's copy.
+      return ExportedKotlinPackages.org.levarac.beid.shared.event
+        .EventJoinFailureReason.UNKNOWN
     }
   }
 
@@ -2898,6 +2917,8 @@ final class SensingCoordinator: ObservableObject {
       outcome = "registry_read_failed"
     case .definitionNotEligible:
       outcome = "definition_not_eligible"
+    case .eventSigningKeyUnavailable:
+      outcome = "event_signing_key_unavailable"
     }
     emitJoinStageDiagnostic(
       joinDiagnosticLog,
@@ -2983,6 +3004,7 @@ final class SensingCoordinator: ObservableObject {
     stopParticipantRelay()
     clearNearbyEventDiscovery()
     if stopEngine {
+      discoveryOnlyScanOwned = false
       engine.stopAutomaticOperation()
     }
     resetSessionState()
@@ -3048,6 +3070,45 @@ final class SensingCoordinator: ObservableObject {
     recordingSurfaceReady = false
   }
 
+  private func prepareDeviceSecret(prepareEngine: Bool = true) -> Bool {
+    do {
+      if let cryptography = sensingCryptography as? BarnardSensingCryptography {
+        let storage = try cryptography.prepareSession()
+        if prepareEngine { keychainEngine?.prepare(storage: storage) }
+      } else if prepareEngine {
+        try keychainEngine?.prepare()
+      }
+      eventSigningKeyFailure = nil
+      // Complete any existing launch checkpoint with the resolved secret
+      // before a new session can replace that checkpoint.
+      reconcileSelfProofCheckpointIfNeeded()
+      return true
+    } catch {
+      eventSigningKeyFailure = .unavailable
+      discoveryOnlyScanOwned = false
+      engine.stopAutomaticOperation()
+      refuseJoin(
+        .eventSigningKeyUnavailable,
+        "The device signing key is unavailable.",
+        reasonKey: "device_key_unavailable"
+      )
+      return false
+    }
+  }
+
+  private func resolvedEventSigningPublicKey(eventCode: String) -> Data? {
+    do {
+      return try sensingCryptography.eventSigningPublicKey(eventCode: eventCode)
+    } catch {
+      eventSigningKeyFailure = .unavailable
+      return nil
+    }
+  }
+
+  func dismissEventSigningKeyFailure() {
+    eventSigningKeyFailure = nil
+  }
+
   // MARK: - Nearby event discovery (B005 pre-join hints, gh#100 Stage 1)
 
   /// Starts Central-only B005 discovery while no event has been selected.
@@ -3066,6 +3127,7 @@ final class SensingCoordinator: ObservableObject {
       return
     }
     guard !discoveryOnlyScanOwned, !isScanning, !isAdvertising else { return }
+    guard prepareDeviceSecret() else { return }
     discoveryOnlyScanOwned = true
     engine.startDiscoveryScan()
   }
@@ -3166,6 +3228,7 @@ final class SensingCoordinator: ObservableObject {
   /// display-only validity window is never join authority.
   func joinNearbyEvent(eventCodeHashHex: String) {
     guard case .idle = phase else { return }
+    guard prepareDeviceSecret() else { return }
     resetSessionState()
     let generation = joinAttemptGeneration
     reportSubmissionRuntime?.submitPending()
@@ -3890,7 +3953,7 @@ final class SensingCoordinator: ObservableObject {
   /// `applyPhaseDecision`).
   private func beginEventFoundSessionState(_ session: EventSession) {
     resetSessionState()
-    let eventSigningKey = sensingCryptography.eventSigningPublicKey(eventCode: session.id)
+    guard let eventSigningKey = resolvedEventSigningPublicKey(eventCode: session.id) else { return }
     guard let ownerKey = resolvedOwnerPublicKey() else { return }
     let salt = Data(randomSource.randomBytes(count: 16))
     activeCommit = EventCommitment.compute(eventSigningKey: eventSigningKey, ownerKey: ownerKey, salt: salt)
@@ -4125,11 +4188,14 @@ final class SensingCoordinator: ObservableObject {
       break
     }
 
+    guard let eventSigningKey = resolvedEventSigningPublicKey(eventCode: event.id) else {
+      return .notVerified
+    }
     let record = BindingRecord(
       proofId: proofId,
       eventCode: event.id,
       walletAddress: walletAddress,
-      eventSigningPublicKey: sensingCryptography.eventSigningPublicKey(eventCode: event.id),
+      eventSigningPublicKey: eventSigningKey,
       ownerPublicKey: message.ownerPublicKey,
       chainId: message.chainId,
       nonce: message.nonce,
@@ -4465,7 +4531,13 @@ final class SensingCoordinator: ObservableObject {
         peerRpids: closingPeerRpids,
         commit: commit
       )
-      let signature = sensingCryptography.signWindowReport(eventCode: eventCode, bytes: payload)
+      let signature: SensingRecoverableSignature
+      do {
+        signature = try sensingCryptography.signWindowReport(eventCode: eventCode, bytes: payload)
+      } catch {
+        eventSigningKeyFailure = .unavailable
+        return
+      }
       let report = WindowReport(
         id: currentWindowId,
         eventCode: eventCode,
@@ -4584,7 +4656,7 @@ final class SensingCoordinator: ObservableObject {
     eninEnd: UInt64
   ) -> SelfProofRecord? {
     let eventIdHash = EventIdHash.compute(eventCode: eventCode)
-    let eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(eventCode: eventCode)
+    guard let eventSigningPublicKey = resolvedEventSigningPublicKey(eventCode: eventCode) else { return nil }
     guard let ownerPublicKey = resolvedOwnerPublicKey() else { return nil }
     let signature: SensingRecoverableSignature?
     do {
@@ -4887,6 +4959,7 @@ final class SensingCoordinator: ObservableObject {
     stopRoute: ScanFlowContent.Route?
   ) {
     demoTask?.cancel()
+    guard prepareDeviceSecret(prepareEngine: false) else { return }
     let session = EventSession(
       id: scenario.event.id,
       name: scenario.event.name,

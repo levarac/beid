@@ -61,6 +61,10 @@ enum EventJoinRefusal: Equatable {
   /// The read produced a definition the shared issuer refused to grant a
   /// capability for. The shared verdict is in the log.
   case definitionNotEligible
+  /// The device secret behind the event signing key could not be read
+  /// (`DeviceSecretKeychainStore`), so no Barnard engine exists to join with.
+  /// Nothing was created or replaced; the next attempt reads again.
+  case eventSigningKeyUnavailable
 }
 
 @MainActor

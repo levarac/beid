@@ -5,6 +5,7 @@
 import Barnard
 import BarnardCore
 import BeidSharedKit
+import Security
 import SwiftUI
 
 /// A seeded receiver snapshot and recording native effects for beid#579.
@@ -43,6 +44,12 @@ enum NearbyJoinUITestFixture {
       verifiedDefinitionValidUntilEpochSeconds: now + 3_600
     )
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("nearby-ui-\(UUID().uuidString)")
+    let deviceSecretStore: DeviceSecretKeychainStore
+    if ProcessInfo.processInfo.arguments.contains("-beid-device-key-unavailable-fixture") {
+      deviceSecretStore = DeviceSecretKeychainStore(keychain: UnavailableUITestDeviceSecretKeychain())
+    } else {
+      deviceSecretStore = .shared
+    }
     let coordinator = SensingCoordinator(
       windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("windows.json")),
       selfProofStore: SelfProofStore(fileURL: directory.appendingPathComponent("proofs.json")),
@@ -50,7 +57,7 @@ enum NearbyJoinUITestFixture {
       bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("aggregate.json")),
       unsentWindowLedgerRuntime: nil,
-      sensingCryptography: BarnardSensingCryptography(),
+      sensingCryptography: BarnardSensingCryptography(deviceSecretStore: deviceSecretStore),
       eventJoinControl: engine,
       nearbyDiscoveryStore: store,
       participantRelayControl: engine
@@ -58,6 +65,17 @@ enum NearbyJoinUITestFixture {
     coordinator.useDemoEventMode = false
     return coordinator
   }
+}
+
+/// Fails before any device-secret bytes can be read or generated.
+private struct UnavailableUITestDeviceSecretKeychain: BeidKeychainAccessing {
+  func read(service: String, account: String) -> BeidKeychainReadResult {
+    .failure(errSecInteractionNotAllowed)
+  }
+  func add(_ write: BeidKeychainWrite) -> OSStatus { errSecInteractionNotAllowed }
+  func write(_ write: BeidKeychainWrite) -> OSStatus { errSecInteractionNotAllowed }
+  func remove(service: String, account: String) -> OSStatus { errSecInteractionNotAllowed }
+  func attributes(service: String, account: String) -> BeidKeychainItemAttributes? { nil }
 }
 
 /// Records only actual native join calls; no phase or tap callback writes this receipt.

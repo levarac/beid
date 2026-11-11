@@ -607,6 +607,8 @@ struct VenueSignedServingView: View {
 
   private func message(for failure: VenueRadioFailure) -> LocalizedStringKey {
     switch failure {
+    case .deviceKeyUnavailable:
+      return LocalizedStringKey(EventSigningKeyFailure.unavailable.message)
     case .containerInstallRejected:
       return "The radio refused this pack and nothing is going out."
     case .bluetoothUnavailable:

@@ -86,6 +86,10 @@ struct ScanFlowView: View {
       EventBindingSheetView(sensing: sensing)
         .environmentObject(coordinator)
     }
+    .modifier(EventSigningKeyFailurePresenter(
+      sensingCoordinator: sensing,
+      isActive: coordinator.scanPresented
+    ))
     .onChange(of: scenePhase) { oldPhase, newPhase in
       // Extends the existing observer rather than adding a second
       // `.onChange(of: scenePhase)` — two independent handlers on the same

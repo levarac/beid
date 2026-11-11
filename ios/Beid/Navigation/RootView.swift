@@ -29,6 +29,10 @@ struct RootView: View {
       sensingCoordinator: coordinator.sensingCoordinator
     ))
     .modifier(OwnerKeyFailurePresenter(sensingCoordinator: coordinator.sensingCoordinator))
+    .modifier(EventSigningKeyFailurePresenter(
+      sensingCoordinator: coordinator.sensingCoordinator,
+      isActive: !coordinator.scanPresented
+    ))
     .tint(DS.Color.actionPrimary)
     .animation(DS.Motion.screenTransition, value: coordinator.screen)
     .fullScreenCover(isPresented: $coordinator.scanPresented) {
@@ -95,5 +99,25 @@ private struct OwnerKeyRestorationNoticePresenter: ViewModifier {
       defaultValue: "Close warning",
       comment: "Button that closes an owner-key restoration warning after the user has read it."
     )
+  }
+}
+
+struct EventSigningKeyFailurePresenter: ViewModifier {
+  @ObservedObject var sensingCoordinator: SensingCoordinator
+  let isActive: Bool
+
+  func body(content: Content) -> some View {
+    content.alert(item: Binding(
+      get: { isActive ? sensingCoordinator.eventSigningKeyFailure : nil },
+      set: {
+        if isActive, $0 == nil { sensingCoordinator.dismissEventSigningKeyFailure() }
+      }
+    )) { failure in
+      Alert(
+        title: Text(verbatim: failure.title),
+        message: Text(verbatim: failure.message),
+        dismissButton: .default(Text(String(localized: "eventSigningKeyFailure.dismiss", defaultValue: "Close")))
+      )
+    }
   }
 }

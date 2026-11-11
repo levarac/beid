@@ -10,6 +10,7 @@ private final class FailingFacadeKeychainAccess: BeidKeychainAccessing {
   func read(service: String, account: String) -> BeidKeychainReadResult {
     .failure(errSecInteractionNotAllowed)
   }
+  func add(_ write: BeidKeychainWrite) -> OSStatus { XCTFail("add must not be reached"); return errSecInteractionNotAllowed }
   func write(_ write: BeidKeychainWrite) -> OSStatus { XCTFail("write must not be reached"); return errSecInteractionNotAllowed }
   func remove(service: String, account: String) -> OSStatus { errSecSuccess }
   func attributes(service: String, account: String) -> BeidKeychainItemAttributes? { nil }

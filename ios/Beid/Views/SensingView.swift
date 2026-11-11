@@ -209,6 +209,8 @@ struct SensingView: View {
   private var joinRefusalMessage: LocalizedStringKey? {
     guard let key = sensing.joinRefusalReasonKey else { return nil }
     switch key {
+    case "device_key_unavailable":
+      return LocalizedStringKey(EventSigningKeyFailure.unavailable.message)
     case "network_required":
       return "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again."
     case "event_not_found":
@@ -814,6 +816,7 @@ enum SensingCantJoinReason {
     switch self {
     case .refused(let key):
       switch key {
+      case "device_key_unavailable": LocalizedStringKey(EventSigningKeyFailure.unavailable.title)
       case "network_required": "No network connection"
       case "event_not_found": "Code not registered"
       case "code_mismatch": "Code mismatch"
@@ -827,6 +830,8 @@ enum SensingCantJoinReason {
     switch self {
     case .refused(let key):
       switch key {
+      case "device_key_unavailable":
+        LocalizedStringKey(EventSigningKeyFailure.unavailable.message)
       case "network_required":
         "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again."
       case "event_not_found":
