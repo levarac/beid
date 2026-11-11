@@ -13,6 +13,76 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testNearbyDiscoveryRestartsAfterAJoinCannotReadTheDeviceSecret() throws {
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let engine = RecordingEventJoinControl()
+    let coordinator = makeCoordinator(
+      directory: try makeDirectory(), cryptography: makeCryptography(keychain), eventJoinControl: engine
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startNearbyEventDiscovery()
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 1)
+
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    coordinator.joinNearbyEvent(eventCodeHashHex: String(repeating: "ab", count: 16))
+
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertEqual(coordinator.joinRefusal, .eventSigningKeyUnavailable)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertFalse(engine.didJoin)
+
+    keychain.readResults = []
+    coordinator.startNearbyEventDiscovery()
+
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 2, "the stopped discovery scan must be restartable")
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertEqual(keychain.readCount, 3)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+    coordinator.stopNearbyEventDiscovery()
+    coordinator.stopNearbyEventDiscovery()
+    XCTAssertEqual(engine.stopDiscoveryScanCallCount, 1)
+  }
+
+  func testStoppingSensingReleasesDiscoveryScanOwnership() throws {
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let engine = RecordingEventJoinControl()
+    let coordinator = makeCoordinator(
+      directory: try makeDirectory(), cryptography: makeCryptography(keychain), eventJoinControl: engine
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startNearbyEventDiscovery()
+
+    coordinator.stopSensing()
+    coordinator.stopNearbyEventDiscovery()
+
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
+    XCTAssertEqual(engine.stopDiscoveryScanCallCount, 0, "automatic operation already stopped the owned scan")
+    coordinator.startNearbyEventDiscovery()
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 2)
+    coordinator.stopNearbyEventDiscovery()
+    XCTAssertEqual(engine.stopDiscoveryScanCallCount, 1)
+  }
+
+  func testResetPreservesOwnershipOfTheDiscoveryScanItLeavesRunning() throws {
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let engine = RecordingEventJoinControl()
+    let coordinator = makeCoordinator(
+      directory: try makeDirectory(), cryptography: makeCryptography(keychain), eventJoinControl: engine
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startNearbyEventDiscovery()
+
+    coordinator.reset()
+    coordinator.startNearbyEventDiscovery()
+
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 1)
+    coordinator.stopNearbyEventDiscovery()
+    XCTAssertEqual(engine.stopDiscoveryScanCallCount, 1)
+  }
+
   func testParticipantEngineAndSignerShareOneResolutionBeforePermissions() throws {
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let store = DeviceSecretKeychainStore(keychain: keychain)
