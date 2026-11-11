@@ -13,6 +13,53 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testUnreadablePendingCaptureStoreSuppressesCompletionNoticesUntilReloaded() throws {
+    let directory = try makeDirectory()
+    let submissionURL = directory.appendingPathComponent("submissions.json")
+    let seeded = ReportSubmissionStore(fileURL: submissionURL)
+    let capture = try seedCapture(in: seeded, publicKey: nil)
+    try seeded.addExclusion(ReportSubmissionExclusion(
+      id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+      enin: capture.enin, peerCount: capture.peerRpids.count, reasonCode: "signing-key-changed", createdAt: Date()
+    ))
+    let pendingURL = directory.appendingPathComponent("submissions.pending.json")
+    let preservedURL = directory.appendingPathComponent("preserved.json")
+    try FileManager.default.moveItem(at: pendingURL, to: preservedURL)
+    try FileManager.default.createDirectory(at: pendingURL, withIntermediateDirectories: false)
+    let unreadable = ReportSubmissionStore(fileURL: submissionURL)
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let bundle = try enabledBundle(in: directory)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: bundle, eventSigningCryptography: makeCryptography(keychain), definitionProvider: provider, store: unreadable
+    ))
+    defer { runtime.stop() }
+    var notices: [String] = []
+    runtime.onSigningKeyChange = { eventCode, _ in notices.append(eventCode) }
+
+    XCTAssertTrue(unreadable.signingKeyChangeEventCodes.isEmpty)
+    XCTAssertNil(runtime.eventSigningKeyFailure)
+    XCTAssertTrue(notices.isEmpty)
+
+    try FileManager.default.removeItem(at: pendingURL)
+    try FileManager.default.moveItem(at: preservedURL, to: pendingURL)
+    let reloaded = ReportSubmissionStore(fileURL: submissionURL)
+    XCTAssertEqual(reloaded.pendingCaptures.map(\.id), [capture.id])
+    XCTAssertTrue(reloaded.signingKeyChangeEventCodes.isEmpty)
+    let resumed = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: bundle, eventSigningCryptography: makeCryptography(keychain), definitionProvider: provider, store: reloaded
+    ))
+    defer { resumed.stop() }
+    resumed.onSigningKeyChange = { eventCode, _ in notices.append(eventCode) }
+    resumed.submitPending()
+
+    XCTAssertTrue(ReportSubmissionStore(fileURL: submissionURL).pendingCaptures.isEmpty)
+    XCTAssertEqual(notices, ["PREVIOUS"])
+    XCTAssertEqual(resumed.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(keychain.readCount, 0)
+    XCTAssertNil(provider.completion)
+  }
+
   func testOrphanDiscardDecisionSurvivesRemovalAndRelaunchUntilAcknowledged() throws {
     let directory = try makeDirectory()
     _ = try seedCheckpoint(in: directory, publicKey: nil)
