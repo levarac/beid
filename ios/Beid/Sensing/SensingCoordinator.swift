@@ -2893,8 +2893,8 @@ final class SensingCoordinator: ObservableObject {
       return ExportedKotlinPackages.org.levarac.beid.shared.event
         .EventJoinFailureReason.VERIFICATION_FAILED
     case .eventSigningKeyUnavailable:
-      // A device condition, not anything about the event. The shared
-      // vocabulary has no reason for it, so it reads as unknown.
+      // Shared event reasons do not describe device-key availability.
+      // Native presentation uses the device-key failure's copy.
       return ExportedKotlinPackages.org.levarac.beid.shared.event
         .EventJoinFailureReason.UNKNOWN
     }
@@ -3086,7 +3086,11 @@ final class SensingCoordinator: ObservableObject {
       eventSigningKeyFailure = .unavailable
       discoveryOnlyScanOwned = false
       engine.stopAutomaticOperation()
-      refuseJoin(.eventSigningKeyUnavailable, "The device signing key is unavailable.", reasonKey: nil)
+      refuseJoin(
+        .eventSigningKeyUnavailable,
+        "The device signing key is unavailable.",
+        reasonKey: "device_key_unavailable"
+      )
       return false
     }
   }

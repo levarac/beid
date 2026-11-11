@@ -29,7 +29,10 @@ struct RootView: View {
       sensingCoordinator: coordinator.sensingCoordinator
     ))
     .modifier(OwnerKeyFailurePresenter(sensingCoordinator: coordinator.sensingCoordinator))
-    .modifier(EventSigningKeyFailurePresenter(sensingCoordinator: coordinator.sensingCoordinator))
+    .modifier(EventSigningKeyFailurePresenter(
+      sensingCoordinator: coordinator.sensingCoordinator,
+      isActive: !coordinator.scanPresented
+    ))
     .tint(DS.Color.actionPrimary)
     .animation(DS.Motion.screenTransition, value: coordinator.screen)
     .fullScreenCover(isPresented: $coordinator.scanPresented) {
@@ -99,13 +102,16 @@ private struct OwnerKeyRestorationNoticePresenter: ViewModifier {
   }
 }
 
-private struct EventSigningKeyFailurePresenter: ViewModifier {
+struct EventSigningKeyFailurePresenter: ViewModifier {
   @ObservedObject var sensingCoordinator: SensingCoordinator
+  let isActive: Bool
 
   func body(content: Content) -> some View {
     content.alert(item: Binding(
-      get: { sensingCoordinator.eventSigningKeyFailure },
-      set: { if $0 == nil { sensingCoordinator.dismissEventSigningKeyFailure() } }
+      get: { isActive ? sensingCoordinator.eventSigningKeyFailure : nil },
+      set: {
+        if isActive, $0 == nil { sensingCoordinator.dismissEventSigningKeyFailure() }
+      }
     )) { failure in
       Alert(
         title: Text(verbatim: failure.title),
