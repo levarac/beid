@@ -5,6 +5,10 @@ import XCTest
 @testable import Beid
 
 final class ReportDetailPresentationTests: XCTestCase {
+  func testExcludedWindowsUseAReasonNeutralLabel() {
+    XCTAssertEqual(TransparencySubmissionDisplay.excludedWindowLabel, "Not submittable")
+  }
+
   func testSubmittingDoesNotClaimSentOrAccepted() {
     let presentation = ReportDetailPresentation(record: record(state: .submitting))
     XCTAssertEqual(presentation.caption, "SUBMISSION IN PROGRESS")
