@@ -1726,7 +1726,12 @@ final class SensingCoordinator: ObservableObject {
     self.reportSubmissionRuntime?.onSigningKeyChange = { [weak self] eventCode, reason in
       self?.recordSigningKeyChange(forEventCode: eventCode, reason: reason)
     }
-    let unacknowledgedEvents = (proofStore?.unacknowledgedSigningKeyChangeEventCodes ?? [])
+    // A terminal parent is not a completed discard while its input remains.
+    let retainedCheckpointProofId = selfProofCheckpointStore.checkpoint?.proofId
+    let unacknowledgedEvents = Set((proofStore?.proofs ?? []).filter {
+      $0.selfProofDiscardedForKeyChange && !$0.signingKeyChangeNoticeAcknowledged
+        && $0.id != retainedCheckpointProofId
+    }.map { $0.eventCode ?? $0.id.uuidString })
       .subtracting(reportSubmissionRuntime?.acknowledgedSigningKeyChangeEventCodes ?? [])
     for eventCode in unacknowledgedEvents.sorted() {
       recordSigningKeyChange(
