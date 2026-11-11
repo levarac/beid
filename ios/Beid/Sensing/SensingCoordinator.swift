@@ -5004,7 +5004,13 @@ final class SensingCoordinator: ObservableObject {
     guard let checkpoint = selfProofCheckpointStore.checkpoint else { return }
     if let proofStore {
       guard let parent = proofStore.proof(withId: checkpoint.proofId) else {
-        recordEventSigningKeyFailure(.discardFailed)
+        do {
+          // Without a parent this input cannot produce a collected record.
+          try selfProofCheckpointStore.clearDurably()
+          recordSigningKeyChange(forEventCode: checkpoint.eventCode)
+        } catch {
+          recordEventSigningKeyFailure(.discardFailed)
+        }
         return
       }
       if parent.selfProofDiscardedForKeyChange {
