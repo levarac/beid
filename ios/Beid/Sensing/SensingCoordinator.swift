@@ -1010,6 +1010,11 @@ final class SensingCoordinator: ObservableObject {
     return false
   }
 
+  /// The live session's event code for display, excluding a code retained after STOP.
+  var currentEventCode: String? {
+    canSelectEventToJoin ? nil : joinedEventCode
+  }
+
   /// The clock nearby-join eligibility is judged against, in epoch seconds.
   var nearbyDiscoveryNowEpochSeconds: Int64 { nearbyDiscoveryClock() / 1_000 }
 

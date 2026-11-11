@@ -77,7 +77,7 @@ struct PastEventsView: View {
     // simply omit a row this invariant says can't occur, rather than crash
     // if it somehow did.
     if let eventCode = proof.eventCode {
-      let isCurrent = eventCode == sensingCoordinator.joinedEventCode
+      let isCurrent = eventCode == sensingCoordinator.currentEventCode
       Button {
         BeidDesign.haptic()
         onRejoin(eventCode)

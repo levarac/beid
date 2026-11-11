@@ -88,6 +88,20 @@ final class EventRejoinTests: XCTestCase {
     _ = coordinator.sensingCoordinator.reset()
   }
 
+  func testStoppedEventIsNoLongerCurrentWhileJoinedCodeIsRetained() {
+    let coordinator = makeApp()
+    let sensing = coordinator.sensingCoordinator
+    XCTAssertNil(sensing.currentEventCode)
+    coordinator.rejoinPastEvent(code: "first-event")
+    XCTAssertEqual(sensing.currentEventCode, "first-event")
+
+    _ = sensing.stopSensing()
+
+    XCTAssertEqual(sensing.phase, .idle)
+    XCTAssertEqual(sensing.joinedEventCode, "first-event")
+    XCTAssertNil(sensing.currentEventCode)
+  }
+
   func testSuccessfulRejoinStartsSensingAndShowsItFromTheNowTab() {
     let coordinator = makeApp()
     coordinator.selectedHomeTab = .records
