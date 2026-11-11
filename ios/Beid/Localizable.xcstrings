@@ -2004,7 +2004,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Earlier record could not be removed"
+            "value": "Earlier record update failed"
           }
         }
       }
@@ -2014,7 +2014,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A record from an earlier session could not be saved or removed."
+            "value": "Changes to a record from an earlier session could not be saved."
           }
         }
       }

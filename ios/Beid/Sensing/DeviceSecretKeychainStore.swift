@@ -108,7 +108,7 @@ enum EventSigningKeyFailure: String, Identifiable {
       return String(localized: "eventSigningKeyFailure.changed.title", defaultValue: "Earlier record discarded")
     case .discardFailed:
       return String(
-        localized: "eventSigningKeyFailure.discardFailed.title", defaultValue: "Earlier record could not be removed"
+        localized: "eventSigningKeyFailure.discardFailed.title", defaultValue: "Earlier record update failed"
       )
     case .unavailable:
       return String(localized: "eventSigningKeyFailure.title", defaultValue: "Recording unavailable")
@@ -130,7 +130,7 @@ enum EventSigningKeyFailure: String, Identifiable {
     case .discardFailed:
       return String(
         localized: "eventSigningKeyFailure.discardFailed",
-        defaultValue: "A record from an earlier session could not be saved or removed."
+        defaultValue: "Changes to a record from an earlier session could not be saved."
       )
     }
   }
