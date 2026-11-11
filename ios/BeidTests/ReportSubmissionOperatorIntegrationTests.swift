@@ -981,7 +981,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
           idHex: UUID().hexString,
           eventIdHex: eventId,
           eventDefinitionDigestHex: definitionDigest,
-          observerHex: cryptography.eventSigningPublicKey(eventCode: eventCode).hexString,
+          observerHex: try cryptography.eventSigningPublicKey(eventCode: eventCode).hexString,
           finalizedAt: Date().timeIntervalSince1970,
           reporterRpidHex: reporterRpid,
           enin: 1,
@@ -997,7 +997,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       preparation as?
         ExportedKotlinPackages.org.levarac.parallax.observation.ObservationPreparationResult.Eligible
     )
-    let signature = cryptography.signWindowReport(
+    let signature = try cryptography.signWindowReport(
       eventCode: eventCode,
       bytes: Data(bytesFromKotlinByteArray: eligible.prepared.signatureStructure.toByteArray())
     )
@@ -1232,7 +1232,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       let evidence = try XCTUnwrap(
         ExportedKotlinPackages.org.levarac.parallax.observation.createMutualSensingWindowEvidence(
           idHex: id.hexString, eventIdHex: eventIdHex, eventDefinitionDigestHex: definitionDigestHex,
-          observerHex: cryptography.eventSigningPublicKey(eventCode: eventCode).hexString,
+          observerHex: try cryptography.eventSigningPublicKey(eventCode: eventCode).hexString,
           finalizedAt: 1_791_324_000 + Double(index),
           reporterRpidHex: "01" + String(repeating: "aa", count: 16),
           enin: Int64(index + 1), observedRpidHexes: ["01" + String(repeating: "bb", count: 16)],
@@ -1243,7 +1243,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
         ExportedKotlinPackages.org.levarac.parallax.observation.prepareMutualSensingObservation(evidence: evidence)
           as? ExportedKotlinPackages.org.levarac.parallax.observation.ObservationPreparationResult.Eligible
       )
-      let signature = cryptography.signWindowReport(
+      let signature = try cryptography.signWindowReport(
         eventCode: eventCode,
         bytes: Data(bytesFromKotlinByteArray: eligible.prepared.signatureStructure.toByteArray())
       )

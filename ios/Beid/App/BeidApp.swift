@@ -9,6 +9,7 @@ struct BeidApp: App {
   @StateObject private var coordinator = AppCoordinator()
 
   init() {
+    DeviceSecretKeychainStore.removeLegacyUserDefaultsCopy(from: .standard)
     let appearance = UINavigationBarAppearance()
     appearance.configureWithOpaqueBackground()
     appearance.backgroundColor = UIColor(DS.Color.surfaceCanvas)

@@ -178,10 +178,7 @@ final class DeviceSecretKeychainStoreTests: XCTestCase {
 
     let identity = BarnardIdentity(keyStorage: storage)
     let laterIdentity = BarnardIdentity(keyStorage: laterStorage)
-    XCTAssertEqual(
-      identity.signingPublicKey(eventCode: "EVENT-A"),
-      laterIdentity.signingPublicKey(eventCode: "EVENT-A")
-    )
+    XCTAssertTrue(identity.signingPublicKey(eventCode: "EVENT-A") == laterIdentity.signingPublicKey(eventCode: "EVENT-A"))
     let engine = BarnardEngine(keyStorage: storage)
     let laterEngine = BarnardEngine(keyStorage: laterStorage)
     XCTAssertTrue(engine.exportCurrentTek() == laterEngine.exportCurrentTek())

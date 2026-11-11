@@ -32,13 +32,13 @@ struct SensingRecoverableSignature: Equatable {
 /// Callers retain every lifecycle, payload, validation, and persistence
 /// decision; implementations only forward one operation and map its result.
 protocol SensingCryptography: AnyObject {
-  func eventSigningPublicKey(eventCode: String) -> Data
+  func eventSigningPublicKey(eventCode: String) throws -> Data
   func ownerPublicKey() throws -> Data
 
   func signWindowReport(
     eventCode: String,
     bytes: Data
-  ) -> SensingRecoverableSignature
+  ) throws -> SensingRecoverableSignature
 
   func signSelfProof(
     eventIdHash: Data,
@@ -57,7 +57,7 @@ protocol SensingCryptography: AnyObject {
 /// Each method makes exactly one provider call and copies its result without
 /// adding sensing decisions or re-checking Barnard semantics.
 final class BarnardSensingCryptography: SensingCryptography {
-  private let identity = BarnardIdentity()
+  private let deviceSecretStore: DeviceSecretKeychainStore
   /// Not `private`: `SensingCoordinator` downcasts to this concrete type to
   /// read `ownerKeyProvider.quarantinedSeedKey` (gh#156 Signal A,
   /// `docs/specs/owner-key-seed-read-failure.md` §8) — a beid-only signal
@@ -66,12 +66,20 @@ final class BarnardSensingCryptography: SensingCryptography {
   /// report on.
   let ownerKeyProvider: OwnerKeyProvider
 
-  init(ownerKeyProvider: OwnerKeyProvider = OwnerKeyProvider(keyStorage: BeidKeychainKeyStorage())) {
+  init(
+    ownerKeyProvider: OwnerKeyProvider = OwnerKeyProvider(keyStorage: BeidKeychainKeyStorage()),
+    deviceSecretStore: DeviceSecretKeychainStore = .shared
+  ) {
     self.ownerKeyProvider = ownerKeyProvider
+    self.deviceSecretStore = deviceSecretStore
   }
 
-  func eventSigningPublicKey(eventCode: String) -> Data {
-    identity.signingPublicKey(eventCode: eventCode)
+  private func identity() throws -> BarnardIdentity {
+    BarnardIdentity(keyStorage: try deviceSecretStore.resolve())
+  }
+
+  func eventSigningPublicKey(eventCode: String) throws -> Data {
+    try identity().signingPublicKey(eventCode: eventCode)
   }
 
   func ownerPublicKey() throws -> Data {
@@ -81,9 +89,9 @@ final class BarnardSensingCryptography: SensingCryptography {
   func signWindowReport(
     eventCode: String,
     bytes: Data
-  ) -> SensingRecoverableSignature {
+  ) throws -> SensingRecoverableSignature {
     SensingRecoverableSignature(
-      barnard: identity.sign(eventCode: eventCode, bytes: bytes)
+      barnard: try identity().sign(eventCode: eventCode, bytes: bytes)
     )
   }
 

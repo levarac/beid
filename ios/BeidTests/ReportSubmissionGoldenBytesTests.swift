@@ -216,17 +216,17 @@ final class SignatureInputRecordingCryptography: SensingCryptography {
     self.wrapped = wrapped
   }
 
-  func eventSigningPublicKey(eventCode: String) -> Data {
-    wrapped.eventSigningPublicKey(eventCode: eventCode)
+  func eventSigningPublicKey(eventCode: String) throws -> Data {
+    try wrapped.eventSigningPublicKey(eventCode: eventCode)
   }
 
   func ownerPublicKey() throws -> Data {
     try wrapped.ownerPublicKey()
   }
 
-  func signWindowReport(eventCode: String, bytes: Data) -> SensingRecoverableSignature {
+  func signWindowReport(eventCode: String, bytes: Data) throws -> SensingRecoverableSignature {
     signatureInputs.append(bytes)
-    return wrapped.signWindowReport(eventCode: eventCode, bytes: bytes)
+    return try wrapped.signWindowReport(eventCode: eventCode, bytes: bytes)
   }
 
   func signSelfProof(

@@ -35,9 +35,18 @@ protocol VenueDeviceBroadcasting: AnyObject {
 /// Production adapter. Owns one dedicated `BarnardEngine` instance, separate
 /// from `SensingCoordinator`'s — see the protocol doc comment.
 final class BarnardVenueDeviceBroadcasting: VenueDeviceBroadcasting {
-  private let engine = BarnardEngine()
+  private var engine: BarnardEngine?
+  private let deviceSecretStore: DeviceSecretKeychainStore
+
+  init(deviceSecretStore: DeviceSecretKeychainStore = .shared) {
+    self.deviceSecretStore = deviceSecretStore
+  }
 
   func startBroadcasting(eventCode: String, label: String) throws {
+    let storage = try deviceSecretStore.resolve()
+    engine?.stopAdvertise()
+    let engine = BarnardEngine(keyStorage: storage)
+    self.engine = engine
     engine.configure(eventCode: eventCode)
     try engine.configureEventInfoServing(
       organizerDesignated: true,
@@ -51,7 +60,7 @@ final class BarnardVenueDeviceBroadcasting: VenueDeviceBroadcasting {
     // `eventDisplayName` defaults to `nil`, which `configureEventInfoServing`
     // never validates, so this can never actually throw — but the method is
     // `throws` at the type level, so a call site is still required.
-    try? engine.configureEventInfoServing(eventActiveForDiscovery: false)
-    engine.stopAdvertise()
+    try? engine?.configureEventInfoServing(eventActiveForDiscovery: false)
+    engine?.stopAdvertise()
   }
 }

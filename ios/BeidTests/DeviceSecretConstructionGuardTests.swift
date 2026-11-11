@@ -52,6 +52,12 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
     )
   }
 
+  func testStartupDeletesTheLegacyValue() throws {
+    let root = try XCTUnwrap(Bundle(for: Self.self).resourceURL)
+    let source = try String(contentsOf: root.appendingPathComponent("Beid/App/BeidApp.swift"), encoding: .utf8)
+    XCTAssertTrue(source.contains("DeviceSecretKeychainStore.removeLegacyUserDefaultsCopy(from: .standard)"))
+  }
+
   func testProductionConstructionPathsNeverRecreateTheUserDefaultsSecret() throws {
     UserDefaults.standard.removeObject(forKey: legacyKey)
 
@@ -84,9 +90,8 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
 
     let productionKey = try BarnardSensingCryptography().eventSigningPublicKey(eventCode: "LEGACY-EVENT")
 
-    XCTAssertNotEqual(
-      productionKey,
-      keyFromLegacySecret,
+    XCTAssertFalse(
+      productionKey == keyFromLegacySecret,
       "the event signing key must not come from the old UserDefaults value"
     )
   }

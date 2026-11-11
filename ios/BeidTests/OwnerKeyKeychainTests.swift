@@ -289,6 +289,11 @@ private final class FakeBeidKeychainAccess: BeidKeychainAccessing {
     return storedData.map(BeidKeychainReadResult.found) ?? .notFound
   }
 
+  func add(_ write: BeidKeychainWrite) -> OSStatus {
+    guard storedData == nil else { return errSecDuplicateItem }
+    return self.write(write)
+  }
+
   func write(_ write: BeidKeychainWrite) -> OSStatus {
     lastWrite = write
     guard writeStatus == errSecSuccess else { return writeStatus }

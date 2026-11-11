@@ -276,6 +276,7 @@ final class ReportSubmissionRetryController {
 
 @MainActor
 protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
+  var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)? { get set }
   func captureAndQueueWindow(
     id: UUID,
     eventCode: String,
@@ -302,6 +303,11 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
 }
 
 extension WindowReportSubmissionRuntimeProtocol {
+  var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)? {
+    get { nil }
+    set {}
+  }
+
   func submitPendingOnNaturalTrigger() { submitPending() }
 
   func stop() {}
@@ -319,6 +325,14 @@ extension WindowReportSubmissionRuntimeProtocol {
 /// shared HTTPS client. It does not alter the legacy WindowReport or ledger.
 @MainActor
 final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
+  var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)?
+  private(set) var eventSigningKeyFailure: EventSigningKeyFailure?
+
+  private func recordSigningKeyFailure(_ failure: EventSigningKeyFailure) {
+    eventSigningKeyFailure = failure
+    onEventSigningKeyFailure?(failure)
+  }
+
   private static let log = Logger(subsystem: "org.levarac.beid", category: "submission")
 
   private let eventSigningCryptography: any SensingCryptography
@@ -488,9 +502,14 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     let definitionDigestHex = Data(
       bytesFromKotlinByteArray: definitionDigest.toByteArray()
     ).hexString
-    let observerHex = eventSigningCryptography
-      .eventSigningPublicKey(eventCode: capture.eventCode)
-      .hexString
+    let observerHex: String
+    do {
+      observerHex = try eventSigningCryptography.eventSigningPublicKey(eventCode: capture.eventCode).hexString
+    } catch {
+      recordSigningKeyFailure(.unavailable)
+      Self.log.error("Deferred canonical submission while the device signing key is unavailable")
+      return
+    }
     let observedRpidHexes = capture.peerRpids.map { $0.lowercased() }.sorted()
     let evidence = ExportedKotlinPackages.org.levarac.parallax.observation
       .createMutualSensingWindowEvidence(
@@ -523,10 +542,14 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     let signatureInput = Data(
       bytesFromKotlinByteArray: eligible.prepared.signatureStructure.toByteArray()
     )
-    let signature = eventSigningCryptography.signWindowReport(
-      eventCode: capture.eventCode,
-      bytes: signatureInput
-    )
+    let signature: SensingRecoverableSignature
+    do {
+      signature = try eventSigningCryptography.signWindowReport(eventCode: capture.eventCode, bytes: signatureInput)
+    } catch {
+      recordSigningKeyFailure(.unavailable)
+      Self.log.error("Deferred canonical submission while the device signing key is unavailable")
+      return
+    }
     let signed = eligible.prepared.signWithCompactSignatureHex(
       rHex: signature.r.hexString,
       sHex: signature.s.hexString
