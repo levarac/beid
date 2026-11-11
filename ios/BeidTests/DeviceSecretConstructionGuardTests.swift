@@ -170,8 +170,8 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
 
     try exerciseSignedContainerStart(deviceSecretStore: .shared)
 
-    XCTAssertNil(
-      UserDefaults.standard.object(forKey: legacyKey),
+    XCTAssertFalse(
+      UserDefaults.standard.object(forKey: legacyKey) != nil,
       "a Barnard object built with its default storage recreated the UserDefaults secret"
     )
   }

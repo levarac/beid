@@ -144,7 +144,7 @@ final class DeviceSecretKeychainStoreTests: XCTestCase {
       XCTAssertEqual(error as? DeviceSecretError, .randomFailed(-42))
     }
     XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
-    XCTAssertNil(keychain.storedData)
+    XCTAssertFalse(keychain.storedData != nil)
   }
 
   func testWriteFailureAndReadBackMismatchAreRefused() {
@@ -199,7 +199,7 @@ final class DeviceSecretKeychainStoreTests: XCTestCase {
     DeviceSecretKeychainStore.removeLegacyUserDefaultsCopy(from: defaults)
 
     XCTAssertFalse(defaults.readKeys.contains(account), "the old value is deleted, never read")
-    XCTAssertNil(defaults.object(forKey: account))
+    XCTAssertFalse(defaults.object(forKey: account) != nil)
   }
 }
 
