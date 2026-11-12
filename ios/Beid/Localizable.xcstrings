@@ -1,6 +1,39 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "OPEN SETTINGS": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OPEN SETTINGS"
+          }
+        }
+      }
+    },
+    "Your records are safe. Sensing resumes when Bluetooth is back.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your records are safe. Sensing resumes when Bluetooth is back."
+          }
+        }
+      }
+    },
+    "Turn Bluetooth back on.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn Bluetooth back on."
+          }
+        }
+      }
+    },
     "record.sentToOrganizer": {
       "extractionState": "manual",
       "localizations": {

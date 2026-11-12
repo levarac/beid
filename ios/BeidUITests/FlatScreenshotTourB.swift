@@ -46,6 +46,20 @@ final class FlatScreenshotTourB: XCTestCase {
     capture("04c")
   }
 
+  func testNowBluetoothOffShowsRecoveryTileAndSettingsAction() {
+    for extra in [[], ["-beid-home-frame-04"]] as [[String]] {
+      launchHome(arguments: ["-beid-now-bluetooth-off-fixture"] + extra)
+      app.tabButton("Now").assertHittable()
+      app.staticTexts["Turn Bluetooth back on."].scrollToHittable(in: app)
+      XCTAssertTrue(app.staticTexts[
+        "Your records are safe. Sensing resumes when Bluetooth is back."
+      ].exists)
+      app.buttons["home.bluetooth.open-settings"].scrollToHittable(in: app)
+      XCTAssertTrue(app.staticTexts["BLUETOOTH OFF · SENSING PAUSED"].exists)
+      app.terminate()
+    }
+  }
+
   func testShot_08_EventDetail() {
     launchHome(arguments: ["-beid-event-detail-frame-08"])
     app.openRecordsByEvent()
