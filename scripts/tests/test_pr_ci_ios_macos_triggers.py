@@ -24,6 +24,9 @@ EXPECTED_PATHS = [
     'scripts/ci_simulator.py',
     'scripts/ios_ui_smoke.py',
     'scripts/ios_ci_timing.py',
+    'scripts/ios_ci_products.py',
+    'scripts/ios-ui-durations.json',
+    'scripts/ios-ui-iphone-skips.txt',
     'scripts/run_local_tests.py',
 ]
 

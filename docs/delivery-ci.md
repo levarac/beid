@@ -85,8 +85,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     A `Classify paths for iOS lane` job runs the same collection step and
     `scripts/ci_change_filter.py` as `Determine changed paths`; the lane has a
     job-level `if:` driven by an independent `ios` output. Documentation-only
-    PRs and PRs limited to Android app sources/resources report `iOS simulator`
-    as skipped, which GitHub treats as passing for a required check. The only
+    PRs and PRs limited to Android app sources/resources skip macOS work;
+    `iOS simulator` is a successful aggregate with an explicit classifier-skip
+    summary only when classification succeeded with `ios=false,error=false`. The only
     non-documentation exclusions are `android/app/src/**` (after build-input
     rules) and the standalone `tools/beid-lab-cli/**`.
     `android/settings.gradle.kts` includes only `:app` and `:shared`, with the
@@ -139,9 +140,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     The standard `macos-26` image uses `/Applications/Xcode_26.5.app` and
     requires the iOS 26.5 runtime. `scripts/ci_simulator.py` creates a new
     simulator for each job and returns its UDID; only that device is booted,
-    tested and deleted, even on failure. Build-for-testing and
-    test-without-building use `SWIFT_OPTIMIZATION_LEVEL=-O`. Every test run
-    executes all `BeidTests`. Ordinary `pull_request` events also execute only
+    tested and deleted, even on failure. Build-for-testing uses
+    `SWIFT_OPTIMIZATION_LEVEL=-O`. Every completed lane covers all `BeidTests`.
+    Ordinary `pull_request` events also execute only
     `ios/ci/ui-smoke-tests.txt`; when the event payload's labels include
     `ci:full-ui`, the complete `BeidUITests` suite runs. Merge groups, push,
     nightly and manual events always run full. On `merge_group`, the optional
@@ -158,12 +159,57 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     The list stays outside all XcodeGen source roots, rejects empty/duplicate
     entries, and repository sanity checks every method against its Swift class.
     Smoke selection includes `-only-testing:BeidTests` and one exact UI method
-    argument per entry. No mode skips the job or a test step; only the existing
-    path classifier may skip PR runs. The structured xcresult summary must contain
-    nonzero tests, consistent counts and a passing result. A second check reads
-    the test tree: smoke UI cases must equal the list exactly and all be Passed;
-    full mode must also execute and pass every listed case. Skipped listed
-    tests, missing/renamed cases, and duplicate UI cases fail the job.
+    argument per entry. The structured xcresult summary must contain nonzero
+    tests, consistent counts and a passing result. The execution ledger must
+    contain every enumerated unit case, and exactly the smoke UI list in smoke
+    mode or the complete UI enumeration in full mode.
+
+    Job graph: the optional classifier feeds `Plan iOS test jobs` (Ubuntu),
+    then `Build iOS test bundles` (`macos-26`). Smoke builds and runs its tests
+    in that one macOS job. Full builds both bundles once, enumerates them with
+    `xcodebuild -enumerate-tests`, then transfers a tar containing `Build/Products`
+    and its `.xctestrun` to a matrix: one `unit` job and `ui-1` through `ui-N`.
+    Each matrix job owns a fresh simulator, DerivedData and result bundle, uses
+    `-xctestrun` without a project/package resolution, and disables Xcode's own
+    parallel testing. Tar preserves executable permissions and symlinks. Before
+    extraction, SHA, full Xcode version/build, SDK and architecture must match;
+    absolute DerivedData/checkout references in `.xctestrun` are relocated.
+    The matrix starts only after build finishes, has `fail-fast: false` and
+    `max-parallel: 4`, and all macOS jobs use the free standard `macos-26` label.
+    Change only workflow `env.IOS_UI_SHARDS` from `3` to `2` to reduce the matrix
+    from four macOS jobs to three. Values outside 2/3 fail planning.
+
+    `scripts/ios_ui_smoke.py shards` balances methods longest-first using
+    `scripts/ios-ui-durations.json`. Its initial measured values are from a
+    local iPad run; replace them with hosted iPhone `test-tree.json` case
+    durations after the first runs. Missing/new methods get a 20-second weight;
+    identifier ordering and the lowest shard index break ties, so every new
+    test is assigned exactly once. Runtime UI enumeration must also equal the
+    current Swift source inventory. The two tablet-only methods in
+    `scripts/ios-ui-iphone-skips.txt` remain selected and must have result nodes;
+    only their deliberate iPhone Skipped status is allowed.
+
+    The exact required name `iOS simulator` belongs to an `if: always()` Ubuntu
+    aggregate. Full requires successful plan/build/matrix jobs, every expected
+    shard artifact, no repeated or unassigned UI case, every non-exempt UI case
+    Passed, and every enumerated `BeidTests` case Passed. Missing, failed,
+    cancelled or unexpectedly skipped jobs/cases fail the aggregate. Smoke
+    requires build/test success in its one job and its exact execution ledger.
+    Only a successful explicit PR classifier skip exempts test execution;
+    merge groups and pushes never take that exception. `cancel-in-progress`
+    remains enabled and no shard result is treated as passing after cancellation.
+
+    Both modes upload `ios-evidence-<attempt>-<lane>` artifacts: enumeration,
+    manifest, xcresult tree/schema/summary, per-case durations, and build logs/
+    phase timing JSONL where applicable (14 days). Full product tar is a
+    separate `ios-products-<attempt>` artifact (3 days), never a cache. Use
+    “Re-run all jobs” for a fresh attempt; artifacts intentionally do not cross
+    attempt boundaries. `scripts/ios_ci_timing.py` timestamps SPM resolution,
+    KMP script start/end, and the observed Swift compile window. That window
+    includes overlapping/link work; `-showBuildTimingSummary` in `build.log`
+    gives actual task durations. Timeouts (45 minutes build/smoke, 35 per test
+    job) are containment, not claimed speed; hosted full and smoke timing and
+    artifact portability still need measurement on the final SHA.
     With the main merge queue enabled, the merge step is to add the PR to
     the queue after its required PR checks pass. A completed full-mode pass of
     `iOS simulator` on the queue's exact merge result satisfies the full-suite
@@ -195,9 +241,10 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
   Recommended required status checks on main: `Determine changed paths`,
   `Android build`, `SwiftLint`, `Repository sanity`, `iOS simulator`, and
-  `beid-lab-cli build and test`. Android, lint, iOS and lab CLI may
-  legitimately be skipped by their changed-path classifier (all four on a
-  documentation-only PR); a skipped required check counts as passing. Do not require the
+  `beid-lab-cli build and test`. Android, lint and lab CLI may legitimately be
+  skipped by their changed-path classifier; the iOS aggregate validates and
+  reports its classifier skip as success. A skipped required check counts as
+  passing. Do not require the
   main-only delivery, trusted comparison or Release compilation jobs, nor the
   release-notes metadata warning. Branch protection is a separate operator
   change; this document does not claim it has been applied.

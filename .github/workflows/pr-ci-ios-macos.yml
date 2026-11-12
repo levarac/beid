@@ -32,6 +32,9 @@ on:
       - "scripts/ci_simulator.py"
       - "scripts/ios_ui_smoke.py"
       - "scripts/ios_ci_timing.py"
+      - "scripts/ios_ci_products.py"
+      - "scripts/ios-ui-durations.json"
+      - "scripts/ios-ui-iphone-skips.txt"
       - "scripts/run_local_tests.py"
   # Escape hatch: run this lane against any ref on demand. `paths` does not
   # apply to workflow_dispatch, so a manual run always executes.
@@ -46,6 +49,8 @@ permissions:
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+  # Change only this value to use two UI shards (three test jobs in total).
+  IOS_UI_SHARDS: '3'
 
 concurrency:
   # Event and ref/PR identity isolate queue entries from PR updates and main pushes.
@@ -138,31 +143,17 @@ jobs:
         if: always()
         run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
 
-  ios-simulator:
-    name: iOS simulator
+  plan:
+    name: Plan iOS test jobs
     needs: changes
-    # Still created on every PR head so the required context reports; a
-    # PR limited to docs or Android app sources/resources reports it as skipped.
-    # Fail closed: unsafe diff metadata, unknown paths, or failed/missing classification
-    # runs the lane. Merge groups always run the full suite, even for docs-only changes.
-    # `!cancelled()` avoids starting a superseded macOS job.
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true') }}
-    # Keep PR code on disposable hosted runners; repository variables must
-    # never route a fork pull request back to a persistent signing host.
-    runs-on: macos-26
-    # The serial unit and UI suites take 28-39 minutes after a 9-14 minute
-    # build; 45 minutes cancelled most runs from 2026-10-15 on. With the 1.1
-    # screens (about 1,180 tests) the UI suite alone took 46 minutes on
-    # 2026-11-12 and the job hit 60. 90 minutes only contains that; the fix is
-    # to shard the UI suite.
-    timeout-minutes: 90
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+      mode: ${{ steps.test-mode.outputs.mode }}
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
-      - name: Initialize CI output path
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
-
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -177,6 +168,50 @@ jobs:
           set -euo pipefail
           python3 -m scripts.ios_ui_smoke mode \
             --event-name "$EVENT_NAME" --event-path "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Plan bounded test matrix
+        id: plan
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CHANGES_JSON: ${{ toJSON(needs.changes) }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          from scripts.ios_ui_smoke import classifier_skip
+          count = int(os.environ['IOS_UI_SHARDS'])
+          if count not in (2, 3):
+              raise SystemExit('IOS_UI_SHARDS must be 2 or 3')
+          skip = classifier_skip(os.environ['EVENT_NAME'], {'changes': json.loads(os.environ['CHANGES_JSON'])})
+          print(f'run={str(not skip).lower()}')
+          print('matrix=' + json.dumps({'lane': ['unit'] + [f'ui-{i + 1}' for i in range(count)]}))
+          PY
+
+  build:
+    name: Build iOS test bundles
+    needs: [changes, plan]
+    # A failed/missing classifier runs the lane. Smoke builds and tests here;
+    # full builds once here, then runs the artifact on independent test jobs.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' }}
+    # Keep PR code on disposable hosted runners; repository variables must
+    # never route a fork pull request back to a persistent signing host.
+    runs-on: macos-26
+    # The former serial full job hit 60 minutes. Full mode now builds once
+    # and fans out to <=4 macOS test jobs. Smoke retains its single job.
+    # 45 minutes is containment for build/smoke, not a performance target.
+    timeout-minutes: 45
+    steps:
+      - name: Initialize CI output path
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
       - name: Set up Java
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -286,11 +321,54 @@ jobs:
             SWIFT_OPTIMIZATION_LEVEL=-O \
             build-for-testing
 
-      - name: Test without rebuilding
+      - name: Enumerate built tests and compute shards
+        id: enumerate
         shell: bash
         env:
-          TEST_MODE: ${{ steps.test-mode.outputs.mode }}
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          TEST_MODE: ${{ needs.plan.outputs.mode }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          xctestrun="$(python3 -c 'import os; from pathlib import Path; from scripts.ios_ci_products import test_run; print(test_run(Path(os.environ["CI_OUTPUT_ROOT"]) / "DerivedData"))')"
+          printf 'xctestrun=%s\n' "$xctestrun" >> "$GITHUB_OUTPUT"
+          xcodebuild -quiet test-without-building -xctestrun "$xctestrun" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -enumerate-tests -test-enumeration-style hierarchical -test-enumeration-format json \
+            -test-enumeration-output-path "$CI_OUTPUT_ROOT/enumerated-tests.json"
+          python3 -m scripts.ios_ui_smoke shards --mode "$TEST_MODE" \
+            --enumeration "$CI_OUTPUT_ROOT/enumerated-tests.json" --count "$IOS_UI_SHARDS" \
+            --sha "$EXPECTED_SHA" --output "$CI_OUTPUT_ROOT/manifest.json"
+
+      - name: Package full-mode test products
+        if: ${{ needs.plan.outputs.mode == 'full' }}
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python3 -m scripts.ios_ci_products pack --derived-data "$CI_OUTPUT_ROOT/DerivedData" \
+            --manifest "$CI_OUTPUT_ROOT/manifest.json" --archive "$CI_OUTPUT_ROOT/products.tar" \
+            --sha "$EXPECTED_SHA" --xcode "$(xcodebuild -version)" \
+            --sdk "$(xcrun --sdk iphonesimulator --show-sdk-version)" --arch "$(uname -m)"
+
+      - name: Upload full-mode test products
+        if: ${{ needs.plan.outputs.mode == 'full' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-products-${{ github.run_attempt }}
+          path: ${{ env.CI_OUTPUT_ROOT }}/products.tar
+          compression-level: 1
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Test without rebuilding
+        if: ${{ needs.plan.outputs.mode == 'smoke' }}
+        shell: bash
+        env:
+          TEST_MODE: ${{ needs.plan.outputs.mode }}
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          XCTESTRUN: ${{ steps.enumerate.outputs.xctestrun }}
         run: |
           set -euo pipefail
           # Materialize before reading: a parser failure must stop the test step.
@@ -301,18 +379,16 @@ jobs:
             test_args+=("$argument")
           done < "$CI_OUTPUT_ROOT/test-arguments.txt"
           xcodebuild -quiet \
-            -project ios/Beid.xcodeproj \
-            -scheme Beid \
-            -configuration Debug \
-            -sdk iphonesimulator \
+            -xctestrun "$XCTESTRUN" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
+            -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
             "${test_args[@]}" \
             test-without-building
 
       - name: Summarize structured test results
-        if: always()
+        if: ${{ always() && needs.plan.outputs.mode == 'smoke' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -410,10 +486,10 @@ jobs:
           PY
 
       - name: Verify UI execution and bundle durations
-        if: always()
+        if: ${{ always() && needs.plan.outputs.mode == 'smoke' }}
         shell: bash
         env:
-          TEST_MODE: ${{ steps.test-mode.outputs.mode }}
+          TEST_MODE: ${{ needs.plan.outputs.mode }}
         run: |
           set -euo pipefail
           mkdir -p "$CI_OUTPUT_ROOT"
@@ -422,17 +498,20 @@ jobs:
             --path "$CI_OUTPUT_ROOT/Tests.xcresult" > "$CI_OUTPUT_ROOT/test-tree-schema.json"
           xcrun xcresulttool get test-results tests \
             --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/test-tree.json"
-          python3 -m scripts.ios_ui_smoke verify --mode "$TEST_MODE" \
-            --tests-json "$CI_OUTPUT_ROOT/test-tree.json" --summary "$GITHUB_STEP_SUMMARY"
+          python3 -m scripts.ios_ui_smoke verify-lane --lane build \
+            --manifest "$CI_OUTPUT_ROOT/manifest.json" --tests-json "$CI_OUTPUT_ROOT/test-tree.json" \
+            --summary-json "$CI_OUTPUT_ROOT/test-summary.json" --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Upload structured test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ios-evidence-${{ github.run_attempt }}
+          name: ios-evidence-${{ github.run_attempt }}-build
           path: |
             ${{ env.CI_OUTPUT_ROOT }}/test-*.json
             ${{ env.CI_OUTPUT_ROOT }}/build-timings.jsonl
+            ${{ env.CI_OUTPUT_ROOT }}/enumerated-tests.json
+            ${{ env.CI_OUTPUT_ROOT }}/manifest.json
             ${{ env.CI_OUTPUT_ROOT }}/*.log
           if-no-files-found: error
           retention-days: 14
@@ -446,3 +525,159 @@ jobs:
           set -euo pipefail
           xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true
           xcrun simctl delete "$SIMULATOR_UDID"
+
+  tests:
+    name: iOS full tests (${{ matrix.lane }})
+    needs: [plan, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.plan.outputs.mode == 'full' }}
+    runs-on: macos-26
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      # One unit job + <=3 UI shards; build has finished before these start.
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      TEST_LANE: ${{ matrix.lane }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Initialize isolated test paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          output_root="$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$TEST_LANE"
+          mkdir -p "$output_root"
+          printf 'CI_OUTPUT_ROOT=%s\n' "$output_root" >> "$GITHUB_ENV"
+
+      - name: Download full-mode test products
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ios-products-${{ github.run_attempt }}
+          path: ${{ env.CI_OUTPUT_ROOT }}
+
+      - name: Validate and restore test products
+        id: products
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.5"
+          xctestrun="$(python3 -m scripts.ios_ci_products unpack \
+            --archive "$CI_OUTPUT_ROOT/products.tar" --derived-data "$CI_OUTPUT_ROOT/DerivedData" \
+            --sha "$EXPECTED_SHA" --xcode "$(xcodebuild -version)" \
+            --sdk "$(xcrun --sdk iphonesimulator --show-sdk-version)" --arch "$(uname -m)")"
+          cp "$CI_OUTPUT_ROOT/DerivedData/manifest.json" "$CI_OUTPUT_ROOT/manifest.json"
+          printf 'xctestrun=%s\n' "$xctestrun" >> "$GITHUB_OUTPUT"
+
+      - name: Create shard-owned simulator
+        id: simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          simulator_udid="$(python3 scripts/ci_simulator.py \
+            --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-$TEST_LANE")"
+          printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
+
+      - name: Boot shard-owned simulator
+        shell: bash
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$SIMULATOR_UDID"
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
+      - name: Execute full-mode test lane
+        shell: bash
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          XCTESTRUN: ${{ steps.products.outputs.xctestrun }}
+        run: |
+          set -euo pipefail
+          python3 -m scripts.ios_ui_smoke lane-arguments --lane "$TEST_LANE" \
+            --manifest "$CI_OUTPUT_ROOT/manifest.json" > "$CI_OUTPUT_ROOT/test-arguments.txt"
+          test_args=()
+          while IFS= read -r argument; do
+            test_args+=("$argument")
+          done < "$CI_OUTPUT_ROOT/test-arguments.txt"
+          xcodebuild -quiet test-without-building -xctestrun "$XCTESTRUN" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
+            -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
+            -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
+            "${test_args[@]}"
+
+      - name: Collect shard structured results
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun xcresulttool get test-results summary --path "$CI_OUTPUT_ROOT/Tests.xcresult" \
+            --compact > "$CI_OUTPUT_ROOT/test-summary.json"
+          xcrun xcresulttool get test-results tests --schema --path "$CI_OUTPUT_ROOT/Tests.xcresult" \
+            > "$CI_OUTPUT_ROOT/test-tree-schema.json"
+          xcrun xcresulttool get test-results tests --path "$CI_OUTPUT_ROOT/Tests.xcresult" \
+            --compact > "$CI_OUTPUT_ROOT/test-tree.json"
+          python3 -m scripts.ios_ui_smoke verify-lane --lane "$TEST_LANE" \
+            --manifest "$CI_OUTPUT_ROOT/manifest.json" --tests-json "$CI_OUTPUT_ROOT/test-tree.json" \
+            --summary-json "$CI_OUTPUT_ROOT/test-summary.json" --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload shard test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-evidence-${{ github.run_attempt }}-${{ matrix.lane }}
+          path: |
+            ${{ env.CI_OUTPUT_ROOT }}/test-*.json
+            ${{ env.CI_OUTPUT_ROOT }}/manifest.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Delete shard-owned simulator
+        if: ${{ always() && steps.simulator.outputs.udid != '' }}
+        shell: bash
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true
+          xcrun simctl delete "$SIMULATOR_UDID"
+
+  ios-simulator:
+    name: iOS simulator
+    needs: [changes, plan, build, tests]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Download structured test evidence
+        if: ${{ needs.plan.outputs.run == 'true' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: ios-evidence-${{ github.run_attempt }}-*
+          path: ${{ runner.temp }}/ios-evidence
+
+      - name: Verify all job results and execution ledger
+        if: always()
+        shell: bash
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ios-evidence"
+          printf '%s\n' "$NEEDS_JSON" > "$RUNNER_TEMP/ios-needs.json"
+          python3 -m scripts.ios_ui_smoke aggregate --event-name "$EVENT_NAME" \
+            --needs-json "$RUNNER_TEMP/ios-needs.json" --evidence-root "$RUNNER_TEMP/ios-evidence" \
+            --attempt "$GITHUB_RUN_ATTEMPT" --sha "$EXPECTED_SHA" --summary "$GITHUB_STEP_SUMMARY"
