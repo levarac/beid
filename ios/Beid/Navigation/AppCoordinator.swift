@@ -29,6 +29,137 @@ private struct HomeClockFixtureDateSource: TrustedDateSource {
     "Wed, 16 Sep 2026 11:58:53 GMT"
   }
 }
+
+/// S47 fault inputs only. STOP, persistence, and presentation stay on their
+/// existing paths. Each launch retains its artifacts in a fresh directory.
+@MainActor
+final class StopOutcomeUITestFixture {
+  enum Mode: String {
+    case saveFailure = "save-failure"
+    case saveFailureWithEndpoints = "save-failure-with-endpoints"
+    case nilSignature = "nil-signature"
+    case signingError = "signing-error"
+    case detecting
+  }
+
+  static func selectedMode(arguments: [String]) -> Mode? {
+    guard arguments.contains("-beid-ui-test"),
+      let index = arguments.firstIndex(of: "-beid-stop-outcome-fixture"),
+      arguments.indices.contains(index + 1)
+    else { return nil }
+    return Mode(rawValue: arguments[index + 1])
+  }
+
+  static func fromLaunchArguments() -> StopOutcomeUITestFixture? {
+    selectedMode(arguments: ProcessInfo.processInfo.arguments).map { StopOutcomeUITestFixture(mode: $0) }
+  }
+
+  let mode: Mode
+  let directory: URL
+  let proofStore: ProofStore
+  let selfProofStore: SelfProofStore
+  let checkpointStore: SelfProofCheckpointStore
+  let sensingCoordinator: SensingCoordinator
+  private let cryptography: StopOutcomeUITestCryptography
+  private(set) var proofID: UUID?
+  var signingCallCount: Int { cryptography.signingCallCount }
+
+  init(mode: Mode) {
+    self.mode = mode
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-stop-outcome-\(UUID().uuidString)", isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    } catch {
+      preconditionFailure("Unable to create isolated STOP fixture directory: \(error)")
+    }
+    self.directory = directory
+    let proofStore = ProofStore(
+      fileURL: directory.appendingPathComponent("proofs.json"),
+      writeData: { data, url in
+        if mode == .saveFailure || mode == .saveFailureWithEndpoints { throw CocoaError(.fileWriteNoPermission) }
+        try data.write(to: url, options: .atomic)
+      }
+    )
+    let selfProofStore = SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json"))
+    let checkpointStore = SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json"))
+    let cryptography = StopOutcomeUITestCryptography(mode: mode)
+    // Reuse the existing no-radio adapter; no permissions, SDK, or network fault.
+    let engine = NearbyJoinUITestEngine()
+    self.proofStore = proofStore
+    self.selfProofStore = selfProofStore
+    self.checkpointStore = checkpointStore
+    self.cryptography = cryptography
+    sensingCoordinator = SensingCoordinator(
+      windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("windows.json")),
+      selfProofStore: selfProofStore,
+      selfProofCheckpointStore: checkpointStore,
+      bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("aggregate.json")),
+      unsentWindowLedgerRuntime: nil,
+      sensingCryptography: cryptography,
+      eventJoinControl: engine,
+      participantRelayControl: engine,
+      proofStore: proofStore
+    )
+  }
+
+  func prepare() async {
+    // Zero-delay existing demo primitives establish the same inputs as
+    // SensingStopFlowTests. The scan opens only after they have settled.
+    if mode == .detecting {
+      sensingCoordinator.runDemoScenario(.appReviewGolden, stepDelayNanos: 0, stopWhenPhaseReaches: .eventFound)
+      await sensingCoordinator.waitForDemoScenarioPreviewToSettle()
+    } else if mode == .saveFailure {
+      // Omit demo ENIN-advance inputs, then stop at the first recording
+      // decision. No timestamps are invented for the missing endpoints.
+      // With endpoints present the real ProofStore admission check already
+      // raises .discardFailed; do not suppress or duplicate that alert.
+      let scenario = DemoScenario(
+        identifier: "stopSaveFailureBeforeWindow", event: .demoSample,
+        steps: DemoScenario.appReviewGolden.steps.filter { $0 != .advanceDemoWindow }
+      )
+      sensingCoordinator.runDemoScenario(scenario, stepDelayNanos: 0, stopWhenPhaseReaches: .recording)
+      await sensingCoordinator.waitForDemoScenarioPreviewToSettle()
+    } else {
+      sensingCoordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+      await sensingCoordinator.waitForDemoSequenceToFinish()
+    }
+    proofID = sensingCoordinator.currentProofID
+    cryptography.failKeyRead = mode == .signingError
+  }
+}
+
+/// The existing native protocol is the fault boundary, as in the unit oracle.
+/// Fixed bytes are test inputs, never signatures used by a normal app launch.
+private final class StopOutcomeUITestCryptography: SensingCryptography {
+  private let mode: StopOutcomeUITestFixture.Mode
+  var failKeyRead = false
+  private(set) var signingCallCount = 0
+
+  init(mode: StopOutcomeUITestFixture.Mode) { self.mode = mode }
+
+  func eventSigningPublicKey(eventCode: String) throws -> Data {
+    if failKeyRead { throw CocoaError(.fileReadNoPermission) }
+    return Data([0x02] + [UInt8](repeating: 0x33, count: 32))
+  }
+
+  func ownerPublicKey() -> Data { Data([0x03] + [UInt8](repeating: 0x44, count: 32)) }
+
+  func signWindowReport(eventCode: String, bytes: Data) -> SensingRecoverableSignature {
+    SensingRecoverableSignature(r: Data(repeating: 0x11, count: 32), s: Data(repeating: 0x22, count: 32), v: 0)
+  }
+
+  func signSelfProof(
+    eventIdHash: Data, eventSigningPublicKey: Data, eninStart: UInt64, eninEnd: UInt64
+  ) -> SensingRecoverableSignature? {
+    signingCallCount += 1
+    if mode == .nilSignature { return nil }
+    return SensingRecoverableSignature(r: Data(repeating: 0x55, count: 32), s: Data(repeating: 0x66, count: 32), v: 1)
+  }
+
+  func signWalletAcknowledgement(walletAddress: Data, walletSignature: Data) -> SensingRecoverableSignature? { nil }
+}
 #endif
 
 /// Root routing for onboarding and the collection home.
@@ -52,6 +183,7 @@ final class AppCoordinator: ObservableObject {
   #if DEBUG
   @Published private(set) var homeStandbyFixtureTime: TimeInterval = 0
   @Published private(set) var homeStandbyFixtureHasCandidate = false
+  let stopOutcomeUITestFixture: StopOutcomeUITestFixture?
   #endif
   @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
   @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
@@ -174,7 +306,14 @@ final class AppCoordinator: ObservableObject {
     #else
     linkStore = reportProofLinkStore ?? ReportProofLinkStore()
     #endif
+    #if DEBUG
+    let stopFixture = proofStore == nil && injectedSensingCoordinator == nil
+      ? StopOutcomeUITestFixture.fromLaunchArguments() : nil
+    self.stopOutcomeUITestFixture = stopFixture
+    let resolvedProofStore = proofStore ?? stopFixture?.proofStore ?? ProofStore()
+    #else
     let resolvedProofStore = proofStore ?? ProofStore()
+    #endif
     self.registryClient = registryClient
     self.reportSubmissionStore = reportStore
     self.joinDiagnosticLog = joinDiagnosticLog
@@ -184,7 +323,9 @@ final class AppCoordinator: ObservableObject {
       self.sensingCoordinator = injectedSensingCoordinator
     } else {
       #if DEBUG
-      if NearbyJoinUITestFixture.isEnabled {
+      if let stopFixture {
+        self.sensingCoordinator = stopFixture.sensingCoordinator
+      } else if NearbyJoinUITestFixture.isEnabled {
         self.sensingCoordinator = NearbyJoinUITestFixture.makeCoordinator()
       } else {
         self.sensingCoordinator = SensingCoordinator(
@@ -898,6 +1039,7 @@ final class AppCoordinator: ObservableObject {
   /// without depending on the network.
   private static func clockPreflightOrigin(bundle: Bundle = .main) -> URL? {
 #if DEBUG
+    if StopOutcomeUITestFixture.selectedMode(arguments: ProcessInfo.processInfo.arguments) != nil { return nil }
     if NearbyJoinUITestFixture.isEnabled { return nil }
     if ProcessInfo.processInfo.arguments.contains("-beid-clock-preflight-fixture") {
       return nil
@@ -925,6 +1067,7 @@ final class AppCoordinator: ObservableObject {
 
   var homeHasDemoCandidate: Bool {
     #if DEBUG
+    if stopOutcomeUITestFixture != nil { return true }
     if isHomeStandbyFixture { return homeStandbyFixtureHasCandidate }
     let arguments = ProcessInfo.processInfo.arguments
     if arguments.contains("-beid-ui-test"),
@@ -947,7 +1090,7 @@ final class AppCoordinator: ObservableObject {
     if isEnabled && !homeStandbyDiscoveryActive {
       homeStandbyDiscoveryActive = true
       #if DEBUG
-      if !isHomeStandbyFixture {
+      if !isHomeStandbyFixture && stopOutcomeUITestFixture == nil {
         sensingCoordinator.startHomeStandbyDiscovery()
       }
       #else
@@ -1046,6 +1189,15 @@ final class AppCoordinator: ObservableObject {
         date: Date(timeIntervalSince1970: 1_800_000_000),
         peersVerified: 0
       )
+      return
+    }
+    #endif
+    #if DEBUG
+    if let stopOutcomeUITestFixture {
+      Task {
+        await stopOutcomeUITestFixture.prepare()
+        scanPresented = true
+      }
       return
     }
     #endif

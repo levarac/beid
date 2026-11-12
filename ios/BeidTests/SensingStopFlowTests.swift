@@ -6,6 +6,122 @@ import XCTest
 
 @MainActor
 final class SensingStopFlowTests: XCTestCase {
+  func testStopOutcomeFixtureRequiresUITestGateAndKnownMode() {
+    XCTAssertNil(StopOutcomeUITestFixture.selectedMode(arguments: ["-beid-stop-outcome-fixture", "save-failure"]))
+    XCTAssertNil(StopOutcomeUITestFixture.selectedMode(arguments: ["-beid-ui-test", "-beid-stop-outcome-fixture"]))
+    XCTAssertNil(StopOutcomeUITestFixture.selectedMode(arguments: ["-beid-ui-test", "-beid-stop-outcome-fixture", "unknown"]))
+    XCTAssertEqual(StopOutcomeUITestFixture.selectedMode(
+      arguments: ["-beid-ui-test", "-beid-stop-outcome-fixture", "save-failure"]
+    ), .saveFailure)
+  }
+
+  func testSaveFailureUIFixtureHasNoDurableRecordAndRetainsFinalizationArtifacts() async throws {
+    let fixture = StopOutcomeUITestFixture(mode: .saveFailure)
+    let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+    await fixture.prepare()
+    app.scanPresented = true
+    let proofID = try XCTUnwrap(fixture.proofID)
+    XCTAssertNil(fixture.proofStore.proof(withId: proofID))
+    XCTAssertNotNil(fixture.proofStore.lastPersistenceError)
+    XCTAssertNil(fixture.checkpointStore.checkpoint, "First recording precedes demo ENIN advancement")
+    XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+    XCTAssertNil(fixture.sensingCoordinator.ownerKeyOperationFailure)
+
+    app.requestScanClose()
+    app.confirmStopSensing()
+
+    XCTAssertEqual(fixture.sensingCoordinator.phase, .idle)
+    XCTAssertNil(fixture.proofStore.proof(withId: proofID))
+    XCTAssertNotNil(fixture.proofStore.lastPersistenceError)
+    XCTAssertNil(fixture.selfProofStore.record(forProofId: proofID))
+    XCTAssertNotNil(fixture.sensingCoordinator.sessionAggregateSnapshot(forProofId: proofID))
+    let aggregateURL = fixture.directory.appendingPathComponent("aggregate.json")
+    let aggregateBytes = try Data(contentsOf: aggregateURL)
+    XCTAssertNil(app.sealedSnapshot)
+    XCTAssertNil(app.proofCollectedSnapshot)
+    XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+    XCTAssertNil(fixture.sensingCoordinator.ownerKeyOperationFailure)
+    app.confirmStopSensing()
+    XCTAssertEqual(fixture.signingCallCount, 0, "Missing endpoints must not manufacture signing inputs")
+    XCTAssertEqual(try Data(contentsOf: aggregateURL), aggregateBytes)
+  }
+
+  func testNilSignatureUIFixtureRetainsUnsignedRecordAndCheckpointWithoutAnAlert() async throws {
+    let fixture = StopOutcomeUITestFixture(mode: .nilSignature)
+    let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+    await fixture.prepare()
+    app.scanPresented = true
+    let proofID = try XCTUnwrap(fixture.proofID)
+    XCTAssertNotNil(fixture.proofStore.proof(withId: proofID))
+    let recordURL = fixture.directory.appendingPathComponent("proofs.json")
+    let recordBytes = try Data(contentsOf: recordURL)
+    XCTAssertNil(fixture.checkpointStore.checkpoint, "Demo checkpoints only at finalization")
+
+    app.requestScanClose()
+    app.confirmStopSensing()
+    app.confirmStopSensing()
+
+    XCTAssertEqual(fixture.sensingCoordinator.phase, .idle)
+    XCTAssertNotNil(fixture.proofStore.proof(withId: proofID))
+    XCTAssertEqual(try Data(contentsOf: recordURL), recordBytes)
+    XCTAssertNotNil(ProofStore(fileURL: recordURL).proof(withId: proofID), "Reload must find the durable Record")
+    XCTAssertNil(fixture.selfProofStore.record(forProofId: proofID))
+    XCTAssertEqual(fixture.checkpointStore.checkpoint?.proofId, proofID)
+    XCTAssertEqual(SelfProofCheckpointStore(
+      fileURL: fixture.directory.appendingPathComponent("checkpoint.json")
+    ).checkpoint?.proofId, proofID)
+    XCTAssertNotNil(fixture.sensingCoordinator.sessionAggregateSnapshot(forProofId: proofID))
+    XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+    XCTAssertNil(fixture.sensingCoordinator.ownerKeyOperationFailure)
+    XCTAssertNil(app.sealedSnapshot)
+    XCTAssertNil(app.proofCollectedSnapshot)
+    XCTAssertEqual(fixture.signingCallCount, 1)
+  }
+
+  func testSaveFailureWithEndpointsAlreadyRaisesPersistenceAlert() async throws {
+    let fixture = StopOutcomeUITestFixture(mode: .saveFailureWithEndpoints)
+    let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+    await fixture.prepare()
+    app.scanPresented = true
+    let proofID = try XCTUnwrap(fixture.proofID)
+    XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+
+    app.requestScanClose()
+    app.confirmStopSensing()
+
+    XCTAssertEqual(fixture.sensingCoordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(fixture.proofStore.proof(withId: proofID))
+    XCTAssertNotNil(fixture.selfProofStore.record(forProofId: proofID), "Preserve independently saved signature bytes")
+    XCTAssertNotNil(fixture.sensingCoordinator.sessionAggregateSnapshot(forProofId: proofID))
+    XCTAssertNil(app.sealedSnapshot)
+    XCTAssertNil(app.proofCollectedSnapshot)
+  }
+
+  func testSigningErrorUIFixtureUsesExistingAlertAndRetainsUnsignedArtifacts() async throws {
+    let fixture = StopOutcomeUITestFixture(mode: .signingError)
+    let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+    await fixture.prepare()
+    app.scanPresented = true
+    let proofID = try XCTUnwrap(fixture.proofID)
+    XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure, "Fault is armed after setup")
+
+    app.requestScanClose()
+    app.confirmStopSensing()
+    app.confirmStopSensing()
+
+    XCTAssertEqual(fixture.sensingCoordinator.eventSigningKeyFailure, .unavailable)
+    XCTAssertNil(fixture.sensingCoordinator.ownerKeyOperationFailure)
+    XCTAssertNotNil(fixture.proofStore.proof(withId: proofID))
+    XCTAssertNil(fixture.selfProofStore.record(forProofId: proofID))
+    XCTAssertEqual(fixture.checkpointStore.checkpoint?.proofId, proofID)
+    XCTAssertNil(app.sealedSnapshot)
+    XCTAssertNil(app.proofCollectedSnapshot)
+    fixture.sensingCoordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+    app.confirmStopSensing()
+    XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+  }
+
   func testStopAfterFailedProofSaveEndsSensingWithoutClaimingASavedRecord() async throws {
     let proofURL = FileManager.default.temporaryDirectory
       .appendingPathComponent("sensing-stop-unsaved-\(UUID().uuidString).json")
@@ -317,6 +433,8 @@ final class SensingStopFlowTests: XCTestCase {
 
     XCTAssertNil(coordinator.sealedSnapshot)
     XCTAssertNil(coordinator.proofCollectedSnapshot)
+    XCTAssertEqual(sensing.ownerKeyOperationFailure, .unavailable, "The real signing throw already has a root alert")
+    XCTAssertNil(sensing.eventSigningKeyFailure, "Do not manufacture a second signing alert")
   }
 
   func testStopDuringDetectingRequiresConfirmationAndKeepPreservesSession() async {
