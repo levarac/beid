@@ -193,7 +193,12 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertTrue(try Data(contentsOf: checkpointURL) == original)
     XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
     XCTAssertFalse(engine.isHoldingPermissionRequest)
-    XCTAssertEqual(keychain.readCount, reads + 1)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertFalse(parents.hasReadableProofs)
+    XCTAssertEqual(coordinator.joinRefusalReasonKey, "storage_recovery_required")
+    // Admission must wait for readable parent records before preparing a session key.
+    XCTAssertEqual(keychain.readCount, reads)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
 
     try FileManager.default.removeItem(at: parentURL)
     try FileManager.default.moveItem(at: preservedURL, to: parentURL)
@@ -203,7 +208,9 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
     XCTAssertNotNil(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).record(forProofId: proofId))
     XCTAssertTrue(engine.isHoldingPermissionRequest)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
     XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertNil(coordinator.joinRefusalReasonKey)
     XCTAssertNil(coordinator.eventSigningKeyFailure)
   }
 
