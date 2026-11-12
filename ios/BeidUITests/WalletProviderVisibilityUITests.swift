@@ -3,14 +3,10 @@
 
 import XCTest
 
-/// Regression coverage for thegreeting/beid#270: Coinbase Wallet (the
-/// renamed "Base" app) stopped showing its approval dialog on real devices,
-/// and the underlying SDK has no native-iOS fix available yet. The wallet
-/// picker was narrowed to MetaMask only — see `WalletConnectView.swift`'s
-/// `providerSelectionContent` and the removed binding sheet's `swift`'s
-/// `connectContent` for the two production call sites.
-///
-/// v1.1 offers no wallet connection. A user with no wallet must not find a
+/// H1 removes every wallet connection entry from v1.1 Account. This also
+/// preserves beid#270's protection against offering an unusable provider,
+/// without relying on the removed wallet picker or binding sheet.
+/// A user with no wallet must not find a
 /// "Connect Wallet" row (or anything that opens the pairing sheet) in the
 /// Account sheet. H1 also removes legacy connected-wallet rows, covered by
 /// FlatScreenshotTourD with `-beid-account-connected-fixture`.

@@ -254,21 +254,98 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
   }
 
-  /// Mutual observation stays unavailable in the record's evidence ladder,
-  /// including when the finished session has a measured aggregate snapshot.
+  /// D1 forbids numeric mutual counts anywhere on Record Detail, including
+  /// separate values beside a mutual label and the artwork's VoiceOver text.
   func testParticipationSummaryHeadlineHidesNumericMutualCount() {
     navigateToCollectionWithProof()
     openFirstProof()
 
-    let mutual = app.staticTexts["MUTUAL OBSERVATION"]
-    mutual.scrollToHittable(in: app)
-    XCTAssertTrue(mutual.exists)
-    let following = app.staticTexts["INCLUDED IN PUBLISHED DATA"]
-    XCTAssertTrue(following.exists)
-    let rowValues = app.staticTexts.allElementsBoundByIndex.filter {
-      $0.frame.midY > mutual.frame.maxY && $0.frame.midY < following.frame.minY
-    }.map(\.label)
-    XCTAssertEqual(rowValues, ["NOT YET AVAILABLE"], "The mutual row must not report a measured zero")
+    assertRecordDetailHidesNumericMutualCount(firstRung: "SEALED ON THIS PHONE")
+  }
+
+  func testRecordDetailHidesNumericMutualCountWithMeasuredSnapshot() {
+    app.launchArguments = ["-beid-ui-test", "-beid-observation-frame-11"]
+    app.launch()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
+    app.buttons["Allow Bluetooth"].assertHittable()
+    app.buttons["Allow Bluetooth"].tap()
+    app.openRecordsByEvent()
+    app.buttons["home.past-event.ETHTOKYO2026"].assertHittable()
+    app.buttons["home.past-event.ETHTOKYO2026"].tap()
+    app.staticTexts["event-detail.heading"].assertExists()
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+
+    // This is a real stored aggregate (23 devices, six observed windows),
+    // not a missing snapshot that could hide a fabricated measured zero.
+    app.descendants(matching: .any).matching(NSPredicate(
+      format: "label == %@", "Devices heard: 23. Window 6. Mutual check not available yet."
+    )).firstMatch.assertExists()
+    assertRecordDetailHidesNumericMutualCount(firstRung: "RECORDED ON THIS PHONE")
+  }
+
+  private func assertRecordDetailHidesNumericMutualCount(
+    firstRung: String, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    let titles = [firstRung, "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"]
+    let scroll = app.scrollViews.firstMatch
+    scroll.assertHittable(file: file, line: line)
+    let window = app.windows.firstMatch
+    let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "record.session."))
+    guard sessions.count > 0 else {
+      XCTFail("Expected stored session routes on Record Detail", file: file, line: line)
+      return
+    }
+    let lastSession = sessions.element(boundBy: sessions.count - 1)
+    var seenRungs = Set<Int>()
+    var reachedEnd = false
+    for _ in 0..<10 {
+      let mutualLabels = scroll.descendants(matching: .any).matching(
+        NSPredicate(format: "label CONTAINS[c] %@", "mutual")
+      ).allElementsBoundByIndex.filter {
+        !$0.frame.isEmpty && window.frame.intersects($0.frame)
+      }
+      let numericValues = scroll.staticTexts.matching(
+        NSPredicate(format: "label MATCHES %@", #"(?s)\s*\d.*"#)
+      ).allElementsBoundByIndex
+      for (index, title) in titles.enumerated() {
+        let rung = app.staticTexts["record.ladder.\(index + 1).title"]
+        if rung.exists && !rung.frame.isEmpty && window.frame.contains(rung.frame) {
+          XCTAssertEqual(rung.label, title, file: file, line: line)
+          seenRungs.insert(index + 1)
+        }
+      }
+      for mutual in mutualLabels {
+        // Device/window numbers in other sentences of the Sigil label are
+        // allowed; a number in its mutual statement is not (D1).
+        let statements = mutual.label.components(separatedBy: CharacterSet(charactersIn: ".!?;"))
+        for statement in statements where statement.localizedCaseInsensitiveContains("mutual") {
+          XCTAssertNil(statement.rangeOfCharacter(from: .decimalDigits),
+                       "D1: numeric mutual wording: \(mutual.label)", file: file, line: line)
+        }
+        let mutualFrame = mutual.frame
+        let adjacentValues = numericValues.filter { value in
+          let valueFrame = value.frame
+          let sameRow = valueFrame.minY < mutualFrame.maxY && valueFrame.maxY > mutualFrame.minY
+          let below = valueFrame.minY >= mutualFrame.maxY && valueFrame.minY - mutualFrame.maxY <= 12
+            && valueFrame.minX < mutualFrame.maxX && valueFrame.maxX > mutualFrame.minX
+          return sameRow || below
+        }
+        XCTAssertTrue(adjacentValues.isEmpty,
+                      "D1: numeric value next to \(mutual.label): \(adjacentValues.map(\.label))", file: file, line: line)
+      }
+      if lastSession.exists && lastSession.isHittable && !lastSession.frame.isEmpty
+        && window.frame.contains(lastSession.frame) {
+        reachedEnd = true
+        break
+      }
+      scroll.swipeUp()
+    }
+    XCTAssertEqual(seenRungs, Set(1...4), "Must inspect all four evidence rungs", file: file, line: line)
+    XCTAssertTrue(reachedEnd, "Must inspect Record Detail through its last session route", file: file, line: line)
   }
 
   /// Two independent launches share the installed container but must not
