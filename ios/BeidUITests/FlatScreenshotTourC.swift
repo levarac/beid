@@ -134,7 +134,7 @@ final class FlatScreenshotTourC: XCTestCase {
     record.tap()
     app.staticTexts["proof.detail.title"].assertExists()
     let fullSigil = app.descendants(matching: .any).matching(
-      NSPredicate(format: "label ENDSWITH %@", "23 detected, window 6")
+      NSPredicate(format: "label == %@", "Devices heard: 23. Window 6. Mutual check not available yet.")
     ).firstMatch
     fullSigil.assertExists()
     app.navigationBars.buttons.element(boundBy: 0).tap()
@@ -155,7 +155,7 @@ final class FlatScreenshotTourC: XCTestCase {
     fourthWindow.tap()
     XCTAssertTrue(
       app.descendants(matching: .any).matching(
-        NSPredicate(format: "label ENDSWITH %@", "23 detected, window 4")
+        NSPredicate(format: "label == %@", "Devices heard: 23. Window 4. Mutual check not available yet.")
       ).firstMatch.exists,
       "Selected window 4 must render four observed windows from stored Sigil input"
     )
@@ -168,7 +168,7 @@ final class FlatScreenshotTourC: XCTestCase {
     firstWindow.tap()
     XCTAssertTrue(
       app.descendants(matching: .any).matching(
-        NSPredicate(format: "label ENDSWITH %@", "4 detected, window 1")
+        NSPredicate(format: "label == %@", "Devices heard: 4. Window 1. Mutual check not available yet.")
       ).firstMatch.exists,
       "Selected window 1 must exclude peers first observed in later windows"
     )
@@ -182,7 +182,7 @@ final class FlatScreenshotTourC: XCTestCase {
     secondWindow.tap()
     XCTAssertTrue(
       app.descendants(matching: .any).matching(
-        NSPredicate(format: "label ENDSWITH %@", "12 detected, window 2")
+        NSPredicate(format: "label == %@", "Devices heard: 12. Window 2. Mutual check not available yet.")
       ).firstMatch.exists,
       "Selected window 2 must include only the first two observed windows"
     )
@@ -202,11 +202,11 @@ final class FlatScreenshotTourC: XCTestCase {
     record.tap()
     app.staticTexts["proof.detail.title"].assertExists()
     let artwork = app.descendants(matching: .any).matching(
-      NSPredicate(format: "label ENDSWITH %@", "23 detected, window 6")
+      NSPredicate(format: "label == %@", "Devices heard: 23. Window 6. Mutual check not available yet.")
     ).firstMatch
     artwork.assertExists()
     XCTAssertTrue(
-      artwork.label.localizedCaseInsensitiveContains("mutual not available"),
+      artwork.label.localizedCaseInsensitiveContains("mutual check not available yet"),
       "A device record cannot announce mutual confirmation as a measured zero"
     )
     XCTAssertFalse(artwork.label.localizedCaseInsensitiveContains("0 mutual"))
