@@ -478,9 +478,11 @@ lanes via `test-without-building`, each with fresh simulator/DerivedData/results
 supported. At most four macOS jobs run together. Product SHA, Xcode build, SDK
 and architecture must match before extraction; permissions/symlinks survive tar.
 The aggregate requires every needed job to succeed, the UI shard union to equal
-the runtime enumeration without duplicates, and all enumerated `BeidTests` to
-pass. Only the two explicit iPhone exclusions in the checked-in skip list may
-report Skipped; their result nodes must still exist. Structured results and
+the runtime enumeration without duplicates, and every enumerated test to be
+checked. Anything not on the per-environment skip list must pass. The two iPhone
+UI exclusions in `scripts/ios-ui-iphone-skips.txt` and the Debug Simulator unit
+exclusions in `scripts/ios-unit-debug-simulator-skips.txt` must exist and report
+Skipped; a listed test that passes is a stale-list failure. Structured results and
 phase timings are uploaded in both modes. A successful explicit classifier skip
 is the only exception to executed evidence. Dependency-only KMP/SPM caches use
 exact toolchain/lockfile keys without prefix restores; DerivedData and test

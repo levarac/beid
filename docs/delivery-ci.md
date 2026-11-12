@@ -189,11 +189,16 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     `scripts/ios-ui-iphone-skips.txt` remain selected and must have result nodes;
     they must report their deliberate iPhone Skipped status. An unexecuted
     excluded case may omit duration (counted as zero); passed cases require it.
+    Debug Simulator unit exclusions are listed with reasons in
+    `scripts/ios-unit-debug-simulator-skips.txt`: guestFirst onboarding, the
+    Release-only demo-mode assertion, and the opt-in local reference-operator
+    integration (not configured in CI). Both modes keep these tests selected;
+    each must exist and report Skipped. A listed test that passes fails as stale.
 
     The exact required name `iOS simulator` belongs to an `if: always()` Ubuntu
     aggregate. Full requires successful plan/build/matrix jobs, every expected
-    shard artifact, no repeated or unassigned UI case, every non-exempt UI case
-    Passed, and every enumerated `BeidTests` case Passed. Missing, failed,
+    shard artifact, and no repeated or unassigned UI case. Every enumerated test
+    is checked; anything not on the per-environment skip list must pass. Missing, failed,
     cancelled or unexpectedly skipped jobs/cases fail the aggregate. Smoke
     requires build/test success in its one job and its exact execution ledger.
     Only a successful explicit PR classifier skip exempts test execution;
@@ -208,8 +213,10 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     attempt boundaries. `scripts/ios_ci_timing.py` timestamps SPM resolution,
     KMP script start/end, and the observed Swift compile window. That window
     includes overlapping/link work; `-showBuildTimingSummary` in `build.log`
-    gives actual task durations. Timeouts (45 minutes build/smoke, 35 per test
-    job) are containment, not claimed speed; hosted full and smoke timing and
+    gives actual task durations. Job timeouts are 45 minutes for build/smoke and
+    35 per test lane. Step timeouts are 25 minutes for build, 10 for smoke tests,
+    and 25 for each full-mode test lane, leaving time for evidence and cleanup.
+    These are containment, not claimed speed; hosted full and smoke timing and
     artifact portability still need measurement on the final SHA.
 
     Dependency caches are limited to `~/.gradle/caches` (excluding task build

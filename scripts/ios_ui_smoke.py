@@ -18,6 +18,7 @@ IDENTIFIER = re.compile(r"BeidUITests/[A-Za-z_]\w*/test\w+")
 DEFAULT_LIST = Path("ios/ci/ui-smoke-tests.txt")
 DEFAULT_DURATIONS = Path("scripts/ios-ui-durations.json")
 IPHONE_SKIPS = Path("scripts/ios-ui-iphone-skips.txt")
+UNIT_SKIPS = Path("scripts/ios-unit-debug-simulator-skips.txt")
 
 
 def unique_tests(tests, bundle):
@@ -127,10 +128,18 @@ def validate_lane(expected, payload, allowed_skips=()):
     for identifier, result, _ in cases:
         if identifier in allowed_skips:
             if result != "Skipped":
-                raise ValueError(f"declared iPhone exclusion did not skip: {identifier}: {result}")
+                raise ValueError(f"declared environment exclusion did not skip: {identifier}: {result}")
         elif result != "Passed":
             raise ValueError(f"test did not pass: {identifier}: {result}")
     return cases
+
+
+def validate_unit_skips(skips, unit):
+    if not isinstance(skips, list):
+        raise ValueError("missing or malformed Debug Simulator unit skip list")
+    if skips and not set(unique_tests(skips, "BeidTests")) <= set(unit):
+        raise ValueError("stale Debug Simulator unit skip list")
+    return skips
 
 
 def classifier_skip(event, needs):
@@ -161,6 +170,7 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
         raise ValueError("manifest head or mode mismatch")
     unit = unique_tests(manifest.get("unit"), "BeidTests")
     ui = unique_tests(manifest.get("ui"), "BeidUITests")
+    unit_skips = validate_unit_skips(manifest.get("unit_skips"), unit)
     skips = manifest.get("iphone_skips", [])
     if not isinstance(skips, list) or len(set(skips)) != len(skips) or not set(skips) <= set(ui):
         raise ValueError("invalid explicit iPhone skip list")
@@ -177,11 +187,12 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
         raise ValueError(f"missing or extra lane artifacts: expected={sorted(lanes)}, actual={sorted(evidence)}")
     all_cases = []
     for lane, expected in lanes.items():
-        all_cases.extend(validate_lane(expected, evidence[lane], skips))
+        all_cases.extend(validate_lane(expected, evidence[lane], skips + unit_skips))
     executed = [identifier for identifier, result, _ in all_cases if result == "Passed"]
     if mode == "full" and set(executed) - set(unit) != set(ui) - set(skips):
         raise ValueError("executed iPhone UI union mismatch")
-    return f"{mode}: all {len(all_cases)} cases accounted for; all {len(unit)} BeidTests passed."
+    return (f"{mode}: all {len(all_cases)} cases accounted for; "
+            f"BeidTests: {len(unit) - len(unit_skips)} passed, {len(unit_skips)} skipped.")
 
 
 def compute_mode(event_name: str, payload: object) -> str:
@@ -368,12 +379,17 @@ def main() -> int:
             skips = parse_smoke_list(IPHONE_SKIPS.read_text())
             if not set(skips) <= set(enumerated["BeidUITests"]):
                 raise ValueError("stale iPhone skip list")
+            unit_skips = unique_tests([
+                identifier for line in UNIT_SKIPS.read_text().splitlines()
+                if (identifier := line.partition("#")[0].strip())
+            ], "BeidTests")
+            validate_unit_skips(unit_skips, enumerated["BeidTests"])
             smoke = parse_smoke_list(DEFAULT_LIST.read_text())
             validate_sources(smoke, Path("ios/BeidUITests"))
             duration_data = json.loads(args.durations.read_text())
             manifest = {"sha": args.sha, "mode": args.mode,
                         "unit": enumerated["BeidTests"], "ui": enumerated["BeidUITests"],
-                        "iphone_skips": skips, "smoke": smoke,
+                        "iphone_skips": skips, "unit_skips": unit_skips, "smoke": smoke,
                         "shards": shard_tests(enumerated["BeidUITests"], duration_data["seconds"], args.count)}
             args.output.write_text(json.dumps(manifest, indent=2) + "\n")
             return 0
@@ -393,7 +409,8 @@ def main() -> int:
                 print("\n".join(arguments))
                 return 0
             payload = json.loads(args.tests_json.read_text())
-            cases = validate_lane(selected, payload, manifest["iphone_skips"])
+            unit_skips = validate_unit_skips(manifest.get("unit_skips"), manifest["unit"])
+            cases = validate_lane(selected, payload, manifest["iphone_skips"] + unit_skips)
             summary = json.loads(args.summary_json.read_text())
             warnings = validate_xcresult_summary(summary, parse_xcresult_tests(payload))
             if warnings or summary.get("result") != "Passed":

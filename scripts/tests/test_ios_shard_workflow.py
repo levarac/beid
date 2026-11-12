@@ -67,6 +67,20 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertIn("--lane build", build)
         self.assertNotIn("simctl erase", text)
 
+    def test_long_steps_leave_time_for_evidence_and_cleanup(self):
+        for job, names in (("build", ("Build for testing", "Test without rebuilding")),
+                           ("tests", ("Execute full-mode test lane",))):
+            block = job_block(IOS, job)
+            job_limit = int(re.search(r"^    timeout-minutes: (\d+)$", block, re.M)[1])
+            step_limits = []
+            for name in names:
+                step = re.search(rf"^      - name: {re.escape(name)}\n(?:(?!      - ).*\n)*", block, re.M)[0]
+                limit = re.search(r"^        timeout-minutes: (\d+)$", step, re.M)
+                self.assertIsNotNone(limit, f"unbounded step: {name}")
+                step_limits.append(int(limit[1]))
+                self.assertGreater(step_limits[-1], 0)
+            self.assertLessEqual(sum(step_limits), job_limit - 5)
+
     def test_dependency_caches_have_exact_toolchain_and_lockfile_keys(self):
         build = job_block(IOS, "build")
         self.assertIn("name: Cache KMP dependencies", build, "missing dependency cache")

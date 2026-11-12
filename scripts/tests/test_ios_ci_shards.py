@@ -12,6 +12,11 @@ import unittest
 from scripts.tests.test_ios_ui_smoke import ONE, TWO, tree
 
 UNIT = "BeidTests/FlowTests/testUnit"
+EXPECTED_UNIT_SKIPS = [
+    "BeidTests/OnboardingFlagTests/testWalletFirstOrderReachesBluetoothPermissionAfterConnect",
+    "BeidTests/ReportSubmissionOperatorIntegrationTests/testRealSignedWindowGetsVerifiedReceiptFromReferenceOperator",
+    "BeidTests/SensingCoordinatorTests/testReleaseConfigurationCannotEnableDemoEventMode",
+]
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -60,6 +65,10 @@ class ShardContractTest(unittest.TestCase):
             {"name": "BeidTests", "children": [{"name": "FlowTests", "children": [{"name": "testUnit()"}]}]},
             {"name": "BeidUITests", "children": [
                 {"name": suite, "children": methods} for suite, methods in classes.items()]}]}]}
+        unit_suites = payload["values"][0]["children"][0]["children"]
+        for test in EXPECTED_UNIT_SKIPS:
+            _, suite, method = test.split("/")
+            unit_suites.append({"name": suite, "children": [{"name": method + "()"}]})
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             enum, manifest = root / "enumerated.json", root / "manifest.json"
@@ -70,6 +79,7 @@ class ShardContractTest(unittest.TestCase):
                     "--mode", "full", "--sha", "a" * 40], cwd=ROOT, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 data = json.loads(manifest.read_text())
+                self.assertEqual(data["unit_skips"], EXPECTED_UNIT_SKIPS)
                 self.assertEqual(len(data["shards"]), count)
                 self.assertEqual(sorted(sum(data["shards"], [])), inventory)
                 selected = []
@@ -80,6 +90,12 @@ class ShardContractTest(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     selected.extend(line.removeprefix("-only-testing:") for line in result.stdout.splitlines())
                 self.assertEqual(sorted(selected), inventory)
+            unit_suites.pop()
+            enum.write_text(json.dumps(payload))
+            result = subprocess.run([sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
+                "--enumeration", str(enum), "--output", str(manifest), "--count", "3",
+                "--mode", "full", "--sha", "a" * 40], cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0, "stale unit skip list accepted")
 
     def test_duration_weights_must_be_finite_positive_numbers(self):
         for value in (-1, 0, True, float("nan"), float("inf"), "20"):
@@ -91,7 +107,7 @@ class AggregateContractTest(unittest.TestCase):
     def setUp(self):
         self.tool = importlib.import_module("scripts.ios_ui_smoke")
         self.manifest = {"sha": "a" * 40, "mode": "full", "unit": [UNIT], "ui": [ONE, TWO],
-                         "shards": [[ONE], [TWO]], "iphone_skips": []}
+                         "shards": [[ONE], [TWO]], "iphone_skips": [], "unit_skips": []}
         self.needs = {"changes": {"result": "skipped", "outputs": {}},
                       "plan": {"result": "success", "outputs": {"run": "true", "mode": "full"}},
                       "build": {"result": "success"}, "tests": {"result": "success"}}
@@ -147,6 +163,80 @@ class AggregateContractTest(unittest.TestCase):
         self.manifest["unit"].append("BeidTests/FlowTests/testNew")
         with self.assertRaises(ValueError):
             self.verify()
+
+    def unit_case(self, mode):
+        self.needs["plan"]["outputs"]["mode"] = self.manifest["mode"] = mode
+        if mode == "smoke":
+            self.needs["tests"]["result"] = "skipped"
+            self.manifest["smoke"] = [ONE, TWO]
+            self.evidence = {"build": tree()}
+        payload = self.evidence["build" if mode == "smoke" else "unit"]
+        return payload["testNodes"][0]["children"][0]["children"][0]
+
+    def test_allowlisted_unit_skip_passes_in_full_and_smoke(self):
+        self.manifest["unit_skips"] = [UNIT]
+        for mode in ("full", "smoke"):
+            with self.subTest(mode=mode):
+                case = self.unit_case(mode)
+                case["result"] = "Skipped"
+                del case["durationInSeconds"]
+                message = self.verify()
+                self.assertIn("BeidTests: 0 passed, 1 skipped", message)
+
+    def test_unlisted_unit_skip_fails_in_full_and_smoke(self):
+        for mode in ("full", "smoke"):
+            self.unit_case(mode)["result"] = "Skipped"
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "test did not pass"):
+                self.verify()
+
+    def test_allowlisted_unit_that_passed_fails_in_full_and_smoke(self):
+        self.manifest["unit_skips"] = [UNIT]
+        for mode in ("full", "smoke"):
+            self.unit_case(mode)
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "did not skip"):
+                self.verify()
+
+    def test_allowlisted_unit_missing_fails_in_full_and_smoke(self):
+        self.manifest["unit_skips"] = [UNIT]
+        for mode in ("full", "smoke"):
+            self.unit_case(mode)
+            payload = self.evidence["build" if mode == "smoke" else "unit"]
+            payload["testNodes"][0]["children"][0]["children"].clear()
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "execution ledger mismatch"):
+                self.verify()
+
+    def test_missing_malformed_or_stale_unit_skip_list_fails(self):
+        for skips in (None, "", [UNIT, UNIT], [ONE], [UNIT + "Missing"]):
+            self.manifest["unit_skips"] = skips
+            with self.subTest(skips=skips), self.assertRaises(ValueError):
+                self.verify()
+
+    def test_verify_lane_cli_enforces_unit_skips_in_full_and_smoke(self):
+        self.manifest["unit_skips"] = [UNIT]
+        for mode, lane in (("full", "unit"), ("smoke", "build")):
+            case = self.unit_case(mode)
+            case["result"] = "Skipped"
+            payload = self.evidence[lane]
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                manifest, tests, summary = (root / name for name in ("manifest.json", "tests.json", "summary.json"))
+                manifest.write_text(json.dumps(self.manifest))
+                total = 1 if mode == "full" else 3
+                summary.write_text(json.dumps({"result": "Passed", "totalTestCount": total,
+                    "passedTests": total - 1, "failedTests": 0, "skippedTests": 1}))
+                command = [sys.executable, "-m", "scripts.ios_ui_smoke", "verify-lane",
+                    "--manifest", str(manifest), "--lane", lane, "--tests-json", str(tests),
+                    "--summary-json", str(summary), "--summary", str(root / "summary.md")]
+                tests.write_text(json.dumps(payload))
+                result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                case["result"] = "Passed"
+                tests.write_text(json.dumps(payload))
+                summary.write_text(json.dumps({"result": "Passed", "totalTestCount": total,
+                    "passedTests": total, "failedTests": 0, "skippedTests": 0}))
+                result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("did not skip", result.stderr)
 
     def test_explicit_iphone_skip_is_allowed_and_must_be_observed(self):
         self.manifest["iphone_skips"] = [ONE]
@@ -222,7 +312,7 @@ class AggregateContractTest(unittest.TestCase):
                        "--sha", "a" * 40, "--summary", str(root / "summary.md")]
             result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("all 1 BeidTests passed", (root / "summary.md").read_text())
+            self.assertIn("BeidTests: 1 passed, 0 skipped", (root / "summary.md").read_text())
             (artifacts / "ios-evidence-1-ui-2/test-tree.json").unlink()
             result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)

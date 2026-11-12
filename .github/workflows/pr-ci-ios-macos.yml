@@ -328,6 +328,7 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: Build for testing
+        timeout-minutes: 25
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
@@ -395,6 +396,7 @@ jobs:
 
       - name: Test without rebuilding
         if: ${{ needs.plan.outputs.mode == 'smoke' }}
+        timeout-minutes: 10
         shell: bash
         env:
           TEST_MODE: ${{ needs.plan.outputs.mode }}
@@ -624,6 +626,7 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: Execute full-mode test lane
+        timeout-minutes: 25
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
