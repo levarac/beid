@@ -35,7 +35,7 @@ struct BluetoothOffView: View {
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, DS.Onboarding.titleGap)
 
-        Text("beid can’t sense events or collect proofs while Bluetooth is off.")
+        Text("beid can’t find nearby events or record observations while Bluetooth is off.")
           .beidTextStyle(DS.Font.Library.body15)
           .foregroundStyle(DS.Color.textSecondary)
           .fixedSize(horizontal: false, vertical: true)

@@ -307,7 +307,7 @@ private struct NowHomeView: View {
 
   private var demoCandidate: some View {
     VStack(alignment: .leading, spacing: DS.Space.s) {
-      Text("DEMO EVENT · FOR APP REVIEW")
+      Text("DEMO EVENT · SAMPLE DATA")
         .beidTextStyle(DS.Font.Library.labelMono10)
       Text("Demo event").beidTextStyle(DS.Font.Library.title19)
       Text("Sample devices and records. No Bluetooth event is joined.")

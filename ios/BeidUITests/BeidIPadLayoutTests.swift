@@ -25,7 +25,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.launch()
 
     assertWelcomeLayout(named: "welcome-\(orientation)")
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
 
     // OnboardingMode.current is .guestFirst (event-first, the default — see
     // OnboardingFlagTests): Welcome's CTA routes straight to the
@@ -205,7 +205,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     XCTAssertTrue(
       app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5),
       "Expected Bluetooth permission after Get Started.\n\(app.debugDescription)"
@@ -283,7 +283,7 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   private func assertWelcomeLayout(named name: String) {
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     let appWindow = app.windows.firstMatch
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5), "Expected Welcome CTA: \(name)")
     XCTAssertTrue(appWindow.exists, "Expected an app window: \(name)")

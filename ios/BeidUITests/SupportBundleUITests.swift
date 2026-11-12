@@ -9,7 +9,7 @@ final class SupportBundleUITests: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
     XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
