@@ -12,6 +12,22 @@ final class EventMembershipUITests: XCTestCase {
     continueAfterFailure = false
   }
 
+  override func record(_ issue: XCTIssue) {
+    if issue.type == .assertionFailure {
+      // Capture the failing screen before continueAfterFailure stops the test.
+      let hierarchy = XCTAttachment(string: app.debugDescription)
+      hierarchy.name = "Code-entry failure accessibility tree"
+      hierarchy.lifetime = .keepAlways
+      add(hierarchy)
+
+      let screenshot = XCTAttachment(screenshot: app.screenshot())
+      screenshot.name = "Code-entry failure screenshot"
+      screenshot.lifetime = .keepAlways
+      add(screenshot)
+    }
+    super.record(issue)
+  }
+
   func testAccountSheetJoinDismissesCodeEntryAndShowsSensing() {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
