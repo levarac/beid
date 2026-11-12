@@ -198,6 +198,15 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertFalse(app.buttons["Start broadcasting"].exists)
   }
 
+  func testVenueOrganizerStatusRowsShowOnlyAvailableDeviceFacts() {
+    openVenue(frame: "14b")
+    for identifier in ["venue.digest", "venue.delivery", "venue.until", "venue.battery", "venue.bluetooth"] {
+      XCTAssertTrue(app.staticTexts[identifier].exists, identifier)
+    }
+    XCTAssertEqual(app.staticTexts["venue.delivery"].label, "DIRECT · HOP 0")
+    XCTAssertTrue(app.staticTexts["venue.bluetooth"].label.uppercased().contains("ASKED TO BROADCAST"))
+  }
+
   func testShot_14d_ScanQR() {
     openVenue(frame: "14d")
     app.buttons["Scan QR code"].tap()

@@ -949,7 +949,17 @@
     "Allow Bluetooth": {},
     "Ask the event organizer for the code. This joins the event directly, without connecting a wallet.": {},
     "Automatic": {},
-    "Bluetooth": {},
+    "Bluetooth": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth"
+          }
+        }
+      }
+    },
     "Bluetooth is off": {},
     "Cancel": {
       "comment": "Dismisses the Home event-code entry sheet without joining an event. Also used for other cancellation actions.",
@@ -4109,6 +4119,61 @@
           "stringUnit": {
             "state": "translated",
             "value": "Load saved pack"
+          }
+        }
+      }
+    },
+    "Battery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Battery"
+          }
+        }
+      }
+    },
+    "Delivery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delivery"
+          }
+        }
+      }
+    },
+    "Not yet available": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not yet available"
+          }
+        }
+      }
+    },
+    "venue.delivery.direct": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direct · hop 0"
+          }
+        }
+      }
+    },
+    "venue.delivery.relayed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relayed · hop %lld"
           }
         }
       }

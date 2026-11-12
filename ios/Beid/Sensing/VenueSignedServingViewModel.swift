@@ -213,6 +213,7 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// earlier permit is never exposed once serving ends.
   private var servingPermitIdentity: VenueArtifactIdentity?
   private var currentPermitEnd: Int64?
+  private var installedRelayHopCount: Int?
 
   var broadcastUntilUnixSeconds: Int64? {
     workflow?.receipt?.broadcastUntilUnixSeconds ?? currentPermitEnd
@@ -220,6 +221,7 @@ final class VenueSignedServingViewModel: ObservableObject {
 
   var registrarHex: String? { workflow?.receipt?.registrarHex }
   var loadedIdentity: VenueArtifactIdentity? { workflow?.receipt?.identity }
+  var relayHopCount: Int? { preparedPermit?.relayHopCount ?? installedRelayHopCount }
 
   var canonicalEventIdHexForAcquisition: String? { canonicalEventIdHex }
 
@@ -815,6 +817,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     }
 
     servingPermitIdentity = permit.identity
+    installedRelayHopCount = permit.relayHopCount
     currentPermitEnd = permit.stopAtUnixSeconds
     status = .serving(displayName: permit.displayName, stopAtUnixSeconds: permit.stopAtUnixSeconds)
     scheduleRenewal(now: installedAt)
@@ -921,6 +924,7 @@ final class VenueSignedServingViewModel: ObservableObject {
   private func invalidate() -> UUID {
     clearRadio()
     preparedPermit = nil
+    installedRelayHopCount = nil
     expiry.cancel()
     generation = UUID()
     return generation

@@ -17,6 +17,8 @@ struct VenueSignedServingView: View {
   @State private var scannerRefusal: VenueLinkScanner.Authorization?
   @State private var showsLinkInput = false
   @State private var fixtureStarted = false
+  @State private var batteryPercent: Int?
+  @State private var previouslyMonitoredBattery = false
 
   init(viewModel: @autoclosure @escaping () -> VenueSignedServingViewModel) {
     _viewModel = StateObject(wrappedValue: viewModel())
@@ -87,6 +89,9 @@ struct VenueSignedServingView: View {
       .background(DS.Color.surfaceCanvas)
     }
     .onAppear {
+      previouslyMonitoredBattery = UIDevice.current.isBatteryMonitoringEnabled
+      UIDevice.current.isBatteryMonitoringEnabled = true
+      batteryPercent = Self.batteryPercent(for: UIDevice.current.batteryLevel)
       if let fixtureCode {
         showsLinkInput = ["14e", "14e2", "14e3"].contains(fixtureCode)
         switch fixtureCode {
@@ -100,12 +105,16 @@ struct VenueSignedServingView: View {
       }
     }
     .onDisappear {
+      UIDevice.current.isBatteryMonitoringEnabled = previouslyMonitoredBattery
       guard fixtureCode == nil else { return }
       // The camera uses a sheet, which leaves this presenting route mounted.
       // A real route departure always ends the session and clears the radio.
       viewModel.endSession()
       requestTask?.cancel()
       lifecycleTasks.cancelAll()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: UIDevice.batteryLevelDidChangeNotification)) { _ in
+      batteryPercent = Self.batteryPercent(for: UIDevice.current.batteryLevel)
     }
     .onChange(of: scenePhase) { _, phase in
       guard fixtureCode == nil else { return }
@@ -279,6 +288,15 @@ struct VenueSignedServingView: View {
               .accessibilityLabel(Text(verbatim: digest))
           }
         }
+        if let hop = effectiveHopCount {
+          keyValueRow("Delivery") {
+            Text(hop == 0
+              ? String(localized: "venue.delivery.direct", defaultValue: "Direct · hop 0", comment: "The event announcement is sent directly by this venue device.")
+              : String(localized: "venue.delivery.relayed", defaultValue: "Relayed · hop \(hop)", comment: "How many relays the checked announcement has passed through."))
+              .beidTextStyle(DS.Font.Library.labelMono11)
+              .accessibilityIdentifier("venue.delivery")
+          }
+        }
         keyValueRow("Until") {
           Text(verbatim: fixtureCode != nil ? "THU 10/15 18:00 JST" : Self.instantText(viewModel.broadcastUntilUnixSeconds ?? stopAtUnixSeconds))
             .beidTextStyle(DS.Font.Library.labelMono11Time)
@@ -322,7 +340,18 @@ struct VenueSignedServingView: View {
       case .radioRefused(let failure):
         statusMessage(message(for: failure))
       }
-      keyValueRow("Radio") {
+      keyValueRow("Battery") {
+        if let batteryPercent {
+          Text(verbatim: (Double(batteryPercent) / 100).formatted(.percent.precision(.fractionLength(0))))
+            .beidTextStyle(DS.Font.Library.labelMono11Time)
+            .accessibilityIdentifier("venue.battery")
+        } else {
+          Text("Not yet available")
+            .beidTextStyle(DS.Font.Library.labelMono11)
+            .accessibilityIdentifier("venue.battery")
+        }
+      }
+      keyValueRow("Bluetooth") {
         HStack(spacing: DS.Space.s) {
           Circle()
             .fill(tint(for: effectiveRadio.state))
@@ -331,6 +360,7 @@ struct VenueSignedServingView: View {
           Text(radioRowLabel(for: effectiveRadio.state))
             .beidTextStyle(DS.Font.Library.labelMono11)
             .accessibilityLabel(message(for: effectiveRadio.state))
+            .accessibilityIdentifier("venue.bluetooth")
         }
       }
       if let failure = effectiveRadio.failure {
@@ -548,6 +578,15 @@ struct VenueSignedServingView: View {
   private var effectiveDigest: String? {
     if fixtureCode != nil { return "e31c1bf3777936e004b5f501fbbb1aa73ac01c42bf83a6256d98bd13242c7f21" }
     return viewModel.loadedIdentity?.bundleDigestHex
+  }
+
+  private var effectiveHopCount: Int? {
+    fixtureCode != nil ? 0 : viewModel.relayHopCount
+  }
+
+  static func batteryPercent(for level: Float) -> Int? {
+    guard level.isFinite, (0...1).contains(level) else { return nil }
+    return Int((level * 100).rounded())
   }
 
   private var effectiveRadio: VenueRadioUpdate {

@@ -164,6 +164,7 @@ final class VenueServePermit {
   let displayName: String
   let payloadDigestHex: String
   let currentEnin: Int64
+  let relayHopCount: Int
   /// The INCLUSIVE start of the ENIN this permit was verified for.
   ///
   /// Carried as its own field rather than left to the consumer to compute,
@@ -183,7 +184,8 @@ final class VenueServePermit {
     payloadDigestHex: String,
     currentEnin: Int64,
     startAtUnixSeconds: Int64,
-    stopAtUnixSeconds: Int64
+    stopAtUnixSeconds: Int64,
+    relayHopCount: Int = 0
   ) {
     self.identity = identity
     self.container = container
@@ -192,6 +194,7 @@ final class VenueServePermit {
     self.currentEnin = currentEnin
     self.startAtUnixSeconds = startAtUnixSeconds
     self.stopAtUnixSeconds = stopAtUnixSeconds
+    self.relayHopCount = relayHopCount
   }
 }
 
@@ -877,7 +880,8 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
         // dividing `stopAtUnixSeconds` back down keeps this independent of
         // that relationship instead of assuming it.
         startAtUnixSeconds: lease.currentEnin * Int64(servable.verified.eninSeconds),
-        stopAtUnixSeconds: lease.stopAtUnixSeconds
+        stopAtUnixSeconds: lease.stopAtUnixSeconds,
+        relayHopCount: Int(servable.verified.relayHopCount)
       )
       return .permitted(permit)
     }
@@ -994,7 +998,8 @@ enum VenueServingContractTestFactory {
     payloadDigestHex: String,
     currentEnin: Int64,
     startAtUnixSeconds: Int64,
-    stopAtUnixSeconds: Int64
+    stopAtUnixSeconds: Int64,
+    relayHopCount: Int = 0
   ) -> VenueServePermit {
     VenueServePermit(
       identity: identity,
@@ -1003,7 +1008,8 @@ enum VenueServingContractTestFactory {
       payloadDigestHex: payloadDigestHex,
       currentEnin: currentEnin,
       startAtUnixSeconds: startAtUnixSeconds,
-      stopAtUnixSeconds: stopAtUnixSeconds
+      stopAtUnixSeconds: stopAtUnixSeconds,
+      relayHopCount: relayHopCount
     )
   }
 }

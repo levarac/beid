@@ -122,6 +122,31 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     guard case .ready = viewModel.status else { return XCTFail("a foreground return cannot count as Start") }
   }
 
+  func testOrganizerReportsHopFromCheckedPermitAndClearsItOnStop() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    let relayed = VenueServingContractTestFactory.permit(
+      identity: fixture.identity, container: fixture.container, displayName: "Relayed fixture",
+      payloadDigestHex: "fixture", currentEnin: 6_000_000,
+      startAtUnixSeconds: now, stopAtUnixSeconds: now + 300, relayHopCount: 1)
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(relayed))]
+    await supply(viewModel)
+    XCTAssertEqual(viewModel.relayHopCount, 1)
+    await viewModel.startBroadcasting()
+    XCTAssertEqual(viewModel.relayHopCount, 1)
+    viewModel.stop()
+    XCTAssertNil(viewModel.relayHopCount)
+  }
+
+  func testUnavailableBatteryNeverBecomesAFabricatedPercentage() {
+    XCTAssertNil(VenueSignedServingView.batteryPercent(for: -1))
+    XCTAssertNil(VenueSignedServingView.batteryPercent(for: .nan))
+    XCTAssertNil(VenueSignedServingView.batteryPercent(for: 1.1))
+    XCTAssertEqual(VenueSignedServingView.batteryPercent(for: 0), 0)
+    XCTAssertEqual(VenueSignedServingView.batteryPercent(for: 0.78), 78)
+    XCTAssertEqual(VenueSignedServingView.batteryPercent(for: 1), 100)
+  }
+
   private func renewalReceipt(until: Int64) -> VenueImportedBundle {
     VenueImportedBundle(identity: fixture.identity, publicArtifact: fixture.artifact,
                         broadcastUntilUnixSeconds: until)
