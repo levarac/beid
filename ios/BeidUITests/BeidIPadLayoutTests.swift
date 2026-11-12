@@ -312,7 +312,9 @@ final class BeidIPadLayoutTests: XCTestCase {
         NSPredicate(format: "label MATCHES %@", #"(?s)\s*\d.*"#)
       ).allElementsBoundByIndex
       for (index, title) in titles.enumerated() {
-        let rung = app.staticTexts["record.ladder.\(index + 1).title"]
+        // SwiftUI exposes the enclosing rung's identifier on its text children.
+        let rung = app.staticTexts.matching(identifier: "record.ladder.\(index + 1)")
+          .matching(NSPredicate(format: "label == %@", title)).firstMatch
         if rung.exists && !rung.frame.isEmpty && window.frame.contains(rung.frame) {
           XCTAssertEqual(rung.label, title, file: file, line: line)
           seenRungs.insert(index + 1)
