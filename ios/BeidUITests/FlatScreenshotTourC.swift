@@ -49,6 +49,38 @@ final class FlatScreenshotTourC: XCTestCase {
     let app = launchSensingFixture("05a3")
     SensingVisualOracle.assertPostScrollGuidance(in: app, test: self, name: "05a3-fixture")
   }
+
+  func testProductionFirstSensingHintPersistsAcrossRelaunch() {
+    let app = XCUIApplication()
+    for firstLaunch in [true, false] {
+      app.launchArguments = ["-beid-ui-test"]
+      if firstLaunch {
+        app.launchArguments += ["-beid.sensing.firstTimeHintShown", "NO"]
+      }
+      app.launch()
+      app.buttons["Continue"].assertHittable()
+      app.buttons["Continue"].tap()
+      app.buttons["Allow Bluetooth"].assertHittable()
+      app.buttons["Allow Bluetooth"].tap()
+      app.tabButton("Now").assertHittable()
+      app.buttons["home.demo.join"].assertHittable()
+      app.buttons["home.demo.join"].tap()
+      app.descendants(matching: .any)["scan.sensing-session"].assertExists()
+      let hint = app.buttons["scan.first-time.about"]
+      if firstLaunch {
+        hint.scrollToHittable(in: app)
+        XCTAssertTrue(hint.label.contains("FIRST TIME? HOW THIS WORKS"))
+        hint.tap()
+        app.staticTexts["HOW IT WORKS"].assertExists()
+        app.navigationBars.buttons.firstMatch.tap()
+        hint.scrollToHittable(in: app)
+      } else {
+        for _ in 0..<3 { app.swipeUp() }
+        XCTAssertFalse(hint.exists)
+      }
+      app.terminate()
+    }
+  }
   func testShot_07_ProofCollected() { capture("07") }
   func testShot_09_ProofDetail() { capture("09") }
 

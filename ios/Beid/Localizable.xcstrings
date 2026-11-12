@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "FIRST TIME? HOW THIS WORKS": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FIRST TIME? HOW THIS WORKS"
+          }
+        }
+      }
+    },
     "OPEN SETTINGS": {
       "extractionState": "manual",
       "localizations": {

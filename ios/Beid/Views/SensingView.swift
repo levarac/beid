@@ -523,7 +523,20 @@ struct SensingView: View {
 /// The live, joined-event portion of Flat 2b's 05 family. Values are read
 /// from the same coordinator that records the session. Figma's counts and
 /// event details are examples, never defaults for a production session.
+private struct FirstSensingHintKey: EnvironmentKey {
+  static let defaultValue = false
+}
+
+extension EnvironmentValues {
+  var showsFirstSensingHint: Bool {
+    get { self[FirstSensingHintKey.self] }
+    set { self[FirstSensingHintKey.self] = newValue }
+  }
+}
+
 struct SensingSessionSurface: View {
+  @Environment(\.showsFirstSensingHint) private var showsFirstSensingHint
+  @AppStorage("beid.sensing.firstTimeHintShown") private var hasShownFirstTimeHint = false
   enum Presentation: Equatable {
     case detecting
     case detectingLong
@@ -676,18 +689,21 @@ struct SensingSessionSurface: View {
       Text("Keep the app open nearby to help phones observe each other and keep signed records.")
         .beidTextStyle(DS.Font.Library.body13)
         .foregroundStyle(DS.Color.textSecondaryOnInk)
-      if presentation != .steady {
+      if showsFirstSensingHint || presentation != .steady {
         NavigationLink {
           AboutSensingView()
         } label: {
           BeidTextControlLabel(
-            "HOW SENSING WORKS",
+            showsFirstSensingHint || presentation == .detectingFirstTime ? "FIRST TIME? HOW THIS WORKS" : "HOW SENSING WORKS",
             glyph: .trailing("→", announcing: "How sensing works"),
             labelColor: DS.Color.labelOnActionPrimary
           )
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("scan.first-time.about")
+        .accessibilityIdentifier(showsFirstSensingHint || presentation == .detectingFirstTime ? "scan.first-time.about" : "scan.about")
+        .onAppear {
+          if showsFirstSensingHint { hasShownFirstTimeHint = true }
+        }
       }
     }
   }
