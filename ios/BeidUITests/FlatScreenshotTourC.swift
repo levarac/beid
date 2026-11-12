@@ -69,7 +69,8 @@ final class FlatScreenshotTourC: XCTestCase {
       let hint = app.buttons["scan.first-time.about"]
       if firstLaunch {
         hint.scrollToHittable(in: app)
-        XCTAssertTrue(hint.label.contains("FIRST TIME? HOW THIS WORKS"))
+        // The glyph-bearing control supplies a spoken label for VoiceOver.
+        XCTAssertEqual(hint.label, "How sensing works")
         hint.tap()
         app.staticTexts["HOW IT WORKS"].assertExists()
         app.navigationBars.buttons.firstMatch.tap()
@@ -168,7 +169,9 @@ final class FlatScreenshotTourC: XCTestCase {
 
     let expectedTitles = ["RECORDED ON THIS PHONE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"]
     for (index, expected) in expectedTitles.enumerated() {
-      let rung = app.staticTexts["record.ladder.\(index + 1).title"]
+      // Match the exposed row identifier and title, excluding its detail text.
+      let rung = app.staticTexts.matching(identifier: "record.ladder.\(index + 1)")
+        .matching(NSPredicate(format: "label == %@", expected)).firstMatch
       rung.scrollToHittable(in: app)
       XCTAssertEqual(rung.label, expected)
     }
