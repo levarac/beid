@@ -167,6 +167,7 @@ struct SensingView: View {
           .padding(.vertical, DS.Space.l)
         }
       }
+      .accessibilityIdentifier("scan.sensing")
     }
     // Sensing screen: actionPrimary tint — Flat 2b has one ink and no
     // per-screen motif accents (DESIGN.md §5). The radar rings use this
@@ -185,12 +186,10 @@ struct SensingView: View {
           .buttonBorderShape(.roundedRectangle(radius: DS.Radius.control))
           .padding(.horizontal, DS.Space.pageMargin)
           .padding(.vertical, DS.Space.s)
-          .accessibilityIdentifier("scan.manual-entry")
         }
         .beidBottomBar()
       }
     }
-    .accessibilityIdentifier("scan.sensing")
   }
 
   /// True once JOIN was tapped (or an event code accepted) and no other
@@ -930,15 +929,14 @@ struct SensingCantJoinView: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("scan.manual-entry")
           }
         }
         .frame(minHeight: geometry.size.height, alignment: .top)
         .padding(.horizontal, DS.Space.pageMargin)
       }
+      .accessibilityIdentifier("scan.cant-join")
     }
     .background(DS.Color.textPrimary.ignoresSafeArea())
-    .accessibilityIdentifier("scan.cant-join")
   }
 
   private var eventIdentity: some View {

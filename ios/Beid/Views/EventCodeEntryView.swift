@@ -52,6 +52,7 @@ struct ScanFlowEventCodeEntryLink<Label: View>: View {
     } label: {
       label()
     }
+    .accessibilityIdentifier("scan.manual-entry")
     .navigationDestination(isPresented: submission.presentationBinding($isPresented, coordinator: coordinator)) {
       EventCodeEntryView(mode: .scanFlow, submission: submission)
         .id(ObjectIdentifier(submission))
