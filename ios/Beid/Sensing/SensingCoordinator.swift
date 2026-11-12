@@ -3211,7 +3211,10 @@ final class SensingCoordinator: ObservableObject {
   /// wake-up and race tests use the same entry so expired sources and due
   /// registry retries are reflected in the current join authority together.
   func refreshNearbyEventDiscovery() {
-    let refreshedAt = nearbyDiscoveryClock()
+    refreshNearbyEventDiscovery(asOf: nearbyDiscoveryClock())
+  }
+
+  private func refreshNearbyEventDiscovery(asOf refreshedAt: Int64) {
     let update = ExportedKotlinPackages.org.levarac.parallax.discovery
       .refreshNearbyEventDiscovery(
         store: nearbyDiscoveryStore,
@@ -3222,8 +3225,8 @@ final class SensingCoordinator: ObservableObject {
   }
 
   /// One-tap nearby join (beid#141). The action carries only the stable B005
-  /// hash. After the permission wait resumes, this method re-reads the
-  /// coordinator's current snapshot and asks the shared issuer for a fresh
+  /// hash. After the permission wait resumes, this method advances the
+  /// shared snapshot and asks the shared issuer for a fresh
   /// capability; a displayed Event ID, list position, selected state, or
   /// display-only validity window is never join authority.
   func joinNearbyEvent(eventCodeHashHex: String) {
@@ -3248,7 +3251,9 @@ final class SensingCoordinator: ObservableObject {
         // incorrectly answers the same callback twice, only the first answer
         // can reach Barnard.
         self.joinAttemptGeneration &+= 1
-        let nowEpochSeconds = self.nearbyDiscoveryClock() / 1_000
+        let nowEpochMillis = self.nearbyDiscoveryClock()
+        self.refreshNearbyEventDiscovery(asOf: nowEpochMillis)
+        let nowEpochSeconds = nowEpochMillis / 1_000
         guard let context = ExportedKotlinPackages.org.levarac.parallax.discovery
           .RegistryVerifiedJoinContext.Companion.shared.fromNearbyCandidate(
             candidates: self.nearbyEventCandidates,
