@@ -4,7 +4,7 @@
 import BeidSharedKit
 import SwiftUI
 
-/// The five values in frame 09. Record existence and aggregate counts are
+/// Frame 09's values and incomplete-record notice. Record existence and aggregate counts are
 /// inputs so presentation never infers a signature from ProofSignatureState
 /// or a connected wallet. The screenshot tour supplies only these display
 /// values; it creates no durable signing or reporting artifact.
@@ -13,11 +13,13 @@ struct ProofDetailPresentation {
   let status: String
   let signature: String
   let withValue: String
+  let incompleteReason: String?
+  let isSealedOnDevice: Bool
 
   init(
     method: String,
     hasSelfProof: Bool,
-    hasBinding: Bool,
+    hasBinding _: Bool,
     deviceCount: Int?,
     windowCount: Int?,
     sessionCount: Int,
@@ -26,6 +28,14 @@ struct ProofDetailPresentation {
     self.method = method == "Bluetooth Sensing"
       ? String(localized: "proofDetail.method.bluetooth", defaultValue: "Bluetooth sensing")
       : method
+    isSealedOnDevice = hasSelfProof && !selfProofDiscardedForKeyChange
+    incompleteReason = selfProofDiscardedForKeyChange
+      ? String(
+        localized: "proofDetail.incompleteReason",
+        defaultValue: "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.",
+        comment: "Reason for an incomplete stored record after signing-key continuity failed. The record and its session/report evidence are retained."
+      )
+      : nil
     status = selfProofDiscardedForKeyChange
       ? String(localized: "proofDetail.status.incomplete", defaultValue: "Recording incomplete")
       : hasSelfProof
@@ -35,20 +45,17 @@ struct ProofDetailPresentation {
         defaultValue: "Recorded on device",
         comment: "Proof Detail status when a Proof is stored locally but no matching self-proof signature record exists. Do not imply sealing or third-party verification."
       )
-    if hasBinding {
-      signature = String(
-        localized: "proofDetail.signature.bound",
-        defaultValue: "Bound to wallet",
-        comment: "Proof Detail signature value shown only when a wallet BindingRecord belongs to this exact Proof."
-      )
+    if selfProofDiscardedForKeyChange {
+      signature = Self.signatureUnavailable
     } else if hasSelfProof {
+      // A legacy binding's acknowledgement is not this recording's self-signature.
       signature = String(
         localized: "proofDetail.signature.selfSigned",
         defaultValue: "Self-signed on device",
-        comment: "Proof Detail signature value when a matching owner-key SelfProofRecord exists, but no wallet binding exists. This does not mean third-party verification."
+        comment: "Record Detail signature value only when a matching on-device SelfProofRecord exists. This does not mean third-party verification."
       )
     } else {
-      signature = Self.unavailable
+      signature = Self.signatureUnavailable
     }
     if sessionCount > 1 {
       // A selected Proof is one session, never the entire event.
@@ -78,11 +85,19 @@ struct ProofDetailPresentation {
     }
   }
 
+  private static var signatureUnavailable: String {
+    String(
+      localized: "proofDetail.signature.unavailable",
+      defaultValue: "NOT AVAILABLE",
+      comment: "Record Detail signature value when no matching on-device self-signature is available, including a discarded self-proof or a legacy binding alone. This does not imply a key change unless the record is flagged incomplete."
+    )
+  }
+
   private static var unavailable: String {
     String(
       localized: "proofDetail.value.unavailable",
       defaultValue: "Not yet available",
-      comment: "Proof Detail value when no matching signature record or session aggregate snapshot exists. No missing count should appear as zero."
+      comment: "Proof Detail value when no session aggregate snapshot exists. No missing count should appear as zero."
     )
   }
 }
@@ -117,6 +132,7 @@ struct ItemDetailView: View {
   }
 
   var body: some View {
+    let presentation = presentation
     ScrollView {
       BeidAdaptiveContent {
         VStack(alignment: .leading, spacing: 0) {
@@ -135,6 +151,21 @@ struct ItemDetailView: View {
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("proof.detail.title")
             .padding(.top, DS.Space.l + DS.Space.xs)
+
+          if let reason = presentation.incompleteReason {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+              Text(verbatim: presentation.status)
+                .beidTextStyle(DS.Font.Library.title15)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("record.incomplete.title")
+              Text(verbatim: reason)
+                .beidTextStyle(DS.Font.Library.body13)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("record.incomplete.reason")
+            }
+            .foregroundStyle(DS.Color.textPrimary)
+            .padding(.vertical, DS.Space.m)
+          }
 
           VStack(spacing: 0) {
             keyValueRow(
@@ -168,7 +199,8 @@ struct ItemDetailView: View {
           )
 
           RecordEvidenceLadder(
-            proof: proof, sensing: coordinator.sensingCoordinator,
+            proof: proof, hasSelfProof: presentation.isSealedOnDevice,
+            sensing: coordinator.sensingCoordinator,
             submissionStore: coordinator.reportSubmissionStore,
             proofStore: coordinator.proofStore, linkStore: coordinator.reportProofLinkStore
           )
@@ -266,6 +298,7 @@ struct RecordSendingLadderPresentation {
 
 private struct RecordEvidenceLadder: View {
   let proof: Proof
+  let hasSelfProof: Bool
   @ObservedObject var sensing: SensingCoordinator
   @ObservedObject var submissionStore: ReportSubmissionStore
   @ObservedObject var proofStore: ProofStore
@@ -280,7 +313,7 @@ private struct RecordEvidenceLadder: View {
   var body: some View {
     let reports = reports
     let presentation = RecordSendingLadderPresentation(
-      hasSelfProof: sensing.selfProofRecord(forProofId: proof.id) != nil,
+      hasSelfProof: hasSelfProof,
       records: reports?.map(\.record)
     )
     VStack(alignment: .leading, spacing: DS.Space.m) {

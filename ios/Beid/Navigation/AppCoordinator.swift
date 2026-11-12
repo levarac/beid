@@ -6,6 +6,8 @@ import Combine
 import Foundation
 
 #if DEBUG
+import BarnardCore
+
 /// Two screenshot-only samples; production code never compiles this type.
 enum EventCodeScreenshotFixture {
   case entry
@@ -184,7 +186,48 @@ final class AppCoordinator: ObservableObject {
       self.sensingCoordinator = injectedSensingCoordinator
     } else {
       #if DEBUG
-      if NearbyJoinUITestFixture.isEnabled {
+      if reportArguments.contains("-beid-ui-test"),
+        reportArguments.contains("-beid-event-detail-frame-08"),
+        reportArguments.contains("-beid-record-legacy-binding-fixture")
+      {
+        // One stored-shape legacy binding, with no SelfProofRecord. Placeholder
+        // signature bytes exercise lookup/presentation, never cryptographic verification.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+          "beid-legacy-record-\(UUID().uuidString)", isDirectory: true
+        )
+        do {
+          try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+          preconditionFailure("Unable to create isolated legacy-record fixture")
+        }
+        let proofId = UUID(uuidString: "00000000-0000-4000-8000-000000000631")!
+        let binding = BindingRecord(
+          proofId: proofId, eventCode: "ETHTOKYO2026",
+          walletAddress: "0x" + String(repeating: "00", count: 20),
+          eventSigningPublicKey: Data(repeating: 1, count: 33),
+          ownerPublicKey: Data(repeating: 2, count: 33), chainId: 1,
+          nonce: Data(repeating: 0, count: 16), issuedAt: "2026-03-25T13:02:00Z",
+          walletSignatureHex: String(repeating: "00", count: 65),
+          deviceSignature: BarnardCoreRecoverableSignature(
+            r: [UInt8](repeating: 1, count: 32), s: [UInt8](repeating: 2, count: 32), v: 0
+          )
+        )
+        let bindingURL = directory.appendingPathComponent("binding-records.json")
+        BindingRecordStore(fileURL: bindingURL).add(binding)
+        let fixture = SensingCoordinator(
+          windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("reports.json")),
+          selfProofStore: SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")),
+          selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")),
+          bindingRecordStore: BindingRecordStore(fileURL: bindingURL),
+          sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("snapshots.json")),
+          unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
+          sensingCryptography: BarnardSensingCryptography(),
+          reportProofLinkStore: linkStore, proofStore: resolvedProofStore
+        )
+        precondition(fixture.bindingRecord(forProofId: proofId) == binding)
+        precondition(fixture.selfProofRecord(forProofId: proofId) == nil)
+        self.sensingCoordinator = fixture
+      } else if NearbyJoinUITestFixture.isEnabled {
         self.sensingCoordinator = NearbyJoinUITestFixture.makeCoordinator()
       } else {
         self.sensingCoordinator = SensingCoordinator(
@@ -367,7 +410,9 @@ final class AppCoordinator: ObservableObject {
       let proof = Proof(
         id: UUID(uuidString: "00000000-0000-4000-8000-00000000063\(index + 1)")!,
         eventName: "ETH Tokyo 2026", date: Date(timeIntervalSince1970: start),
-        peersVerified: 0, eventCode: eventCode
+        peersVerified: 0, eventCode: eventCode,
+        selfProofDiscardedForKeyChange: index == 0 && arguments.contains("-beid-record-incomplete-fixture"),
+        signingKeyChangeNoticeAcknowledged: true
       )
       proofStore.add(proof)
       // 08c and 11 deliberately omit one snapshot so the single unavailable

@@ -2231,8 +2231,19 @@
         }
       }
     },
+    "proofDetail.incompleteReason": {
+      "comment": "Reason for an incomplete stored record after signing-key continuity failed. The record and its session/report evidence are retained.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone."
+          }
+        }
+      }
+    },
     "proofDetail.status.incomplete": {
-      "comment": "Status for a recording whose unsigned session record could not be saved and was discarded.",
+      "comment": "Status for a retained recording whose self-signature could not be completed after signing-key continuity failed.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2253,19 +2264,19 @@
         }
       }
     },
-    "proofDetail.signature.bound": {
-      "comment": "Proof Detail signature value shown only when a wallet BindingRecord belongs to this exact Proof.",
+    "proofDetail.signature.unavailable": {
+      "comment": "Record Detail signature value when no matching on-device self-signature is available, including a discarded self-proof or a legacy binding alone. This does not imply a key change unless the record is flagged incomplete.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bound to wallet"
+            "value": "NOT AVAILABLE"
           }
         }
       }
     },
     "proofDetail.signature.selfSigned": {
-      "comment": "Proof Detail signature value when a matching owner-key SelfProofRecord exists, but no wallet binding exists. This does not mean third-party verification.",
+      "comment": "Record Detail signature value only when a matching on-device SelfProofRecord exists. This does not mean third-party verification.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2344,7 +2355,7 @@
       }
     },
     "proofDetail.value.unavailable": {
-      "comment": "Proof Detail value when no matching signature record or session aggregate snapshot exists. No missing count should appear as zero.",
+      "comment": "Proof Detail value when no session aggregate snapshot exists. No missing count should appear as zero.",
       "localizations": {
         "en": {
           "stringUnit": {
