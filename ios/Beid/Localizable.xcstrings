@@ -7,7 +7,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mutual not available, %1$lld detected, window %2$lld"
+            "value": "Devices heard: %1$lld. Window %2$lld. Mutual check not available yet."
           }
         }
       }
@@ -422,12 +422,12 @@
         }
       }
     },
-    "PREPARED ON DEVICE": {
+    "PREPARED ON THIS PHONE": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "PREPARED ON DEVICE"
+            "value": "PREPARED ON THIS PHONE"
           }
         }
       }
@@ -462,12 +462,12 @@
         }
       }
     },
-    "RECORDED ON DEVICE": {
+    "RECORDED ON THIS PHONE": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "RECORDED ON DEVICE"
+            "value": "RECORDED ON THIS PHONE"
           }
         }
       }
@@ -520,17 +520,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "SENSING DATA"
-          }
-        }
-      }
-    },
-    "PEERS OBSERVED": {
-      "comment": "Number of distinct per-event display IDs observed in one stored session; this does not mean mutual confirmation.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PEERS OBSERVED"
           }
         }
       }
@@ -1086,7 +1075,7 @@
     "That event isn't open to join right now.": {},
     "beid couldn't verify that event. Check the code with the event organizer.": {},
     "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again.": {},
-    "beid can't trust event times while the clock is wrong. Turn on automatic date and time in Settings, then check again.": {},
+    "beid can't trust event times while the clock is wrong. Open Settings, choose General, then Date & Time, and check the time settings.": {},
     "beid couldn't compare the clock with the network, so event times can't be trusted yet. Check your connection, then try again.": {},
     "Check again": {
       "comment": "Re-runs the clock preflight comparison after the user follows the clock help instructions.",
@@ -1129,7 +1118,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Devices sensed"
+            "value": "Devices heard"
           }
         }
       }
@@ -1160,7 +1149,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Checking event registry…"
+            "value": "Checking event registration…"
           }
         }
       }
@@ -1171,7 +1160,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No registry definition was found for this event."
+            "value": "This event isn't registered."
           }
         }
       }
@@ -1193,7 +1182,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Event registry is temporarily unavailable."
+            "value": "Event registration can't be checked right now."
           }
         }
       }
@@ -1220,7 +1209,7 @@
     },
     "I've turned it on": {},
     "Install MetaMask to connect directly.": {},
-    "Join Event": {},
+    "Join event": {},
     "Keep beid open nearby to collect proof of attendance.": {},
     "MetaMask is not installed": {},
     "Method": {},
@@ -1255,7 +1244,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No name announced by nearby beacon"
+            "value": "This event didn't send a name"
           }
         }
       }
@@ -1461,7 +1450,7 @@
     "Sign this proof": {
       "comment": "Button: initiates a wallet-signature request for an already-collected proof."
     },
-    "Signal Lost": {},
+    "Signal lost": {},
     "Signature": {
       "comment": "Section/metric-row label for a proof's wallet-signature status (verb 'sign', noun form) -- distinct from the 'Proof' vocabulary term."
     },
@@ -1490,7 +1479,7 @@
     "Tap Bluetooth": {},
     "Tap Sense Event to start collecting proof of attendance automatically.": {},
     "The request timed out. Try again once your wallet is reachable.": {},
-    "Try Again": {},
+    "Try again": {},
     "Verified": {},
     "Verifying proof": {},
     "Waiting for wallet to approve…": {},
@@ -1528,7 +1517,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Join Event"
+            "value": "Join event"
           }
         }
       }
@@ -2087,7 +2076,7 @@
     "No past events yet.": {
       "comment": "Empty state on the Past Events screen, shown when this device has never recorded a Proof for any event."
     },
-    "Only events you've actually recorded a proof for are listed here.": {
+    "Only events you have a saved record for are listed here.": {
       "comment": "Footer under the Past Events list, clarifying that a code that was typed and abandoned before recording completed does not appear."
     },
     "account.pastEvents.label": {
@@ -2096,7 +2085,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Past Events"
+            "value": "Past events"
           }
         }
       }
@@ -2240,7 +2229,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sending isn't turned on for this build."
+            "value": "Sending is off in this version."
           }
         }
       }
@@ -2507,13 +2496,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld peer"
+                  "value": "%lld device"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld peers"
+                  "value": "%lld devices"
                 }
               }
             }
@@ -2608,7 +2597,7 @@
     },
     "Sensing is paused until Bluetooth is on. Tap to open Settings.": {},
     "Venue broadcast": {},
-    "Your proofs stay on this device as self-proofs. Nothing is deleted. You can connect this or another wallet anytime.": {},
+    "Your records stay on this phone. Nothing is deleted.": {},
     "About\nsensing": {},
     "HOW IT WORKS": {},
     "Phones exchange rotating anonymous IDs, not names or wallet addresses.": {},
@@ -2618,7 +2607,7 @@
     "How it works": {},
     "What\nwe send": {},
     "The event you joined": {},
-    "The event’s identifier, so the organiser knows which event this belongs to.": {},
+    "The event’s identifier, so the organizer knows which event this belongs to.": {},
     "The time window": {},
     "Which five-minute stretch of the event this record covers, not the moment you arrived or left.": {},
     "The anonymous IDs of the phones near you": {},
@@ -2636,7 +2625,7 @@
     "Your name, your account, or your wallet address": {},
     "None of them are part of a record.": {},
     "Anything you have not recorded": {},
-    "Records stay on this phone until sending is turned on for this build.": {},
+    "Sending is off in this version. Records stay on this phone.": {},
     "Saved observations are sent to the event operator.": {},
     "aboutSensing.submission.enabled": {
       "comment": "Status on About sensing when the report submission build flag is on. This only says the feature is enabled, not that a record was sent or accepted.",
@@ -2644,7 +2633,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sending is turned on for this build."
+            "value": "Sending is on."
           }
         }
       }
@@ -2688,9 +2677,9 @@
     "Link": {},
     "Link names no source": {},
     "Load a signed pack, check it, then broadcast it.": {},
-    "Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.": {},
+    "Load the signed pack the organizer gave you. Once it checks out, this phone broadcasts it.": {},
     "No camera access": {},
-    "No pack yet. Paste the link the organiser gave you, or scan its QR code.": {},
+    "No pack yet. Paste the link the organizer gave you, or scan its QR code.": {},
     "Not a venue link": {},
     "Not broadcasting": {},
     "Not saved": {},
@@ -2714,29 +2703,29 @@
     "Pack unavailable": {},
     "Paste the link": {},
     "Paste venue link": {},
-    "Point at the organiser's QR code": {},
+    "Point at the organizer's QR code": {},
     "Radio stopped": {},
     "Scan QR code": {},
     "Scanning unavailable": {},
     "Source not supported": {},
     "Stop broadcasting": {},
-    "That address sent us somewhere else, so it was not followed.": {},
+    "That link redirects elsewhere, so beid didn't follow it.": {},
     "That file is larger than a pack may be.": {},
     "That is not a venue link. Paste the whole link, including everything after the #.": {},
     "The camera could not start. Paste the link instead.": {},
     "The camera is ready.": {},
     "The event record could not be reached, so it is unknown whether this may broadcast.": {},
     "The event record could not be reached, so the pack was not checked.": {},
-    "The link and the pack do not agree. Ask the organiser for a current link.": {},
-    "The link carries the event's details itself. Use one the event's organiser gave you.": {},
+    "The link and the pack do not agree. Ask the organizer for a current link.": {},
+    "The link carries the event's details itself. Use one the event's organizer gave you.": {},
     "The pack could not be fetched.": {},
     "The pack is not for the event this link named.": {},
     "The part of this pack covering right now did not check out.": {},
     "The radio refused this pack and nothing is going out.": {},
     "This device cannot scan QR codes. Paste the link instead.": {},
     "This device's clock is unavailable, so broadcasting cannot be scheduled.": {},
-    "This event has been updated. Ask the organiser for a current link.": {},
-    "This event has no record on chain.": {},
+    "This event has been updated. Ask the organizer for a current link.": {},
+    "This event isn't in the event registration list.": {},
     "This event needs an entry code. Broadcasting those is not supported yet.": {},
     "This event's details were rejected.": {},
     "This link names an event but does not say where to get its pack.": {},
@@ -3039,7 +3028,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "RECORDED ON DEVICE"
+            "value": "RECORDED ON THIS PHONE"
           }
         }
       }
@@ -3144,7 +3133,7 @@
       }
     },
     "Waiting for Bluetooth": {},
-    "A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organiser gave you.": {},
+    "A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organizer gave you.": {},
     "Prepared": {
       "comment": "A canonical Observation is stored locally before sending.",
       "localizations": {
@@ -3261,7 +3250,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "PREPARED ON DEVICE"
+            "value": "PREPARED ON THIS PHONE"
           }
         }
       }
@@ -3360,7 +3349,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "RECORDED ON DEVICE"
+            "value": "RECORDED ON THIS PHONE"
           }
         }
       }
@@ -3514,7 +3503,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "PREPARED ON DEVICE · %@"
+            "value": "PREPARED ON THIS PHONE · %@"
           }
         }
       }

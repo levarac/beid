@@ -128,7 +128,7 @@ struct AboutSensingView: View {
 
   private var sendingStatus: String {
     if submissionEnabled {
-      return String(localized: "aboutSensing.submission.enabled", defaultValue: "Sending is turned on for this build.")
+      return String(localized: "aboutSensing.submission.enabled", defaultValue: "Sending is on.")
     }
     return String(localized: "dailySummary.submission.disabledForBuild")
   }
@@ -152,7 +152,7 @@ struct WhatWeSendView: View {
           SensingExplainerRule()
           SensingExplainerDetail(
             title: "The event you joined",
-            detail: "The event’s identifier, so the organiser knows which event this belongs to.",
+            detail: "The event’s identifier, so the organizer knows which event this belongs to.",
             identifier: "whatWeSend.firstRow"
           )
           SensingExplainerRule()
@@ -204,7 +204,7 @@ struct WhatWeSendView: View {
           } else {
             SensingExplainerDetail(
               title: "Anything you have not recorded",
-              detail: "Records stay on this phone until sending is turned on for this build.",
+              detail: "Sending is off in this version. Records stay on this phone.",
               identifier: "whatWeSend.finalRow"
             )
           }

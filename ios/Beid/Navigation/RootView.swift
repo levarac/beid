@@ -5,6 +5,7 @@ import SwiftUI
 
 struct RootView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     Group {
@@ -34,7 +35,7 @@ struct RootView: View {
       isActive: !coordinator.scanPresented
     ))
     .tint(DS.Color.actionPrimary)
-    .animation(DS.Motion.screenTransition, value: coordinator.screen)
+    .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: coordinator.screen)
 
   }
 }
@@ -47,7 +48,7 @@ private struct OwnerKeyFailurePresenter: ViewModifier {
       Alert(
         title: Text(verbatim: failure.title),
         message: Text(verbatim: failure.message),
-        primaryButton: .default(Text(String(localized: "ownerKeyFailure.retry", defaultValue: "Try Again"))) {
+        primaryButton: .default(Text(String(localized: "ownerKeyFailure.retry", defaultValue: "Try again"))) {
           sensingCoordinator.retryOwnerKeyOperation()
         },
         secondaryButton: .cancel(Text(String(localized: "ownerKeyFailure.dismiss", defaultValue: "Close")))

@@ -126,7 +126,7 @@ struct SensingSealedView: View {
             Text("DONE · YOU CAN CLOSE THE APP")
               .beidTextStyle(DS.Font.Library.labelMono10)
               .foregroundStyle(DS.Color.labelOnActionPrimary)
-            Text("Your record is saved on this phone. You can close the app.")
+            Text("Your record is saved on this phone. You'll find it in Records.")
               .beidTextStyle(DS.Font.Library.body13)
               .foregroundStyle(DS.Color.textSecondaryOnInk)
           }
@@ -134,10 +134,6 @@ struct SensingSealedView: View {
           .frame(maxWidth: .infinity, alignment: .leading)
           .background(DS.Color.strokeHairlineOnInk, in: RoundedRectangle(cornerRadius: DS.Radius.card))
           .padding(.vertical, DS.Space.l)
-          Text("Added to your collection · no action needed")
-            .beidTextStyle(DS.Font.Library.labelMono9)
-            .foregroundStyle(DS.Color.textSecondaryOnInk)
-            .frame(maxWidth: .infinity)
         }
         .frame(minHeight: geometry.size.height, alignment: .top)
         .padding(.horizontal, DS.Space.pageMargin)
@@ -168,7 +164,7 @@ struct SensingSealedView: View {
       SensingMetric(value: String(snapshot.detectedDeviceCount), label: "DEVICES HEARD")
     ]
     if let elapsed {
-      items.append(SensingMetric(value: "\(elapsed / 60):\(String(format: "%02d", elapsed % 60))", label: "ELAPSED"))
+      items.append(SensingMetric(value: ElapsedTimeFormat.minutesSeconds(TimeInterval(elapsed)), label: "ELAPSED"))
     }
     return HStack(alignment: .top, spacing: 0) {
       ForEach(items) { item in

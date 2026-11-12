@@ -8,6 +8,7 @@ struct ScanFlowView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject private var sensing: SensingCoordinator
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   init(sensing: SensingCoordinator) {
     self.sensing = sensing
@@ -15,7 +16,7 @@ struct ScanFlowView: View {
 
   var body: some View {
     content
-      .animation(DS.Motion.screenTransition, value: sensing.phase)
+      .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: sensing.phase)
       .navigationTitle("")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar(proofCollectedForDisplay == nil ? .visible : .hidden, for: .navigationBar)
@@ -64,7 +65,7 @@ struct ScanFlowView: View {
     if #available(iOS 26, *) {
       Button(role: .confirm, action: finishSealedScan)
     } else {
-      Button("Done", action: finishSealedScan)
+      Button("Done", systemImage: "checkmark", action: finishSealedScan)
     }
   }
 
@@ -277,7 +278,7 @@ enum ScanFlowContent {
       SensingStopConfirmView(
         sensing: sensing,
         snapshot: SensingStopConfirmSnapshot(
-          proofID: nil,
+          proofID: UUID(uuidString: "00000000-0000-4000-8000-000000000005"),
           event: event
         ),
         onStop: {},

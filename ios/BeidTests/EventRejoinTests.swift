@@ -51,7 +51,7 @@ final class EventRejoinTests: XCTestCase {
 
     XCTAssertEqual(
       coordinator.sensingCoordinator.joinedEventCode, "first-event",
-      "rejoinPastEvent must not replace an already-joined event — matches the single-slot invariant Join Event already enforces (EventMembershipUITests)."
+      "rejoinPastEvent must not replace an already-joined event — matches the single-slot invariant Join event already enforces (EventMembershipUITests)."
     )
   }
 

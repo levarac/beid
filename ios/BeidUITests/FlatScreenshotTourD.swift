@@ -36,7 +36,7 @@ final class FlatScreenshotTourD: XCTestCase {
     _ = heading.waitForExistence(timeout: 5)
     attachScreenshot("12")
     XCTAssertEqual(heading.label, "Report #1")
-    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON DEVICE"))
+    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS PHONE"))
     XCTAssertTrue(app.descendants(matching: .any)["report-detail.delivery"].label.contains("NOT SENT"))
     XCTAssertFalse(app.staticTexts.matching(
       NSPredicate(format: "label CONTAINS[c] %@", "verified")

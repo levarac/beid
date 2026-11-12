@@ -57,7 +57,7 @@ struct ProofDetailPresentation {
     } else if let deviceCount, let windowCount {
       let peers = String(
         localized: "proofDetail.with.peers",
-        defaultValue: "^[\(deviceCount) peers](inflect: true)",
+        defaultValue: "^[\(deviceCount) devices](inflect: true)",
         comment: "Number of distinct nearby devices in this Proof's session aggregate; this does not imply mutual confirmation."
       )
       let windows = String(
@@ -240,7 +240,7 @@ private struct RecordEvidenceLadder: View {
       Text(String(localized: "record.selectedSession", defaultValue: "SELECTED SESSION \(ordinal)"))
         .beidTextStyle(DS.Font.Library.labelMono10)
       evidence(
-        sensing.selfProofRecord(forProofId: proof.id) == nil ? "RECORDED ON DEVICE" : "SEALED ON THIS PHONE",
+        sensing.selfProofRecord(forProofId: proof.id) == nil ? "RECORDED ON THIS PHONE" : "SEALED ON THIS PHONE",
         value: String(localized: "Kept on this phone")
       )
       switch ReportProofLinkPresentation.readReports(

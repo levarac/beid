@@ -94,7 +94,7 @@ struct VenueScannerScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-        Text("Point at the organiser's QR code")
+        Text("Point at the organizer's QR code")
           .beidTextStyle(DS.Font.Library.labelMono10)
           .foregroundStyle(DS.Color.textSecondaryOnInk)
           .accessibilityIdentifier("venue.scanner.caption")

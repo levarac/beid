@@ -15,7 +15,7 @@ final class ReportDetailPresentationTests: XCTestCase {
 
   func testPreparedTimeIsOnlyShownForPreparation() {
     let presentation = ReportDetailPresentation(record: record(state: .prepared))
-    XCTAssertEqual(presentation.caption, "PREPARED ON DEVICE")
+    XCTAssertEqual(presentation.caption, "PREPARED ON THIS PHONE")
     XCTAssertEqual(presentation.delivery, "NOT SENT")
     XCTAssertTrue(presentation.showsPreparedAt)
   }
@@ -62,7 +62,7 @@ final class ReportDetailPresentationTests: XCTestCase {
     let progress = ReportProgressPresentation(records: records)
     XCTAssertEqual(progress.summary, "1 OF 3 RECEIVED")
     XCTAssertEqual(progress.receivedCount, 1)
-    XCTAssertEqual(ReportProgressPresentation(records: [records[1]]).summary, "PREPARED ON DEVICE")
+    XCTAssertEqual(ReportProgressPresentation(records: [records[1]]).summary, "PREPARED ON THIS PHONE")
     XCTAssertEqual(ReportProgressPresentation(records: [records[2]]).summary, "STATUS UNAVAILABLE")
     XCTAssertEqual(ReportProgressPresentation(records: []).summary, "NO LINKED REPORTS")
   }
