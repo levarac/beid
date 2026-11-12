@@ -203,7 +203,9 @@ final class FlatScreenshotTourD: XCTestCase {
     for identifier in ["venue.digest", "venue.delivery", "venue.until", "venue.battery", "venue.bluetooth"] {
       XCTAssertTrue(app.staticTexts[identifier].exists, identifier)
     }
-    XCTAssertEqual(app.staticTexts["venue.delivery"].label, "DIRECT · HOP 0")
+    // Label/Mono uppercases the visual text, while accessibility keeps the
+    // localized sentence and the checked permit's actual hop count.
+    XCTAssertEqual(app.staticTexts["venue.delivery"].label, "Direct · hop 0")
     XCTAssertTrue(app.staticTexts["venue.bluetooth"].label.uppercased().contains("ASKED TO BROADCAST"))
   }
 

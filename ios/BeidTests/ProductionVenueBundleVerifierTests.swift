@@ -691,7 +691,9 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     XCTAssertEqual(permit.currentEnin, 5_967_648)
     XCTAssertEqual(permit.relayHopCount, 0)
     XCTAssertNotNil(imported.broadcastUntilUnixSeconds)
-    XCTAssertEqual(imported.registrarHex, "0x1111111111111111111111111111111111111111")
+    // full-schedule.venue-bundle.hex: signed definition payload key 3;
+    // fullScheduleContextABIHex: registry registration key 1 agrees.
+    XCTAssertEqual(imported.registrarHex, "0xdf6986bbadd189309d52d437851c10e47ca02e20")
     XCTAssertGreaterThan(try XCTUnwrap(imported.broadcastUntilUnixSeconds), permit.stopAtUnixSeconds,
                          "the screen's end covers the verified chain, not just this ENIN")
   }
