@@ -2264,19 +2264,8 @@
         }
       }
     },
-    "proofDetail.signature.bound": {
-      "comment": "Proof Detail signature value shown only when a wallet BindingRecord belongs to this exact Proof.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bound to wallet"
-          }
-        }
-      }
-    },
     "proofDetail.signature.selfSigned": {
-      "comment": "Proof Detail signature value when a matching owner-key SelfProofRecord exists, but no wallet binding exists. This does not mean third-party verification.",
+      "comment": "Record Detail signature value only when a matching on-device SelfProofRecord exists. This does not mean third-party verification.",
       "localizations": {
         "en": {
           "stringUnit": {

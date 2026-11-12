@@ -4,7 +4,7 @@
 import BeidSharedKit
 import SwiftUI
 
-/// The five values in frame 09. Record existence and aggregate counts are
+/// Frame 09's values and incomplete-record notice. Record existence and aggregate counts are
 /// inputs so presentation never infers a signature from ProofSignatureState
 /// or a connected wallet. The screenshot tour supplies only these display
 /// values; it creates no durable signing or reporting artifact.
@@ -19,7 +19,7 @@ struct ProofDetailPresentation {
   init(
     method: String,
     hasSelfProof: Bool,
-    hasBinding: Bool,
+    hasBinding _: Bool,
     deviceCount: Int?,
     windowCount: Int?,
     sessionCount: Int,
@@ -47,17 +47,12 @@ struct ProofDetailPresentation {
       )
     if selfProofDiscardedForKeyChange {
       signature = Self.unavailable
-    } else if hasBinding {
-      signature = String(
-        localized: "proofDetail.signature.bound",
-        defaultValue: "Bound to wallet",
-        comment: "Proof Detail signature value shown only when a wallet BindingRecord belongs to this exact Proof."
-      )
     } else if hasSelfProof {
+      // A legacy binding's acknowledgement is not this recording's self-signature.
       signature = String(
         localized: "proofDetail.signature.selfSigned",
         defaultValue: "Self-signed on device",
-        comment: "Proof Detail signature value when a matching owner-key SelfProofRecord exists, but no wallet binding exists. This does not mean third-party verification."
+        comment: "Record Detail signature value only when a matching on-device SelfProofRecord exists. This does not mean third-party verification."
       )
     } else {
       signature = Self.unavailable

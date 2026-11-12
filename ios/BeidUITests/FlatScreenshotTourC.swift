@@ -219,6 +219,24 @@ final class FlatScreenshotTourC: XCTestCase {
     app.staticTexts["proof.detail.title"].assertExists()
   }
 
+  func testLegacyBindingWithoutSelfProofDoesNotInventSignatureEvidence() {
+    // The fixture loads a matching BindingRecord from an isolated store,
+    // without creating a SelfProofRecord or overriding presentation values.
+    let app = launchEventDetailFixture(extraArguments: ["-beid-record-legacy-binding-fixture"])
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    app.staticTexts["SIGNATURE"].scrollToHittable(in: app)
+    XCTAssertTrue(app.staticTexts["Not yet available"].exists)
+    XCTAssertFalse(app.staticTexts["Self-signed on device"].exists)
+    XCTAssertFalse(app.staticTexts["SEALED ON THIS PHONE"].exists)
+    XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
+    XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "wallet")).firstMatch.exists)
+    app.staticTexts["RECORDED ON THIS PHONE"].scrollToHittable(in: app)
+    attachScreenshot("09-legacy-binding")
+  }
+
   func testSelectingObservedWindowExposesThatSelection() {
     let app = launchObservationFixture()
     let record = app.buttons["event-detail.proof.1"]
@@ -590,7 +608,8 @@ final class FlatScreenshotTourC: XCTestCase {
       XCTAssertEqual(app.staticTexts["proof-collected.status"].label, "SEALED", file: file, line: line)
     } else if code == "09" {
       XCTAssertTrue(app.staticTexts["proof.detail.title"].exists, file: file, line: line)
-      XCTAssertTrue(app.staticTexts["Bound to wallet"].exists, file: file, line: line)
+      XCTAssertTrue(app.staticTexts["Self-signed on device"].exists, file: file, line: line)
+      XCTAssertFalse(app.staticTexts["Bound to wallet"].exists, file: file, line: line)
       XCTAssertFalse(app.buttons["Transparency"].exists, file: file, line: line)
       XCTAssertFalse(app.buttons["View participation summary"].exists, file: file, line: line)
       let externalResult = app.staticTexts["THIRD-PARTY RESULT"]

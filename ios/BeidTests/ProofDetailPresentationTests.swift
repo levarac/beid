@@ -5,7 +5,7 @@ import XCTest
 @testable import Beid
 
 final class ProofDetailPresentationTests: XCTestCase {
-  func testOnlyAMatchingSelfProofCanSealAndOnlyABindingCanClaimWallet() {
+  func testOnlyAMatchingSelfProofDeterminesOnDeviceSignatureEvidence() {
     let recorded = makePresentation(selfProof: false, binding: false)
     XCTAssertEqual(recorded.status, "Recorded on device")
     XCTAssertEqual(recorded.signature, "Not yet available")
@@ -16,13 +16,17 @@ final class ProofDetailPresentationTests: XCTestCase {
 
     let bound = makePresentation(selfProof: true, binding: true)
     XCTAssertEqual(bound.status, "Sealed")
-    XCTAssertEqual(bound.signature, "Bound to wallet")
+    XCTAssertEqual(bound.signature, "Self-signed on device")
 
     // A binding is not itself a SelfProofRecord. These are deliberately
     // independent lookups, even when historical data is incomplete.
     let bindingOnly = makePresentation(selfProof: false, binding: true)
     XCTAssertEqual(bindingOnly.status, "Recorded on device")
-    XCTAssertEqual(bindingOnly.signature, "Bound to wallet")
+    XCTAssertEqual(bindingOnly.signature, "Not yet available")
+    for value in [recorded, selfSigned, bound, bindingOnly] {
+      XCTAssertFalse(value.signature.localizedCaseInsensitiveContains("wallet"))
+      XCTAssertNil(value.incompleteReason)
+    }
   }
 
   func testDiscardedSelfProofShowsAnIncompleteRecording() {
