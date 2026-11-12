@@ -708,6 +708,7 @@ struct SensingSessionSurface: View {
           )
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .accessibilityIdentifier(showsFirstSensingHint || presentation == .detectingFirstTime ? "scan.first-time.about" : "scan.about")
         .onAppear {
           if showsFirstSensingHint { hasShownFirstTimeHint = true }

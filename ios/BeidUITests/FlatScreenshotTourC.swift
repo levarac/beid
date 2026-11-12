@@ -48,6 +48,41 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertTrue(heard.staticTexts["ELAPSED"].exists)
   }
 
+  func testSensingHeaderAndFirstTimeExplanationMatchTheApprovedFrames() {
+    for code in ["05", "05a3"] {
+      let app = launchSensingFixture(code)
+      let status = app.navigationBars.staticTexts.matching(
+        NSPredicate(format: "label ==[c] %@", "Sensing")
+      ).firstMatch
+      status.assertExists()
+      XCTAssertFalse(app.staticTexts["MUTUAL"].exists)
+      XCTAssertFalse(app.staticTexts["DETECTED"].exists)
+      XCTAssertTrue(app.staticTexts["DEVICES HEARD"].exists)
+      XCTAssertTrue(app.staticTexts["ELAPSED"].exists)
+      app.buttons["scan.stop-sensing"].assertHittable()
+
+      if code == "05a3" {
+        let hint = app.buttons["scan.first-time.about"]
+        hint.scrollToHittable(in: app)
+        XCTAssertEqual(hint.label, "How sensing works")
+        XCTAssertEqual(hint.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 1)
+        hint.tap()
+        app.staticTexts["HOW IT WORKS"].assertExists()
+        app.navigationBars.buttons.firstMatch.tap()
+        hint.scrollToHittable(in: app)
+      }
+
+      // Native Back must still leave the live session available in Now.
+      app.navigationBars.buttons.firstMatch.assertHittable()
+      app.navigationBars.buttons.firstMatch.tap()
+      app.buttons["home.open-details"].assertHittable()
+      app.buttons["home.open-details"].tap()
+      app.descendants(matching: .any)["scan.sensing-session"].assertExists()
+      XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
+      app.terminate()
+    }
+  }
+
   /// Not a Figma frame. An unchecked device clock is a notice above the
   /// nearby list on the pre-join screen; it never becomes 05d.
   func testShot_05_ClockUncheckedNotice() {
