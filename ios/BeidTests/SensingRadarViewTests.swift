@@ -94,7 +94,7 @@ final class SensingRadarViewTests: XCTestCase {
     XCTAssertEqual(sensing.edges.count, peers.count)
   }
 
-  func testAccessibilitySummaryUsesSuppliedMutualCountIncludingZeroWithoutIdentifiers() {
+  func testAccessibilitySummaryOmitsMutualCountsAndPrivateIdentifiers() {
     let privateID = "private-peer-identifier"
     let peers = [
       SensingRadarPeer(id: privateID, signalStrength: .unmeasured),
@@ -111,8 +111,8 @@ final class SensingRadarViewTests: XCTestCase {
       observedWindowCount: 6
     )
 
-    XCTAssertEqual(zeroSummary, "0 mutual, 2 detected, window 6")
-    XCTAssertEqual(mutualSummary, "1 mutual, 2 detected, window 6")
+    XCTAssertEqual(zeroSummary, "2 devices heard")
+    XCTAssertEqual(mutualSummary, "2 devices heard")
     XCTAssertFalse(zeroSummary.contains(privateID))
     XCTAssertFalse(mutualSummary.contains(privateID))
     XCTAssertFalse(mutualSummary.contains("other"))

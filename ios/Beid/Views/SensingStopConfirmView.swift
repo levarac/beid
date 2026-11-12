@@ -3,8 +3,8 @@
 
 import SwiftUI
 
-/// Identity held while the live coordinator continues sensing. `proofID` is
-/// nil only in the gated screenshot fixture.
+/// Identity held while sensing continues. A record ID may not exist yet
+/// when the participant requests a stop during initial detection.
 struct SensingStopConfirmSnapshot {
   let proofID: UUID?
   let event: EventSession
@@ -97,29 +97,27 @@ struct SensingStopConfirmView: View {
   }
 
   private var metrics: some View {
-    let items = [
-      SensingMetric(value: String(sensing.sessionAggregate?.mutualDeviceCount ?? 0), label: "MUTUAL"),
-      SensingMetric(value: String(sensing.devicesVerified), label: "DETECTED"),
-      SensingMetric(value: String(sensing.sessionAggregate?.windowCount ?? 0), label: "WINDOWS")
-    ]
-    return HStack(alignment: .top, spacing: 0) {
-      ForEach(items) { item in
-        VStack(alignment: .leading, spacing: DS.Space.xs) {
-          Text(verbatim: item.value)
-            .beidTextStyle(DS.Font.Library.displayNumber40)
-            .foregroundStyle(DS.Color.labelOnActionPrimary)
-          Text(verbatim: item.label)
-            .beidTextStyle(DS.Font.Library.labelMono10)
-            .foregroundStyle(DS.Color.textSecondaryOnInk)
+    TimelineView(.periodic(from: .now, by: 1)) { context in
+      let elapsed = max(0, Int(sensing.firstSightingAt.map {
+        sensing.sensingPresentationNow(context.date).timeIntervalSince($0)
+      } ?? 0))
+      let items = [
+        SensingMetric(value: String(sensing.devicesVerified), label: "DEVICES HEARD"),
+        SensingMetric(value: "\(elapsed / 60):\(String(format: "%02d", elapsed % 60))", label: "ELAPSED")
+      ]
+      HStack(alignment: .top, spacing: 0) {
+        ForEach(items) { item in
+          VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Text(verbatim: item.value)
+              .beidTextStyle(DS.Font.Library.displayNumber40)
+              .foregroundStyle(DS.Color.labelOnActionPrimary)
+            Text(verbatim: item.label)
+              .beidTextStyle(DS.Font.Library.labelMono10)
+              .foregroundStyle(DS.Color.textSecondaryOnInk)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(
-      "\(sensing.sessionAggregate?.mutualDeviceCount ?? 0) mutual, "
-        + "\(sensing.devicesVerified) detected, "
-        + "window \(sensing.sessionAggregate?.windowCount ?? 0)"
-    )
   }
 }

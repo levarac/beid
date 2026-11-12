@@ -25,7 +25,7 @@ struct SignalLostView: View {
   var body: some View {
     BeidStatusLayout(
       title: "Signal Lost",
-      message: "beid lost the connection to \(event.name). Move closer and we'll pick it back up automatically.",
+      message: "beid lost the connection to \(event.name). Move closer, then try again.",
       accessory: {
       VStack(spacing: DS.Space.m) {
         BeidStatusPill(state: .sensingPaused)

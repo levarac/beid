@@ -3,9 +3,8 @@
 
 import SwiftUI
 
-/// The observed, pre-recording session. Its first sighting is 05a; when the
-/// same real session has remained here for 20 seconds, the shared surface
-/// reveals 05a2's manual-entry rescue without resetting a timer on redraw.
+/// Initial detection shares the live sensing surface and its explanation
+/// link. Returning to Now leaves this participation running.
 struct EventFoundView: View {
   @ObservedObject var sensing: SensingCoordinator
   let event: EventSession

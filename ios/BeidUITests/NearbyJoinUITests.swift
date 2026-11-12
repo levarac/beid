@@ -160,11 +160,10 @@ final class NowNavigationUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["DEMO EVENT · FOR APP REVIEW"].exists)
     app.buttons["home.demo.join"].tap()
     XCTAssertTrue(app.scrollViews["scan.sensing-session"].waitForExistence(timeout: 30))
-    let cancelBinding = app.buttons["Cancel"]
-    if cancelBinding.waitForExistence(timeout: 10) { cancelBinding.tap() }
+    XCTAssertFalse(app.buttons["Cancel"].exists, "Recording must not present a wallet sheet")
     let recording = app.buttons["Simulate Signal Lost"]
     XCTAssertTrue(recording.waitForExistence(timeout: 30))
-    app.buttons["Close"].tap()
+    app.buttons["scan.stop-sensing"].tap()
     app.buttons["scan.stop-confirm.stop"].assertHittable()
     app.buttons["scan.stop-confirm.stop"].tap()
     app.buttons["Done"].assertHittable()
