@@ -8,7 +8,7 @@ final class ProofDetailPresentationTests: XCTestCase {
   func testOnlyAMatchingSelfProofDeterminesOnDeviceSignatureEvidence() {
     let recorded = makePresentation(selfProof: false, binding: false)
     XCTAssertEqual(recorded.status, "Recorded on device")
-    XCTAssertEqual(recorded.signature, "Not yet available")
+    XCTAssertEqual(recorded.signature, "NOT AVAILABLE")
 
     let selfSigned = makePresentation(selfProof: true, binding: false)
     XCTAssertEqual(selfSigned.status, "Sealed")
@@ -22,9 +22,11 @@ final class ProofDetailPresentationTests: XCTestCase {
     // independent lookups, even when historical data is incomplete.
     let bindingOnly = makePresentation(selfProof: false, binding: true)
     XCTAssertEqual(bindingOnly.status, "Recorded on device")
-    XCTAssertEqual(bindingOnly.signature, "Not yet available")
+    XCTAssertEqual(bindingOnly.signature, "NOT AVAILABLE")
     for value in [recorded, selfSigned, bound, bindingOnly] {
       XCTAssertFalse(value.signature.localizedCaseInsensitiveContains("wallet"))
+      XCTAssertFalse(value.signature.localizedCaseInsensitiveContains("bind"))
+      XCTAssertFalse(value.signature.localizedCaseInsensitiveContains("bound"))
       XCTAssertNil(value.incompleteReason)
     }
   }
@@ -36,7 +38,7 @@ final class ProofDetailPresentationTests: XCTestCase {
         XCTAssertEqual(value.status, "Recording incomplete")
         XCTAssertEqual(value.incompleteReason,
                        "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
-        XCTAssertEqual(value.signature, "Not yet available")
+        XCTAssertEqual(value.signature, "NOT AVAILABLE")
         XCTAssertFalse(value.isSealedOnDevice)
         let ladder = RecordSendingLadderPresentation(hasSelfProof: value.isSealedOnDevice, records: nil)
         XCTAssertEqual(ladder.rungs[0].title, "RECORDED ON THIS PHONE")
@@ -47,9 +49,11 @@ final class ProofDetailPresentationTests: XCTestCase {
 
   func testOrdinarySignedAndUnsignedRecordsHaveNoIncompleteWarning() {
     for selfProof in [false, true] {
-      let value = makePresentation(selfProof: selfProof, binding: false)
-      XCTAssertNil(value.incompleteReason)
-      XCTAssertEqual(value.isSealedOnDevice, selfProof)
+      for binding in [false, true] {
+        let value = makePresentation(selfProof: selfProof, binding: binding)
+        XCTAssertNil(value.incompleteReason)
+        XCTAssertEqual(value.isSealedOnDevice, selfProof)
+      }
     }
   }
 
@@ -58,6 +62,7 @@ final class ProofDetailPresentationTests: XCTestCase {
       selfProof: false, binding: false, devices: nil, windows: nil
     )
     XCTAssertEqual(value.withValue, "Not yet available")
+    XCTAssertEqual(value.signature, "NOT AVAILABLE")
     XCTAssertFalse(value.withValue.contains("0 devices"))
     XCTAssertFalse(value.withValue.contains("0 windows"))
   }

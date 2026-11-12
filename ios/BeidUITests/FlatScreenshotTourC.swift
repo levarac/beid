@@ -162,6 +162,7 @@ final class FlatScreenshotTourC: XCTestCase {
     title.assertExists()
     XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
     XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
+    assertSignatureUnavailable(app)
     XCTAssertTrue(app.staticTexts["RECORDED ON THIS PHONE"].exists)
     XCTAssertFalse(app.staticTexts["STATUS"].exists)
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
@@ -184,9 +185,17 @@ final class FlatScreenshotTourC: XCTestCase {
   }
 
   func testIncompleteRecordExplainsKeyChangeAndKeepsSessionAndReportRoutes() {
-    let app = launchEventDetailFixture(extraArguments: [
-      "-beid-report-links-701", "-beid-record-incomplete-fixture"
-    ])
+    assertIncompleteRecordKeepsSessionAndReportRoutes(legacyBinding: false)
+  }
+
+  func testIncompleteRecordWithLegacyBindingDoesNotInventSignatureEvidence() {
+    assertIncompleteRecordKeepsSessionAndReportRoutes(legacyBinding: true)
+  }
+
+  private func assertIncompleteRecordKeepsSessionAndReportRoutes(legacyBinding: Bool) {
+    var arguments = ["-beid-report-links-701", "-beid-record-incomplete-fixture"]
+    if legacyBinding { arguments.append("-beid-record-legacy-binding-fixture") }
+    let app = launchEventDetailFixture(extraArguments: arguments)
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
@@ -199,42 +208,83 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertEqual(reason.label,
                    "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
     XCTAssertTrue(app.windows.firstMatch.frame.contains(reason.frame))
-    XCTAssertFalse(app.staticTexts["Self-signed on device"].exists)
-    XCTAssertFalse(app.staticTexts["SEALED ON THIS PHONE"].exists)
+    assertSignatureUnavailable(app)
     app.staticTexts["RECORDED ON THIS PHONE"].scrollToHittable(in: app)
-    attachScreenshot("09-incomplete-record")
-
-    let report = app.buttons["proof-detail.report.\(Self.linkedReportID)"]
-    // The linked report is above the ladder; return to the top before scrolling to it.
-    for _ in 0..<5 { app.swipeDown() }
-    report.scrollToHittable(in: app)
-    report.tap()
-    app.staticTexts["report-detail.heading"].assertExists()
-    app.navigationBars.buttons.firstMatch.tap()
-    let session = app.buttons["record.session.00000000-0000-4000-8000-000000000631"]
-    session.scrollToHittable(in: app)
-    session.tap()
-    app.staticTexts["observation-detail.title"].assertExists()
-    app.navigationBars.buttons.firstMatch.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    attachScreenshot(legacyBinding ? "09-incomplete-legacy-binding" : "09-incomplete-record")
+    assertRecordKeepsSessionAndReportRoutes(app)
+    XCTAssertEqual(reason.label,
+                   "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
   }
 
   func testLegacyBindingWithoutSelfProofDoesNotInventSignatureEvidence() {
     // The fixture loads a matching BindingRecord from an isolated store,
     // without creating a SelfProofRecord or overriding presentation values.
-    let app = launchEventDetailFixture(extraArguments: ["-beid-record-legacy-binding-fixture"])
+    // Placeholder signature bytes establish stored shape, not cryptographic validity.
+    let app = launchEventDetailFixture(extraArguments: [
+      "-beid-report-links-701", "-beid-record-legacy-binding-fixture"
+    ])
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
     app.staticTexts["proof.detail.title"].assertExists()
-    app.staticTexts["SIGNATURE"].scrollToHittable(in: app)
-    XCTAssertTrue(app.staticTexts["Not yet available"].exists)
-    XCTAssertFalse(app.staticTexts["Self-signed on device"].exists)
-    XCTAssertFalse(app.staticTexts["SEALED ON THIS PHONE"].exists)
+    assertSignatureUnavailable(app)
     XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
-    XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "wallet")).firstMatch.exists)
+    XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
     app.staticTexts["RECORDED ON THIS PHONE"].scrollToHittable(in: app)
     attachScreenshot("09-legacy-binding")
+    assertRecordKeepsSessionAndReportRoutes(app)
+    XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
+    XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
+  }
+
+  private func assertSignatureUnavailable(_ app: XCUIApplication) {
+    app.staticTexts["SIGNATURE"].scrollToHittable(in: app)
+    app.staticTexts["NOT AVAILABLE"].scrollToHittable(in: app)
+    XCTAssertEqual(app.staticTexts["NOT AVAILABLE"].label, "NOT AVAILABLE")
+    XCTAssertFalse(app.staticTexts["Self-signed on device"].exists)
+    XCTAssertFalse(app.staticTexts["SEALED ON THIS PHONE"].exists)
+    assertNoWalletOrBindingPresentation(app)
+  }
+
+  private func assertNoWalletOrBindingPresentation(_ app: XCUIApplication) {
+    let elements = app.descendants(matching: .any).allElementsBoundByIndex
+    for element in elements {
+      let text = element.label + " " + (element.value as? String ?? "")
+      for word in ["wallet", "bind", "bound"] {
+        XCTAssertFalse(text.localizedCaseInsensitiveContains(word), text)
+      }
+    }
+  }
+
+  private func assertRecordKeepsSessionAndReportRoutes(_ app: XCUIApplication) {
+    let recordID = app.staticTexts["Record ID 00000000-0000-4000-8000-000000000631"]
+    XCTAssertTrue(recordID.exists)
+    XCTAssertTrue(app.staticTexts["See each session"].exists)
+    let report = app.buttons["proof-detail.report.\(Self.linkedReportID)"]
+    // The linked report is above the ladder; return to the top before scrolling to it.
+    for _ in 0..<5 { app.swipeDown() }
+    report.scrollToHittable(in: app)
+    let reportLabel = report.label
+    report.tap()
+    app.staticTexts["report-detail.heading"].assertExists()
+    XCTAssertTrue(app.descendants(matching: .any)["report-detail.record-id"].label.contains(Self.linkedReportID))
+    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS PHONE"))
+    XCTAssertTrue(app.descendants(matching: .any)["report-detail.delivery"].label.contains("NOT SENT"))
+    app.navigationBars.buttons.firstMatch.tap()
+    for number in 1...3 {
+      XCTAssertTrue(app.buttons["record.session.00000000-0000-4000-8000-00000000063\(number)"].exists)
+    }
+    let session = app.buttons["record.session.00000000-0000-4000-8000-000000000631"]
+    session.scrollToHittable(in: app)
+    session.tap()
+    app.staticTexts["observation-detail.title"].assertExists()
+    XCTAssertFalse(app.staticTexts["observation-detail.unavailable"].exists)
+    app.navigationBars.buttons.firstMatch.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    for _ in 0..<5 { app.swipeDown() }
+    XCTAssertTrue(recordID.exists)
+    assertSignatureUnavailable(app)
+    XCTAssertEqual(report.label, reportLabel)
   }
 
   func testSelectingObservedWindowExposesThatSelection() {
@@ -609,6 +659,7 @@ final class FlatScreenshotTourC: XCTestCase {
     } else if code == "09" {
       XCTAssertTrue(app.staticTexts["proof.detail.title"].exists, file: file, line: line)
       XCTAssertTrue(app.staticTexts["Self-signed on device"].exists, file: file, line: line)
+      assertNoWalletOrBindingPresentation(app)
       XCTAssertFalse(app.staticTexts["Bound to wallet"].exists, file: file, line: line)
       XCTAssertFalse(app.buttons["Transparency"].exists, file: file, line: line)
       XCTAssertFalse(app.buttons["View participation summary"].exists, file: file, line: line)

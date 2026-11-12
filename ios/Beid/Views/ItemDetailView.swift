@@ -46,7 +46,7 @@ struct ProofDetailPresentation {
         comment: "Proof Detail status when a Proof is stored locally but no matching self-proof signature record exists. Do not imply sealing or third-party verification."
       )
     if selfProofDiscardedForKeyChange {
-      signature = Self.unavailable
+      signature = Self.signatureUnavailable
     } else if hasSelfProof {
       // A legacy binding's acknowledgement is not this recording's self-signature.
       signature = String(
@@ -55,7 +55,7 @@ struct ProofDetailPresentation {
         comment: "Record Detail signature value only when a matching on-device SelfProofRecord exists. This does not mean third-party verification."
       )
     } else {
-      signature = Self.unavailable
+      signature = Self.signatureUnavailable
     }
     if sessionCount > 1 {
       // A selected Proof is one session, never the entire event.
@@ -85,11 +85,19 @@ struct ProofDetailPresentation {
     }
   }
 
+  private static var signatureUnavailable: String {
+    String(
+      localized: "proofDetail.signature.unavailable",
+      defaultValue: "NOT AVAILABLE",
+      comment: "Record Detail signature value when no matching on-device self-signature is available, including a discarded self-proof or a legacy binding alone. This does not imply a key change unless the record is flagged incomplete."
+    )
+  }
+
   private static var unavailable: String {
     String(
       localized: "proofDetail.value.unavailable",
       defaultValue: "Not yet available",
-      comment: "Proof Detail value when no matching signature record or session aggregate snapshot exists. No missing count should appear as zero."
+      comment: "Proof Detail value when no session aggregate snapshot exists. No missing count should appear as zero."
     )
   }
 }

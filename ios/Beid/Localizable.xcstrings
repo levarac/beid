@@ -2264,6 +2264,17 @@
         }
       }
     },
+    "proofDetail.signature.unavailable": {
+      "comment": "Record Detail signature value when no matching on-device self-signature is available, including a discarded self-proof or a legacy binding alone. This does not imply a key change unless the record is flagged incomplete.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NOT AVAILABLE"
+          }
+        }
+      }
+    },
     "proofDetail.signature.selfSigned": {
       "comment": "Record Detail signature value only when a matching on-device SelfProofRecord exists. This does not mean third-party verification.",
       "localizations": {
@@ -2344,7 +2355,7 @@
       }
     },
     "proofDetail.value.unavailable": {
-      "comment": "Proof Detail value when no matching signature record or session aggregate snapshot exists. No missing count should appear as zero.",
+      "comment": "Proof Detail value when no session aggregate snapshot exists. No missing count should appear as zero.",
       "localizations": {
         "en": {
           "stringUnit": {
