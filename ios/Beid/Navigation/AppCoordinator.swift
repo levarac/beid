@@ -439,17 +439,16 @@ final class AppCoordinator: ObservableObject {
     screen = .bluetoothPermission
   }
 
-  /// `address` is supplied by `WalletConnectPairingView` (MetaMask) once a
-  /// session settles.
+  /// Legacy compatibility entry for a settled connector session.
+  /// v1.1 onboarding has no wallet-connect step.
   func completeWalletConnect(address: LiveWalletAddress, connector: (any WalletConnector)? = nil) {
     recordWalletConnection(address: address, connector: connector)
     screen = .bluetoothPermission
   }
 
-  /// Takes `LiveWalletAddress`, not a plain `String` — every production
-  /// caller already has one, straight from a connector's own successful
-  /// `connect()`/`connectAndSign()` (see `WalletConnectPairingView.onConnected`
-  /// and the Account sheet's restored-hint fast path). This is part of
+  /// Takes `LiveWalletAddress`, not a plain `String`, so compatibility
+  /// callers must supply a connector's successful `connect()` or
+  /// `connectAndSign()` result. v1.1 has no wallet-connect UI. This is part of
   /// beid#315's structural containment: a bare `String` (e.g. read from a
   /// `CachedWalletHint`) cannot be passed here without first being wrapped in
   /// a visible `LiveWalletAddress(...)` construction.

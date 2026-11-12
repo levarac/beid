@@ -143,7 +143,7 @@ struct AccountSheetView: View {
             .accessibilityIdentifier("account.privacy-policy")
         }
         // Account Join retains the existing event-code route.
-        // Sensing ends through Home Stop or the scan cover's CLOSE.
+        // Sensing ends through STOP SENSING in the details opened from Now.
         EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
         // beid#466: a user-initiated, frozen support snapshot. Flat 2b
         // text row (#631 keeps icons out of controls); its explanation

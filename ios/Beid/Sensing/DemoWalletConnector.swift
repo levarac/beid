@@ -6,15 +6,11 @@ import BarnardCore
 import Combine
 import Foundation
 
-/// DEBUG-only mock `WalletConnector` so the connect+binding interstitial's
-/// full round trip (connect → wallet `personal_sign` → device countersign →
-/// `BindingRecord`) is exercisable in the simulator/demo walkthrough without
-/// a real wallet app installed — mirrors `SensingCoordinator
-/// .useDemoEventMode`'s existing demo-fixture convention. Offered only by
-/// the removed binding sheet's demo escape hatch (gated on `useDemoEventMode`,
-/// same as `simulateSignalLost()`), never by `WalletConnectPairingView`
-/// (onboarding/Account sheet reuse it as-is, per
-/// `docs/specs/scan-slice2-redesign.md` §5.6 — no demo option there).
+/// DEBUG-only mock `WalletConnector` for exercising the full round trip
+/// (connect → wallet `personal_sign` → device countersign → `BindingRecord`)
+/// in compatibility tests without a real wallet app installed. Mirrors
+/// `SensingCoordinator.useDemoEventMode`'s demo-fixture convention. The
+/// binding sheet and pairing UI have been removed; v1.1 has no wallet entry.
 @MainActor
 final class DemoWalletConnector: ObservableObject, WalletConnector {
   static let shared = DemoWalletConnector()

@@ -19,10 +19,8 @@ curl -sSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
 unzip -q "$XCODEGEN_TMP/xcodegen.zip" -d "$XCODEGEN_TMP"
 export PATH="$XCODEGEN_TMP/xcodegen/bin:$PATH"
 test "$(xcodegen --version | awk '{print $2}')" = "$XCODEGEN_VERSION"
-cd ios
-xcodegen generate
-open Beid.xcodeproj
-cd ..
+scripts/xcodegen_generate_checked.sh
+open ios/Beid.xcodeproj
 ```
 
 `project.yml` is the source of truth, but `Beid.xcodeproj` is committed for
@@ -138,7 +136,8 @@ manifest and published the `v0.1.0` tag.
 
 For local barnard development, drag a local `barnard` checkout into Xcode to
 create a package override, or temporarily point `project.yml` at a local
-`path:` and re-run `xcodegen generate`; do not commit the override.
+`path:` and re-run `scripts/xcodegen_generate_checked.sh` from the repository
+root; do not commit the override.
 
 ## Onboarding flag
 
@@ -158,11 +157,11 @@ remain available to legacy record handling.
 
 ## WalletConnect
 
-The Account sheet's "Connect Wallet" action uses `WalletConnectPairingView`
-(`Beid/Views/WalletConnectView.swift`), which drives a `WalletConnector`:
-`MetaMaskConnector` wraps MetaMask's direct app-to-app mobile SDK. The
-selected connector is retained by `AppCoordinator`, so proof signing uses
-the same session that supplied the connected address.
+v1.1 has no wallet-connect entry in onboarding or the Account sheet. The
+unused pairing view and its previews have been removed. `WalletConnector`,
+`MetaMaskConnector`, and their tests remain for legacy record handling and
+compatibility. The connector history and SDK notes below describe that
+retained support, not a shipping v1.1 wallet flow.
 
 WalletConnect (Reown) — a relay-based pairing SDK that was beid's original
 third wallet option — was removed entirely (gh#250, DECISIONS 2026-08-20):
@@ -229,15 +228,11 @@ it leaves the wallet SDK's own persisted session and the cached
 `WalletHintStore` hint alone. `disconnect()` is reserved for the explicit
 "Disconnect Wallet" action — it is the one that tears down both.
 
-**Still requires a physical-device E2E, and it is a release gate, not a
-nice-to-have:** install a current MetaMask Mobile build and a beid build,
-then verify connect → `personal_sign` → automatic return to beid, including
-MetaMask and beid cold starts. The Simulator cannot settle this because it
-does not provide the installed-wallet round trip. The procedure lives in
-`docs/field-test-procedure.md`; per DECISIONS 2026-08-21, if that
-verification fails, the promotion to Release reverts — see the note above
-on what that means for wallet-connect availability now that Coinbase
-Wallet is gone.
+Before restoring any wallet UI, its physical-device E2E would need to verify
+connect → `personal_sign` → return to beid, including MetaMask and beid cold
+starts. The Simulator cannot settle the installed-wallet round trip. The
+historical procedure lives in `docs/field-test-procedure.md`; v1.1 ships no
+wallet flow to validate.
 
 ## DemoEvent mode
 
@@ -391,19 +386,12 @@ Lost" button on the Recording screen while in DemoEvent mode.
 
 ## What's stubbed / out of scope for this slice
 
-- **Wallet**: direct app-to-app connect/sign for MetaMask is wired (see
-  "WalletConnect" above). Its real-device round trip has never been
-  verified at all — see "MetaMask connector" above and
-  `docs/field-test-procedure.md`. Once a
-  wallet is connected, Item Detail's `ProofSignatureControlsView` calls
-  `AppCoordinator.signProof(_:)`, which builds a `SignaturePayload`, hashes
-  its canonical JSON with `signingDigestHex()`, requests `personal_sign`
-  through the selected `WalletConnector`, and persists the returned
-  `SignatureRecord` in the proof's `signatureState`. This is the
-  **PROVISIONAL local convenience signature** defined in
-  `ProofSignature.swift`: it is not the protocol's self-proof, does not
-  prove physical attendance by itself, and no backend or verifier may
-  depend on its payload.
+- **Wallet**: v1.1 exposes no wallet-connect or wallet-signing UI. The
+  connector, `AppCoordinator.signProof(_:)`, and legacy signature models
+  remain for compatibility and tests (see "WalletConnect" above). The
+  **PROVISIONAL local convenience signature** in `ProofSignature.swift`
+  is not the protocol's self-proof, does not prove physical attendance by
+  itself, and no backend or verifier may depend on its payload.
 - **Chain**: no on-chain calls anywhere (`BarnardIdentity.proveRpidOwnership`
   is available in the barnard SDK but not called from the app in this
   slice).
