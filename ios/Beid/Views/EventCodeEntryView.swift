@@ -1,10 +1,66 @@
 // Copyright (c) 2024-2026 Levarac Foundation
 // SPDX-License-Identifier: MIT
 
+import BeidSharedKit
 import SwiftUI
 import UIKit
 
-/// Manual entry shared by wallet-optional onboarding, Account, and scan rescue.
+/// One code-entry route owns its pending task. Consuming cancellation clears
+/// that ownership so later disappearance cannot invalidate a newer route.
+@MainActor
+final class EventCodeEntrySubmission: ObservableObject {
+  @Published var isSubmitting = false
+  var task: Task<Void, Never>?
+
+  func cancel(coordinator: AppCoordinator) {
+    let wasSubmitting = isSubmitting
+    task?.cancel()
+    task = nil
+    isSubmitting = false
+    if wasSubmitting { coordinator.cancelPendingAccountSheetJoinAttempt() }
+  }
+
+  func presentationBinding(_ presented: Binding<Bool>, coordinator: AppCoordinator) -> Binding<Bool> {
+    Binding(
+      get: { presented.wrappedValue },
+      set: { value in
+        // Native Back and interactive pop write through this binding. Invalidate
+        // before forwarding that write, rather than waiting for onDisappear.
+        if !value, presented.wrappedValue { self.cancel(coordinator: coordinator) }
+        presented.wrappedValue = value
+      }
+    )
+  }
+}
+
+/// Both scan-flow entry points retain the system Back button and interactive
+/// pop. Each push gets its own submission lifetime, including after a retry.
+struct ScanFlowEventCodeEntryLink<Label: View>: View {
+  @EnvironmentObject private var coordinator: AppCoordinator
+  @State private var isPresented = false
+  @State private var submission = EventCodeEntrySubmission()
+  private let label: () -> Label
+
+  init(@ViewBuilder label: @escaping () -> Label) {
+    self.label = label
+  }
+
+  var body: some View {
+    Button {
+      submission = EventCodeEntrySubmission()
+      isPresented = true
+    } label: {
+      label()
+    }
+    .accessibilityIdentifier("scan.manual-entry")
+    .navigationDestination(isPresented: submission.presentationBinding($isPresented, coordinator: coordinator)) {
+      EventCodeEntryView(mode: .scanFlow, submission: submission)
+        .id(ObjectIdentifier(submission))
+    }
+  }
+}
+
+/// Explicit code entry shared by onboarding, Account, Home, and the scan flow.
 struct EventCodeEntryView: View {
   /// Screen 13/13b's measured offsets in the 402 × 874 Figma frames.
   private enum Layout {
@@ -25,8 +81,8 @@ struct EventCodeEntryView: View {
     /// Reached from the 04b Home empty state. Shares the existing post-
     /// onboarding join behavior, but dismisses Home's own sheet on success.
     case home
-    /// Pushed inside `ScanFlowView` as the rescue route when nearby discovery
-    /// finds no joinable card. Success keeps the full-screen flow presented,
+    /// Pushed inside `ScanFlowView` as manual entry when nearby discovery
+    /// finds no joinable card. Success keeps the existing scan flow presented,
     /// starts sensing through the existing operator-lookup gate, and pops this
     /// manual-entry screen back to the phase content.
     case scanFlow
@@ -37,11 +93,16 @@ struct EventCodeEntryView: View {
   @State private var code: String
   @State private var errorMessage: LocalizedStringKey?
   @State private var errorKind: EventCodeJoinError?
+  @StateObject private var submission: EventCodeEntrySubmission
   @FocusState private var codeFieldFocused: Bool
   @ScaledMetric(relativeTo: .largeTitle) private var fieldMinHeight: CGFloat = 52
   private let mode: Mode
 
-  init(code: String = "", errorMessage: LocalizedStringKey? = nil, mode: Mode = .onboarding) {
+  init(
+    code: String = "", errorMessage: LocalizedStringKey? = nil, mode: Mode = .onboarding,
+    submission: EventCodeEntrySubmission? = nil
+  ) {
+    _submission = StateObject(wrappedValue: submission ?? EventCodeEntrySubmission())
     #if DEBUG
     // Both launch arguments are required; normal launches never see samples.
     let fixture = AppCoordinator.eventCodeScreenshotFixture
@@ -66,6 +127,8 @@ struct EventCodeEntryView: View {
     false
     #endif
   }
+
+  private var isSubmitting: Bool { submission.isSubmitting }
 
   var body: some View {
     ZStack {
@@ -93,7 +156,23 @@ struct EventCodeEntryView: View {
           .scrollDismissesKeyboard(.interactively)
 
           VStack(spacing: DS.Space.s) {
+            if isSubmitting {
+              Text("eventCode.lookup.pending")
+                .beidTextStyle(DS.Font.Library.body13)
+                .foregroundStyle(DS.Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("eventCode.pending")
+            }
+
             EventCodeJoinButton(action: submit)
+              .disabled(isSubmitting)
+              .accessibilityIdentifier("eventCode.join")
+
+            #if DEBUG
+            if EventCodeEntryProgressFixture.isEnabled {
+              EventCodeEntryProgressFixtureControls(resubmit: submit)
+            }
+            #endif
 
             if mode == .onboarding && !isScreenshotFixture {
               BeidSecondaryButton(title: "Continue without a code") {
@@ -107,7 +186,31 @@ struct EventCodeEntryView: View {
         }
       }
     }
-    .onAppear { codeFieldFocused = !isScreenshotFixture }
+    .onAppear {
+      codeFieldFocused = !isScreenshotFixture
+      #if DEBUG
+      if EventCodeEntryProgressFixture.isEnabled {
+        // Suspend the real generation-owned lookup, with no transport.
+        coordinator.resolveCanonicalEventIdHexOverride = { _ in
+          await EventCodeEntryProgressFixture.shared.lookup()
+        }
+        coordinator.eventCodeJoinErrorForUITesting = {
+          EventCodeEntryProgressFixture.shared.completionError
+        }
+      }
+      #endif
+    }
+    .onChange(of: isSubmitting) { _, pending in
+      if pending {
+        UIAccessibility.post(notification: .announcement, argument: String(localized: "eventCode.lookup.pending"))
+      }
+    }
+    .onDisappear {
+      // Cancel a task that has not entered the coordinator yet as well as a
+      // lookup already owned by its generation. The scan-flow binding has
+      // already consumed pop cancellation; this remains fallback cleanup.
+      submission.cancel(coordinator: coordinator)
+    }
   }
 
   private var title: some View {
@@ -144,6 +247,7 @@ struct EventCodeEntryView: View {
             .accessibilityLabel(Text(verbatim: String(localized: "Paste event code")))
         }
         .buttonStyle(.plain)
+        .disabled(isSubmitting)
         .accessibilityIdentifier("eventCode.paste")
       }
       .frame(minHeight: DS.Size.minHitTarget)
@@ -155,6 +259,7 @@ struct EventCodeEntryView: View {
         .autocorrectionDisabled()
         .submitLabel(.join)
         .focused($codeFieldFocused)
+        .disabled(isSubmitting)
         .tint(DS.Color.textPrimary)
         .accessibilityIdentifier("Event code")
         .frame(minHeight: fieldMinHeight)
@@ -217,25 +322,50 @@ struct EventCodeEntryView: View {
   /// Capture the typed code before awaiting lookup. Superseded attempts must
   /// never overwrite a newer attempt's error or navigation state.
   private func submit() {
+    guard !isSubmitting else { return }
     let submittedCode = code
-    Task { @MainActor in
-      let outcome: AppCoordinator.JoinAttemptOutcome
-      switch mode {
-      case .onboarding:
-        outcome = await coordinator.joinEventResolvingCanonicalId(code: submittedCode)
-      case .accountSheet:
-        outcome = await coordinator.joinEventFromAccountSheetResolvingCanonicalId(code: submittedCode)
-      case .home:
-        outcome = await coordinator.joinEventFromHomeResolvingCanonicalId(code: submittedCode)
-      case .scanFlow:
-        outcome = await coordinator.joinEventFromScanFlowResolvingCanonicalId(code: submittedCode)
-      }
-      guard case .completed(let error) = outcome else { return }
-      errorKind = error
-      errorMessage = message(for: error)
-      if mode == .scanFlow, error == nil {
-        dismiss()
-      }
+    // Use the same validation as the coordinator, before creating a task or
+    // pending UI. Empty input is an immediate field error, never a lookup.
+    guard BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: submittedCode) != nil else {
+      errorKind = .emptyCode
+      errorMessage = message(for: .emptyCode)
+      return
+    }
+    submission.isSubmitting = true
+    errorKind = nil
+    errorMessage = nil
+    codeFieldFocused = false
+    submission.task = Task { @MainActor in
+      guard !Task.isCancelled else { return }
+      let outcome = await join(submittedCode)
+      guard !Task.isCancelled else { return }
+      finishSubmission(outcome)
+    }
+  }
+
+  private func join(_ submittedCode: String) async -> AppCoordinator.JoinAttemptOutcome {
+    switch mode {
+    case .onboarding:
+      return await coordinator.joinEventResolvingCanonicalId(code: submittedCode)
+    case .accountSheet:
+      return await coordinator.joinEventFromAccountSheetResolvingCanonicalId(code: submittedCode)
+    case .home:
+      return await coordinator.joinEventFromHomeResolvingCanonicalId(code: submittedCode)
+    case .scanFlow:
+      return await coordinator.joinEventFromScanFlowResolvingCanonicalId(code: submittedCode)
+    }
+  }
+
+  private func finishSubmission(_ outcome: AppCoordinator.JoinAttemptOutcome) {
+    submission.isSubmitting = false
+    submission.task = nil
+    guard case .completed(let error) = outcome else { return }
+    errorKind = error
+    errorMessage = message(for: error)
+    if error != nil {
+      codeFieldFocused = true
+    } else if mode == .scanFlow {
+      dismiss()
     }
   }
 
@@ -251,8 +381,75 @@ struct EventCodeEntryView: View {
   }
 }
 
-/// Frame 13's full-width 56 pt ink capsule. Keep the current button case
-/// until #24 settles it; this view owns the shape while #643 is unmerged.
+#if DEBUG
+/// A UI-test-only suspension of the real coordinator's lookup. Failure is
+/// injected because the current nonempty-code selector cannot return
+/// `joinFailed`; transport refusals belong to the later sensing screen.
+/// Success resumes the actual coordinator route. No timer, network or SDK
+/// result drives this gate, and cancelled tasks resume only to exit.
+@MainActor
+private final class EventCodeEntryProgressFixture: ObservableObject {
+  static let shared = EventCodeEntryProgressFixture()
+
+  static var isEnabled: Bool {
+    let arguments = ProcessInfo.processInfo.arguments
+    return arguments.contains("-beid-ui-test") && arguments.contains("-beid-code-entry-progress-fixture")
+  }
+
+  @Published private(set) var receipt = "submissions=0 resumed=0"
+  private(set) var completionError: EventCodeJoinError?
+  private var submissions = 0
+  private var resumed = 0
+  private var pending: [CheckedContinuation<Void, Never>] = []
+
+  func lookup() async -> AppCoordinator.CanonicalEventIdLookup {
+    submissions += 1
+    updateReceipt()
+    await withCheckedContinuation { pending.append($0) }
+    resumed += 1
+    updateReceipt()
+    return .noAnswer
+  }
+
+  func complete(error: EventCodeJoinError?) {
+    guard !pending.isEmpty else { return }
+    completionError = error
+    pending.removeFirst().resume()
+  }
+
+  private func updateReceipt() {
+    receipt = "submissions=\(submissions) resumed=\(resumed)"
+  }
+}
+
+private struct EventCodeEntryProgressFixtureControls: View {
+  @ObservedObject private var fixture = EventCodeEntryProgressFixture.shared
+  let resubmit: () -> Void
+
+  var body: some View {
+    VStack(spacing: DS.Space.s) {
+      Text(verbatim: fixture.receipt)
+        .accessibilityIdentifier("fixture.code.receipt")
+      HStack {
+        Button("Complete success") { fixture.complete(error: nil) }
+          .frame(minHeight: DS.Size.minHitTarget)
+          .accessibilityIdentifier("fixture.code.succeed")
+        Button("Complete failure") { fixture.complete(error: .joinFailed) }
+          .frame(minHeight: DS.Size.minHitTarget)
+          .accessibilityIdentifier("fixture.code.fail")
+      }
+      // Invoke the real handler, as an already queued keyboard submit would,
+      // even after the visible field and JOIN button become disabled.
+      Button("Submit again", action: resubmit)
+        .frame(minHeight: DS.Size.minHitTarget)
+        .accessibilityIdentifier("fixture.code.resubmit")
+    }
+    .beidTextStyle(DS.Font.Library.body13)
+  }
+}
+#endif
+
+/// Frame 13's full-width ink capsule uses the shared Flat 2b primary button.
 private struct EventCodeJoinButton: View {
   let action: () -> Void
 

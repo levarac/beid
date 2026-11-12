@@ -571,6 +571,13 @@ final class AppCoordinator: ObservableObject {
   /// production produces.
   var resolveCanonicalEventIdHexOverride: ((String) async -> CanonicalEventIdLookup)?
 
+  #if DEBUG
+  /// UI-only failure input: nonempty selection currently cannot fail, but
+  /// frame 13 must restore its controls if a current attempt ever does.
+  /// Installed only by the doubly gated code-entry progress fixture.
+  var eventCodeJoinErrorForUITesting: (() -> EventCodeJoinError?)?
+  #endif
+
   /// What a code-to-id lookup produced: the id when it answered, and the
   /// registry's own `errorCode` when it did not.
   ///
@@ -771,6 +778,13 @@ final class AppCoordinator: ObservableObject {
     guard let normalized = BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) else {
       return .emptyCode
     }
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"), arguments.contains("-beid-code-entry-progress-fixture"),
+      let error = eventCodeJoinErrorForUITesting?() {
+      return error
+    }
+    #endif
     guard sensingCoordinator.joinEvent(
       normalized,
       canonicalEventIdHex: canonicalEventIdHex,
