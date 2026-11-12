@@ -213,11 +213,19 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     attempt boundaries. `scripts/ios_ci_timing.py` timestamps SPM resolution,
     KMP script start/end, and the observed Swift compile window. That window
     includes overlapping/link work; `-showBuildTimingSummary` in `build.log`
-    gives actual task durations. Job timeouts are 45 minutes for build/smoke and
-    35 per test lane. Step timeouts are 25 minutes for build, 10 for smoke tests,
-    and 25 for each full-mode test lane, leaving time for evidence and cleanup.
-    These are containment, not claimed speed; hosted full and smoke timing and
-    artifact portability still need measurement on the final SHA.
+    gives actual task durations. Job timeouts are 55 minutes for build/smoke and
+    35 per test lane. Step timeouts are 25 minutes for build, smoke tests, and
+    each full-mode test lane. All unit tests plus selected smoke UI share one
+    step; its former 10-minute limit clipped hosted Debug execution after a
+    successful build, so it now matches the full-mode step's 25-minute budget.
+    Local optimized all-unit measurements of 282/285 seconds do not establish
+    hosted Debug plus selected UI and startup duration or guarantee completion
+    within 25 minutes. The build/smoke job budget allows 25 minutes for build,
+    25 for smoke and a 5-minute reserve for evidence and cleanup; setup and
+    other steps also consume that job budget. These limits provide cancellation
+    containment with no execution-time improvement, and the CI-time target
+    remains exceeded. Hosted full and smoke timing and artifact portability
+    still need measurement on the final SHA.
 
     Dependency caches are limited to `~/.gradle/caches` (excluding task build
     caches/execution history), `~/.gradle/wrapper`, `~/.konan`, and SPM
