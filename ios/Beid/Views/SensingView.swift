@@ -176,9 +176,7 @@ struct SensingView: View {
     .safeAreaInset(edge: .bottom) {
       if isPreJoin {
         BeidAdaptiveContent {
-          NavigationLink {
-            EventCodeEntryView(mode: .scanFlow)
-          } label: {
+          ScanFlowEventCodeEntryLink {
             Text(manualEntryTitle)
               .font(DS.Font.cardTitle)
               .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
@@ -927,9 +925,7 @@ struct SensingCantJoinView: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("scan.storage-retry")
           } else if !reason.isStorageLoading {
-            NavigationLink {
-              EventCodeEntryView(mode: .scanFlow)
-            } label: {
+            ScanFlowEventCodeEntryLink {
               BeidTextControlLabel("Enter event code instead", labelColor: DS.Color.labelOnActionPrimary)
                 .frame(maxWidth: .infinity)
             }

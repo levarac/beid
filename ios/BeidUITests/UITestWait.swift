@@ -56,6 +56,16 @@ extension XCUIElement {
 }
 
 extension XCUIApplication {
+  /// Exercise the native interactive-pop recognizer on either idiom.
+  /// A middle-of-screen swipe drives scrolling instead of navigation.
+  func swipeFromLeadingEdge() {
+    let window = windows.firstMatch
+    window.assertExists()
+    let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+    let finish = window.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+    start.press(forDuration: 0.01, thenDragTo: finish, withVelocity: .fast, thenHoldForDuration: 0)
+  }
+
   func tabButton(_ label: String) -> XCUIElement {
     if UIDevice.current.userInterfaceIdiom == .pad {
       return buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch

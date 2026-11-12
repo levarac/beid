@@ -5,6 +5,60 @@ import BeidSharedKit
 import SwiftUI
 import UIKit
 
+/// One code-entry route owns its pending task. Consuming cancellation clears
+/// that ownership so later disappearance cannot invalidate a newer route.
+@MainActor
+final class EventCodeEntrySubmission: ObservableObject {
+  @Published var isSubmitting = false
+  var task: Task<Void, Never>?
+
+  func cancel(coordinator: AppCoordinator) {
+    let wasSubmitting = isSubmitting
+    task?.cancel()
+    task = nil
+    isSubmitting = false
+    if wasSubmitting { coordinator.cancelPendingAccountSheetJoinAttempt() }
+  }
+
+  func presentationBinding(_ presented: Binding<Bool>, coordinator: AppCoordinator) -> Binding<Bool> {
+    Binding(
+      get: { presented.wrappedValue },
+      set: { value in
+        // Native Back and interactive pop write through this binding. Invalidate
+        // before forwarding that write, rather than waiting for onDisappear.
+        if !value, presented.wrappedValue { self.cancel(coordinator: coordinator) }
+        presented.wrappedValue = value
+      }
+    )
+  }
+}
+
+/// Both scan-flow entry points retain the system Back button and interactive
+/// pop. Each push gets its own submission lifetime, including after a retry.
+struct ScanFlowEventCodeEntryLink<Label: View>: View {
+  @EnvironmentObject private var coordinator: AppCoordinator
+  @State private var isPresented = false
+  @State private var submission = EventCodeEntrySubmission()
+  private let label: () -> Label
+
+  init(@ViewBuilder label: @escaping () -> Label) {
+    self.label = label
+  }
+
+  var body: some View {
+    Button {
+      submission = EventCodeEntrySubmission()
+      isPresented = true
+    } label: {
+      label()
+    }
+    .navigationDestination(isPresented: submission.presentationBinding($isPresented, coordinator: coordinator)) {
+      EventCodeEntryView(mode: .scanFlow, submission: submission)
+        .id(ObjectIdentifier(submission))
+    }
+  }
+}
+
 /// Explicit code entry shared by onboarding, Account, Home, and the scan flow.
 struct EventCodeEntryView: View {
   /// Screen 13/13b's measured offsets in the 402 × 874 Figma frames.
@@ -38,13 +92,16 @@ struct EventCodeEntryView: View {
   @State private var code: String
   @State private var errorMessage: LocalizedStringKey?
   @State private var errorKind: EventCodeJoinError?
-  @State private var isSubmitting = false
-  @State private var submissionTask: Task<Void, Never>?
+  @StateObject private var submission: EventCodeEntrySubmission
   @FocusState private var codeFieldFocused: Bool
   @ScaledMetric(relativeTo: .largeTitle) private var fieldMinHeight: CGFloat = 52
   private let mode: Mode
 
-  init(code: String = "", errorMessage: LocalizedStringKey? = nil, mode: Mode = .onboarding) {
+  init(
+    code: String = "", errorMessage: LocalizedStringKey? = nil, mode: Mode = .onboarding,
+    submission: EventCodeEntrySubmission? = nil
+  ) {
+    _submission = StateObject(wrappedValue: submission ?? EventCodeEntrySubmission())
     #if DEBUG
     // Both launch arguments are required; normal launches never see samples.
     let fixture = AppCoordinator.eventCodeScreenshotFixture
@@ -69,6 +126,8 @@ struct EventCodeEntryView: View {
     false
     #endif
   }
+
+  private var isSubmitting: Bool { submission.isSubmitting }
 
   var body: some View {
     ZStack {
@@ -147,11 +206,9 @@ struct EventCodeEntryView: View {
     }
     .onDisappear {
       // Cancel a task that has not entered the coordinator yet as well as a
-      // lookup already owned by its generation. Native Back needs both.
-      submissionTask?.cancel()
-      submissionTask = nil
-      if isSubmitting { coordinator.cancelPendingAccountSheetJoinAttempt() }
-      isSubmitting = false
+      // lookup already owned by its generation. The scan-flow binding has
+      // already consumed pop cancellation; this remains fallback cleanup.
+      submission.cancel(coordinator: coordinator)
     }
   }
 
@@ -273,11 +330,11 @@ struct EventCodeEntryView: View {
       errorMessage = message(for: .emptyCode)
       return
     }
-    isSubmitting = true
+    submission.isSubmitting = true
     errorKind = nil
     errorMessage = nil
     codeFieldFocused = false
-    submissionTask = Task { @MainActor in
+    submission.task = Task { @MainActor in
       guard !Task.isCancelled else { return }
       let outcome = await join(submittedCode)
       guard !Task.isCancelled else { return }
@@ -299,8 +356,8 @@ struct EventCodeEntryView: View {
   }
 
   private func finishSubmission(_ outcome: AppCoordinator.JoinAttemptOutcome) {
-    isSubmitting = false
-    submissionTask = nil
+    submission.isSubmitting = false
+    submission.task = nil
     guard case .completed(let error) = outcome else { return }
     errorKind = error
     errorMessage = message(for: error)

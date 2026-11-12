@@ -204,6 +204,79 @@ final class EventMembershipUITests: XCTestCase {
     assertCodeReceipt("submissions=0 resumed=0")
   }
 
+  func testNativeBackLeavesBothScanCodeEntryRoutesUsable() {
+    assertScanCodeEntryCanPopAndReopen(usingGesture: false)
+  }
+
+  func testLeadingEdgeSwipeLeavesBothScanCodeEntryRoutesUsable() {
+    assertScanCodeEntryCanPopAndReopen(usingGesture: true)
+  }
+
+  func testCodeLookupSuccessUsesTheExistingScanFlowRouteOnce() {
+    launchCodeProgressFixture(extraArguments: ["-beid-clock-preflight-fixture"])
+    openScanCodeEntry()
+    app.textFields["Event code"].typeText("ETHTOKYO2026\n")
+    assertCodeLookupPending()
+    assertCodeReceipt("submissions=1 resumed=0")
+    app.buttons["fixture.code.succeed"].tap()
+
+    app.textFields["Event code"].assertDisappears()
+    app.buttons["scan.stop-sensing"].assertHittable()
+    app.navigationBars.buttons.firstMatch.tap()
+    app.tabButton("Records").assertHittable()
+    app.tabButton("Records").tap()
+    app.tabButton("Now").tap()
+    XCTAssertFalse(app.staticTexts["eventCode.pending"].exists)
+    XCTAssertFalse(app.buttons["scan.stop-sensing"].exists)
+  }
+
+  private func assertScanCodeEntryCanPopAndReopen(usingGesture: Bool) {
+    for fixture in ["-beid-clock-preflight-fixture", "-beid-join-refusal-fixture"] {
+      launchCodeProgressFixture(extraArguments: [fixture])
+      openScanCodeEntry()
+      app.textFields["Event code"].typeText("ABANDONED\n")
+      assertCodeLookupPending()
+      if usingGesture {
+        app.swipeFromLeadingEdge()
+      } else {
+        app.navigationBars.buttons.firstMatch.tap()
+      }
+      app.textFields["Event code"].assertDisappears()
+
+      // Both native navigation controls must return to their own source.
+      let source = fixture == "-beid-clock-preflight-fixture" ? "scan.sensing" : "scan.cant-join"
+      app.scrollViews[source].assertHittable()
+      openScanCodeEntryFromScan()
+      app.buttons["fixture.code.fail"].tap()
+      assertCodeReceipt("submissions=1 resumed=1")
+      assertFreshCodeEntry()
+      // A new route is editable and can submit after the old route's pop.
+      app.textFields["Event code"].tap()
+      app.textFields["Event code"].typeText("RETRY\n")
+      assertCodeLookupPending()
+      assertCodeReceipt("submissions=2 resumed=1")
+      app.buttons["fixture.code.fail"].tap()
+      assertCodeReceipt("submissions=2 resumed=2")
+      app.staticTexts["eventCode.pending"].assertDisappears()
+      XCTAssertTrue(app.textFields["Event code"].isEnabled)
+      app.terminate()
+    }
+  }
+
+  private func openScanCodeEntry() {
+    app.buttons["home.demo.join"].assertHittable()
+    app.buttons["home.demo.join"].tap()
+    openScanCodeEntryFromScan()
+  }
+
+  private func openScanCodeEntryFromScan() {
+    let entry = app.buttons["scan.manual-entry"]
+    entry.scrollToHittable(in: app)
+    entry.tap()
+    app.textFields["Event code"].assertHittable()
+    app.textFields["Event code"].tap()
+  }
+
   private func launchCodeProgressFixture(extraArguments: [String] = []) {
     app.launchArguments = ["-beid-ui-test", "-beid-code-entry-progress-fixture"] + extraArguments
     app.launch()
