@@ -5,6 +5,43 @@ import XCTest
 @testable import Beid
 
 final class ReportDetailPresentationTests: XCTestCase {
+  func testRecordLadderAlwaysHasFourRungsAndOnlyReceiptsAdvanceDelivery() {
+    let pending = RecordSendingLadderPresentation(hasSelfProof: true, records: [record(state: .submitting)])
+    XCTAssertEqual(pending.rungs.map(\.number), [1, 2, 3, 4])
+    XCTAssertEqual(pending.rungs.map(\.title), [
+      "SEALED ON THIS PHONE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"
+    ])
+    XCTAssertEqual(pending.rungs.map(\.reached), [true, false, false, false])
+
+    for incomplete in [
+      record(state: .prepared), record(state: .accepted),
+      record(state: .accepted, receipt: "ab", terminalError: "local-error")
+    ] {
+      XCTAssertEqual(
+        RecordSendingLadderPresentation(hasSelfProof: false, records: [incomplete]).rungs.map(\.reached),
+        [false, false, false, false]
+      )
+    }
+    let accepted = RecordSendingLadderPresentation(
+      hasSelfProof: true, records: [record(state: .accepted, receipt: "ab")]
+    )
+    XCTAssertEqual(accepted.rungs.map(\.reached), [true, true, true, false])
+    XCTAssertEqual(accepted.rungs[1].title, "SENT TO https://example.invalid:443")
+  }
+
+  func testRecordLadderKeepsPartialAndUnavailableDeliveryPending() {
+    let mixed = RecordSendingLadderPresentation(hasSelfProof: false, records: [
+      record(state: .accepted, receipt: "ab"), record(state: .prepared)
+    ])
+    XCTAssertEqual(mixed.rungs[0].title, "RECORDED ON THIS PHONE")
+    XCTAssertEqual(mixed.rungs.map(\.reached), [false, false, false, false])
+    for records in [nil, []] as [[ReportSubmissionRecord]?] {
+      let missing = RecordSendingLadderPresentation(hasSelfProof: false, records: records)
+      XCTAssertEqual(missing.rungs.count, 4)
+      XCTAssertEqual(missing.rungs.map(\.reached), [false, false, false, false])
+    }
+  }
+
   func testExcludedWindowsUseAReasonNeutralLabel() {
     XCTAssertEqual(ReportDetailPresentation.excludedWindowLabel, "Not submittable")
   }

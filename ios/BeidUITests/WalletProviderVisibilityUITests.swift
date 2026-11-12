@@ -12,7 +12,7 @@ import XCTest
 ///
 /// v1.1 offers no wallet connection. A user with no wallet must not find a
 /// "Connect Wallet" row (or anything that opens the pairing sheet) in the
-/// Account sheet. The connected-wallet row and Disconnect are covered by
+/// Account sheet. H1 also removes legacy connected-wallet rows, covered by
 /// FlatScreenshotTourD with `-beid-account-connected-fixture`.
 final class WalletProviderVisibilityUITests: XCTestCase {
   private let app = XCUIApplication()

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import SwiftUI
+import UIKit
 
 /// Now owns current participation; Records owns stored records and events.
 struct CollectionHomeView: View {
@@ -249,6 +250,15 @@ private struct NowHomeView: View {
         coordinator.screen = .bluetoothOff
       }
       .accessibilityIdentifier("home.bluetooth.fix")
+      instructionTile(
+        title: "Turn Bluetooth back on.",
+        body: "Your records are safe. Sensing resumes when Bluetooth is back."
+      )
+      BeidTextControl("OPEN SETTINGS", glyph: .trailing("→", announcing: "Open Settings"),
+                      labelColor: foreground) {
+        UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
+      }
+      .accessibilityIdentifier("home.bluetooth.open-settings")
     }
     .padding(.vertical, DS.Space.m)
   }

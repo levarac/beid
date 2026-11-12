@@ -51,8 +51,6 @@ struct EventDetailView: View {
 
           observations
             .padding(.top, DS.Space.xl)
-          reports
-            .padding(.top, DS.Space.xl)
           proofs
             .padding(.top, DS.Space.xl)
         }
@@ -161,88 +159,6 @@ struct EventDetailView: View {
   private func sessionMeasurements(_ aggregate: BeidSharedKit.aggregation.SessionAggregate?) -> String {
     guard let aggregate else { return String(localized: "Measurements unavailable") }
     return SessionDisplay.measurements(aggregate)
-  }
-
-  private var reports: some View {
-    VStack(alignment: .leading, spacing: DS.Space.s) {
-      if let eventCode {
-        switch submissionStore.eventRecords(forEventCode: eventCode) {
-        case .failure(.unreadableStore):
-          sectionLabel(String(localized: "Reports"))
-          Text("Reports unavailable on this device")
-            .beidTextStyle(DS.Font.Library.body13)
-            .foregroundStyle(DS.Color.textSecondary)
-        case .failure(.invalidEventCode):
-          sectionLabel(String(localized: "Reports"))
-          Text("Reports unavailable for this event code")
-            .beidTextStyle(DS.Font.Library.body13)
-            .foregroundStyle(DS.Color.textSecondary)
-        case .success(let records):
-          let otherReports = Array(records.enumerated()).filter { entry in
-            let record = entry.element
-            guard let session = ReportProofLinkPresentation.session(
-              for: record, linkStore: coordinator.reportProofLinkStore, proofStore: proofStore,
-              hasSelfProof: { sensing.selfProofRecord(forProofId: $0) != nil }
-            ), let index = sensing.observedWindowIndex(forWindowID: record.id),
-               let data = ObservationDetailPresentation(aggregate: sensing.sessionAggregateSnapshot(forProofId: session.proof.id))
-            else { return true }
-            return !data.windows.contains { $0.windowIndex == index }
-          }
-          if records.isEmpty {
-            sectionLabel(String(localized: "Reports"))
-            noReports
-          } else if !otherReports.isEmpty {
-            sectionLabel(String(localized: "OTHER STORED REPORTS"))
-            ForEach(otherReports, id: \.element.id) { index, record in
-              hairline
-              EventReportRow(
-                ordinal: index + 1,
-                record: record,
-                identifier: "event-detail.report.\(record.id.uuidString)",
-                submissionStore: submissionStore,
-                proofStore: proofStore,
-                linkStore: coordinator.reportProofLinkStore,
-                sensing: sensing
-              )
-            }
-            hairline
-          }
-        }
-      } else {
-        sectionLabel(String(localized: "Reports"))
-        Text("Reports unavailable for this older record")
-          .beidTextStyle(DS.Font.Library.body13)
-          .foregroundStyle(DS.Color.textSecondary)
-      }
-    }
-  }
-
-  private func reportHeading(_ count: Int) -> String {
-    String(
-      localized: "eventDetail.reports.count",
-      defaultValue: "REPORTS · \(count)",
-      comment: "Section label and number of locally stored canonical Observation submission records for this event."
-    )
-  }
-
-  private var noReports: some View {
-    BeidEmptyBlock {
-      VStack(spacing: DS.Space.s) {
-        Text("NO REPORTS YET")
-          .beidTextStyle(DS.Font.Library.labelMono10)
-          .foregroundStyle(DS.Color.textPrimary)
-        Text("No reports for this event are stored on this device.")
-          .beidTextStyle(DS.Font.Library.body13)
-          .foregroundStyle(DS.Color.textSecondary)
-          .multilineTextAlignment(.center)
-      }
-    }
-  }
-
-  private func sectionLabel(_ title: String) -> some View {
-    Text(verbatim: title)
-      .beidTextStyle(DS.Font.Library.labelMono10)
-      .foregroundStyle(DS.Color.textSecondary)
   }
 
   @ViewBuilder private var proofs: some View {

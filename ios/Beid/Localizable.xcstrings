@@ -1,6 +1,83 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "FIRST TIME? HOW THIS WORKS": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FIRST TIME? HOW THIS WORKS"
+          }
+        }
+      }
+    },
+    "OPEN SETTINGS": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OPEN SETTINGS"
+          }
+        }
+      }
+    },
+    "Your records are safe. Sensing resumes when Bluetooth is back.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your records are safe. Sensing resumes when Bluetooth is back."
+          }
+        }
+      }
+    },
+    "Turn Bluetooth back on.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn Bluetooth back on."
+          }
+        }
+      }
+    },
+    "record.sentToOrganizer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SENT TO %@"
+          }
+        }
+      }
+    },
+    "SENT TO ORGANIZER": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SENT TO ORGANIZER"
+          }
+        }
+      }
+    },
+    "The session is unavailable for these event reports.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The session is unavailable for these event reports."
+          }
+        }
+      }
+    },
     "sigil.record.accessibilitySummary": {
       "comment": "VoiceOver summary for a device record. Mutual confirmation is decided off device and is unavailable here; never translate this as a measured zero. Keep the detected-device and observed-window counts from this exact rendered layout. Generic measured-layout narration uses sigil.accessibilitySummary.",
       "localizations": {
@@ -568,59 +645,6 @@
         }
       }
     },
-    "home.header.counts": {
-      "comment": "Collection Home header: independently pluralized distinct event count, including the active event, and total stored Proof record count.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%#@events@ · %#@proofs@"
-          },
-          "substitutions": {
-            "events": {
-              "argNum": 1,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg event"
-                    }
-                  },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg events"
-                    }
-                  }
-                }
-              }
-            },
-            "proofs": {
-              "argNum": 2,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg proof"
-                    }
-                  },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg proofs"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "home.account.accessibilityLabel": {
       "comment": "VoiceOver label for the Collection Home account control. The argument is a shortened wallet address or the localized Account title.",
       "localizations": {
@@ -698,62 +722,6 @@
         }
       }
     },
-    "home.past.proofAction": {
-      "comment": "Trailing past event action. Count is stored Proof records in the event group; the arrow opens Event Detail.",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld proof →"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld proofs →"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "home.past.accessibilityLabel": {
-      "comment": "VoiceOver label for a past event row. First argument is the operator-supplied event name; second is the number of stored Proof records.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@, %#@proofs@, open event"
-          },
-          "substitutions": {
-            "proofs": {
-              "argNum": 2,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg proof"
-                    }
-                  },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg proofs"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "home.clock.networkInstructions.title": {
       "comment": "Home clock help title when beid could not compare the device clock with network time.",
       "localizations": {
@@ -783,17 +751,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scan"
-          }
-        }
-      }
-    },
-    "home.empty.description": {
-      "comment": "Collection Home empty-state explanation. The English line break after show up matches the two-line design; other locales may wrap as needed.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Walk into an event — it will show up\nhere automatically."
           }
         }
       }
@@ -908,17 +865,6 @@
         }
       }
     },
-    "Proofs need an accurate clock. Turn on “Set automatically” in Settings.": {
-      "comment": "Body of the Home clock warning after an over-tolerance verdict.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Proofs need an accurate clock. Turn on “Set automatically” in Settings."
-          }
-        }
-      }
-    },
     "beid couldn't compare the clock with the network. Check your connection, then try again.": {
       "comment": "Body of the Home clock warning after an undeterminable verdict.",
       "localizations": {
@@ -959,17 +905,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect to the network, then check the clock again before joining an event."
-          }
-        }
-      }
-    },
-    "Open Settings, choose General, then Date & Time, and turn on Set Automatically.": {
-      "comment": "Home clock help instructions after an over-tolerance verdict; the app cannot deep-link to Date & Time.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Settings, choose General, then Date & Time, and turn on Set Automatically."
           }
         }
       }
@@ -1065,9 +1000,6 @@
       }
     },
     "Copy URI": {},
-    "Copy address": {
-      "comment": "Button: copies the connected wallet address to the clipboard, not a noun."
-    },
     "Detected event": {},
     "No event is registered for that code. Check it with the event organizer.": {},
     "Some nearby events are not shown.": {},
@@ -1210,12 +1142,9 @@
     "I've turned it on": {},
     "Install MetaMask to connect directly.": {},
     "Join event": {},
-    "Keep beid open nearby to collect proof of attendance.": {},
     "MetaMask is not installed": {},
     "Method": {},
-    "My Proofs": {},
     "Nearby events": {},
-    "Nearby peers are confirming your attendance automatically.": {},
     "nearbyEvent.beaconName.conflict": {
       "comment": "Warning shown when nearby beacons announce different names for the same event-code hash. Do not choose one of the names as authoritative.",
       "localizations": {
@@ -1326,14 +1255,12 @@
         }
       }
     },
-    "No proofs yet": {},
     "Not signed": {},
     "Off": {
       "comment": "Status label shown next to a colored dot when Bluetooth is powered off."
     },
     "On": {},
     "On-device first": {},
-    "Only anonymous proofs are exchanged, never your identity.": {},
     "ownerKeyRestoration.dismiss": {
       "comment": "Button that closes an owner-key restoration warning after the user has read it.",
       "localizations": {
@@ -1422,10 +1349,6 @@
     "Peers": {},
     "Privacy": {},
     "Private by design": {},
-    "Proof": {},
-    "Proof Collected": {},
-    "Proof Detail": {},
-    "Prove you were there. Automatically.": {},
     "Scan": {
       "comment": "Screen title for the scan/sensing flow's modal header (noun, the name of the flow, not an instruction to scan something)."
     },
@@ -1446,9 +1369,6 @@
           }
         }
       }
-    },
-    "Sign this proof": {
-      "comment": "Button: initiates a wallet-signature request for an already-collected proof."
     },
     "Signal lost": {},
     "Signature": {
@@ -1477,7 +1397,6 @@
       "comment": "Button: abandons the current wallet-connect attempt and returns to the start of the flow."
     },
     "Tap Bluetooth": {},
-    "Tap Sense Event to start collecting proof of attendance automatically.": {},
     "The request timed out. Try again once your wallet is reachable.": {},
     "Try again": {
       "comment": "Retries the requested event join after a local storage failure.",
@@ -1491,25 +1410,12 @@
       }
     },
     "Verified": {},
-    "Verifying proof": {},
     "Waiting for wallet to approve…": {},
-    "Walk into an event — it will show up here automatically.": {
-      "comment": "Collection Home empty-state explanation: nearby events appear automatically when sensing detects them.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Walk into an event — it will show up here automatically."
-          }
-        }
-      }
-    },
     "Wallet": {},
     "Wallet not available": {},
     "This wallet can't be used right now. Try again in a moment.": {},
     "You can change this anytime in Settings.": {},
     "You declined the request in your wallet.": {},
-    "Your attendance proof is ready to be added to your collection.": {},
     "account.bluetooth.relayNote": {
       "comment": "Note under the Bluetooth row on the Account sheet: while this phone is at an event it can pass that event's details on to phones nearby, so the event still reaches the edges of a venue (beid#367). Says what the phone does, not how the protocol does it.",
       "localizations": {
@@ -1545,63 +1451,13 @@
     "beid": {
       "comment": "Brand name, appears as the app title on the Welcome screen. Not translated in any target locale."
     },
-    "beid can't sense events or collect proofs while Bluetooth is off.": {},
     "beid couldn't connect to your wallet. Check your connection and try again.": {},
     "beid couldn't join that event. Check the code and try again.": {},
     "beid found a nearby event signal.": {},
-    "beid lost the connection to %@. Move closer and we'll pick it back up automatically.": {},
-    "beid senses nearby events and people over Bluetooth Low Energy — that's how it proves you were really there.": {},
     "beid uses your wallet to sign proofs of event attendance.": {},
     "Collection": {
       "comment": "Noun: title of the Collection Home screen, showing the user's collected proofs."
     },
-    "collection.eventCount": {
-      "comment": "Caption above the Collection Home grid: count of distinct events the user has collected a proof for (grouped by eventCode; each proof recorded before eventCode existed counts as its own event). \"Proof\" here is the mass-noun collected fact, per DESIGN.md §15’s vocabulary (a proof is collected — the object of \"collect\" is proof, never the event itself), and the number scopes how many events that applies across; it is not a raw count of recording sessions — a user who scanned the same event twice still counts as one event here, and this caption does not imply exactly one Proof record per event.",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Proof collected from %lld event"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Proof collected from %lld events"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "collection.proofCount": {
-      "comment": "Caption above the Collection Home grid, showing how many proofs the user has collected so far.",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld proof collected"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld proofs collected"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Start sensing at an event to collect your first proof.": {},
     "proofCard.sessionCount": {
       "comment": "Caption on a Collection Home card for an event recorded more than once (the user re-scanned the same event in a separate app session). Count of distinct recorded sessions for this event, not devices or peers. Also reused, composed after a comma, inside proofCard.accessibilityLabel's VoiceOver text for the same fact when sessionCount > 1.",
       "localizations": {
@@ -1621,17 +1477,6 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "proofCard.accessibilityLabel": {
-      "comment": "VoiceOver label for one proof card in the Collection Home grid — composed from the event name and collection date. When the event was recorded in more than one session, proofCard.sessionCount's own text (e.g. \"3 sessions\") is appended after a comma, so VoiceOver users get the same session-count fact sighted users see in the card's secondary caption.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Proof of %1$@, %2$@"
           }
         }
       }
@@ -1739,17 +1584,6 @@
       "comment": "Status badge on the event card during BLE sensing, not audio/video recording."
     },
     "Verification starts automatically — stay nearby": {},
-    "scan.recording.caption": {
-      "comment": "Cumulative count of distinct nearby devices sensed at the event, each counted once however long it stayed; no fixed target. Do NOT translate this as mutual, two-way, or reciprocal confirmation: this device cannot tell whether a peer also observed it, so any such wording would overclaim.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recording your attendance automatically · %lld devices sensed"
-          }
-        }
-      }
-    },
     "scan.recording.diagnosticCaption": {
       "comment": "Temporary diagnostic line on the Recording screen (beid#218, DECISIONS 2026-08-20) — not permanent product UI, does not need to survive #141's rebuild, but ships to real TestFlight/production builds (not #if DEBUG) because a live multi-device field test needs to read these counters without a debugger attached. \"Identified\" is SensingCoordinator.devicesVerified: distinct nearby devices whose proximity identifier (RPID) was resolved to a display ID. \"Unidentified\" is SensingCoordinator.unidentifiedRpidCount: proximity identifiers observed but not yet resolved to a display ID — radio is arriving, but the device could not be identified. A large unidentified count with a flat identified count points at an identification failure; both flat points at nothing arriving at all — opposite fixes, which is why both numbers must be visible together. Do NOT translate this as mutual, two-way, or reciprocal confirmation of any kind — neither number says anything about whether a peer observed this device back (the protocol carries no such signal, DECISIONS 2026-08-09). Same bar as this file's `scan.recording.caption` translator comment on the line above this one.",
       "localizations": {
@@ -1834,17 +1668,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Included in published data"
-          }
-        }
-      }
-    },
-    "Verified proof": {
-      "comment": "Tier 3 of 3 on the Transparency screen: whether this device's participation has passed third-party verification. Always shows \"Not yet available\" today because no verifier exists yet. Proof Detail's Sealed status means a matching local SelfProofRecord exists, not third-party verification.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Verified proof"
           }
         }
       }
@@ -2144,28 +1967,6 @@
         }
       }
     },
-    "No proofs yet today": {
-      "comment": "Empty-state title on the Daily Summary screen when no proof has been collected yet today (local calendar day). Distinct from Collection Home's all-time empty state (\"No proofs yet\").",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No proofs yet today"
-          }
-        }
-      }
-    },
-    "Proofs you collect today will show up here.": {
-      "comment": "Empty-state body on the Daily Summary screen, directly under \"No proofs yet today\". Describes what will populate this list, not an instruction to act right now.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Proofs you collect today will show up here."
-          }
-        }
-      }
-    },
     "Submission": {
       "comment": "Section header on the Daily Summary screen, above one line describing whether sending proofs to a report server is turned on for this build. Noun, not a verb/CTA.",
       "localizations": {
@@ -2195,29 +1996,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Today"
-          }
-        }
-      }
-    },
-    "dailySummary.recordCount": {
-      "comment": "Header above the Daily Summary screen's list of today's proofs: how many proofs (Proof records in ProofStore, not distinct events) were collected on the current local calendar day. Only shown when the day is non-empty — the empty-day state (\"No proofs yet today\") is a separate string.",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld proof collected today"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld proofs collected today"
-                }
-              }
-            }
           }
         }
       }
@@ -2425,7 +2203,6 @@
         }
       }
     },
-    "Attendance\nProof": {},
     "METHOD": {},
     "RECORD ID": {},
     "STATUS": {},
@@ -2659,24 +2436,6 @@
     },
     "Share support information": {},
     "Includes app version, recent states and failure reasons from this app session. Choose who to share it with.": {},
-    "Copied": {
-      "comment": "Feedback after the full wallet address has been copied."
-    },
-    "Copied address": {
-      "comment": "Accessibility label after copying the full wallet address."
-    },
-    "Disconnect": {
-      "comment": "Confirms disconnecting the wallet after the Account confirmation message."
-    },
-    "Disconnect wallet": {
-      "comment": "Destructive Account row that opens a confirmation before disconnecting the wallet."
-    },
-    "Disconnect wallet?": {
-      "comment": "Title of the wallet disconnection confirmation within the Account sheet."
-    },
-    "Keep connected": {
-      "comment": "Cancels wallet disconnection and returns to the Account sheet."
-    },
     "Off · Fix": {
       "comment": "Bluetooth-off status and action to open Settings in the Account sheet."
     },
@@ -2688,7 +2447,6 @@
     },
     "Sensing is paused until Bluetooth is on. Tap to open Settings.": {},
     "Venue broadcast": {},
-    "Your records stay on this phone. Nothing is deleted.": {},
     "About\nsensing": {},
     "HOW IT WORKS": {},
     "Phones exchange rotating anonymous IDs, not names or wallet addresses.": {},
@@ -2719,7 +2477,6 @@
     "A commitment for this event": {},
     "A value derived from keys for this event. It can support a later ownership check without including your wallet address.": {},
     "A signature from this phone": {},
-    "It proves the record was not changed after this phone made it.": {},
     "WHAT WE SEND": {},
     "WHAT WE DON’T SEND": {},
     "Your location": {},
@@ -2736,17 +2493,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sending is on."
-          }
-        }
-      }
-    },
-    "account.wallet.header": {
-      "comment": "Account sheet label naming the connected wallet provider.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wallet · Connected via %@"
           }
         }
       }
@@ -3058,39 +2804,6 @@
         }
       }
     },
-    "eventDetail.proofs.count": {
-      "comment": "Fixed-plural PROOFS section label and count of stored recording Proofs in this event.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%#@proofs@"
-          },
-          "substitutions": {
-            "proofs": {
-              "argNum": 1,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "PROOFS · %arg"
-                    }
-                  },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "PROOFS · %arg"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "eventDetail.proof.title": {
       "comment": "Opens the stored Proof for this numbered recording session.",
       "localizations": {
@@ -3098,17 +2811,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Record for session %lld"
-          }
-        }
-      }
-    },
-    "eventDetail.proof.accessibilityLabel": {
-      "comment": "VoiceOver label for a Proof row; the state comes only from a matching self-proof signature record.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open proof for session %lld, %@"
           }
         }
       }
@@ -3175,17 +2877,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reports unavailable on this device"
-          }
-        }
-      }
-    },
-    "Reports unavailable for this older proof": {
-      "comment": "Legacy Proof has no stored event code to scope submission records.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reports unavailable for this older proof"
           }
         }
       }
@@ -4296,7 +3987,6 @@
     "Get Started": {},
     "Join Event": {},
     "Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.": {},
-    "Nearby events appear automatically — no codes, no search.": {},
     "No pack yet. Paste the link the organiser gave you, or scan its QR code.": {},
     "Not submittable (count-only record)": {
       "comment": "Sub-state row under \"Participation record\": windows recorded with only a device count and no reporter RPID can never be submitted to a report server. This row makes that exclusion explicit instead of silently dropping those windows (levarac/dispatch#3).",
@@ -4309,10 +3999,6 @@
         }
       }
     },
-    "Only events you've actually recorded a proof for are listed here.": {
-      "comment": "Footer under the Past Events list, clarifying that a code that was typed and abandoned before recording completed does not appear."
-    },
-    "Only needed if an event didn’t appear automatically. Ask the organizer for the code.": {},
     "PEERS OBSERVED": {
       "comment": "Number of distinct per-event display IDs observed in one stored session; this does not mean mutual confirmation.",
       "localizations": {
@@ -4335,8 +4021,6 @@
       }
     },
     "Point at the organiser's QR code": {},
-    "Proofs of presence, collected automatically while you are at an event. No codes, no taps.": {},
-    "Prove you\nwere there.": {},
     "RECORDED ON DEVICE": {
       "localizations": {
         "en": {
@@ -4361,11 +4045,8 @@
     "V 1.0": {
       "comment": "Version label in the Welcome screen header."
     },
-    "Your proofs stay on this device as self-proofs. Nothing is deleted. You can connect this or another wallet anytime.": {},
     "Zero effort": {},
     "beid can't trust event times while the clock is wrong. Turn on automatic date and time in Settings, then check again.": {},
-    "beid can’t sense events or collect proofs while Bluetooth is off.": {},
-    "beid senses nearby events and people over Bluetooth Low Energy — that’s how it proves you were really there.": {},
     "e.g. ETHTOKYO2026": {
       "comment": "Placeholder shown in the empty event-code text field. Keep the invented example code (ETHTOKYO2026) as-is; translate only the localized equivalent of \"e.g.\"."
     }

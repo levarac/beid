@@ -232,6 +232,38 @@ struct ItemDetailView: View {
 }
 
 /// Every network stage belongs to this selected session and exact report UUID.
+/// A request starting is not delivery evidence. Until a durable receipt exists,
+/// the send and acceptance rungs stay pending; partial sessions stay partial.
+struct RecordSendingLadderPresentation {
+  struct Rung: Identifiable {
+    let number: Int
+    let title: String
+    let reached: Bool
+    var id: Int { number }
+  }
+
+  let rungs: [Rung]
+
+  init(hasSelfProof: Bool, records: [ReportSubmissionRecord]?) {
+    let records = records ?? []
+    let received = records.filter { !$0.isTerminal && $0.submissionState == .accepted && $0.isReceiptStored }
+    let allReceived = !records.isEmpty && received.count == records.count
+    let origins = Set(received.compactMap { submissionOperatorOrigin($0.endpoint) })
+    let sentTitle: String
+    if allReceived, origins.count == 1, let origin = origins.first {
+      sentTitle = String(localized: "record.sentToOrganizer", defaultValue: "SENT TO \(origin)")
+    } else {
+      sentTitle = String(localized: "SENT TO ORGANIZER")
+    }
+    rungs = [
+      Rung(number: 1, title: String(localized: hasSelfProof ? "SEALED ON THIS PHONE" : "RECORDED ON THIS PHONE"), reached: hasSelfProof),
+      Rung(number: 2, title: sentTitle, reached: allReceived),
+      Rung(number: 3, title: String(localized: "ACCEPTED"), reached: allReceived),
+      Rung(number: 4, title: String(localized: "THIRD-PARTY RESULT"), reached: false)
+    ]
+  }
+}
+
 private struct RecordEvidenceLadder: View {
   let proof: Proof
   @ObservedObject var sensing: SensingCoordinator
@@ -239,48 +271,42 @@ private struct RecordEvidenceLadder: View {
   @ObservedObject var proofStore: ProofStore
   @ObservedObject var linkStore: ReportProofLinkStore
 
+  private var reports: [LinkedReport]? {
+    try? ReportProofLinkPresentation.readReports(
+      for: proof, submissionStore: submissionStore, linkStore: linkStore, proofStore: proofStore
+    ).get()
+  }
+
   var body: some View {
+    let reports = reports
+    let presentation = RecordSendingLadderPresentation(
+      hasSelfProof: sensing.selfProofRecord(forProofId: proof.id) != nil,
+      records: reports?.map(\.record)
+    )
     VStack(alignment: .leading, spacing: DS.Space.m) {
       let ordinal = EventGrouping.sessionOrdinal(of: proof, in: proofStore.proofs) ?? 1
       Text(String(localized: "record.selectedSession", defaultValue: "SELECTED SESSION \(ordinal)"))
         .beidTextStyle(DS.Font.Library.labelMono10)
-      evidence(
-        sensing.selfProofRecord(forProofId: proof.id) == nil ? "RECORDED ON THIS PHONE" : "SEALED ON THIS PHONE",
-        value: String(localized: "Kept on this phone")
-      )
-      switch ReportProofLinkPresentation.readReports(
-        for: proof, submissionStore: submissionStore, linkStore: linkStore, proofStore: proofStore
-      ) {
-      case .failure:
-        evidence("REPORT STATUS", value: String(localized: "NOT YET AVAILABLE"))
-      case .success(let reports):
-        Text(verbatim: ReportProgressPresentation(records: reports.map(\.record)).summary)
-          .beidTextStyle(DS.Font.Library.labelMono10)
-        if reports.isEmpty {
-          evidence("SENT TO", value: String(localized: "NOT YET AVAILABLE"))
-          evidence("ACCEPTANCE RECEIPT", value: String(localized: "NOT YET AVAILABLE"))
-        }
-        ForEach(reports, id: \.record.id) { report in
-          let received = !report.record.isTerminal && report.record.submissionState == .accepted && report.record.isReceiptStored
+      ForEach(presentation.rungs) { rung in
+        HStack(alignment: .top, spacing: DS.Space.m) {
+          Text(verbatim: String(format: "%02d", rung.number))
+            .beidTextStyle(DS.Font.Library.labelMono13Value)
+            .foregroundStyle(rung.reached ? DS.Color.textPrimary : DS.Color.textSecondary)
+            .accessibilityHidden(true)
           VStack(alignment: .leading, spacing: DS.Space.s) {
-            Text(String(localized: "eventDetail.report.title", defaultValue: "Report #\(report.ordinal)"))
-              .beidTextStyle(DS.Font.Library.title15)
-            evidence(
-              received ? "SENT TO" : "DESTINATION",
-              value: submissionOperatorOrigin(report.record.endpoint) ?? String(localized: "NOT YET AVAILABLE")
-            )
-            evidence("DELIVERY", value: ReportDetailPresentation(record: report.record).delivery)
-            evidence("DELIVERY TIME", value: String(localized: "NOT YET AVAILABLE"))
-            evidence(received ? "ACCEPTED" : "ACCEPTANCE RECEIPT", value: ReportDetailPresentation(record: report.record).receipt)
-            evidence("RECEIPT TIME", value: String(localized: "NOT YET AVAILABLE"))
+            Text(verbatim: rung.title)
+              .beidTextStyle(DS.Font.Library.labelMono10)
+              .accessibilityIdentifier("record.ladder.\(rung.number).title")
+            rungDetails(rung.number, reports: reports)
           }
-          .accessibilityIdentifier("record.evidence.\(report.record.id.uuidString)")
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.top, DS.Space.m)
+        .overlay(alignment: .top) {
+          Rectangle().fill(DS.Color.strokeHairline).frame(height: DS.Size.hairline)
+        }
+        .accessibilityIdentifier("record.ladder.\(rung.number)")
       }
-      evidence("REPRODUCIBLE MATERIAL", value: String(localized: "NOT YET AVAILABLE"))
-      evidence("THIRD-PARTY RESULT", value: String(localized: "NOT YET AVAILABLE"))
-      evidence("MUTUAL OBSERVATION", value: String(localized: "NOT YET AVAILABLE"))
-      evidence("INCLUDED IN PUBLISHED DATA", value: String(localized: "NOT YET AVAILABLE"))
       if let code = proof.eventCode {
         Text("EVENT DATA").beidTextStyle(DS.Font.Library.labelMono10)
         evidence("JOIN ACTION", value: String(localized: "Joined"))
@@ -297,10 +323,50 @@ private struct RecordEvidenceLadder: View {
     .foregroundStyle(DS.Color.textPrimary)
   }
 
+  @ViewBuilder private func rungDetails(_ number: Int, reports: [LinkedReport]?) -> some View {
+    if number == 1 {
+      Text("Kept on this phone").beidTextStyle(DS.Font.Library.body13)
+    } else if number == 4 {
+      Text("NOT YET AVAILABLE").beidTextStyle(DS.Font.Library.body13)
+    } else if let reports, !reports.isEmpty {
+      ForEach(reports, id: \.record.id) { report in
+        let record = report.record
+        let received = !record.isTerminal && record.submissionState == .accepted && record.isReceiptStored
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+          Text(String(localized: "eventDetail.report.title", defaultValue: "Report #\(report.ordinal)"))
+            .beidTextStyle(DS.Font.Library.title15)
+          if number == 2 {
+            evidence(
+              received ? "SENT TO" : "DESTINATION",
+              value: submissionOperatorOrigin(record.endpoint) ?? String(localized: "NOT YET AVAILABLE")
+            )
+            evidence("DELIVERY", value: ReportDetailPresentation(record: record).delivery)
+            if received {
+              evidence("DELIVERY TIME", value: String(localized: "NOT YET AVAILABLE"))
+            }
+          } else if received, let receipt = record.acceptanceReceiptHex {
+            evidence("ACCEPTANCE RECEIPT", value: receipt)
+            evidence("RECEIPT TIME", value: String(localized: "NOT YET AVAILABLE"))
+          } else {
+            Text(verbatim: ReportDetailPresentation(record: record).receipt)
+              .beidTextStyle(DS.Font.Library.body13)
+          }
+        }
+        .accessibilityIdentifier("record.ladder.\(number).report.\(record.id.uuidString)")
+      }
+    } else {
+      Text("NOT YET AVAILABLE").beidTextStyle(DS.Font.Library.body13)
+      if reports == nil {
+        Text("REPORT STATUS UNAVAILABLE").beidTextStyle(DS.Font.Library.body13)
+      }
+    }
+  }
+
   private func evidence(_ title: LocalizedStringKey, value: String) -> some View {
     VStack(alignment: .leading, spacing: DS.Space.xs) {
       Text(title).beidTextStyle(DS.Font.Library.labelMono10).foregroundStyle(DS.Color.textSecondary)
       Text(verbatim: value).beidTextStyle(DS.Font.Library.body13)
+        .fixedSize(horizontal: false, vertical: true)
     }
   }
 }

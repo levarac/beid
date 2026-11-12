@@ -9,6 +9,10 @@ struct ScanFlowView: View {
   @ObservedObject private var sensing: SensingCoordinator
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @AppStorage("beid.sensing.firstTimeHintShown") private var hasShownFirstTimeHint = false
+  // Latch eligibility for this navigation lifetime, including phase changes
+  // and returning from About sensing. Only a later visit reads persistence.
+  @State private var showsFirstTimeHint: Bool?
 
   init(sensing: SensingCoordinator) {
     self.sensing = sensing
@@ -16,6 +20,10 @@ struct ScanFlowView: View {
 
   var body: some View {
     content
+      .environment(\.showsFirstSensingHint, showsFirstTimeHint ?? false)
+      .onAppear {
+        if showsFirstTimeHint == nil { showsFirstTimeHint = !hasShownFirstTimeHint }
+      }
       .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: sensing.phase)
       .navigationTitle("")
       .navigationBarTitleDisplayMode(.inline)
