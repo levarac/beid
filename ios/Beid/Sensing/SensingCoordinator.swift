@@ -938,6 +938,12 @@ final class SensingCoordinator: ObservableObject {
   private var demoInterpreterIsParked = false
   private var demoInterpreterLastObservationChanged = false
   private var demoInterpreterStepDelayNanos: UInt64 = 700_000_000
+  #if DEBUG
+  @Published private(set) var demoAdvanceToken: UUID?
+  var demoAdvanceArgumentsForTesting: [String]?
+  private var demoAdvanceContinuation: CheckedContinuation<Bool, Never>?
+  private var demoAdvanceGeneration = UUID()
+  #endif
   /// Generation and session identity protect the UI from a completion that
   /// belongs to a reset, leave, retry, or later session with the same raw code.
   private var eventIdentityVerificationGeneration = 0
@@ -1247,6 +1253,65 @@ final class SensingCoordinator: ObservableObject {
   // Native storage refusals use their own keys rather than registry reasons.
   private var storageAdmissionRetry: (() -> Void)?
   private var admissionAfterLedgerLoad: (() -> Void)?
+
+  /// Release can never opt in, even if all fixture arguments are supplied.
+  static func demoAdvanceIsEnabled(arguments: [String]) -> Bool {
+    #if DEBUG
+    return arguments.contains("-beid-ui-test") && arguments.contains("-beid-controlled-demo")
+    #else
+    return false
+    #endif
+  }
+
+  #if DEBUG
+  var isDemoAdvanceEnabled: Bool {
+    useDemoEventMode && Self.demoAdvanceIsEnabled(
+      arguments: demoAdvanceArgumentsForTesting ?? ProcessInfo.processInfo.arguments
+    )
+  }
+
+  /// A receipt belongs to exactly one pending pause, never to a future run.
+  /// Consuming it synchronously prevents double taps from queuing progress.
+  @discardableResult
+  func advanceDemo(token: UUID) -> Bool {
+    guard isDemoAdvanceEnabled, demoAdvanceToken == token, demoAdvanceContinuation != nil else { return false }
+    finishDemoAdvance(advancing: true)
+    return true
+  }
+
+  private func finishDemoAdvance(advancing: Bool) {
+    let continuation = demoAdvanceContinuation
+    demoAdvanceContinuation = nil
+    demoAdvanceToken = nil
+    continuation?.resume(returning: advancing)
+  }
+
+  private func waitForDemoAdvance() async -> Bool {
+    let token = UUID()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        guard !Task.isCancelled, isDemoAdvanceEnabled else {
+          continuation.resume(returning: false)
+          return
+        }
+        demoAdvanceContinuation = continuation
+        demoAdvanceToken = token
+      }
+    } onCancel: {
+      Task { @MainActor [weak self] in
+        guard let self, self.demoAdvanceToken == token else { return }
+        self.finishDemoAdvance(advancing: false)
+      }
+    }
+  }
+  #endif
+
+  private func waitForDemoPause(_ nanos: UInt64) async -> Bool {
+    #if DEBUG
+    if isDemoAdvanceEnabled { return await waitForDemoAdvance() }
+    #endif
+    return await delay(nanos)
+  }
 
   private var demoStepDelayNanos: UInt64 {
     #if DEBUG
@@ -5412,6 +5477,9 @@ final class SensingCoordinator: ObservableObject {
     cursor: Int,
     stepDelayNanos: UInt64
   ) {
+    #if DEBUG
+    let generation = demoAdvanceGeneration
+    #endif
     demoTask = Task { @MainActor [weak self] in
       guard let self else { return }
 
@@ -5419,11 +5487,14 @@ final class SensingCoordinator: ObservableObject {
         guard !Task.isCancelled else { return }
         let step = scenario.steps[index]
         self.onDemoInterpreterCheckpointForTesting?(.step(index, step))
+        #if DEBUG
+        guard !Task.isCancelled, self.demoAdvanceGeneration == generation else { return }
+        #endif
 
         var shouldPark = false
         switch step {
         case .pause:
-          guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
+          guard await self.waitForDemoPause(stepDelayNanos), !Task.isCancelled else { return }
         default:
           shouldPark = self.applyDemoScenarioStep(step, event: scenario.event)
         }
@@ -5431,7 +5502,13 @@ final class SensingCoordinator: ObservableObject {
         guard !Task.isCancelled else { return }
         await Task.yield()
         guard !Task.isCancelled else { return }
+        #if DEBUG
+        guard self.demoAdvanceGeneration == generation else { return }
+        #endif
         self.onDemoInterpreterCheckpointForTesting?(.renderTurnSettled(index))
+        #if DEBUG
+        guard !Task.isCancelled, self.demoAdvanceGeneration == generation else { return }
+        #endif
         self.demoInterpreterCursor = index + 1
 
         // The reducer has now run for this step, so `phase` is its answer and
@@ -5510,8 +5587,16 @@ final class SensingCoordinator: ObservableObject {
       return false
     }
 
+    #if DEBUG
+    let generation = demoAdvanceGeneration
+    #endif
     demoInterpreterIsParked = false
     onDemoInterpreterCheckpointForTesting?(.resumed(cursor))
+    #if DEBUG
+    // STOP or replacement handled this resume; do not launch its old cursor
+    // or let resumeSensing fall through into fallback demo growth.
+    guard demoAdvanceGeneration == generation else { return true }
+    #endif
     runDemoInterpreter(
       scenario,
       cursor: cursor,
@@ -5521,6 +5606,10 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func clearDemoInterpreterState() {
+    #if DEBUG
+    demoAdvanceGeneration = UUID()
+    finishDemoAdvance(advancing: false)
+    #endif
     demoInterpreterScenario = nil
     demoInterpreterStopRoute = nil
     demoInterpreterCursor = nil
@@ -5541,10 +5630,16 @@ final class SensingCoordinator: ObservableObject {
   /// `ScanDetectionResult.updatedRecording`.
   private func continueDemoRecording(event: EventSession, stepDelayNanos: UInt64) {
     demoTask?.cancel()
+    #if DEBUG
+    let generation = demoAdvanceGeneration
+    #endif
     demoTask = Task { @MainActor [weak self] in
       guard let self else { return }
       for _ in 0..<2 {
-        guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
+        guard await self.waitForDemoPause(stepDelayNanos), !Task.isCancelled else { return }
+        #if DEBUG
+        guard self.demoAdvanceGeneration == generation else { return }
+        #endif
         let changed = self.observeOneDemoDevice()
         self.applyPhaseDecision(
           coPresentDeviceCount: self.demoWindowRpids.count,
