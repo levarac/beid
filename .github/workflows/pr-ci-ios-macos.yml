@@ -31,6 +31,7 @@ on:
       - "scripts/download_xcodegen.sh"
       - "scripts/ci_simulator.py"
       - "scripts/ios_ui_smoke.py"
+      - "scripts/ios_ci_timing.py"
       - "scripts/run_local_tests.py"
   # Escape hatch: run this lane against any ref on demand. `paths` does not
   # apply to workflow_dispatch, so a manual run always executes.
@@ -267,13 +268,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$CI_OUTPUT_ROOT"
-          xcodebuild -quiet \
+          python3 -m scripts.ios_ci_timing --phase spm \
+            --log "$CI_OUTPUT_ROOT/spm.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
+            xcodebuild -resolvePackageDependencies -project ios/Beid.xcodeproj -scheme Beid \
+            -clonedSourcePackagesDirPath "$CI_OUTPUT_ROOT/SourcePackages"
+          python3 -m scripts.ios_ci_timing --phase build \
+            --log "$CI_OUTPUT_ROOT/build.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
+            xcodebuild -showBuildTimingSummary \
             -project ios/Beid.xcodeproj \
             -scheme Beid \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
+            -clonedSourcePackagesDirPath "$CI_OUTPUT_ROOT/SourcePackages" \
+            -disableAutomaticPackageResolution \
             SWIFT_OPTIMIZATION_LEVEL=-O \
             build-for-testing
 
@@ -415,6 +424,18 @@ jobs:
             --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/test-tree.json"
           python3 -m scripts.ios_ui_smoke verify --mode "$TEST_MODE" \
             --tests-json "$CI_OUTPUT_ROOT/test-tree.json" --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload structured test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-evidence-${{ github.run_attempt }}
+          path: |
+            ${{ env.CI_OUTPUT_ROOT }}/test-*.json
+            ${{ env.CI_OUTPUT_ROOT }}/build-timings.jsonl
+            ${{ env.CI_OUTPUT_ROOT }}/*.log
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Delete owned simulator
         if: ${{ always() && steps.simulator.outputs.udid != '' }}
