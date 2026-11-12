@@ -3639,6 +3639,17 @@
         }
       }
     },
+    "LOOKING FOR PEERS · STAY NEARBY": {
+      "comment": "State caption after joining an event while no other phone has been heard yet.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LOOKING FOR PEERS · STAY NEARBY"
+          }
+        }
+      }
+    },
     "All records": {
       "comment": "VoiceOver label for the arrow control returning to the saved record grid.",
       "localizations": {

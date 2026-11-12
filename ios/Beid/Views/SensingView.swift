@@ -137,6 +137,14 @@ struct SensingView: View {
 
             radar
 
+            if isListeningAfterJoin {
+              Text("LOOKING FOR PEERS · STAY NEARBY")
+                .beidTextStyle(DS.Font.Library.labelMono10)
+                .foregroundStyle(DS.Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("scan.detecting.caption")
+            }
+
             Group {
               if isListeningAfterJoin {
                 Text("Keep the app open. Sensing starts when beid hears another phone at this event.")

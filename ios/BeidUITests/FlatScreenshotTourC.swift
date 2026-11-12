@@ -18,6 +18,36 @@ final class FlatScreenshotTourC: XCTestCase {
   func testShot_05a3_DetectingFirstTime() { capture("05a3") }
   func testShot_05d_CantJoin() { capture("05d") }
 
+  func testDetectingCaptionOnlyAppearsAfterJoinBeforeAnyPhoneIsHeard() {
+    let app = XCUIApplication()
+    app.launchArguments = ["-beid-ui-test", "-beid-nearby-join-fixture"]
+    app.launch()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
+    app.buttons["Allow Bluetooth"].assertHittable()
+    app.buttons["Allow Bluetooth"].tap()
+    app.tabButton("Now").assertExists()
+    XCTAssertFalse(app.staticTexts["scan.detecting.caption"].exists)
+
+    let join = app.buttons["home.nearby.join.9adc61d60dda843e"]
+    join.assertHittable()
+    join.tap()
+    let caption = app.staticTexts["scan.detecting.caption"]
+    caption.scrollToHittable(in: app)
+    XCTAssertEqual(caption.label, "LOOKING FOR PEERS · STAY NEARBY")
+    XCTAssertFalse(app.staticTexts["MUTUAL"].exists)
+    XCTAssertFalse(app.staticTexts["DETECTED"].exists)
+    app.buttons["scan.stop-sensing"].assertHittable()
+    app.terminate()
+
+    // 05a's sample already contains five heard devices. Its presentation
+    // name must not override the actual sensing state and claim zero peers.
+    let heard = launchSensingFixture("05a")
+    XCTAssertFalse(heard.staticTexts["scan.detecting.caption"].exists)
+    XCTAssertTrue(heard.staticTexts["DEVICES HEARD"].exists)
+    XCTAssertTrue(heard.staticTexts["ELAPSED"].exists)
+  }
+
   /// Not a Figma frame. An unchecked device clock is a notice above the
   /// nearby list on the pre-join screen; it never becomes 05d.
   func testShot_05_ClockUncheckedNotice() {
