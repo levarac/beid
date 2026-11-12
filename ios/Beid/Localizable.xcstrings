@@ -1479,7 +1479,17 @@
     "Tap Bluetooth": {},
     "Tap Sense Event to start collecting proof of attendance automatically.": {},
     "The request timed out. Try again once your wallet is reachable.": {},
-    "Try again": {},
+    "Try again": {
+      "comment": "Retries the requested event join after a local storage failure.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
     "Verified": {},
     "Verifying proof": {},
     "Waiting for wallet to approve…": {},
@@ -4210,6 +4220,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "beid could not access the key used to sign records. Operations that need this key are paused. Try again when your device is available."
+          }
+        }
+      }
+    },
+    "Saved records unavailable": {
+      "comment": "Join refusal title when local record recovery cannot finish.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved records unavailable"
+          }
+        }
+      }
+    },
+    "Loading saved records": {
+      "comment": "Shown while an event join waits for existing local records to load.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading saved records"
+          }
+        }
+      }
+    },
+    "beid couldn't access saved records. Try again before joining another event.": {
+      "comment": "Local storage refusal; the retry action repeats the requested join after recovery succeeds.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid couldn't access saved records. Try again before joining another event."
+          }
+        }
+      }
+    },
+    "beid is loading saved records before joining another event. Please wait.": {
+      "comment": "The pending join resumes after local record loading and recovery finish.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid is loading saved records before joining another event. Please wait."
           }
         }
       }

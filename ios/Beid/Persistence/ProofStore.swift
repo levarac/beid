@@ -8,6 +8,7 @@ import Foundation
 @MainActor
 final class ProofStore: ObservableObject {
   @Published private(set) var proofs: [Proof] = []
+  @Published private(set) var lastPersistenceError: Error?
 
   /// Set when `load()` preserved a file that failed to decode, so the event
   /// is not invisible. Broader observability is beid#131's job.
@@ -35,12 +36,6 @@ final class ProofStore: ObservableObject {
     var acknowledged: Bool
   }
 
-  private struct Snapshot: Encodable {
-    let schemaVersion = RecordSchemaEnvelope.currentSchemaVersion
-    let records: [Proof]
-    let orphanDiscards: [OrphanDiscard]
-  }
-
   private struct DiscardMetadata: Decodable {
     let orphanDiscards: [OrphanDiscard]
     private enum CodingKeys: String, CodingKey { case orphanDiscards }
@@ -54,9 +49,17 @@ final class ProofStore: ObservableObject {
       }
     }
   }
+  private let encodeRecords: ([Proof]) throws -> Data
+  private let writeData: (Data, URL) throws -> Void
 
-  init(fileURL: URL? = nil) {
+  init(
+    fileURL: URL? = nil,
+    encodeRecords: @escaping ([Proof]) throws -> Data = { try RecordSchemaEnvelope.encodeRecords($0) },
+    writeData: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
+  ) {
     self.fileURL = fileURL ?? Self.defaultFileURL()
+    self.encodeRecords = encodeRecords
+    self.writeData = writeData
     load()
   }
 
@@ -65,13 +68,17 @@ final class ProofStore: ObservableObject {
     return dir.appendingPathComponent("proofs.json")
   }
 
-  func add(_ proof: Proof) {
-    proofs.insert(proof, at: 0)
-    save()
+  @discardableResult
+  func add(_ proof: Proof) -> Bool {
+    var updated = proofs.filter { $0.id != proof.id }
+    updated.insert(proof, at: 0)
+    return save(updated)
   }
 
+  /// Memory-only fallback entries cannot support a saved-record claim.
   func proof(withId id: UUID) -> Proof? {
-    proofs.first { $0.id == id }
+    guard persistedProofIds.contains(id) else { return nil }
+    return proofs.first { $0.id == id }
   }
 
   func hasPersistedProof(withId id: UUID) -> Bool {
@@ -88,10 +95,12 @@ final class ProofStore: ObservableObject {
   /// Updates only the signature lifecycle of an already-stored proof — the
   /// proof's own collected fields are immutable once added. No-op if the
   /// proof was removed since the caller last read it.
-  func updateSignatureState(for id: UUID, to state: ProofSignatureState) {
-    guard let index = proofs.firstIndex(where: { $0.id == id }) else { return }
-    proofs[index].signatureState = state
-    save()
+  @discardableResult
+  func updateSignatureState(for id: UUID, to state: ProofSignatureState) -> Bool {
+    guard let index = proofs.firstIndex(where: { $0.id == id }) else { return false }
+    var updated = proofs
+    updated[index].signatureState = state
+    return save(updated)
   }
 
   /// Updates a recording proof's peer count in place as
@@ -99,10 +108,12 @@ final class ProofStore: ObservableObject {
   /// is created once, at the instant `.recording` begins, and never
   /// re-created (`docs/specs/scan-slice2-redesign.md` §4.6). No-op if the
   /// proof was removed since the caller last read it.
-  func updatePeersVerified(for id: UUID, to peersVerified: Int) {
-    guard let index = proofs.firstIndex(where: { $0.id == id }) else { return }
-    proofs[index].peersVerified = peersVerified
-    save()
+  @discardableResult
+  func updatePeersVerified(for id: UUID, to peersVerified: Int) -> Bool {
+    guard let index = proofs.firstIndex(where: { $0.id == id }) else { return false }
+    var updated = proofs
+    updated[index].peersVerified = peersVerified
+    return save(updated)
   }
 
   /// Persists the terminal decision before its signing input can be removed.
@@ -180,11 +191,18 @@ final class ProofStore: ObservableObject {
   private func persistDurably(_ updated: [Proof], orphanDiscards updatedOrphanDiscards: [OrphanDiscard]? = nil) throws {
     if let persistenceSuspensionReason { throw persistenceSuspensionReason }
     let decisions = updatedOrphanDiscards ?? orphanDiscards
-    let data = try JSONEncoder().encode(Snapshot(records: updated, orphanDiscards: decisions))
-    try data.write(to: fileURL, options: .atomic)
+    let encodedRecords = try encodeRecords(updated)
+    guard var snapshot = try JSONSerialization.jsonObject(with: encodedRecords) as? [String: Any] else {
+      throw CocoaError(.coderInvalidValue)
+    }
+    snapshot["orphanDiscards"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(decisions))
+    let data = try JSONSerialization.data(withJSONObject: snapshot)
+    try writeData(data, fileURL)
     proofs = updated
     orphanDiscards = decisions
     persistedProofIds = Set(updated.map(\.id))
+    hasReadableProofs = true
+    lastPersistenceError = nil
   }
 
   private func load() {
@@ -239,18 +257,24 @@ final class ProofStore: ObservableObject {
     persistedProofIds = Set(loaded.map(\.id))
     hasReadableProofs = true
     if didSanitize {
-      save()
+      save(loaded)
     }
   }
 
-  private func save() {
-    guard !isPersistenceSuspended else { return }
-    guard let data = try? JSONEncoder().encode(Snapshot(records: proofs, orphanDiscards: orphanDiscards)) else { return }
+  @discardableResult
+  private func save(_ updated: [Proof]) -> Bool {
+    if let reason = persistenceSuspensionReason {
+      // Preserve the established memory-only fallback, while reporting failure.
+      proofs = updated
+      lastPersistenceError = reason
+      return false
+    }
     do {
-      try data.write(to: fileURL, options: .atomic)
-      persistedProofIds = Set(proofs.map(\.id))
+      try persistDurably(updated)
+      return true
     } catch {
-      return
+      lastPersistenceError = error
+      return false
     }
   }
 
@@ -270,6 +294,7 @@ final class ProofStore: ObservableObject {
     persistenceSuspensionReason = nil
     hasReadableProofs = true
     persistedProofIds = []
+    lastPersistenceError = nil
     try? FileManager.default.removeItem(at: fileURL)
   }
 }

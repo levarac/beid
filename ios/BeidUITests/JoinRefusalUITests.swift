@@ -20,29 +20,43 @@ final class JoinRefusalUITests: XCTestCase {
     continueAfterFailure = false
   }
 
+  func testStorageRefusalShowsItsOwnReasonAndRetryAction() {
+    app.launchArguments = ["-beid-ui-test", "-beid-join-refusal-fixture", "-beid-storage-refusal-fixture"]
+    app.launch()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
+    app.buttons["Allow Bluetooth"].assertHittable()
+    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["home.demo.join"].assertHittable()
+    app.buttons["home.demo.join"].tap()
+    app.scrollViews["scan.cant-join"].assertHittable()
+    app.staticTexts["Saved records unavailable"].scrollToHittable(in: app)
+    app.staticTexts["beid couldn't access saved records. Try again before joining another event."]
+      .scrollToHittable(in: app)
+    XCTAssertFalse(app.buttons["scan.manual-entry"].exists)
+    let retry = app.buttons["scan.storage-retry"]
+    retry.scrollToHittable(in: app)
+    retry.tap()
+    app.scrollViews["scan.cant-join"].assertDisappears()
+    app.scrollViews["scan.sensing"].assertHittable()
+  }
+
   func testDeviceKeyFailureAppearsOnOpenScanFlowAndDismissesOnce() {
     app.launchArguments = [
       "-beid-ui-test", "-beid-nearby-join-fixture", "-beid-device-key-unavailable-fixture"
     ]
     app.launch()
-    app.buttons["Get Started"].assertHittable()
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
     app.buttons["Allow Bluetooth"].assertHittable()
     app.buttons["Allow Bluetooth"].tap()
-    app.buttons["home.scan"].assertHittable()
-    app.buttons["home.scan"].tap()
-
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
     receipt.assertHittable()
     XCTAssertEqual(receipt.label, "joins=0 event=none")
-    let card = app.buttons.matching(NSPredicate(
-      format: "identifier == %@ AND label CONTAINS %@", "scan.nearby-events", "Community night"
-    )).firstMatch
-    XCTAssertTrue(card.waitForExistence(timeout: 5))
-    let alert = app.alerts["Recording unavailable"]
-    XCTAssertFalse(alert.exists, "the failure must occur after the scan flow opens")
-    app.scrollViews["scan.sensing"].swipeUp()
+    let card = app.buttons["home.nearby.join.9adc61d60dda843e"]
     card.assertHittable()
+    let alert = app.alerts["Recording unavailable"]
+    XCTAssertFalse(alert.exists, "the failure must occur after joining the nearby event")
     card.tap()
 
     let message = "The device signing key is unavailable. Unlock your device and try again."
@@ -60,10 +74,10 @@ final class JoinRefusalUITests: XCTestCase {
     XCTAssertEqual(title.label, "Recording unavailable")
     panel.staticTexts[message].scrollToHittable(in: app)
     XCTAssertFalse(app.staticTexts["beid couldn't join that event. Check the code and try again."].exists)
-    app.buttons["Close"].assertHittable()
-    app.buttons["Close"].tap()
+    app.navigationBars.buttons.firstMatch.assertHittable()
+    app.navigationBars.buttons.firstMatch.tap()
     panel.assertDisappears()
-    app.buttons["home.scan"].assertHittable()
+    card.assertHittable()
 
     let repeatedAlert = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: alert)
     repeatedAlert.isInverted = true
