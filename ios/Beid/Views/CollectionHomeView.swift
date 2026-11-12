@@ -95,6 +95,10 @@ private struct NowHomeView: View {
               }
               #if DEBUG
               if coordinator.isHomeStandbyFixture { standbyFixtureControls }
+              if coordinator.stopOutcomeUITestFixture != nil {
+                Button("Repeat STOP confirmation") { coordinator.confirmStopSensing() }
+                  .accessibilityIdentifier("stop.fixture.repeat-confirmation")
+              }
               #endif
             }
             .padding(.horizontal, DS.Space.pageMargin)

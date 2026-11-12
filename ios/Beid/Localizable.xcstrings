@@ -1,6 +1,39 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "stop.outcome.action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to Now"
+          }
+        }
+      }
+    },
+    "stop.outcome.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Record could not be saved for this session. Return to Now to join again."
+          }
+        }
+      }
+    },
+    "stop.outcome.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record not saved"
+          }
+        }
+      }
+    },
     "FIRST TIME? HOW THIS WORKS": {
       "extractionState": "manual",
       "localizations": {

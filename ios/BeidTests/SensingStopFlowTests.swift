@@ -6,6 +6,115 @@ import XCTest
 
 @MainActor
 final class SensingStopFlowTests: XCTestCase {
+  func testStopPresentationRequiresADurableMatchingRecordAndGivesAlertsPriority() {
+    let attemptedID = UUID()
+    let otherID = UUID()
+    for signatureID in [nil, attemptedID, otherID] {
+      XCTAssertEqual(AppCoordinator.stopPresentation(
+        attemptedRecordID: attemptedID, signedRecordID: signatureID,
+        storedRecordID: nil, hasExplainingAlert: false
+      ), .noRecordSaved, "Nil or mismatched signing output cannot hide a missing durable Record")
+      XCTAssertEqual(AppCoordinator.stopPresentation(
+        attemptedRecordID: attemptedID, signedRecordID: signatureID,
+        storedRecordID: otherID, hasExplainingAlert: false
+      ), .noRecordSaved)
+      XCTAssertEqual(AppCoordinator.stopPresentation(
+        attemptedRecordID: attemptedID, signedRecordID: signatureID,
+        storedRecordID: attemptedID, hasExplainingAlert: false
+      ), signatureID == attemptedID ? .sealed : .dismiss)
+      for storedID in [nil, attemptedID, otherID] {
+        XCTAssertEqual(AppCoordinator.stopPresentation(
+          attemptedRecordID: attemptedID, signedRecordID: signatureID,
+          storedRecordID: storedID, hasExplainingAlert: true
+        ), .dismiss, "An existing STOP failure alert is the only explanation")
+      }
+    }
+    XCTAssertEqual(AppCoordinator.stopPresentation(
+      attemptedRecordID: nil, signedRecordID: nil, storedRecordID: nil, hasExplainingAlert: false
+    ), .dismiss, "Detecting without observations is normal cancellation")
+  }
+
+  func testLaterIndependentSessionGetsItsOwnOutcomeWithoutReusingConsumedConfirmation() async throws {
+    let fixture = StopOutcomeUITestFixture(mode: .saveFailure)
+    let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+    await fixture.prepare()
+    app.scanPresented = true
+    app.requestScanClose()
+    app.confirmStopSensing()
+    let first = try XCTUnwrap(app.stopOutcome)
+    app.dismissStopOutcome()
+    await fixture.prepare()
+    app.scanPresented = true
+    let newProofID = try XCTUnwrap(fixture.proofID)
+    app.confirmStopSensing()
+    XCTAssertEqual(fixture.sensingCoordinator.currentProofID, newProofID)
+    XCTAssertNil(app.stopOutcome, "An old confirmation cannot stop the next live session")
+    app.requestScanClose()
+    let nextSessionID = try XCTUnwrap(app.stopConfirmSnapshot?.event.sessionID)
+    app.confirmStopSensing()
+    let second = try XCTUnwrap(app.stopOutcome)
+    XCTAssertNotEqual(second, first)
+    XCTAssertEqual(second.sessionID, nextSessionID)
+    XCTAssertNotEqual(second.sessionID, first.sessionID)
+    let artifacts = try fixtureArtifacts(fixture)
+    let writes = fixture.recordWriteCount
+    app.confirmStopSensing()
+    XCTAssertEqual(app.stopOutcome, second)
+    XCTAssertEqual(fixture.recordWriteCount, writes)
+    XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
+  }
+
+  func testDetectingConfirmationCannotStopDifferentSessionUsingTheSameEventCode() async throws {
+    let fixture = StopOutcomeUITestFixture(mode: .detecting)
+    let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+    await fixture.prepare()
+    app.scanPresented = true
+    app.requestScanClose()
+    let oldSessionID = try XCTUnwrap(app.stopConfirmSnapshot?.event.sessionID)
+    await fixture.prepare()
+    let livePhase = fixture.sensingCoordinator.phase
+    let artifacts = try fixtureArtifacts(fixture)
+    app.confirmStopSensing()
+    XCTAssertEqual(fixture.sensingCoordinator.phase, livePhase)
+    XCTAssertTrue(app.scanPresented)
+    XCTAssertNil(app.stopConfirmSnapshot)
+    XCTAssertNil(app.stopOutcome)
+    XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
+    app.requestScanClose()
+    XCTAssertNotEqual(app.stopConfirmSnapshot?.event.sessionID, oldSessionID)
+    app.confirmStopSensing()
+    XCTAssertEqual(fixture.sensingCoordinator.phase, .idle)
+    XCTAssertNil(app.stopOutcome)
+  }
+
+  func testMissingStoredRecordWithoutWindowEndpointsExplainsNoRecordAfterAttempt() async throws {
+    let fixture = StopOutcomeUITestFixture(mode: .nilSignature)
+    let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+    let scenario = DemoScenario(
+      identifier: "stopMissingRecordBeforeWindow", event: .demoSample,
+      steps: DemoScenario.appReviewGolden.steps.filter { $0 != .advanceDemoWindow }
+    )
+    fixture.sensingCoordinator.runDemoScenario(scenario, stepDelayNanos: 0, stopWhenPhaseReaches: .recording)
+    await fixture.sensingCoordinator.waitForDemoScenarioPreviewToSettle()
+    let proofID = try XCTUnwrap(fixture.sensingCoordinator.currentProofID)
+    XCTAssertNotNil(fixture.proofStore.proof(withId: proofID))
+    app.scanPresented = true
+    app.requestScanClose()
+    fixture.proofStore.resetForUITesting() // Isolated test input: the durable parent disappears.
+    app.confirmStopSensing()
+    XCTAssertEqual(fixture.sensingCoordinator.phase, .idle)
+    XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+    XCTAssertNil(fixture.sensingCoordinator.ownerKeyOperationFailure)
+    XCTAssertNotNil(app.stopOutcome)
+    XCTAssertNil(app.sealedSnapshot)
+    XCTAssertNil(app.proofCollectedSnapshot)
+    let artifacts = try fixtureArtifacts(fixture)
+    let writes = fixture.recordWriteCount
+    app.confirmStopSensing()
+    XCTAssertEqual(fixture.recordWriteCount, writes)
+    XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
+  }
+
   func testStopOutcomeFixtureRequiresUITestGateAndKnownMode() {
     XCTAssertNil(StopOutcomeUITestFixture.selectedMode(arguments: ["-beid-stop-outcome-fixture", "save-failure"]))
     XCTAssertNil(StopOutcomeUITestFixture.selectedMode(arguments: ["-beid-ui-test", "-beid-stop-outcome-fixture"]))
@@ -28,6 +137,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(fixture.sensingCoordinator.ownerKeyOperationFailure)
 
     app.requestScanClose()
+    XCTAssertNotNil(app.stopConfirmSnapshot, "A failed save must still offer STOP confirmation")
     app.confirmStopSensing()
 
     XCTAssertEqual(fixture.sensingCoordinator.phase, .idle)
@@ -41,9 +151,19 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(app.proofCollectedSnapshot)
     XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
     XCTAssertNil(fixture.sensingCoordinator.ownerKeyOperationFailure)
+    let outcome = try XCTUnwrap(app.stopOutcome)
+    let writes = fixture.recordWriteCount
+    let artifacts = try fixtureArtifacts(fixture)
     app.confirmStopSensing()
+    XCTAssertEqual(app.stopOutcome, outcome, "Repeated confirmation cannot replace the existing outcome")
+    XCTAssertEqual(fixture.recordWriteCount, writes)
+    XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
     XCTAssertEqual(fixture.signingCallCount, 0, "Missing endpoints must not manufacture signing inputs")
     XCTAssertEqual(try Data(contentsOf: aggregateURL), aggregateBytes)
+    app.dismissStopOutcome()
+    app.confirmStopSensing()
+    XCTAssertNil(app.stopOutcome, "Acknowledgement cannot trigger a second outcome")
+    XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
   }
 
   func testNilSignatureUIFixtureRetainsUnsignedRecordAndCheckpointWithoutAnAlert() async throws {
@@ -59,6 +179,8 @@ final class SensingStopFlowTests: XCTestCase {
 
     app.requestScanClose()
     app.confirmStopSensing()
+    let artifacts = try fixtureArtifacts(fixture)
+    let writes = fixture.recordWriteCount
     app.confirmStopSensing()
 
     XCTAssertEqual(fixture.sensingCoordinator.phase, .idle)
@@ -76,6 +198,9 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(app.sealedSnapshot)
     XCTAssertNil(app.proofCollectedSnapshot)
     XCTAssertEqual(fixture.signingCallCount, 1)
+    XCTAssertNil(app.stopOutcome, "A durable unsigned Record needs no new outcome")
+    XCTAssertEqual(fixture.recordWriteCount, writes)
+    XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
   }
 
   func testSaveFailureWithEndpointsAlreadyRaisesPersistenceAlert() async throws {
@@ -95,6 +220,20 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNotNil(fixture.sensingCoordinator.sessionAggregateSnapshot(forProofId: proofID))
     XCTAssertNil(app.sealedSnapshot)
     XCTAssertNil(app.proofCollectedSnapshot)
+    XCTAssertNil(app.stopOutcome)
+    let artifacts = try fixtureArtifacts(fixture)
+    let writes = fixture.recordWriteCount
+    let signatures = fixture.signingCallCount
+    app.confirmStopSensing()
+    XCTAssertEqual(fixture.sensingCoordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertEqual(fixture.signingCallCount, signatures)
+    XCTAssertEqual(fixture.recordWriteCount, writes)
+    XCTAssertEqual(try fixtureArtifacts(fixture), artifacts, "Preserve signed and unsigned files byte for byte")
+    fixture.sensingCoordinator.dismissEventSigningKeyFailure()
+    app.confirmStopSensing()
+    XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+    XCTAssertNil(app.stopOutcome)
+    XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
   }
 
   func testSigningErrorUIFixtureUsesExistingAlertAndRetainsUnsignedArtifacts() async throws {
@@ -107,6 +246,8 @@ final class SensingStopFlowTests: XCTestCase {
 
     app.requestScanClose()
     app.confirmStopSensing()
+    let artifacts = try fixtureArtifacts(fixture)
+    let writes = fixture.recordWriteCount
     app.confirmStopSensing()
 
     XCTAssertEqual(fixture.sensingCoordinator.eventSigningKeyFailure, .unavailable)
@@ -116,10 +257,14 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertEqual(fixture.checkpointStore.checkpoint?.proofId, proofID)
     XCTAssertNil(app.sealedSnapshot)
     XCTAssertNil(app.proofCollectedSnapshot)
+    XCTAssertNil(app.stopOutcome)
     fixture.sensingCoordinator.dismissEventSigningKeyFailure()
     XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
     app.confirmStopSensing()
     XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+    XCTAssertNil(app.stopOutcome)
+    XCTAssertEqual(fixture.recordWriteCount, writes)
+    XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
   }
 
   func testStopAfterFailedProofSaveEndsSensingWithoutClaimingASavedRecord() async throws {
@@ -142,11 +287,12 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertEqual(sensing.phase, .idle)
     XCTAssertNil(sensing.currentProofID)
     XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
-    XCTAssertFalse(coordinator.scanPresented)
+    XCTAssertTrue(coordinator.scanPresented, "Keep the no-Record outcome reachable until acknowledged")
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.sealedSnapshot)
     XCTAssertNil(coordinator.proofCollectedSnapshot)
     XCTAssertNotNil(proofStore.lastPersistenceError, "stopping must preserve the save failure")
+    XCTAssertNotNil(coordinator.stopOutcome)
   }
 
   func testPrejoinStopBypassesConfirmationAndEndsParticipantTransport() {
@@ -309,6 +455,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(coordinator.sealedSnapshot)
     XCTAssertNil(coordinator.proofCollectedSnapshot)
     XCTAssertNil(coordinator.stopConfirmSnapshot)
+    XCTAssertNil(coordinator.stopOutcome)
   }
 
   func testNewProofWhileConfirmationIsOpenReturnsToItsLiveScan() async {
@@ -329,6 +476,7 @@ final class SensingStopFlowTests: XCTestCase {
     guard case .recording = coordinator.sensingCoordinator.phase else {
       return XCTFail("a newer Proof must remain live")
     }
+    XCTAssertNil(coordinator.stopOutcome, "Stale confirmation is not a failed attempt in the new session")
     _ = coordinator.sensingCoordinator.reset()
   }
 
@@ -340,12 +488,14 @@ final class SensingStopFlowTests: XCTestCase {
 
     coordinator.confirmStopSensing()
 
-    XCTAssertFalse(coordinator.scanPresented)
+    XCTAssertFalse(coordinator.scanPresented, "The existing persistence alert explains this missing Record")
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.sealedSnapshot)
     XCTAssertNil(coordinator.proofCollectedSnapshot)
     XCTAssertNil(coordinator.sensingCoordinator.currentProofID)
     XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
+    XCTAssertEqual(coordinator.sensingCoordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(coordinator.stopOutcome)
   }
 
   func testSealedSnapshotUsesObservationsReceivedWhileConfirmationWasOpen() async {
@@ -435,6 +585,12 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(coordinator.proofCollectedSnapshot)
     XCTAssertEqual(sensing.ownerKeyOperationFailure, .unavailable, "The real signing throw already has a root alert")
     XCTAssertNil(sensing.eventSigningKeyFailure, "Do not manufacture a second signing alert")
+    XCTAssertNil(coordinator.stopOutcome, "The existing owner-key alert is the sole explanation")
+    let signingCalls = crypto.calls
+    coordinator.confirmStopSensing()
+    XCTAssertEqual(crypto.calls, signingCalls, "Repeated confirmation cannot retry an owner-key operation")
+    XCTAssertEqual(sensing.ownerKeyOperationFailure, .unavailable)
+    XCTAssertNil(coordinator.stopOutcome)
   }
 
   func testStopDuringDetectingRequiresConfirmationAndKeepPreservesSession() async {
@@ -478,6 +634,12 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertEqual(sensing.phase, .idle)
     XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
     XCTAssertFalse(app.scanPresented)
+    XCTAssertNil(app.stopOutcome)
+  }
+
+  private func fixtureArtifacts(_ fixture: StopOutcomeUITestFixture) throws -> [String: Data] {
+    let urls = try FileManager.default.contentsOfDirectory(at: fixture.directory, includingPropertiesForKeys: nil)
+    return try Dictionary(uniqueKeysWithValues: urls.map { ($0.lastPathComponent, try Data(contentsOf: $0)) })
   }
 
   private func makeCoordinator(sensingCoordinator: SensingCoordinator? = nil,

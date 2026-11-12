@@ -34,6 +34,7 @@ private struct HomeClockFixtureDateSource: TrustedDateSource {
 /// existing paths. Each launch retains its artifacts in a fresh directory.
 @MainActor
 final class StopOutcomeUITestFixture {
+  private final class WriteCounter { var count = 0 }
   enum Mode: String {
     case saveFailure = "save-failure"
     case saveFailureWithEndpoints = "save-failure-with-endpoints"
@@ -61,8 +62,10 @@ final class StopOutcomeUITestFixture {
   let checkpointStore: SelfProofCheckpointStore
   let sensingCoordinator: SensingCoordinator
   private let cryptography: StopOutcomeUITestCryptography
+  private let recordWrites: WriteCounter
   private(set) var proofID: UUID?
   var signingCallCount: Int { cryptography.signingCallCount }
+  var recordWriteCount: Int { recordWrites.count }
 
   init(mode: Mode) {
     self.mode = mode
@@ -74,9 +77,12 @@ final class StopOutcomeUITestFixture {
       preconditionFailure("Unable to create isolated STOP fixture directory: \(error)")
     }
     self.directory = directory
+    let recordWrites = WriteCounter()
+    self.recordWrites = recordWrites
     let proofStore = ProofStore(
       fileURL: directory.appendingPathComponent("proofs.json"),
       writeData: { data, url in
+        recordWrites.count += 1
         if mode == .saveFailure || mode == .saveFailureWithEndpoints { throw CocoaError(.fileWriteNoPermission) }
         try data.write(to: url, options: .atomic)
       }
@@ -107,8 +113,12 @@ final class StopOutcomeUITestFixture {
   func prepare() async {
     // Zero-delay existing demo primitives establish the same inputs as
     // SensingStopFlowTests. The scan opens only after they have settled.
+    let sample = EventSession.demoSample
+    let event = EventSession(id: sample.id, name: sample.name, venue: sample.venue)
     if mode == .detecting {
-      sensingCoordinator.runDemoScenario(.appReviewGolden, stepDelayNanos: 0, stopWhenPhaseReaches: .eventFound)
+      sensingCoordinator.runDemoScenario(
+        DemoScenario.appReviewGolden.replacingEvent(event), stepDelayNanos: 0, stopWhenPhaseReaches: .eventFound
+      )
       await sensingCoordinator.waitForDemoScenarioPreviewToSettle()
     } else if mode == .saveFailure {
       // Omit demo ENIN-advance inputs, then stop at the first recording
@@ -116,13 +126,13 @@ final class StopOutcomeUITestFixture {
       // With endpoints present the real ProofStore admission check already
       // raises .discardFailed; do not suppress or duplicate that alert.
       let scenario = DemoScenario(
-        identifier: "stopSaveFailureBeforeWindow", event: .demoSample,
+        identifier: "stopSaveFailureBeforeWindow", event: event,
         steps: DemoScenario.appReviewGolden.steps.filter { $0 != .advanceDemoWindow }
       )
       sensingCoordinator.runDemoScenario(scenario, stepDelayNanos: 0, stopWhenPhaseReaches: .recording)
       await sensingCoordinator.waitForDemoScenarioPreviewToSettle()
     } else {
-      sensingCoordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+      sensingCoordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
       await sensingCoordinator.waitForDemoSequenceToFinish()
     }
     proofID = sensingCoordinator.currentProofID
@@ -162,6 +172,12 @@ private final class StopOutcomeUITestCryptography: SensingCryptography {
 }
 #endif
 
+/// Presentation-only receipt for one consumed STOP confirmation.
+struct SensingStopOutcome: Equatable {
+  let id = UUID()
+  let sessionID: UUID
+}
+
 /// Root routing for onboarding and the collection home.
 @MainActor
 final class AppCoordinator: ObservableObject {
@@ -186,6 +202,7 @@ final class AppCoordinator: ObservableObject {
   let stopOutcomeUITestFixture: StopOutcomeUITestFixture?
   #endif
   @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
+  @Published private(set) var stopOutcome: SensingStopOutcome?
   @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
   @Published private(set) var proofCollectedSnapshot: ProofCollectedSnapshot?
   @Published var selectedProof: Proof?
@@ -667,6 +684,7 @@ final class AppCoordinator: ObservableObject {
   /// button, so the join itself must start sensing and show the sensing
   /// screen from the Now tab.
   private func startSensingAfterSuccessfulJoin() {
+    stopOutcome = nil
     homeEventCodeSheetPresented = false
     eventCodeEntrySheetPresented = false
     accountSheetPresented = false
@@ -1117,6 +1135,7 @@ final class AppCoordinator: ObservableObject {
 
   func joinNearbyEventFromHome(_ card: NearbyEventCard) {
     guard card.joinActionEventCodeHashHex != nil else { return }
+    stopOutcome = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
     nowEventRegistration = homeRegistration(for: card)
@@ -1163,6 +1182,7 @@ final class AppCoordinator: ObservableObject {
   #endif
 
   func startScan() {
+    stopOutcome = nil
     selectedHomeTab = .now
     stopConfirmSnapshot = nil
     sealedSnapshot = nil
@@ -1288,11 +1308,7 @@ final class AppCoordinator: ObservableObject {
   /// requests confirmation for the current participation.
   func requestScanClose() {
     guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
-      stopConfirmSnapshot == nil else { return }
-    if let proofID = sensingCoordinator.currentProofID, proofStore.proof(withId: proofID) == nil {
-      resetAndDismissScan()
-      return
-    }
+      stopConfirmSnapshot == nil, stopOutcome == nil else { return }
     let event: EventSession
     switch sensingCoordinator.phase {
     case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
@@ -1333,10 +1349,6 @@ final class AppCoordinator: ObservableObject {
     guard event.sessionID == snapshot.event.sessionID else { return }
     let proofID = sensingCoordinator.currentProofID
     if let expectedID = snapshot.proofID, proofID != expectedID { return }
-    if let proofID, proofStore.proof(withId: proofID) == nil {
-      resetAndDismissScan()
-      return
-    }
     let aggregate = sensingCoordinator.sessionAggregate
     let detectedDeviceCount = sensingCoordinator.devicesVerified
     let firstSightingAt = sensingCoordinator.firstSightingAt
@@ -1344,8 +1356,18 @@ final class AppCoordinator: ObservableObject {
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
     let selfProof = sensingCoordinator.stopSensing()
-    guard let proofID, selfProof?.proofId == proofID,
-      proofStore.proof(withId: proofID) != nil else {
+    let presentation = Self.stopPresentation(
+      attemptedRecordID: proofID,
+      signedRecordID: selfProof?.proofId,
+      storedRecordID: proofID.flatMap { proofStore.proof(withId: $0)?.id },
+      hasExplainingAlert: sensingCoordinator.eventSigningKeyFailure != nil
+        || sensingCoordinator.ownerKeyOperationFailure != nil
+    )
+    if presentation == .noRecordSaved {
+      stopOutcome = SensingStopOutcome(sessionID: event.sessionID)
+      return
+    }
+    guard presentation == .sealed, let proofID else {
       scanPresented = false
       return
     }
@@ -1357,6 +1379,26 @@ final class AppCoordinator: ObservableObject {
       firstSightingAt: firstSightingAt,
       sealedAt: sealedAt
     )
+  }
+
+  enum StopPresentation: Equatable { case sealed, noRecordSaved, dismiss }
+
+  /// Called only after this confirmation's session/record ownership guards
+  /// and the existing finalization attempt. Signing output is not evidence
+  /// that a Record was durably saved; a nil signature is not evidence of loss.
+  static func stopPresentation(
+    attemptedRecordID: UUID?, signedRecordID: UUID?, storedRecordID: UUID?, hasExplainingAlert: Bool
+  ) -> StopPresentation {
+    guard !hasExplainingAlert, let attemptedRecordID else { return .dismiss }
+    guard storedRecordID == attemptedRecordID else { return .noRecordSaved }
+    return signedRecordID == attemptedRecordID ? .sealed : .dismiss
+  }
+
+  func dismissStopOutcome() {
+    guard stopOutcome != nil else { return }
+    stopOutcome = nil
+    scanPresented = false
+    selectedHomeTab = .now
   }
 
   /// DONE advances from the sealed frame to persistent frame 07. The record
