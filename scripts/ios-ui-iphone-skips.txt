@@ -1,0 +1,4 @@
+# XCTSkip by design in captureRecordNavigation(): these require the tablet grid.
+# Keep these in the shards and require an xcresult node, including its skip result.
+BeidUITests/BeidIPadLayoutTests/testRecordCardsNavigateIndependentlyInPortrait
+BeidUITests/BeidIPadLayoutTests/testRecordCardsNavigateIndependentlyInLandscape
