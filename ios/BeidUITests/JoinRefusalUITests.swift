@@ -79,7 +79,7 @@ final class JoinRefusalUITests: XCTestCase {
     app.buttons["Allow Bluetooth"].assertHittable()
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["home.scan"]
+    let senseEvent = app.buttons["home.demo.join"]
     senseEvent.assertHittable()
     senseEvent.tap()
 

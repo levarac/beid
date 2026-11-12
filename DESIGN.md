@@ -83,17 +83,23 @@ beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
 - **Flat 2b — Library** (node `189-2`) is the authority for **values**:
   the color variable collection `Flat 2b / Color`, the text styles, and
   the components.
-- **Flat 2b — Screens** (node `183-2`) is the authority for **layouts**
-  (the spec lists 18 screens; 22 frames at the 2026-09-22 read, below).
-- "Minimal v4" and the Liquid Glass-era "Fixed" page are historical input
-  only.
+- **The 1.1 screen specification** is the authority for **layouts and
+  behavior**: Fixed v2 is the base, with v3–v5 deltas applied in order.
+  The final specification wins when an earlier screen disagrees. Now owns
+  current actions and explicit JOIN; Records owns saved records and events.
+  Now's DO THIS NOW and FROM THE ORGANIZER tiles use Flat 2b fills and a
+  12pt radius (`DS.Radius.control`); nearby candidate cards retain the 20pt
+  `DS.Radius.nowCard`. Records shows one Attendance per event, preserving
+  its stored recording sessions inside the existing detail routes.
+- The earlier Flat 2b Screens and Liquid Glass-era Fixed layouts are
+  historical input only; the latter is distinct from the Fixed v2 base.
 - The product name is **beid**. "SenseProof" on the Flat 2b board and in
   its spec is the designer's mistake, not a rename (owner, 2026-09-22).
 
 | Artifact | Canonical for |
 | --- | --- |
 | Figma "Flat 2b — Library" (`189-2`) | Design values: colors, text styles, components |
-| Figma "Flat 2b — Screens" (`183-2`) | Screen layouts |
+| The 1.1 screen specification, Fixed v2 plus v3–v5 deltas | Screen layouts and behavior |
 | `ios/Beid/DesignSystem/Tokens.swift` | The `DS` namespace: all color/space/radius/size/font/motion tokens and artwork generators — what ships, and the only place code reads values |
 | `ios/Beid/DesignSystem/Colors.xcassets` | Color values: the 13 Library variables, each a single-appearance colorset named after its Library variable (since #628, §4/§5). The app does not follow the OS appearance: the app target's Info.plist sets `UIUserInterfaceStyle` to `Light` (#632, §14) |
 | `.swiftlint.yml` (repo root) | Enforcement rules for banned raw values |
@@ -2064,12 +2070,14 @@ visual language).
 > in violation until an Android follow-up is scheduled (none exists as of
 > 2026-09-22).
 
-**Flat 2b v2: no icons in content; the navigation bar and toolbar are the
-OS's (owner decision 2026-10-15, beid#730, A2; implementation #732).**
+**Flat 2b: no icons in content; navigation bars, toolbars and the Now /
+Records tab bar are OS-standard controls (the 1.1 screen specification).**
 
 - MUST: The app draws no icons in content. Controls inside a screen are
   monospaced uppercase text in DM Mono (§6): `COPY`, `PASTE`, `OPEN →`,
   `ENTER EVENT CODE →`.
+- MUST: The Now / Records tab bar uses `TabView` with system symbols and
+  titles. Its labels use the system font and its appearance belongs to the OS.
 - MUST: Navigation-bar and toolbar items are OS-standard items, not
   app-drawn controls. Back is the `NavigationStack` back button; close and
   done are the system `.close` and `.done` items (`Button(role: .close)` /
@@ -2089,7 +2097,7 @@ OS's (owner decision 2026-10-15, beid#730, A2; implementation #732).**
   bar items (`sharedBackgroundVisibility(.hidden)`,
   `UIBarButtonItem.hidesSharedBackground`). The 2026-09-25 decision that
   suppressed it is withdrawn (§8).
-- Beyond the navigation bar and toolbar, the only exception is the OS
+- Beyond the navigation bar, toolbar and tab bar, the only exception is the OS
   status bar. OS-drawn chrome the app does not draw itself (system alerts
   and confirmation dialogs, the keyboard, permission dialogs, sheets) is
   outside this rule. There are no other exceptions.
@@ -2112,7 +2120,7 @@ OS's (owner decision 2026-10-15, beid#730, A2; implementation #732).**
   adopted).
 - The two accessibility MUSTs quoted below ("Decorative images use
   `.accessibilityHidden(true)`" and "Symbols paired with text scale with
-  Dynamic Type") apply to the navigation-bar symbols and to any image or
+  Dynamic Type") apply to the navigation-bar and tab-bar symbols and to any image or
   glyph that remains.
 
 > **Superseded 2026-10-15 (owner decision, beid#730, A2).** Figma "Flat 2b

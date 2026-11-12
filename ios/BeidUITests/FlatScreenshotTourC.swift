@@ -30,7 +30,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let allowBluetooth = app.buttons["Allow Bluetooth"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
     allowBluetooth.tap()
-    let senseEvent = app.buttons["home.scan"]
+    let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 10))
     senseEvent.tap()
 
@@ -140,6 +140,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let allowBluetooth = app.buttons["Allow Bluetooth"]
     allowBluetooth.assertExists()
     allowBluetooth.tap()
+    app.openRecordsByEvent()
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
     event.assertExists()
     event.tap()
@@ -228,7 +229,8 @@ final class FlatScreenshotTourC: XCTestCase {
     let allowBluetooth = app.buttons["Allow Bluetooth"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
     allowBluetooth.tap()
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 10))
+    app.openRecordsByEvent()
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
     XCTAssertTrue(event.waitForExistence(timeout: 10))
     event.tap()
@@ -256,7 +258,7 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10), file: file, line: line)
     allowBluetooth.tap()
 
-    let senseEvent = app.buttons["home.scan"]
+    let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 10), file: file, line: line)
     senseEvent.tap()
 

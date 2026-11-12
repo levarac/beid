@@ -22,6 +22,7 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
 
+    app.openRecordsByEvent()
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
     XCTAssertTrue(event.waitForExistence(timeout: 5))
     event.tap()
