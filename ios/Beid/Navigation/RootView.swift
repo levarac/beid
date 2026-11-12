@@ -28,20 +28,10 @@ struct RootView: View {
       sensingCoordinator: coordinator.sensingCoordinator
     ))
     .modifier(OwnerKeyFailurePresenter(sensingCoordinator: coordinator.sensingCoordinator))
-    #if DEBUG
-    .modifier(EventSigningKeyFailurePresenter(
-      sensingCoordinator: coordinator.sensingCoordinator,
-      isActive: !coordinator.scanPresented,
-      routeTrace: coordinator.stopOutcomeUITestFixture?.routeTrace,
-      routeTraceOwner: "root",
-      routeScanPresented: { coordinator.scanPresented }
-    ))
-    #else
     .modifier(EventSigningKeyFailurePresenter(
       sensingCoordinator: coordinator.sensingCoordinator,
       isActive: !coordinator.scanPresented
     ))
-    #endif
     .tint(DS.Color.actionPrimary)
     .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: coordinator.screen)
 
@@ -115,20 +105,6 @@ private struct PresentedEventSigningKeyFailure: Identifiable {
 struct EventSigningKeyFailurePresenter: ViewModifier {
   @ObservedObject var sensingCoordinator: SensingCoordinator
   let isActive: Bool
-  #if DEBUG
-  var routeTrace: StopOutcomeRouteTrace?
-  var routeTraceOwner = "root"
-  var routeScanPresented: (() -> Bool)?
-
-  private func trace(_ event: String, detail: @autoclosure () -> String = "") {
-    guard let routeTrace, let routeScanPresented else { return }
-    routeTrace.record(
-      "alert.\(routeTraceOwner).\(event)",
-      scanPresented: routeScanPresented(),
-      detail: "capturedActive=\(isActive) notice=\(presentedFailure != nil) \(detail())"
-    )
-  }
-  #endif
 
   private var presentedFailure: PresentedEventSigningKeyFailure? {
     sensingCoordinator.eventSigningKeyFailure.map {
@@ -138,35 +114,14 @@ struct EventSigningKeyFailurePresenter: ViewModifier {
 
   func body(content: Content) -> some View {
     let presented = presentedFailure
-    #if DEBUG
-    trace("evaluated")
-    #endif
     return content.alert(item: Binding(
-      get: {
-        #if DEBUG
-        trace("binding-get", detail: "offersNotice=\(isActive && presented != nil)")
-        #endif
-        return isActive ? presented : nil
-      },
+      get: { isActive ? presented : nil },
       set: {
-        #if DEBUG
-        trace("binding-set", detail: "nilInput=\($0 == nil) matches=\(presented?.id == presentedFailure?.id)")
-        #endif
         if isActive, $0 == nil, presented?.id == presentedFailure?.id {
-          #if DEBUG
-          trace("acknowledge-before", detail: "capturedNotice=\(presented != nil) matches=true")
-          #endif
           sensingCoordinator.dismissEventSigningKeyFailure()
-          #if DEBUG
-          trace("acknowledge-after")
-          #endif
         }
       }
     )) { notice in
-      #if DEBUG
-      // Alert construction is not proof of native alert visibility.
-      trace("constructed")
-      #endif
       let failure = notice.failure
       return Alert(
         title: Text(verbatim: failure.title),

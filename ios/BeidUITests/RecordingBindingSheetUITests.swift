@@ -8,42 +8,8 @@ import XCTest
 /// Recording must remain available without a wallet presentation.
 final class RecordingBindingSheetUITests: XCTestCase {
   private let app = XCUIApplication()
-  private var capturesStopRouteTrace = false
-  private var retainedStopRouteTrace = false
 
   override func setUpWithError() throws { continueAfterFailure = false }
-
-  override func record(_ issue: XCTIssue) {
-    retainStopRouteDiagnostics()
-    super.record(issue)
-  }
-
-  override func tearDownWithError() throws {
-    // Retain a successful probe too; a diagnostic-only pass is inconclusive.
-    retainStopRouteDiagnostics()
-    try super.tearDownWithError()
-  }
-
-  private func retainStopRouteDiagnostics() {
-    guard capturesStopRouteTrace, !retainedStopRouteTrace else { return }
-    retainedStopRouteTrace = true
-    let controls = app.buttons.matching(identifier: "stop.fixture.repeat-confirmation").allElementsBoundByIndex
-    let receipt = controls.enumerated().map { index, control in
-      "control[\(index)] natural-render receipt:\n\(control.value as? String ?? "unavailable")"
-    }.joined(separator: "\n\n")
-    let trace = XCTAttachment(string: receipt.isEmpty ? "No fixture control receipt available" : receipt)
-    trace.name = "stop-route-receipt"
-    trace.lifetime = .keepAlways
-    add(trace)
-    let hierarchy = XCTAttachment(string: app.debugDescription)
-    hierarchy.name = "stop-route-hierarchy"
-    hierarchy.lifetime = .keepAlways
-    add(hierarchy)
-    let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    screenshot.name = "stop-route-screen"
-    screenshot.lifetime = .keepAlways
-    add(screenshot)
-  }
 
   func testFirstRecordingDoesNotPresentWalletSheet() {
     reachRecording()
@@ -169,8 +135,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   }
 
   func testConfirmedStopWithSigningKeyErrorShowsExistingAlertOnlyOnce() {
-    // Temporary single-case probe. Remove traceRoute: true for final acceptance.
-    reachStopOutcomeFixture("signing-error", traceRoute: true)
+    reachStopOutcomeFixture("signing-error")
     confirmStop()
 
     let alert = app.alerts["Recording unavailable"]
@@ -217,12 +182,8 @@ final class RecordingBindingSheetUITests: XCTestCase {
     repeatStop.tap()
   }
 
-  private func reachStopOutcomeFixture(_ mode: String, traceRoute: Bool = false) {
+  private func reachStopOutcomeFixture(_ mode: String) {
     app.launchArguments = ["-beid-ui-test", "-beid-stop-outcome-fixture", mode]
-    if traceRoute {
-      app.launchArguments.append("-beid-stop-route-trace")
-      capturesStopRouteTrace = true
-    }
     app.launch()
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()

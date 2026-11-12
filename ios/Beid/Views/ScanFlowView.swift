@@ -23,15 +23,7 @@ struct ScanFlowView: View {
       .environment(\.showsFirstSensingHint, showsFirstTimeHint ?? false)
       .onAppear {
         if showsFirstTimeHint == nil { showsFirstTimeHint = !hasShownFirstTimeHint }
-        #if DEBUG
-        coordinator.stopOutcomeUITestFixture?.routeTrace?.scanVisibility(true, scanPresented: coordinator.scanPresented)
-        #endif
       }
-      #if DEBUG
-      .onDisappear {
-        coordinator.stopOutcomeUITestFixture?.routeTrace?.scanVisibility(false, scanPresented: coordinator.scanPresented)
-      }
-      #endif
       .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: sensing.phase)
       .navigationTitle("")
       .navigationBarTitleDisplayMode(.inline)
@@ -70,22 +62,13 @@ struct ScanFlowView: View {
         if coordinator.stopOutcomeUITestFixture != nil {
           Button("Repeat STOP confirmation") { coordinator.confirmStopSensing() }
             .accessibilityIdentifier("stop.fixture.repeat-confirmation")
-            .accessibilityValue(coordinator.stopOutcomeUITestFixture?.routeTrace?.receipt ?? "")
         }
       }
-      .modifier(EventSigningKeyFailurePresenter(
-        sensingCoordinator: sensing,
-        isActive: coordinator.scanPresented,
-        routeTrace: coordinator.stopOutcomeUITestFixture?.routeTrace,
-        routeTraceOwner: "scan",
-        routeScanPresented: { coordinator.scanPresented }
-      ))
-      #else
+      #endif
       .modifier(EventSigningKeyFailurePresenter(
         sensingCoordinator: sensing,
         isActive: coordinator.scanPresented
       ))
-      #endif
       .onChange(of: scenePhase) { _, newPhase in
         if newPhase == .background { sensing.checkpointOpenWindowForBackgrounding() }
         if newPhase == .active { sensing.retryPendingSubmissionsOnForeground() }
