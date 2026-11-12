@@ -131,13 +131,15 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertFalse(app.staticTexts["STATUS"].exists)
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
     XCTAssertFalse(app.buttons["Connect wallet"].exists)
-    XCTAssertFalse(app.staticTexts["ACCEPTED"].exists)
     XCTAssertFalse(app.staticTexts["VERIFIED"].exists)
     XCTAssertEqual(title.label.replacingOccurrences(of: "\n", with: " "), "Attendance Record")
 
-    for _ in 0..<3 { app.swipeUp() }
-    XCTAssertTrue(app.staticTexts["REPRODUCIBLE MATERIAL"].exists)
-    XCTAssertTrue(app.staticTexts["THIRD-PARTY RESULT"].exists)
+    let expectedTitles = ["RECORDED ON THIS PHONE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"]
+    for (index, expected) in expectedTitles.enumerated() {
+      let rung = app.staticTexts["record.ladder.\(index + 1).title"]
+      rung.scrollToHittable(in: app)
+      XCTAssertEqual(rung.label, expected)
+    }
     let unavailableResults = app.staticTexts.matching(
       NSPredicate(format: "label == %@", "NOT YET AVAILABLE")
     )
