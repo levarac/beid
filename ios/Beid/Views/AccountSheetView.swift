@@ -169,6 +169,14 @@ struct AccountSheetView: View {
             .accessibilityIdentifier("account.aboutSensing")
             .accessibilityLabel("About sensing")
           }
+          AccountSheetRow {
+            Link("Privacy Policy", destination: URL(string: "https://levarac.org/privacy")!)
+              .beidTextStyle(DS.Font.Library.title17)
+              .foregroundStyle(DS.Color.actionInverse)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+              .accessibilityIdentifier("account.privacy-policy")
+          }
           // Account Join stays with the owner decision that wallet is optional.
           // Sensing ends through Home Stop or the scan cover's CLOSE.
           EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)

@@ -4267,6 +4267,96 @@
           }
         }
       }
+    },
+    "A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organiser gave you.": {},
+    "Connect wallet instead": {},
+    "DEMO EVENT · FOR APP REVIEW": {
+      "comment": "Identifies a sample event, not a real Bluetooth event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DEMO EVENT · FOR APP REVIEW"
+          }
+        }
+      }
+    },
+    "Events find you": {},
+    "Get Started": {},
+    "Join Event": {},
+    "Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.": {},
+    "Nearby events appear automatically — no codes, no search.": {},
+    "No pack yet. Paste the link the organiser gave you, or scan its QR code.": {},
+    "Not submittable (count-only record)": {
+      "comment": "Sub-state row under \"Participation record\": windows recorded with only a device count and no reporter RPID can never be submitted to a report server. This row makes that exclusion explicit instead of silently dropping those windows (levarac/dispatch#3).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not submittable (count-only record)"
+          }
+        }
+      }
+    },
+    "Only events you've actually recorded a proof for are listed here.": {
+      "comment": "Footer under the Past Events list, clarifying that a code that was typed and abandoned before recording completed does not appear."
+    },
+    "Only needed if an event didn’t appear automatically. Ask the organizer for the code.": {},
+    "PEERS OBSERVED": {
+      "comment": "Number of distinct per-event display IDs observed in one stored session; this does not mean mutual confirmation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PEERS OBSERVED"
+          }
+        }
+      }
+    },
+    "PREPARED ON DEVICE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PREPARED ON DEVICE"
+          }
+        }
+      }
+    },
+    "Point at the organiser's QR code": {},
+    "Proofs of presence, collected automatically while you are at an event. No codes, no taps.": {},
+    "Prove you\nwere there.": {},
+    "RECORDED ON DEVICE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDED ON DEVICE"
+          }
+        }
+      }
+    },
+    "Records stay on this phone until sending is turned on for this build.": {},
+    "SENDING STATUS · ALL SAVED OBSERVATIONS": {},
+    "Sensing runs quietly in the background. Nothing to tap.": {},
+    "Signal Lost": {},
+    "That address sent us somewhere else, so it was not followed.": {},
+    "The event’s identifier, so the organiser knows which event this belongs to.": {},
+    "The link and the pack do not agree. Ask the organiser for a current link.": {},
+    "The link carries the event's details itself. Use one the event's organiser gave you.": {},
+    "This event has been updated. Ask the organiser for a current link.": {},
+    "This event has no record on chain.": {},
+    "Try Again": {},
+    "V 1.0": {
+      "comment": "Version label in the Welcome screen header."
+    },
+    "Your proofs stay on this device as self-proofs. Nothing is deleted. You can connect this or another wallet anytime.": {},
+    "Zero effort": {},
+    "beid can't trust event times while the clock is wrong. Turn on automatic date and time in Settings, then check again.": {},
+    "beid can’t sense events or collect proofs while Bluetooth is off.": {},
+    "beid senses nearby events and people over Bluetooth Low Energy — that’s how it proves you were really there.": {},
+    "e.g. ETHTOKYO2026": {
+      "comment": "Placeholder shown in the empty event-code text field. Keep the invented example code (ETHTOKYO2026) as-is; translate only the localized equivalent of \"e.g.\"."
     }
   },
   "version": "1.0"
