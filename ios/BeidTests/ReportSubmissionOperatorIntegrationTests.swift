@@ -15,6 +15,8 @@ private final class DeferredEventDefinitionContextProvider: EventDefinitionConte
   private(set) var requestedEventIds: [String] = []
   private var completions: [(VerifiedSubmissionDefinition?) -> Void] = []
 
+  var pendingResolutionCount: Int { completions.count }
+
   init(configuration: ExportedKotlinPackages.org.levarac.parallax.submission
     .SubmissionOperatorConfiguration) {
     verified = VerifiedSubmissionDefinition(configuration: configuration)
@@ -481,6 +483,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     let scheduler = ManualReportSubmissionRetryScheduler()
     let scheduled = expectation(description: "retry remains scheduled after delayed preparation")
     scheduler.onSchedule = { scheduled.fulfill() }
+    defer { scheduler.onSchedule = nil }
     let cryptography = TestSensingCryptography()
     let runtime = try XCTUnwrap(makeRuntime(
       endpoint: endpoint, receiptPublicKeyHex: receiptKeyHex,
@@ -489,15 +492,23 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     ))
     defer { runtime.stop() }
     let coordinator = makeSubmissionCoordinator(cryptography: cryptography, runtime: runtime)
+    defer { withExtendedLifetime(coordinator) {} }
     try await driveOneRealWindow(coordinator: coordinator)
     XCTAssertFalse(provider.requestedEventIds.isEmpty)
-    // Hold the real definition/preparation boundary beyond the old ten-second
-    // request wait. No production clock, HTTP timeout or retry delay is changed.
-    let resolution = DispatchWorkItem {
-      MainActor.assumeIsolated { provider.resolveAll() }
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: resolution)
-    defer { resolution.cancel() }
+    XCTAssertEqual(provider.pendingResolutionCount, 1)
+    // Preparation has no wall-time deadline in the runtime. Hold its real
+    // definition boundary while advancing the already-injected clock, then
+    // release it explicitly instead of queuing a twelve-second wall timer.
+    scheduler.advance(by: 12)
+    XCTAssertEqual(scheduler.now, 12)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.count, 1)
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).records.isEmpty)
+    XCTAssertEqual(server.postCount, 0)
+    XCTAssertEqual(server.getCount, 0)
+    XCTAssertEqual(runtime.activeSubmissionCountForTesting, 0)
+    XCTAssertTrue(scheduler.entries.isEmpty)
+    provider.resolveAll()
+    XCTAssertEqual(provider.pendingResolutionCount, 0)
     do { try await server.waitFor(postCount: 1) }
     catch {
       XCTFail("delayed preparation: \(error); \(server.timeoutDiagnostics)")
@@ -505,13 +516,19 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     }
     await fulfillment(of: [scheduled], timeout: 5)
     scheduler.onSchedule = nil
-    XCTAssertEqual(scheduler.entries.last?.deadline, 2)
+    let retry = try XCTUnwrap(scheduler.entries.last)
+    XCTAssertEqual(retry.deadline - scheduler.now, 2, "backoff starts after delayed preparation and the failed POST")
     // Deliver the callback long after its deadline as well: late scheduling
     // must still drain, look up the receipt, and reuse the original bytes.
     scheduler.advance(by: 200)
     try await server.waitFor(postCount: 2, getCount: 1)
     try await waitForSubmissionState(.accepted, at: fileURL, server: server)
     XCTAssertEqual(server.postBodies[0], server.postBodies[1])
+    XCTAssertEqual(server.postCount, 2)
+    XCTAssertEqual(server.getCount, 1)
+    XCTAssertEqual(runtime.activeSubmissionCountForTesting, 0)
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.isEmpty)
+    XCTAssertTrue(scheduler.entries.allSatisfy(\.cancelled))
   }
 
   func testRetryableOutageBeyondSixAttemptsEventuallyStoresReceiptWithoutResigning() async throws {
