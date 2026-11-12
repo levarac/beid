@@ -136,9 +136,10 @@ final class AppCoordinator: ObservableObject {
       RegistryDependencies.createClient(),
     userDefaults: UserDefaults = .standard,
     permissionEvaluation: (() async -> BluetoothAuthorizationState)? = nil,
+    bluetoothMonitor injectedBluetoothMonitor: BluetoothMonitor? = nil,
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
-    let bluetoothMonitor = BluetoothMonitor()
+    let bluetoothMonitor = injectedBluetoothMonitor ?? BluetoothMonitor()
     let reportStore: ReportSubmissionStore
     #if DEBUG
     let reportArguments = ProcessInfo.processInfo.arguments
