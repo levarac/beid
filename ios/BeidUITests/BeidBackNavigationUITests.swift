@@ -23,7 +23,7 @@ final class BeidBackNavigationUITests: XCTestCase {
     openFirstProof()
 
     let detailHeading = app.staticTexts["proof.detail.title"]
-    let backButton = app.navigationBars.buttons.firstMatch
+    let backButton = app.navigationBars["ETHGlobal Tokyo"].buttons.firstMatch
     let collection = app.collectionViews["records.events"]
     // Hittability is a UI-readiness proxy, not UIKit transition completion.
     let detailReady = XCTNSPredicateExpectation(
