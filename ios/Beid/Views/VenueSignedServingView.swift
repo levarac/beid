@@ -230,7 +230,7 @@ struct VenueSignedServingView: View {
             Text("Broadcasting until 18:00")
               .beidTextStyle(DS.Font.Library.labelMono11)
           } else {
-            Text(String(localized: "venue.serving.servingUntil", defaultValue: "Broadcasting until \(Self.instantText(stopAtUnixSeconds)).", comment: "The permit's exclusive end time."))
+            Text(String(localized: "venue.serving.servingUntil", defaultValue: "Broadcasting until \(Self.instantText(viewModel.broadcastUntilUnixSeconds ?? stopAtUnixSeconds)).", comment: "End of the loaded, verified lease chain."))
               .beidTextStyle(DS.Font.Library.labelMono11)
           }
         }
@@ -278,6 +278,15 @@ struct VenueSignedServingView: View {
       }
       if let failure = effectiveRadio.failure {
         statusMessage(message(for: failure))
+      }
+      if viewModel.refreshFailure != nil {
+        outcome(
+          title: "Pack refresh failed",
+          message: isBroadcasting
+            ? "The pack could not be refreshed. Broadcasting can continue only until the time shown."
+            : "The lease ended and the pack could not be refreshed. Broadcasting stopped. Load a current pack."
+        )
+        .padding(.top, DS.Space.m)
       }
       if viewModel.storedSourceDescription != nil, fixtureCode == nil {
         textAction(isBroadcasting ? "Refresh pack" : "Start broadcasting", identifier: "Refresh pack") {

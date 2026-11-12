@@ -3991,6 +3991,39 @@
     "beid can't trust event times while the clock is wrong. Turn on automatic date and time in Settings, then check again.": {},
     "e.g. ETHTOKYO2026": {
       "comment": "Placeholder shown in the empty event-code text field. Keep the invented example code (ETHTOKYO2026) as-is; translate only the localized equivalent of \"e.g.\"."
+    },
+    "Pack refresh failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pack refresh failed"
+          }
+        }
+      }
+    },
+    "The pack could not be refreshed. Broadcasting can continue only until the time shown.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The pack could not be refreshed. Broadcasting can continue only until the time shown."
+          }
+        }
+      }
+    },
+    "The lease ended and the pack could not be refreshed. Broadcasting stopped. Load a current pack.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The lease ended and the pack could not be refreshed. Broadcasting stopped. Load a current pack."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

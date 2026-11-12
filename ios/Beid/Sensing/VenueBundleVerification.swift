@@ -136,10 +136,13 @@ struct VenueArtifactIdentity: Equatable {
 final class VenueImportedBundle {
   let identity: VenueArtifactIdentity
   let publicArtifact: VenuePublicArtifact
+  /// End of the complete, signature-checked chain, not the current ENIN permit.
+  let broadcastUntilUnixSeconds: Int64?
 
-  init(identity: VenueArtifactIdentity, publicArtifact: VenuePublicArtifact) {
+  init(identity: VenueArtifactIdentity, publicArtifact: VenuePublicArtifact, broadcastUntilUnixSeconds: Int64? = nil) {
     self.identity = identity
     self.publicArtifact = publicArtifact
+    self.broadcastUntilUnixSeconds = broadcastUntilUnixSeconds
   }
 }
 
@@ -594,9 +597,9 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
         return .rejected(failure)
       }
       guard case .usable(let barnardDefinition) = Self.barnardDefinition(from: identity.definition),
-            Self.importSchedule(
+            let schedule = Self.importSchedule(
               bundle: bundle, definition: barnardDefinition, nameValidator: nameValidator
-      ).schedule != nil
+      ).schedule
       else {
         return .rejected(.definitionRejected)
       }
@@ -606,7 +609,8 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
           definitionSequence: bundle.definitionSequence,
           bundleDigestHex: Self.hexString(Self.swiftBytes(fromKotlin: bundle.bundleDigest.toByteArray()))
         ),
-        publicArtifact: VenuePublicArtifact(bundleBytes: bundleBytes, handoffBytes: handoffBytes)
+        publicArtifact: VenuePublicArtifact(bundleBytes: bundleBytes, handoffBytes: handoffBytes),
+        broadcastUntilUnixSeconds: schedule.requiredEndEnin * Int64(schedule.eninSeconds)
       ))
     }
   }

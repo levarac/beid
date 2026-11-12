@@ -3,6 +3,13 @@
 
 import Foundation
 
+/// Exact acquisition inputs. A link's handoff stays pinned to its fragment;
+/// renewal must never synthesize a replacement digest from fetched bytes.
+enum VenueRefreshSource: Codable, Equatable {
+  case paired(bundle: URL, handoff: URL)
+  case link(bundle: URL, handoff: Data)
+}
+
 /// The two public byte sequences a venue device was last given, plus where
 /// they came from, so a restart can offer the same source again.
 ///
@@ -20,6 +27,16 @@ struct VenuePublicArtifactRecord: Codable, Equatable {
   /// Never used to re-fetch automatically and never treated as trusted.
   let sourceDescription: String
   let storedAt: Date
+  let refreshSource: VenueRefreshSource?
+
+  init(bundleBytes: Data, handoffBytes: Data, sourceDescription: String, storedAt: Date,
+       refreshSource: VenueRefreshSource? = nil) {
+    self.bundleBytes = bundleBytes
+    self.handoffBytes = handoffBytes
+    self.sourceDescription = sourceDescription
+    self.storedAt = storedAt
+    self.refreshSource = refreshSource
+  }
 
   var artifact: VenuePublicArtifact {
     VenuePublicArtifact(bundleBytes: bundleBytes, handoffBytes: handoffBytes)

@@ -689,6 +689,9 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     }
     XCTAssertEqual(permit.identity.eventIdHex, fixture.eventId)
     XCTAssertEqual(permit.currentEnin, 5_967_648)
+    XCTAssertNotNil(imported.broadcastUntilUnixSeconds)
+    XCTAssertGreaterThan(try XCTUnwrap(imported.broadcastUntilUnixSeconds), permit.stopAtUnixSeconds,
+                         "the screen's end covers the verified chain, not just this ENIN")
   }
 
   func testProductionClientAndVerifierRejectIncompleteFixtureAfterDelayedRegistryResponse() async throws {
