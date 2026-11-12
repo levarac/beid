@@ -1877,12 +1877,9 @@ Real components in this codebase. Each entry is the contract for reuse.
   `actionPrimary` / `labelOnActionPrimary`, `DS.Radius.pill`,
   `DS.Size.primaryButtonMinHeight` (56) and, for Size=Small,
   `DS.Size.compactPrimaryButtonMinHeight` (52) /
-  `DS.Size.compactPrimaryButtonWidth` (140). #628 added the tokens only;
-  `BeidPrimaryButton`'s geometry (min height 52 today) is unchanged, and
-  building the `Button/Primary` component is not assigned to an issue yet
-  (§0). Since #630 (2026-09-23) `BeidPrimaryButton` is `.borderedProminent`
-  on every OS version (its iOS 26 `.glassProminent` branch is gone), still
-  a `DS.Radius.control` rounded rectangle, not the pill (§8).
+  `DS.Size.compactPrimaryButtonWidth` (140). `BeidPrimaryButton` uses
+  `DS.Size.primaryButtonMinHeight` (56pt), a `Capsule` background and hit
+  shape, and `.buttonStyle(.plain)` on every OS version (§8).
 
   > **Superseded by #628 (2026-09-23).** The accent-map tints were removed
   > (§5). Previously (verbatim):

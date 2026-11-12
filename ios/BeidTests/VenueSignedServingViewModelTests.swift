@@ -17,6 +17,7 @@ final class VenueSignedServingViewModelTests: XCTestCase {
   private var fixture: VenueServingContractFixture!
   private var now: Int64!
   private var clockReading: VenueClockReading!
+  private var renewal: FakeVenueExpiryScheduler!
 
   override func setUp() async throws {
     try await super.setUp()
@@ -24,19 +25,22 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     acquisition = StubVenueArtifactAcquisition()
     store = makeTemporaryArtifactStore()
     expiry = FakeVenueExpiryScheduler()
+    renewal = FakeVenueExpiryScheduler()
     fixture = try VenueServingContractFixture.load()
     now = VenueServingContractFixture.currentUnixSeconds
     clockReading = .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds)
   }
 
-  private func makeViewModel(clock: (() -> VenueClockReading)? = nil) -> VenueSignedServingViewModel {
+  private func makeViewModel(clock: (() -> VenueClockReading)? = nil, requiresStartConfirmation: Bool = false) -> VenueSignedServingViewModel {
     VenueSignedServingViewModel(
       verifier: ports,
       broadcasting: ports,
       acquisition: acquisition,
       store: store,
       clock: clock ?? { [unowned self] in self.clockReading },
-      expiry: expiry
+      expiry: expiry,
+      renewal: renewal,
+      requiresStartConfirmation: requiresStartConfirmation
     )
   }
 
@@ -65,6 +69,440 @@ final class VenueSignedServingViewModelTests: XCTestCase {
       if case .installing = $0 { return true }
       return false
     }
+  }
+
+  // beid#589: injected deadlines, no sleeping and no network.
+  func testValidPackIsReadyWithIdentityBeforeExplicitStart() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 900)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    XCTAssertEqual(viewModel.status, .ready(displayName: VenueServingContractFixture.displayName,
+                                           stopAtUnixSeconds: now + 300))
+    XCTAssertEqual(viewModel.loadedIdentity, fixture.identity)
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertTrue(installCalls.isEmpty)
+    XCTAssertEqual(viewModel.radio.state, .stopped)
+  }
+
+  func testExplicitStartUsesCheckedPackWithoutOriginalDeviceOrNetwork() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    // No acquisition or verification replies remain: any network-dependent start fails the test.
+    let calls = ports.calls.count
+    await viewModel.startBroadcasting()
+    XCTAssertEqual(acquisition.requestedSources.count, 1)
+    XCTAssertEqual(ports.calls.count, calls + 1)
+    XCTAssertEqual(installCalls.count, 1)
+    XCTAssertEqual(viewModel.status, .serving(displayName: VenueServingContractFixture.displayName,
+                                             stopAtUnixSeconds: now + 300))
+  }
+
+  func testExplicitStartAfterPreparedPermitEndsCannotInstallExpiredBytes() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())), .immediate(.blocked(try rejection(.expired)))]
+    await supply(viewModel)
+    clockReading = .available(unixSeconds: now + 300)
+    await viewModel.startBroadcasting()
+    XCTAssertTrue(installCalls.isEmpty)
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+  }
+
+  func testForegroundingPreparedPackStillRequiresExplicitStart() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())), .immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    viewModel.sceneDidEnterBackground()
+    await viewModel.sceneWillEnterForeground()
+    XCTAssertTrue(installCalls.isEmpty)
+    guard case .ready = viewModel.status else { return XCTFail("a foreground return cannot count as Start") }
+  }
+
+  func testOrganizerReportsHopFromCheckedPermitAndClearsItOnStop() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    let relayed = VenueServingContractTestFactory.permit(
+      identity: fixture.identity, container: fixture.container, displayName: "Relayed fixture",
+      payloadDigestHex: "fixture", currentEnin: 6_000_000,
+      startAtUnixSeconds: now, stopAtUnixSeconds: now + 300, relayHopCount: 1)
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(relayed))]
+    await supply(viewModel)
+    XCTAssertEqual(viewModel.relayHopCount, 1)
+    await viewModel.startBroadcasting()
+    XCTAssertEqual(viewModel.relayHopCount, 1)
+    viewModel.stop()
+    XCTAssertNil(viewModel.relayHopCount)
+  }
+
+  func testUnavailableBatteryNeverBecomesAFabricatedPercentage() {
+    XCTAssertNil(VenueSignedServingView.batteryPercent(for: -1))
+    XCTAssertNil(VenueSignedServingView.batteryPercent(for: .nan))
+    XCTAssertNil(VenueSignedServingView.batteryPercent(for: 1.1))
+    XCTAssertEqual(VenueSignedServingView.batteryPercent(for: 0), 0)
+    XCTAssertEqual(VenueSignedServingView.batteryPercent(for: 0.78), 78)
+    XCTAssertEqual(VenueSignedServingView.batteryPercent(for: 1), 100)
+  }
+
+  private func renewalReceipt(until: Int64) -> VenueImportedBundle {
+    VenueImportedBundle(identity: fixture.identity, publicArtifact: fixture.artifact,
+                        broadcastUntilUnixSeconds: until)
+  }
+
+  func testLeaseRefreshBeforeEndKeepsValidRadioAndExtendsChainedEnd() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300))),
+                           .immediate(.imported(renewalReceipt(until: now + 900)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    XCTAssertEqual(renewal.scheduledStopAt, now + 240)
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    acquisition.replies = [.artifact(fixture.artifact)]
+    clockReading = .available(unixSeconds: now + 240)
+    let clears = ports.calls.filter { $0 == .clearing }.count
+    await renewal.fireAndWait()
+    XCTAssertEqual(acquisition.requestedSources.count, 2)
+    XCTAssertEqual(acquisition.requestedSources.last?.handoff, URL(string: "https://venue.example/handoff"))
+    XCTAssertEqual(ports.calls.filter { $0 == .clearing }.count, clears)
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertNotNil(ports.installedPermit)
+    XCTAssertNil(viewModel.refreshFailure)
+  }
+
+  func testFailedEarlyRefetchKeepsValidEnvelopeAndItsRealEnd() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    let installed = try XCTUnwrap(ports.installedPermit)
+    XCTAssertEqual(expiry.scheduledStopAt, now + 300)
+    // Installing bytes does not confirm radio success. Script the SDK's
+    // request update explicitly; this still does not claim confirmed advertising.
+    ports.emit(try XCTUnwrap(VenueRadioUpdate(state: .advertisingRequested)))
+    acquisition.replies = [.failure(.transportFailure)]
+    clockReading = .available(unixSeconds: now + 240)
+    await renewal.fireAndWait()
+    XCTAssertEqual(viewModel.refreshFailure, .acquisition(.transportFailure))
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 300)
+    XCTAssertTrue(ports.installedPermit === installed)
+    XCTAssertEqual(expiry.scheduledStopAt, now + 300)
+    XCTAssertEqual(viewModel.radio.state, .advertisingRequested)
+  }
+
+  func testFailedRefetchAtLastLeaseEndStopsBeforeAwaitingNetwork() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())),
+                               .immediate(.blocked(try rejection(.expired)))]
+    await supply(viewModel)
+    acquisition.replies = [.deferred]
+    clockReading = .available(unixSeconds: now + 300)
+    let fire = try XCTUnwrap(expiry.takeQueuedFire())
+    let task = Task { await fire() }
+    await acquisition.waitForAcquisitionCount(2)
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertEqual(viewModel.radio.state, .stopped)
+    acquisition.failAcquisition(id: 1, with: .timedOut)
+    await task.value
+    XCTAssertEqual(viewModel.refreshFailure, .acquisition(.timedOut))
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+    XCTAssertNil(ports.installedPermit)
+  }
+
+  func testRefetchAtLeaseEndContinuesWithFreshlyVerifiedLease() async throws {
+    let viewModel = makeViewModel()
+    let identity = VenueArtifactIdentity(eventIdHex: fixture.identity.eventIdHex, definitionSequence: 2,
+                                         bundleDigestHex: String(repeating: "bb", count: 32))
+    let renewed = VenueImportedBundle(identity: identity, publicArtifact: fixture.artifact,
+                                     broadcastUntilUnixSeconds: now + 900)
+    let replacement = VenueServingContractTestFactory.permit(
+      identity: identity, container: fixture.container, displayName: "Renewed event",
+      payloadDigestHex: "renewed", currentEnin: 6_000_001,
+      startAtUnixSeconds: now + 300, stopAtUnixSeconds: now + 600)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300))),
+                           .immediate(.imported(renewed))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())), .immediate(.permitted(replacement))]
+    await supply(viewModel)
+    acquisition.replies = [.artifact(fixture.artifact)]
+    ports.evaluationReplies = [.immediate(.permitted(replacement)), .immediate(.permitted(replacement))]
+    clockReading = .available(unixSeconds: now + 300)
+    await expiry.fireAndWait()
+    XCTAssertTrue(ports.installedPermit === replacement)
+    XCTAssertEqual(viewModel.loadedIdentity, identity)
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertEqual(expiry.scheduledStopAt, now + 600)
+  }
+
+  func testStoppedWorkflowCannotAcceptLateRefetchAndManualResupplyStillWorks() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300))),
+                           .immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())), .immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    acquisition.replies = [.deferred]
+    let fire = try XCTUnwrap(renewal.takeQueuedFire())
+    let task = Task { await fire() }
+    await acquisition.waitForAcquisitionCount(2)
+    viewModel.stop()
+    acquisition.completeAcquisition(id: 1, with: fixture.artifact)
+    await task.value
+    XCTAssertEqual(viewModel.status, .idle)
+    XCTAssertNil(ports.installedPermit)
+    await supply(viewModel)
+    XCTAssertNotNil(ports.installedPermit)
+    XCTAssertNil(viewModel.refreshFailure)
+  }
+
+  func testRefetchRejectsAnotherEventWithoutReplacingValidLoadedPack() async throws {
+    let viewModel = makeViewModel()
+    let otherIdentity = VenueArtifactIdentity(eventIdHex: String(repeating: "ab", count: 32),
+                                              definitionSequence: 1, bundleDigestHex: "other")
+    let other = VenueImportedBundle(identity: otherIdentity, publicArtifact: fixture.artifact,
+                                    broadcastUntilUnixSeconds: now + 900)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300))), .immediate(.imported(other))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    acquisition.replies = [.artifact(fixture.artifact)]
+    await renewal.fireAndWait()
+    XCTAssertEqual(viewModel.refreshFailure, .anotherEvent)
+    XCTAssertEqual(viewModel.loadedIdentity, fixture.identity)
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 300)
+    XCTAssertEqual(installCalls.count, 1)
+  }
+
+  func testFailedReplacementSignatureRetainsValidCurrentEnvelopeUntilItsEnd() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300))), .immediate(.rejected(.definitionRejected))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    acquisition.replies = [.artifact(fixture.artifact)]
+    await renewal.fireAndWait()
+    XCTAssertEqual(viewModel.refreshFailure, .rejected(.definitionRejected))
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 300)
+    XCTAssertNotNil(ports.installedPermit)
+  }
+
+  func testReplacementWithoutCurrentEnvelopeCannotAdvertiseAGapAsContinuousCoverage() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300))),
+                           .immediate(.imported(renewalReceipt(until: now + 900)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())),
+                               .immediate(.blocked(try rejection(.noCurrentEnvelope)))]
+    await supply(viewModel)
+    acquisition.replies = [.artifact(fixture.artifact)]
+    await renewal.fireAndWait()
+    XCTAssertEqual(viewModel.refreshFailure, .blocked(.noCurrentEnvelope))
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 300)
+    XCTAssertNotNil(ports.installedPermit)
+  }
+
+  func testZeroCurrentEnvelopesStopsAndLeavesNoExpiryLoop() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())),
+                               .immediate(.blocked(try rejection(.noCurrentEnvelope)))]
+    await supply(viewModel)
+    clockReading = .available(unixSeconds: now + 300)
+    await expiry.fireAndWait()
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.noCurrentEnvelope)))
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertEqual(viewModel.radio.state, .stopped)
+    XCTAssertFalse(expiry.isScheduled)
+  }
+
+  func testManualResupplyAfterRefreshFailureRequiresConfirmationAgain() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300))),
+                           .immediate(.imported(renewalReceipt(until: now + 900)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())), .immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    await viewModel.startBroadcasting()
+    acquisition.replies = [.failure(.transportFailure)]
+    await renewal.fireAndWait()
+    XCTAssertNotNil(viewModel.refreshFailure)
+    await supply(viewModel)
+    XCTAssertNil(viewModel.refreshFailure)
+    guard case .ready = viewModel.status else { return XCTFail("manual replacement requires Start again") }
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertEqual(installCalls.count, 1)
+    await viewModel.startBroadcasting()
+    XCTAssertEqual(installCalls.count, 2)
+  }
+
+  func testStoredRefreshSourceRoundTripsAndOldRecordsStillDecode() throws {
+    let source = VenueRefreshSource.paired(bundle: URL(string: "https://venue.example/bundle")!,
+                                           handoff: URL(string: "https://venue.example/handoff")!)
+    let record = VenuePublicArtifactRecord(bundleBytes: fixture.artifact.bundleBytes,
+      handoffBytes: fixture.artifact.handoffBytes, sourceDescription: "venue.example", storedAt: Date(), refreshSource: source)
+    let bytes = try JSONEncoder().encode(record)
+    XCTAssertEqual(try JSONDecoder().decode(VenuePublicArtifactRecord.self, from: bytes).refreshSource, source)
+    var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+    legacy.removeValue(forKey: "refreshSource")
+    let restored = try JSONDecoder().decode(VenuePublicArtifactRecord.self, from: JSONSerialization.data(withJSONObject: legacy))
+    XCTAssertNil(restored.refreshSource)
+    XCTAssertEqual(restored.artifact, fixture.artifact)
+  }
+
+  func testRestoredPersistedPairedSourceRenewsAtLastLeaseEnd() async throws {
+    let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("venue-renewal-\(UUID().uuidString).json")
+    defer { try? FileManager.default.removeItem(at: fileURL) }
+    let source = VenueRefreshSource.paired(bundle: URL(string: "https://persisted.example/new-bundle")!,
+                                          handoff: URL(string: "https://persisted.example/new-handoff")!)
+    let record = VenuePublicArtifactRecord(bundleBytes: fixture.artifact.bundleBytes,
+      handoffBytes: fixture.artifact.handoffBytes, sourceDescription: "persisted.example", storedAt: Date(), refreshSource: source)
+    let writer = VenuePublicArtifactStore(fileURL: fileURL)
+    writer.store(record)
+    XCTAssertNil(writer.persistenceWriteFailure)
+    store = VenuePublicArtifactStore(fileURL: fileURL)
+    XCTAssertEqual(store.record, record, "restore must read a new store instance from disk")
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    let identity = VenueArtifactIdentity(eventIdHex: fixture.identity.eventIdHex, definitionSequence: 2,
+                                         bundleDigestHex: String(repeating: "bb", count: 32))
+    let renewed = VenueImportedBundle(identity: identity, publicArtifact: replacementArtifact,
+                                     broadcastUntilUnixSeconds: now + 900)
+    let replacement = VenueServingContractTestFactory.permit(
+      identity: identity, container: fixture.container, displayName: "Restored source renewal",
+      payloadDigestHex: "renewed", currentEnin: 6_000_001,
+      startAtUnixSeconds: now + 300, stopAtUnixSeconds: now + 600)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300))), .immediate(.imported(renewed))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())),
+                               .immediate(.permitted(replacement)), .immediate(.permitted(replacement))]
+    await viewModel.restoreFromStorage()
+    XCTAssertTrue(acquisition.requestedSources.isEmpty)
+    XCTAssertTrue(installCalls.isEmpty, "a restored pack still requires explicit Start")
+    await viewModel.startBroadcasting()
+    acquisition.replies = [.artifact(replacementArtifact)]
+    clockReading = .available(unixSeconds: now + 300)
+    await expiry.fireAndWait()
+    XCTAssertEqual(acquisition.requestedSources.count, 1)
+    XCTAssertEqual(acquisition.requestedSources.first?.bundle, URL(string: "https://persisted.example/new-bundle"))
+    XCTAssertEqual(acquisition.requestedSources.first?.handoff, URL(string: "https://persisted.example/new-handoff"))
+    XCTAssertEqual(viewModel.loadedIdentity, identity)
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertTrue(ports.installedPermit === replacement)
+    XCTAssertEqual(expiry.scheduledStopAt, now + 600)
+    XCTAssertNil(viewModel.refreshFailure)
+    XCTAssertEqual(store.record?.artifact, replacementArtifact)
+    XCTAssertEqual(VenuePublicArtifactStore(fileURL: fileURL).record?.refreshSource, source)
+    viewModel.stop()
+  }
+
+  func testStoppedWorkflowDiscardsDeferredRenewalImport() async throws {
+    try await assertLateRenewalIsDiscarded(at: .importing, background: false)
+  }
+
+  func testStoppedWorkflowDiscardsDeferredRenewalEvaluation() async throws {
+    try await assertLateRenewalIsDiscarded(at: .evaluating, background: false)
+  }
+
+  func testBackgroundedWorkflowDiscardsDeferredRenewalImport() async throws {
+    for foregroundBeforeResult in [false, true] {
+      try await assertLateRenewalIsDiscarded(at: .importing, background: true, foregroundBeforeResult: foregroundBeforeResult)
+    }
+  }
+
+  func testBackgroundedWorkflowDiscardsDeferredRenewalEvaluation() async throws {
+    for foregroundBeforeResult in [false, true] {
+      try await assertLateRenewalIsDiscarded(at: .evaluating, background: true, foregroundBeforeResult: foregroundBeforeResult)
+    }
+  }
+
+  private enum RenewalPendingStage { case importing, evaluating }
+
+  private func assertLateRenewalIsDiscarded(
+    at stage: RenewalPendingStage, background: Bool, foregroundBeforeResult: Bool = false
+  ) async throws {
+    resetOwnershipHarness()
+    renewal = FakeVenueExpiryScheduler()
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    await viewModel.startBroadcasting()
+    XCTAssertNotNil(ports.installedPermit)
+    let stored = try XCTUnwrap(store.record)
+    let identity = VenueArtifactIdentity(eventIdHex: fixture.identity.eventIdHex, definitionSequence: 2,
+                                         bundleDigestHex: String(repeating: "bb", count: 32))
+    let renewed = VenueImportedBundle(identity: identity, publicArtifact: replacementArtifact,
+                                     broadcastUntilUnixSeconds: now + 900)
+    let replacement = VenueServingContractTestFactory.permit(
+      identity: identity, container: fixture.container, displayName: "Late renewal",
+      payloadDigestHex: "late", currentEnin: 6_000_000,
+      startAtUnixSeconds: now, stopAtUnixSeconds: now + 600)
+    acquisition.replies = [.artifact(replacementArtifact)]
+    ports.importReplies = stage == .importing ? [.deferred] : [.immediate(.imported(renewed))]
+    ports.evaluationReplies = [.deferred]
+    clockReading = .available(unixSeconds: now + 240)
+    let callCount = ports.calls.count
+    let fire = try XCTUnwrap(renewal.takeQueuedFire())
+    let task = Task { await fire() }
+    await ports.waitForCallCount(callCount + (stage == .importing ? 1 : 2))
+    let pendingID = try XCTUnwrap(stage == .importing ? ports.pendingImportIDs.first : ports.pendingEvaluationIDs.first)
+    if background { viewModel.sceneDidEnterBackground() }
+    else { viewModel.stop() }
+    XCTAssertEqual(viewModel.status, .idle)
+    XCTAssertEqual(viewModel.radio.state, .stopped)
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+    XCTAssertFalse(renewal.isScheduled)
+    XCTAssertFalse(viewModel.isRefreshing)
+    XCTAssertEqual(viewModel.loadedIdentity, background ? fixture.identity : nil)
+    if foregroundBeforeResult {
+      // A new foreground evaluation may resume the old checked selection;
+      // the cancelled renewal must not replace it even when eligible again.
+      ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+      await viewModel.sceneWillEnterForeground()
+      XCTAssertEqual(viewModel.loadedIdentity, fixture.identity)
+      XCTAssertEqual(ports.installedPermit?.identity, fixture.identity)
+    }
+    let callsBeforeResult = ports.calls.count
+    let statusBeforeResult = viewModel.status
+    let permitBeforeResult = ports.installedPermit
+    let expiryBeforeResult = expiry.isScheduled
+    let renewalBeforeResult = renewal.isScheduled
+    // Keep a valid reply available so an incorrect late import cannot hide
+    // behind an unrelated unscripted-evaluation failure.
+    ports.evaluationReplies = [.immediate(.permitted(replacement))]
+    if stage == .importing {
+      XCTAssertTrue(ports.completeImport(id: pendingID, with: .imported(renewed)))
+    } else {
+      XCTAssertTrue(ports.completeEvaluation(id: pendingID, with: .permitted(replacement)))
+    }
+    await task.value
+    XCTAssertEqual(ports.calls.count, callsBeforeResult, "late renewal must not evaluate or install")
+    XCTAssertEqual(viewModel.status, statusBeforeResult)
+    XCTAssertTrue(ports.installedPermit === permitBeforeResult)
+    XCTAssertEqual(viewModel.loadedIdentity, background ? fixture.identity : nil)
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, background ? now + 300 : nil)
+    XCTAssertEqual(store.record, stored, "late renewal must not persist its replacement")
+    XCTAssertEqual(expiry.isScheduled, expiryBeforeResult)
+    XCTAssertEqual(renewal.isScheduled, renewalBeforeResult)
+    XCTAssertFalse(viewModel.isRefreshing)
+    XCTAssertNil(viewModel.refreshFailure)
+    viewModel.stop()
+  }
+
+  func testLeaseSwitchRefetchesWhenRegistryHasReplacedLoadedDefinition() async throws {
+    let viewModel = makeViewModel()
+    let replacement = VenueServingContractTestFactory.permit(
+      identity: fixture.identity, container: fixture.container, displayName: "Updated event",
+      payloadDigestHex: "updated", currentEnin: 6_000_001,
+      startAtUnixSeconds: now + 300, stopAtUnixSeconds: now + 600)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 900))),
+                           .immediate(.imported(renewalReceipt(until: now + 1_200)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())),
+      .immediate(.blocked(try rejection(.staleDefinition))),
+      .immediate(.permitted(replacement)), .immediate(.permitted(replacement))]
+    await supply(viewModel)
+    acquisition.replies = [.artifact(fixture.artifact)]
+    clockReading = .available(unixSeconds: now + 300)
+    await expiry.fireAndWait()
+    XCTAssertEqual(acquisition.requestedSources.count, 2)
+    XCTAssertTrue(ports.installedPermit === replacement)
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 1_200)
   }
 
   // MARK: - Scenario 1 — every import rejection
@@ -1327,7 +1765,7 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     // Checked twice because each misses something: the encoded keys omit a nil
     // optional (`encodeIfPresent`), and the declared fields do not show a key
     // smuggled in by a custom `encode(to:)`.
-    let publicFields: Set<String> = ["bundleBytes", "handoffBytes", "sourceDescription", "storedAt"]
+    let publicFields: Set<String> = ["bundleBytes", "handoffBytes", "sourceDescription", "storedAt", "refreshSource"]
     let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
     XCTAssertFalse(object.isEmpty, "the encoded record must have keys to compare")
     XCTAssertEqual(Set(object.keys), publicFields)
@@ -2048,7 +2486,8 @@ extension VenueSignedServingViewModelTests {
         acquisition: acquisition,
         store: store,
         clock: { [unowned self] in self.clockReading },
-        expiry: expiry
+        expiry: expiry,
+        requiresStartConfirmation: false
       )
     }
   }
