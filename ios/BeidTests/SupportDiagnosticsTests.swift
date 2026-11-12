@@ -3,6 +3,7 @@
 
 import BeidSharedKit
 import Combine
+import CryptoKit
 import UIKit
 import XCTest
 @testable import Beid
@@ -11,50 +12,102 @@ import XCTest
 final class SupportDiagnosticsTests: XCTestCase {
   func testActualShareItemExcludesSensitiveUIValuesAndUnknownFailureText() throws {
     let secret = "synthetic-private-key-DO-NOT-SHARE"
-    let rpid = "a1b2c3d4e5f60718293a4b5c6d7e8f90ab"
-    let hexHash = "ef93b80721fc4e29d8a37594303a251f6eaebe88b41bb29d17da1e905b5224af"
+    let rpidBytes = Data((0xA1...0xB1).map { UInt8($0) })
+    let rpid = rpidBytes.map { String(format: "%02x", $0) }.joined()
+    let rpidHash = SHA256.hash(data: rpidBytes).map { String(format: "%02x", $0) }.joined()
+    let markers = [
+      secret, "synthetic-private", "synthetic-seed-DO-NOT-SHARE", "synthetic-cookie-DO-NOT-SHARE",
+      "https://example.invalid/rpc?key=synthetic-credential",
+      "synthetic-signed-observation", "synthetic-signed-report", "synthetic-acceptance-receipt",
+      rpid, rpid.uppercased(), String(rpid.prefix(8)), String(rpid.suffix(8)),
+      rpidBytes.base64EncodedString(), rpidHash,
+      "network_required\n\"injected\":\"synthetic-sensitive-error\""
+    ]
     let phases = PassthroughSubject<ScanPhase, Never>()
     let reasons = PassthroughSubject<String?, Never>()
+    let ownerKeyFailures = PassthroughSubject<OwnerKeyOperationFailure?, Never>()
+    var timestamp: Int64 = 7_234_567
     let diagnostics = SupportDiagnostics(
       phases: phases.eraseToAnyPublisher(),
       refusalReasons: reasons.eraseToAnyPublisher(),
-      ownerKeyFailures: Empty().eraseToAnyPublisher(),
-      clock: { 123 }
+      ownerKeyFailures: ownerKeyFailures.eraseToAnyPublisher(),
+      clock: { timestamp }
     )
-    let event = EventSession(id: secret, name: rpid, venue: "synthetic-sensitive-venue", canonicalEventIdHex: hexHash)
+    let event = EventSession(
+      id: secret, name: rpid, venue: "synthetic-sensitive-venue", canonicalEventIdHex: rpidHash
+    )
+    phases.send(.idle)
+    phases.send(.sensing)
     phases.send(.eventFound(event))
     phases.send(.recording(event: event, peersVerified: 5))
     phases.send(.signalLost(event: event, peersVerified: 7))
-    reasons.send(secret)
-    reasons.send(rpid)
-    reasons.send("network_required")
+    timestamp = 10_800_123
+    let knownReasons = ["network_required", "event_not_found", "code_mismatch", "event_not_active", "verification_failed"]
+    for reason in knownReasons { reasons.send(reason) }
+    reasons.send(nil)
+    ownerKeyFailures.send(.unavailable)
+    for marker in markers {
+      phases.send(.sensing)
+      reasons.send(marker)
+    }
 
-    let output = diagnostics.exportJson()
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let metadata: [String: Any] = [
+      "CFBundleIdentifier": "org.levarac.beid.tests.synthetic",
+      "CFBundlePackageType": "BNDL", "CFBundleShortVersionString": "1.2.3",
+      "CFBundleVersion": "42", "BeidGitHeight": "4242"
+    ]
+    try PropertyListSerialization.data(fromPropertyList: metadata, format: .xml, options: 0)
+      .write(to: directory.appendingPathComponent("Info.plist"))
+    let output = diagnostics.exportJson(bundle: try XCTUnwrap(Bundle(url: directory)))
     let item = SupportShareItem(text: output)
     let controller = UIActivityViewController(activityItems: [item], applicationActivities: nil)
+    // Later changes must not alter the snapshot already offered for sharing.
+    phases.send(.idle)
     let actual = try XCTUnwrap(item.activityViewController(controller, itemForActivityType: nil) as? String)
     let bytes = try XCTUnwrap(actual.data(using: .utf8))
     XCTAssertEqual(actual, output)
-    XCTAssertFalse(actual.contains(secret))
-    XCTAssertFalse(actual.contains(rpid))
-    for forbidden in [
-      "synthetic-private", "a1b2c3d4", "7e8f90ab", "obLD1OX2BxgpOktcbX6PkKs=",
-      "f4adc8d6d9e25499cf15290fffecb8eeff25a7027854cd1adbe5138eba494c22",
-      "synthetic-sensitive-venue", hexHash
-    ] {
-      XCTAssertFalse(actual.contains(forbidden))
-    }
     XCTAssertEqual(item.activityViewControllerPlaceholderItem(controller) as? String, actual)
-    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
-    XCTAssertEqual(json["appVersion"] as? String, Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
-    XCTAssertEqual(json["build"] as? String, Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String)
-    XCTAssertTrue(actual.contains("EVENT_FOUND"))
-    XCTAssertTrue(actual.contains("SIGNAL_LOST"))
-    XCTAssertTrue(actual.contains("NETWORK_REQUIRED"))
+    let json = try parse(actual)
+    XCTAssertEqual(Set(json.keys), Set(["schemaVersion", "platform", "appVersion", "build", "gitHeight", "historyScope", "entries"]))
+    XCTAssertEqual(json["schemaVersion"] as? Int, 1)
+    XCTAssertEqual(json["platform"] as? String, "IOS")
+    XCTAssertEqual(json["appVersion"] as? String, "1.2.3")
+    XCTAssertEqual(json["build"] as? String, "42")
+    XCTAssertEqual(json["gitHeight"] as? Int, 4242)
+    XCTAssertFalse(json["gitHeight"] is String)
+    XCTAssertEqual(json["historyScope"] as? String, "current_process")
+    let entries = try XCTUnwrap(json["entries"] as? [[String: Any]])
+    let expectedStates = ["IDLE", "SENSING", "EVENT_FOUND", "RECORDING", "SIGNAL_LOST"]
+      + Array(repeating: "JOIN_FAILED", count: 5) + ["OWNER_KEY_UNAVAILABLE"]
+      + markers.flatMap { _ in ["SENSING", "JOIN_FAILED"] }
+    let expectedFailures = ["NONE", "NONE", "NONE", "NONE", "SIGNAL_LOST", "NETWORK_REQUIRED",
+                            "EVENT_NOT_FOUND", "CODE_MISMATCH", "EVENT_NOT_ACTIVE", "VERIFICATION_FAILED", "OWNER_KEY_UNAVAILABLE"]
+      + markers.flatMap { _ in ["NONE", "UNKNOWN"] }
+    XCTAssertEqual(entries.count, 11 + 2 * markers.count)
+    XCTAssertEqual(entries.compactMap { $0["state"] as? String }, expectedStates)
+    XCTAssertEqual(entries.compactMap { $0["failure"] as? String }, expectedFailures)
+    for (index, entry) in entries.enumerated() {
+      XCTAssertEqual(Set(entry.keys), Set(["hourStartEpochMs", "state", "failure"]))
+      XCTAssertEqual(entry["hourStartEpochMs"] as? Int64, index < 5 ? 7_200_000 : 10_800_000)
+    }
+    for marker in markers + ["synthetic-sensitive-venue"] {
+      let data = Data(marker.utf8)
+      let encodings = [marker, data.base64EncodedString(), data.map { String(format: "%02x", $0) }.joined()]
+      for encoding in encodings {
+        XCTAssertNil(bytes.range(of: Data(encoding.utf8)), "Sensitive fixture value escaped into share bytes")
+      }
+    }
     XCTAssertEqual(
       ObjectIdentifier(type(of: diagnostics.recorder)),
       ObjectIdentifier(BeidSharedKit.support.SupportBundleRecorder.self)
     )
+    let attachment = XCTAttachment(data: bytes, uniformTypeIdentifier: "public.json")
+    attachment.name = "support-bundle-synthetic-json"
+    attachment.lifetime = .keepAlways
+    add(attachment)
   }
 
   func testOwnerKeyFailuresAreRecordedIncludingFailureLatchedBeforeSubscription() throws {
