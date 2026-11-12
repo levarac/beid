@@ -52,10 +52,14 @@ final class StopOutcomeUITestFixture {
   }
 
   static func fromLaunchArguments() -> StopOutcomeUITestFixture? {
-    selectedMode(arguments: ProcessInfo.processInfo.arguments).map { StopOutcomeUITestFixture(mode: $0) }
+    let arguments = ProcessInfo.processInfo.arguments
+    return selectedMode(arguments: arguments).map {
+      StopOutcomeUITestFixture(mode: $0, traceRoute: arguments.contains("-beid-stop-route-trace"))
+    }
   }
 
   let mode: Mode
+  let routeTrace: StopOutcomeRouteTrace?
   let directory: URL
   let proofStore: ProofStore
   let selfProofStore: SelfProofStore
@@ -67,8 +71,9 @@ final class StopOutcomeUITestFixture {
   var signingCallCount: Int { cryptography.signingCallCount }
   var recordWriteCount: Int { recordWrites.count }
 
-  init(mode: Mode) {
+  init(mode: Mode, traceRoute: Bool = false) {
     self.mode = mode
+    routeTrace = traceRoute ? StopOutcomeRouteTrace() : nil
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("beid-stop-outcome-\(UUID().uuidString)", isDirectory: true)
     do {
@@ -138,6 +143,43 @@ final class StopOutcomeUITestFixture {
     proofID = sensingCoordinator.currentProofID
     cryptography.failKeyRead = mode == .signingError
   }
+}
+
+/// Passive, fixture-owned receipt. No observation, clock, I/O or routing effects.
+/// Only fixed event labels and booleans belong here; never identifiers or payloads.
+@MainActor
+final class StopOutcomeRouteTrace {
+  private var events: [String] = []
+  private var lastDetails: [String: String] = [:]
+  private var overflow = false
+  private var scanVisible: Bool?
+  private var homeVisible: Bool?
+
+  func record(_ event: String, scanPresented: Bool, detail: String = "") {
+    let state = "desiredScan=\(scanPresented) scanVisible=\(flag(scanVisible)) homeVisible=\(flag(homeVisible)) \(detail)"
+    guard lastDetails[event] != state else { return }
+    lastDetails[event] = state
+    guard events.count < 64 else { overflow = true; return }
+    events.append("\(events.count + 1) \(event) \(state)")
+  }
+
+  func scanVisibility(_ visible: Bool, scanPresented: Bool) {
+    scanVisible = visible
+    record("scan.\(visible ? "appear" : "disappear")", scanPresented: scanPresented)
+  }
+
+  func homeVisibility(_ visible: Bool, scanPresented: Bool) {
+    homeVisible = visible
+    record("home.\(visible ? "appear" : "disappear")", scanPresented: scanPresented)
+  }
+
+  // This is a natural-render snapshot, not a live AX getter. Later callbacks
+  // may be absent until another existing view update; absence is not proof.
+  var receipt: String {
+    "stop-route-v1 sample=natural-render events=\(events.count) overflow=\(overflow)\n" + events.joined(separator: "\n")
+  }
+
+  private func flag(_ value: Bool?) -> String { value.map { String($0) } ?? "unknown" }
 }
 
 /// The existing native protocol is the fault boundary, as in the unit oracle.
@@ -1323,6 +1365,9 @@ final class AppCoordinator: ObservableObject {
     )
     selectedHomeTab = .now
     scanPresented = true
+    #if DEBUG
+    stopOutcomeUITestFixture?.routeTrace?.record("stop.requested", scanPresented: scanPresented)
+    #endif
   }
 
   func requestHomeStopSensing() {
@@ -1336,7 +1381,12 @@ final class AppCoordinator: ObservableObject {
   /// Consume the confirmation before performing effects so repeated taps
   /// cannot finalize twice. A different session cannot use an old request.
   func confirmStopSensing() {
-    guard let snapshot = stopConfirmSnapshot else { return }
+    guard let snapshot = stopConfirmSnapshot else {
+      #if DEBUG
+      stopOutcomeUITestFixture?.routeTrace?.record("stop.repeat-ignored", scanPresented: scanPresented)
+      #endif
+      return
+    }
     stopConfirmSnapshot = nil
     let event: EventSession
     switch sensingCoordinator.phase {
@@ -1349,6 +1399,9 @@ final class AppCoordinator: ObservableObject {
     guard event.sessionID == snapshot.event.sessionID else { return }
     let proofID = sensingCoordinator.currentProofID
     if let expectedID = snapshot.proofID, proofID != expectedID { return }
+    #if DEBUG
+    stopOutcomeUITestFixture?.routeTrace?.record("stop.owned-confirmation", scanPresented: scanPresented)
+    #endif
     let aggregate = sensingCoordinator.sessionAggregate
     let detectedDeviceCount = sensingCoordinator.devicesVerified
     let firstSightingAt = sensingCoordinator.firstSightingAt
@@ -1362,12 +1415,21 @@ final class AppCoordinator: ObservableObject {
       storedRecordID: proofID.flatMap { proofStore.proof(withId: $0)?.id },
       hasExplainingAlert: stopResult.hasExplainingAlert
     )
+    #if DEBUG
+    stopOutcomeUITestFixture?.routeTrace?.record(
+      "stop.owned-result", scanPresented: scanPresented,
+      detail: "result=\(presentation) explainingAlert=\(stopResult.hasExplainingAlert)"
+    )
+    #endif
     if presentation == .noRecordSaved {
       stopOutcome = SensingStopOutcome(sessionID: event.sessionID)
       return
     }
     guard presentation == .sealed, let proofID else {
       scanPresented = false
+      #if DEBUG
+      stopOutcomeUITestFixture?.routeTrace?.record("stop.dismiss-requested", scanPresented: scanPresented)
+      #endif
       return
     }
     sealedSnapshot = SensingSealedSnapshot(

@@ -98,6 +98,7 @@ private struct NowHomeView: View {
               if coordinator.stopOutcomeUITestFixture != nil {
                 Button("Repeat STOP confirmation") { coordinator.confirmStopSensing() }
                   .accessibilityIdentifier("stop.fixture.repeat-confirmation")
+                  .accessibilityValue(coordinator.stopOutcomeUITestFixture?.routeTrace?.receipt ?? "")
               }
               #endif
             }
@@ -121,8 +122,18 @@ private struct NowHomeView: View {
       .navigationDestination(item: $coordinator.selectedProof) { proof in
         HomeRecordDetail(proof: proof)
       }
-      .onAppear { isRootVisible = true; refreshStandby() }
-      .onDisappear { isRootVisible = false; refreshStandby() }
+      .onAppear {
+        isRootVisible = true; refreshStandby()
+        #if DEBUG
+        coordinator.stopOutcomeUITestFixture?.routeTrace?.homeVisibility(isRootVisible, scanPresented: coordinator.scanPresented)
+        #endif
+      }
+      .onDisappear {
+        isRootVisible = false; refreshStandby()
+        #if DEBUG
+        coordinator.stopOutcomeUITestFixture?.routeTrace?.homeVisibility(isRootVisible, scanPresented: coordinator.scanPresented)
+        #endif
+      }
       .task { await coordinator.checkClockOnHome() }
       .alert(clockInstructionsTitle, isPresented: $showsClockInstructions) {
         Button("Check again") { Task { await coordinator.clockPreflight.check(force: true) } }
