@@ -1626,8 +1626,12 @@ final class SensingCoordinatorTests: XCTestCase {
       XCTAssertEqual(engine.requestJoinPermissionsCallCount, 2)
       XCTAssertEqual(engine.joinAndStartContexts.count, 1)
       XCTAssertEqual(coordinator.phase, .sensing)
+      // A granted retry refreshes candidates before admission. This fixture has
+      // no registry client, so the refresh reports that missing dependency.
       XCTAssertEqual(lines, [
         "join_stage event_id=unknown stage=admission outcome=rejected_permission_denied " +
+          "attempt=none retry_at_epoch_ms=none",
+        "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
           "attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=5d5891b9 stage=admission outcome=admitted " +
           "attempt=none retry_at_epoch_ms=none"
