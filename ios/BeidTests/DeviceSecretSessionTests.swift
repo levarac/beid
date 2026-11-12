@@ -1275,19 +1275,51 @@ final class DeviceSecretSessionTests: XCTestCase {
     let directory = try makeDirectory()
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
-    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
-    try FileManager.default.createDirectory(
-      at: directory.appendingPathComponent("self-proofs.json"), withIntermediateDirectories: false
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let original = try Data(contentsOf: checkpointURL)
+    let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+    var shouldFail = true
+    let records = SelfProofStore(fileURL: selfProofURL, writeData: { data, url in
+      if shouldFail { throw CocoaError(.fileWriteNoPermission) }
+      try data.write(to: url, options: .atomic)
+    })
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain),
+      eventJoinControl: engine, selfProofStore: records
     )
 
-    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
-
-    XCTAssertNotNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
-    XCTAssertNotNil(coordinator.eventSigningKeyFailure)
+    XCTAssertEqual(try Data(contentsOf: checkpointURL), original)
+    XCTAssertNotNil(records.lastPersistenceError)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
     coordinator.useDemoEventMode = false
     coordinator.startSensing(eventCode: "NEXT")
-    XCTAssertEqual(coordinator.joinRefusal, .eventSigningKeyUnavailable)
-    XCTAssertNotNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+
+    // A failed record write requires storage recovery, not a replacement signing key.
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertEqual(coordinator.joinRefusalReasonKey, "storage_recovery_required")
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(try Data(contentsOf: checkpointURL), original)
+    XCTAssertTrue(SelfProofStore(fileURL: selfProofURL).records.isEmpty)
+
+    shouldFail = false
+    coordinator.retrySessionAdmissionAfterStorageFailure()
+
+    let recovered = SelfProofStore(fileURL: selfProofURL)
+    XCTAssertEqual(recovered.records.count, 1)
+    XCTAssertNotNil(recovered.durableRecord(forProofId: proofId))
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertNil(records.lastPersistenceError)
+    XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertNil(coordinator.joinRefusalReasonKey)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
   }
 
   func testExcludedCaptureCannotSignAfterItsRemovalWasInterrupted() throws {
@@ -1764,13 +1796,14 @@ final class DeviceSecretSessionTests: XCTestCase {
     eventJoinRegistry: (any EventJoinRegistry)? = nil,
     deviceSecretStore: DeviceSecretKeychainStore = .shared,
     proofStore: ProofStore? = nil,
+    selfProofStore: SelfProofStore? = nil,
     checkpointStore: SelfProofCheckpointStore? = nil,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil
   ) -> SensingCoordinator {
     let parents = proofStore ?? ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
     let coordinator = SensingCoordinator(
       windowReportStore: reports ?? WindowReportStore(fileURL: directory.appendingPathComponent("reports.json")),
-      selfProofStore: SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")),
+      selfProofStore: selfProofStore ?? SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")),
       selfProofCheckpointStore: checkpointStore
         ?? SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")),
       bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
