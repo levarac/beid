@@ -7,5 +7,5 @@
 // CURRENT_PROJECT_VERSION is the local placeholder for CFBundleVersion. Xcode
 // Cloud assigns the store build number for every build (docs/xcode-cloud.md),
 // so leave it at 1.
-MARKETING_VERSION = 1.1
+MARKETING_VERSION = 1.1.0
 CURRENT_PROJECT_VERSION = 1
