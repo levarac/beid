@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import XCTest
+import UIKit
 
 final class BeidIPadLayoutTests: XCTestCase {
   private let app = XCUIApplication()
@@ -18,6 +19,137 @@ final class BeidIPadLayoutTests: XCTestCase {
   func testPrimaryFlowInLandscape() {
     XCUIDevice.shared.orientation = .landscapeLeft
     capturePrimaryFlow(orientation: "landscape")
+  }
+
+  func testRecordCardsNavigateIndependentlyInPortrait() throws {
+    try captureRecordNavigation(orientation: .portrait, name: "portrait")
+  }
+
+  func testRecordCardsNavigateIndependentlyInLandscape() throws {
+    try captureRecordNavigation(orientation: .landscapeLeft, name: "landscape")
+  }
+
+  private func captureRecordNavigation(orientation: UIDeviceOrientation, name: String) throws {
+    // This coverage exercises the tablet grid and its native navigation controls.
+    guard UIDevice.current.userInterfaceIdiom == .pad else {
+      throw XCTSkip("Requires an iPad to exercise the tablet Records layout")
+    }
+    let initialOrientation = XCUIDevice.shared.orientation
+    defer { XCUIDevice.shared.orientation = initialOrientation }
+    XCUIDevice.shared.orientation = orientation
+    app.launchArguments = ["-beid-ui-test", "-beid-home-frame-04"]
+    app.launch()
+    let welcome = app.buttons["Continue"]
+    XCTAssertTrue(welcome.waitForExistence(timeout: 5))
+    welcome.tap()
+    let permission = app.buttons["Allow Bluetooth"]
+    XCTAssertTrue(permission.waitForExistence(timeout: 5))
+    permission.tap()
+    let records = app.tabButton("Records")
+    XCTAssertTrue(records.waitForExistence(timeout: 5))
+    records.tap()
+    let grid = app.scrollViews["records.grid"]
+    XCTAssertTrue(grid.waitForExistence(timeout: 5))
+    let window = app.windows.firstMatch
+    XCTAssertEqual(window.frame.width > window.frame.height, orientation == .landscapeLeft)
+
+    // Event names come from the fixture specification, independently of the
+    // selected card's UUID. Matching both catches a card opening another event.
+    let titles = ["DeFi Summit Singapore", "ETH Denver 2025", "DevCon Bangkok 2025", "ETH Tokyo 2026"]
+    let expectedTitles = Dictionary(uniqueKeysWithValues: titles.map { ("Record for \($0)", $0) })
+    let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record."))
+    captureRecordState("records-\(name)-initial")
+    let heading = grid.staticTexts["Records"]
+    assertVisibleInWindow(heading)
+
+    // Observe two distinct, simultaneously visible cards before any scrolling.
+    let visibleCards = cards.allElementsBoundByIndex.filter {
+      $0.isHittable && window.frame.contains($0.frame) && !$0.frame.isEmpty
+    }
+    XCTAssertGreaterThanOrEqual(visibleCards.count, 2)
+    let selectedCards = Array(visibleCards.prefix(2)).map { ($0.identifier, $0.label) }
+    XCTAssertEqual(Set(selectedCards.map { $0.0 }).count, 2)
+    XCTAssertEqual(Set(selectedCards.map { $0.1 }).count, 2)
+
+    var inventory: [String: String] = [:]
+    for step in 0..<5 {
+      for card in cards.allElementsBoundByIndex where card.isHittable {
+        XCTAssertNotNil(expectedTitles[card.label], "Unexpected fixture card: \(card.label)")
+        let recordID = String(card.identifier.dropFirst("records.record.".count))
+        XCTAssertNotNil(UUID(uuidString: recordID), "Card must expose a full UUID")
+        if let previous = inventory[card.label] { XCTAssertEqual(previous, card.identifier) }
+        inventory[card.label] = card.identifier
+      }
+      if inventory.count == expectedTitles.count { break }
+      if step < 4 { grid.swipeUp() }
+    }
+    XCTAssertEqual(Set(inventory.keys), Set(expectedTitles.keys))
+    XCTAssertEqual(Set(inventory.values).count, 4)
+    // Return to the original viewport; selection still uses the two cards
+    // observed together before inventory collection, never replacement cards.
+    for _ in 0..<4 { grid.swipeDown() }
+    assertVisibleInWindow(heading)
+    captureRecordState("records-\(name)-before-navigation")
+
+    for (index, selected) in selectedCards.enumerated() {
+      let (identifier, label) = selected
+      let title = try XCTUnwrap(expectedTitles[label])
+      let recordID = String(identifier.dropFirst("records.record.".count))
+      let card = app.buttons[identifier]
+      XCTAssertEqual(card.label, label)
+      assertVisibleInWindow(card)
+      card.tap()
+      let navigation = app.navigationBars[title]
+      XCTAssertTrue(navigation.waitForExistence(timeout: 5), "Expected event title \(title)")
+      XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+      let fullID = app.staticTexts["Record ID \(recordID)"]
+      fullID.scrollToHittable(in: app)
+      XCTAssertEqual(fullID.label, "Record ID \(recordID)")
+      let back = navigation.buttons.firstMatch
+      assertVisibleInWindow(back)
+      captureRecordState("record-\(name)-\(index)-detail")
+      back.tap()
+      XCTAssertTrue(grid.waitForExistence(timeout: 5))
+      assertVisibleInWindow(heading)
+      for original in selectedCards {
+        let returned = app.buttons[original.0]
+        XCTAssertEqual(returned.label, original.1)
+        assertVisibleInWindow(returned)
+      }
+      captureRecordState("records-\(name)-\(index)-returned")
+    }
+
+    let account = app.buttons["home.account"]
+    assertVisibleInWindow(account)
+    captureRecordState("records-\(name)-before-account")
+    account.tap()
+    let done = app.buttons["Done"]
+    XCTAssertTrue(done.waitForExistence(timeout: 5))
+    assertVisibleInWindow(done)
+    captureRecordState("account-\(name)-open")
+    done.tap()
+    XCTAssertTrue(done.waitForNonExistence(timeout: 5))
+    XCTAssertTrue(grid.waitForExistence(timeout: 5))
+    assertVisibleInWindow(heading)
+    for original in selectedCards { assertVisibleInWindow(app.buttons[original.0]) }
+    captureRecordState("records-\(name)-after-account")
+  }
+
+  private func assertVisibleInWindow(
+    _ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    XCTAssertTrue(element.exists, "Expected element in the XCTest hierarchy", file: file, line: line)
+    XCTAssertTrue(element.isHittable, "Expected a hittable element", file: file, line: line)
+    XCTAssertFalse(element.frame.isEmpty, file: file, line: line)
+    XCTAssertTrue(app.windows.firstMatch.frame.contains(element.frame), file: file, line: line)
+  }
+
+  private func captureRecordState(_ name: String) {
+    capture(named: name)
+    let hierarchy = XCTAttachment(string: app.debugDescription)
+    hierarchy.name = "\(name)-accessibility"
+    hierarchy.lifetime = .keepAlways
+    add(hierarchy)
   }
 
   private func capturePrimaryFlow(orientation: String) {
@@ -94,7 +226,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.collectionViews["records.events"].waitForExistence(timeout: 5))
     app.navigationBars.buttons.firstMatch.tap()
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
-    app.tabBars.buttons["Now"].tap()
+    app.tabButton("Now").tap()
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
