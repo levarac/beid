@@ -255,7 +255,12 @@ final class DeviceSecretSessionTests: XCTestCase {
     coordinator.handleDetection(enin: 2, rpid: "peer-last",
                                 detectedDisplayId: DetectionFixture.displayId(device: 0))
 
-    XCTAssertEqual(parents.proofs.count, 1)
+    let proofId = try XCTUnwrap(coordinator.currentProofID)
+    // An atomic-write failure leaves committed history unchanged, even in memory.
+    XCTAssertTrue(parents.proofs.isEmpty)
+    XCTAssertNotNil(parents.lastPersistenceError)
+    XCTAssertFalse(parents.hasPersistedProof(withId: proofId))
+    XCTAssertNil(parents.proof(withId: proofId))
     XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
     XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
   }
