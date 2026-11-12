@@ -7,6 +7,14 @@ import SwiftUI
 /// Copy derived only from one durable canonical Observation submission.
 /// SUBMITTING is persisted before POST and cannot establish delivery.
 struct ReportDetailPresentation {
+  static var excludedWindowLabel: String {
+    String(
+      localized: "Not submittable",
+      defaultValue: "Not submittable",
+      comment: "Count of windows excluded from submission, including count-only windows and windows discarded after a signing key change."
+    )
+  }
+
   let caption: String
   let delivery: String
   let receipt: String

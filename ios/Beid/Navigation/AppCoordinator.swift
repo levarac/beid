@@ -174,6 +174,7 @@ final class AppCoordinator: ObservableObject {
     #else
     linkStore = reportProofLinkStore ?? ReportProofLinkStore()
     #endif
+    let resolvedProofStore = proofStore ?? ProofStore()
     self.registryClient = registryClient
     self.reportSubmissionStore = reportStore
     self.joinDiagnosticLog = joinDiagnosticLog
@@ -189,14 +190,16 @@ final class AppCoordinator: ObservableObject {
         self.sensingCoordinator = SensingCoordinator(
           registryClient: registryClient, reportSubmissionStore: reportStore,
           reportProofLinkStore: linkStore,
-          joinDiagnosticLog: joinDiagnosticLog
+          joinDiagnosticLog: joinDiagnosticLog,
+          proofStore: resolvedProofStore
         )
       }
       #else
       self.sensingCoordinator = SensingCoordinator(
         registryClient: registryClient, reportSubmissionStore: reportStore,
         reportProofLinkStore: linkStore,
-        joinDiagnosticLog: joinDiagnosticLog
+        joinDiagnosticLog: joinDiagnosticLog,
+        proofStore: resolvedProofStore
       )
       #endif
     }
@@ -226,7 +229,7 @@ final class AppCoordinator: ObservableObject {
     )
     #endif
     self.walletConnector = walletConnector
-    self.proofStore = proofStore ?? ProofStore()
+    self.proofStore = resolvedProofStore
     self.userDefaults = userDefaults
     self.bluetoothMonitor = bluetoothMonitor
     #if DEBUG

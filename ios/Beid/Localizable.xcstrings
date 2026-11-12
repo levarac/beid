@@ -2234,13 +2234,13 @@
         }
       }
     },
-    "Not submittable (count-only record)": {
-      "comment": "Sub-state row under \"Participation record\": windows recorded with only a device count and no reporter RPID can never be submitted to a report server. This row makes that exclusion explicit instead of silently dropping those windows (levarac/dispatch#3).",
+    "Not submittable": {
+      "comment": "Count of windows excluded from submission, including count-only windows and windows discarded after a signing key change.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Not submittable (count-only record)"
+            "value": "Not submittable"
           }
         }
       }
@@ -2428,6 +2428,87 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bluetooth sensing"
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording unavailable"
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The device signing key is unavailable. Unlock your device and try again."
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.changed.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier record discarded"
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.changed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A record from an earlier session could not be saved because this device's signing key changed. It was discarded."
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.unverifiable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A record from an earlier session could not be checked and was discarded."
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.discardFailed.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier record update failed"
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.discardFailed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes to a record from an earlier session could not be saved."
+          }
+        }
+      }
+    },
+    "proofDetail.status.incomplete": {
+      "comment": "Status for a recording whose unsigned session record could not be saved and was discarded.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording incomplete"
           }
         }
       }

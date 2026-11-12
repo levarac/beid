@@ -96,18 +96,34 @@ private struct OwnerKeyRestorationNoticePresenter: ViewModifier {
   }
 }
 
+private struct PresentedEventSigningKeyFailure: Identifiable {
+  let failure: EventSigningKeyFailure
+  let eventCode: String?
+  var id: String { eventCode.map { "\(failure.id):\($0)" } ?? failure.id }
+}
+
 struct EventSigningKeyFailurePresenter: ViewModifier {
   @ObservedObject var sensingCoordinator: SensingCoordinator
   let isActive: Bool
 
+  private var presentedFailure: PresentedEventSigningKeyFailure? {
+    sensingCoordinator.eventSigningKeyFailure.map {
+      PresentedEventSigningKeyFailure(failure: $0, eventCode: sensingCoordinator.eventSigningKeyNoticeEventCode)
+    }
+  }
+
   func body(content: Content) -> some View {
-    content.alert(item: Binding(
-      get: { isActive ? sensingCoordinator.eventSigningKeyFailure : nil },
+    let presented = presentedFailure
+    return content.alert(item: Binding(
+      get: { isActive ? presented : nil },
       set: {
-        if isActive, $0 == nil { sensingCoordinator.dismissEventSigningKeyFailure() }
+        if isActive, $0 == nil, presented?.id == presentedFailure?.id {
+          sensingCoordinator.dismissEventSigningKeyFailure()
+        }
       }
-    )) { failure in
-      Alert(
+    )) { notice in
+      let failure = notice.failure
+      return Alert(
         title: Text(verbatim: failure.title),
         message: Text(verbatim: failure.message),
         dismissButton: .default(Text(String(localized: "eventSigningKeyFailure.dismiss", defaultValue: "Close")))

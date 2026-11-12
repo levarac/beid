@@ -277,6 +277,11 @@ final class ReportSubmissionRetryController {
 @MainActor
 protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)? { get set }
+  var onSigningKeyChange: ((String, EventSigningDiscardReason) -> Void)? { get set }
+  var isSigningKeyChangeAcknowledged: ((String) -> Bool)? { get set }
+  var acknowledgedSigningKeyChangeEventCodes: Set<String> { get }
+  func acknowledgeSigningKeyChanges() throws
+  func acknowledgeSigningKeyChanges(forEventCode eventCode: String) throws
   func captureAndQueueWindow(
     id: UUID,
     eventCode: String,
@@ -284,11 +289,13 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
-    participantCommitment: Data?
+    participantCommitment: Data?,
+    eventSigningPublicKey: Data?
   )
 
   func submitPending()
   func submitPendingOnNaturalTrigger()
+  func endSigningSession()
   func stop()
 
   func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError>
@@ -303,12 +310,28 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
 }
 
 extension WindowReportSubmissionRuntimeProtocol {
+  var onSigningKeyChange: ((String, EventSigningDiscardReason) -> Void)? {
+    get { nil }
+    set {}
+  }
+  func acknowledgeSigningKeyChanges(forEventCode eventCode: String) throws {
+    try acknowledgeSigningKeyChanges()
+  }
+
+  var isSigningKeyChangeAcknowledged: ((String) -> Bool)? {
+    get { nil }
+    set {}
+  }
+  var acknowledgedSigningKeyChangeEventCodes: Set<String> { [] }
+  func acknowledgeSigningKeyChanges() throws {}
+
   var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)? {
     get { nil }
     set {}
   }
 
   func submitPendingOnNaturalTrigger() { submitPending() }
+  func endSigningSession() {}
 
   func stop() {}
 
@@ -325,8 +348,46 @@ extension WindowReportSubmissionRuntimeProtocol {
 /// shared HTTPS client. It does not alter the legacy WindowReport or ledger.
 @MainActor
 final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
-  var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)?
+  var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)? {
+    didSet {
+      if let eventSigningKeyFailure { onEventSigningKeyFailure?(eventSigningKeyFailure) }
+    }
+  }
+  var onSigningKeyChange: ((String, EventSigningDiscardReason) -> Void)? {
+    didSet {
+      for eventCode in store.signingKeyChangeEventCodes.subtracting(store.acknowledgedSigningKeyChangeEventCodes).sorted()
+      where isSigningKeyChangeAcknowledged?(eventCode) != true {
+        onSigningKeyChange?(eventCode, store.signingDiscardReason(forEventCode: eventCode))
+      }
+    }
+  }
+  var isSigningKeyChangeAcknowledged: ((String) -> Bool)?
   private(set) var eventSigningKeyFailure: EventSigningKeyFailure?
+  private var notifiedSigningKeyChangeEvents: Set<String>
+
+  var acknowledgedSigningKeyChangeEventCodes: Set<String> { store.acknowledgedSigningKeyChangeEventCodes }
+
+  func acknowledgeSigningKeyChanges() throws {
+    try store.acknowledgeSigningKeyChanges()
+    if eventSigningKeyFailure?.isDiscardNotice == true { eventSigningKeyFailure = nil }
+  }
+
+  func acknowledgeSigningKeyChanges(forEventCode eventCode: String) throws {
+    try store.acknowledgeSigningKeyChanges(forEventCodes: [eventCode])
+    if eventSigningKeyFailure?.isDiscardNotice == true,
+       store.signingKeyChangeEventCodes.subtracting(store.acknowledgedSigningKeyChangeEventCodes).isEmpty {
+      eventSigningKeyFailure = nil
+    }
+  }
+
+  private func notifySigningKeyChange(forEventCode eventCode: String) {
+    guard !store.acknowledgedSigningKeyChangeEventCodes.contains(eventCode),
+          isSigningKeyChangeAcknowledged?(eventCode) != true,
+          notifiedSigningKeyChangeEvents.insert(eventCode).inserted else { return }
+    let reason = store.signingDiscardReason(forEventCode: eventCode)
+    onSigningKeyChange?(eventCode, reason)
+    recordSigningKeyFailure(reason.failure)
+  }
 
   private func recordSigningKeyFailure(_ failure: EventSigningKeyFailure) {
     eventSigningKeyFailure = failure
@@ -343,6 +404,12 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   private let allowInsecureLoopbackForTests: Bool
   private var inFlight = Set<UUID>()
   private var resolvingCaptures = Set<UUID>()
+  /// Membership only; durable inputs remain in the existing capture store.
+  private var activeSessionCaptureIds = Set<UUID>()
+
+  func endSigningSession() {
+    activeSessionCaptureIds.removeAll()
+  }
 
   #if DEBUG
   /// Test-only crash boundary: returning false leaves the durable record in
@@ -365,6 +432,11 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     self.eventSigningCryptography = eventSigningCryptography
     self.definitionProvider = definitionProvider
     self.store = store
+    self.notifiedSigningKeyChangeEvents = store.signingKeyChangeEventCodes
+    if let eventCode = store.signingKeyChangeEventCodes
+      .subtracting(store.acknowledgedSigningKeyChangeEventCodes).sorted().first {
+      self.eventSigningKeyFailure = store.signingDiscardReason(forEventCode: eventCode).failure
+    }
     self.client = client
     self.retryController = ReportSubmissionRetryController(scheduler: retryScheduler, now: now, jitter: retryJitter)
     self.allowInsecureLoopbackForTests = allowInsecureLoopbackForTests
@@ -402,7 +474,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
-    participantCommitment: Data?
+    participantCommitment: Data?,
+    eventSigningPublicKey: Data? = nil
   ) {
     guard !retryController.isStopped else { return }
     // A missing reporter RPID means this window has only legacy/count-style
@@ -443,6 +516,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       peerRpids: peerRpids.sorted(),
       reporterRpid: reporterRpid,
       participantCommitment: participantCommitment,
+      eventSigningPublicKey: eventSigningPublicKey,
       finalizedAt: Date().timeIntervalSince1970
     )
     do {
@@ -451,6 +525,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       Self.log.error("Unable to persist raw close-window capture: \(String(describing: error), privacy: .public)")
       return
     }
+    activeSessionCaptureIds.insert(capture.id)
     processPendingCapture(capture)
     submitPendingOnNaturalTrigger()
   }
@@ -464,20 +539,40 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       }
       return
     }
-    guard let eventIdHex = capture.eventIdHex,
-          eventIdHex.normalizedCanonicalEventIdHex != nil
-    else {
-      Self.log.error("Deferred canonical submission without a canonical Event ID")
+    guard store.hasReadableExclusions else {
+      recordSigningKeyFailure(.discardFailed)
+      return
+    }
+    // The exclusion is the terminal decision, including a crash between its
+    // write and removal of the raw input. Such an input must never sign.
+    if store.exclusions.contains(where: { $0.id == capture.id && $0.signingDiscardReason != nil }) {
+      removeExcludedCapture(capture)
       return
     }
     guard resolvingCaptures.insert(capture.id).inserted else { return }
     let signingCryptography: any SensingCryptography
     do {
-      signingCryptography = try eventSigningCryptography.signingSnapshot()
+      let snapshot = try activeSessionCaptureIds.contains(capture.id)
+        ? eventSigningCryptography.signingSnapshot()
+        : eventSigningCryptography.recoverySigningSnapshot()
+      signingCryptography = try snapshot.signingSnapshot(
+        eventCode: capture.eventCode, matching: capture.eventSigningPublicKey
+      )
+    } catch let error as EventSigningKeyContinuityError {
+      resolvingCaptures.remove(capture.id)
+      discardCapture(capture, reason: error.discardReason)
+      return
     } catch {
       resolvingCaptures.remove(capture.id)
       recordSigningKeyFailure(.unavailable)
       Self.log.error("Deferred canonical submission while the device signing key is unavailable")
+      return
+    }
+    guard let eventIdHex = capture.eventIdHex,
+          eventIdHex.normalizedCanonicalEventIdHex != nil
+    else {
+      resolvingCaptures.remove(capture.id)
+      Self.log.error("Deferred canonical submission without a canonical Event ID")
       return
     }
     definitionProvider.resolve(eventIdHex: eventIdHex) { [weak self] verified in
@@ -486,6 +581,32 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
         self.resolvingCaptures.remove(capture.id)
         self.prepareAndQueueWindow(capture: capture, verified: verified, signingCryptography: signingCryptography)
       }
+    }
+  }
+
+  private func discardCapture(_ capture: ReportSubmissionCapture, reason: EventSigningDiscardReason) {
+    do {
+      try store.addExclusion(ReportSubmissionExclusion(
+        id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+        enin: capture.enin, peerCount: capture.peerRpids.count,
+        reasonCode: reason == .keyChanged ? "signing-key-changed" : "signing-key-unverifiable", createdAt: Date(),
+        signingKeyChangeNoticeAcknowledged: isSigningKeyChangeAcknowledged?(capture.eventCode) == true
+      ))
+      try store.removePendingCapture(id: capture.id)
+      notifySigningKeyChange(forEventCode: capture.eventCode)
+    } catch {
+      recordSigningKeyFailure(.discardFailed)
+      Self.log.error("Unable to remove an unsigned window that could not be saved")
+    }
+  }
+
+  private func removeExcludedCapture(_ capture: ReportSubmissionCapture) {
+    do {
+      try store.removePendingCapture(id: capture.id)
+      notifySigningKeyChange(forEventCode: capture.eventCode)
+    } catch {
+      recordSigningKeyFailure(.discardFailed)
+      Self.log.error("Unable to remove an excluded unsigned window")
     }
   }
 
