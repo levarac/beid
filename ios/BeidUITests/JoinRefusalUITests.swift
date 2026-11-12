@@ -41,7 +41,7 @@ final class JoinRefusalUITests: XCTestCase {
     app.scrollViews["scan.sensing"].assertHittable()
   }
 
-  func testDeviceKeyFailureAppearsOnOpenScanFlowAndDismissesOnce() {
+  func testDeviceKeyFailureDismissesOnceAcrossHomeAndScanFlow() {
     app.launchArguments = [
       "-beid-ui-test", "-beid-nearby-join-fixture", "-beid-device-key-unavailable-fixture"
     ]
@@ -50,25 +50,31 @@ final class JoinRefusalUITests: XCTestCase {
     app.buttons["Continue"].tap()
     app.buttons["Allow Bluetooth"].assertHittable()
     app.buttons["Allow Bluetooth"].tap()
+    // Home standby can resolve the device key before JOIN on either idiom.
+    // Acknowledge the first failure on whichever surface reaches it first.
+    let alert = app.alerts["Recording unavailable"]
+    let message = "The device signing key is unavailable. Unlock your device and try again."
+    func dismissAlert() {
+      alert.assertHittable()
+      alert.staticTexts[message].assertHittable()
+      XCTAssertEqual(app.alerts.count, 1)
+      alert.buttons["Close"].tap()
+      alert.assertDisappears()
+    }
+    let failureOnHome = alert.waitForExistence(timeout: 1)
+    if failureOnHome { dismissAlert() }
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
     receipt.assertHittable()
     XCTAssertEqual(receipt.label, "joins=0 event=none")
     let card = app.buttons["home.nearby.join.9adc61d60dda843e"]
     card.assertHittable()
-    let alert = app.alerts["Recording unavailable"]
-    XCTAssertFalse(alert.exists, "the failure must occur after joining the nearby event")
     card.tap()
-
-    let message = "The device signing key is unavailable. Unlock your device and try again."
-    alert.assertHittable()
-    alert.staticTexts[message].assertHittable()
-    XCTAssertEqual(app.alerts.count, 1)
-    alert.buttons["Close"].tap()
-    alert.assertDisappears()
-    XCTAssertEqual(receipt.label, "joins=0 event=none")
+    if !failureOnHome { dismissAlert() }
 
     let panel = app.scrollViews["scan.cant-join"]
     panel.assertHittable()
+    XCTAssertFalse(alert.exists, "JOIN must not repeat the acknowledged device-key failure")
+    XCTAssertEqual(receipt.label, "joins=0 event=none")
     let title = panel.staticTexts["scan.join-refusal"]
     title.scrollToHittable(in: app)
     XCTAssertEqual(title.label, "Recording unavailable")
@@ -77,7 +83,9 @@ final class JoinRefusalUITests: XCTestCase {
     app.navigationBars.buttons.firstMatch.assertHittable()
     app.navigationBars.buttons.firstMatch.tap()
     panel.assertDisappears()
-    card.assertHittable()
+    // Leaving Home stops standby discovery and clears its transient cards.
+    // The home receipt must be usable again even while the key stays locked.
+    receipt.assertHittable()
 
     let repeatedAlert = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: alert)
     repeatedAlert.isInverted = true

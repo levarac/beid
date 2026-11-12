@@ -251,6 +251,9 @@ final class SensingCoordinator: ObservableObject {
   private var pendingSigningKeyChangeEvents: [(eventCode: String, reason: EventSigningDiscardReason)] = []
   var eventSigningKeyNoticeEventCode: String? { pendingSigningKeyChangeEvents.first?.eventCode }
   private var signingKeyAvailabilityFailure: EventSigningKeyFailure?
+  // Home discovery and explicit JOIN can retry the same unreadable key.
+  // Acknowledgement lasts until a successful read starts a new failure episode.
+  private var hasAcknowledgedDeviceKeyUnavailable = false
   private var hasUnacknowledgedCaptureFailure = false
 
   /// Wallet connect+binding lifecycle for the event currently being
@@ -3222,6 +3225,7 @@ final class SensingCoordinator: ObservableObject {
       } else if prepareEngine {
         try keychainEngine?.prepare()
       }
+      hasAcknowledgedDeviceKeyUnavailable = false
       // Reading a new session's key does not resolve an earlier capture.
       if !hasUnacknowledgedCaptureFailure { signingKeyAvailabilityFailure = nil }
       eventSigningKeyFailure = pendingSigningKeyChangeEvents.first?.reason.failure ?? signingKeyAvailabilityFailure
@@ -3282,6 +3286,7 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func recordEventSigningKeyFailure(_ failure: EventSigningKeyFailure) {
+    guard failure != .unavailable || !hasAcknowledgedDeviceKeyUnavailable else { return }
     signingKeyAvailabilityFailure = failure
     eventSigningKeyFailure = pendingSigningKeyChangeEvents.first?.reason.failure ?? failure
   }
@@ -3298,6 +3303,9 @@ final class SensingCoordinator: ObservableObject {
         try reportSubmissionRuntime?.acknowledgeSigningKeyChanges(forEventCode: eventCode)
         pendingSigningKeyChangeEvents.removeFirst()
       } else {
+        if signingKeyAvailabilityFailure == .unavailable {
+          hasAcknowledgedDeviceKeyUnavailable = true
+        }
         hasUnacknowledgedCaptureFailure = false
         signingKeyAvailabilityFailure = nil
       }
