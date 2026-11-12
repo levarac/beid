@@ -26,7 +26,11 @@ final class FlatScreenshotTourD: XCTestCase {
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
     XCTAssertTrue(event.waitForExistence(timeout: 5))
     event.tap()
-    let report = app.buttons["event-detail.report.00000000-0000-4000-8000-000000000639"]
+    let session = app.buttons["event-detail.observation.1"]
+    session.scrollToHittable(in: app)
+    session.tap()
+    app.staticTexts["observation-detail.title"].assertExists()
+    let report = app.buttons["observation-detail.unassigned-report.00000000-0000-4000-8000-000000000639"]
     for _ in 0..<5 where !report.isHittable { app.swipeUp() }
     XCTAssertTrue(report.waitForExistence(timeout: 5))
     XCTAssertTrue(report.isHittable)

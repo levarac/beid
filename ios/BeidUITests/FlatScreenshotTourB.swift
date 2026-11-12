@@ -53,7 +53,7 @@ final class FlatScreenshotTourB: XCTestCase {
     XCTAssertTrue(event.waitForExistence(timeout: 5))
     event.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "prepared")).firstMatch.exists)
+    XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "event-detail.report.")).firstMatch.exists)
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "receipt stored")).firstMatch.exists)
     capture("08")
 
@@ -70,7 +70,8 @@ final class FlatScreenshotTourB: XCTestCase {
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
     XCTAssertTrue(event.waitForExistence(timeout: 5))
     event.tap()
-    XCTAssertTrue(app.staticTexts["NO REPORTS YET"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["NO REPORTS YET"].exists)
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "prepared")).firstMatch.exists)
     XCTAssertTrue(app.staticTexts["Measurements unavailable"].exists)
     XCTAssertTrue(app.buttons["event-detail.proof.1"].exists)
@@ -86,7 +87,7 @@ final class FlatScreenshotTourB: XCTestCase {
     let allowBluetooth = app.buttons["Allow Bluetooth"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
-    XCTAssertTrue(app.tabBars.buttons["Now"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.tabButton("Now").waitForExistence(timeout: 5))
   }
 
   private func capture(_ name: String) {

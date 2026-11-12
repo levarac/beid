@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "The session is unavailable for these event reports.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The session is unavailable for these event reports."
+          }
+        }
+      }
+    },
     "sigil.record.accessibilitySummary": {
       "comment": "VoiceOver summary for a device record. Mutual confirmation is decided off device and is unavailable here; never translate this as a measured zero. Keep the detected-device and observed-window counts from this exact rendered layout. Generic measured-layout narration uses sigil.accessibilitySummary.",
       "localizations": {

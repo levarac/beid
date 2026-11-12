@@ -87,6 +87,8 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS PHONE"))
     XCTAssertTrue(app.descendants(matching: .any)["report-detail.delivery"].label.contains("NOT SENT"))
     app.navigationBars.buttons.element(boundBy: 0).tap()
+    app.staticTexts["observation-detail.title"].assertExists()
+    app.navigationBars.buttons.element(boundBy: 0).tap()
     app.staticTexts["event-detail.heading"].assertExists()
 
     for ordinal in 1...3 {
@@ -101,6 +103,21 @@ final class FlatScreenshotTourC: XCTestCase {
       NSPredicate(format: "identifier BEGINSWITH %@", "event-detail.proof.")
     )
     XCTAssertEqual(records.count, 1, "One event has one record; all three sessions remain accessible")
+  }
+
+  func testEventDetailFoldsReportsIntoSessionsAndKeepsUnassignedReportsReachable() {
+    let app = launchEventDetailFixture(extraArguments: [])
+    XCTAssertFalse(app.staticTexts["Reports"].exists)
+    XCTAssertFalse(app.staticTexts["NO REPORTS YET"].exists)
+    XCTAssertFalse(app.staticTexts["OTHER STORED REPORTS"].exists)
+    XCTAssertFalse(app.buttons["event-detail.report.\(Self.linkedReportID)"].exists)
+    openSession(1, in: app)
+    let report = app.buttons["observation-detail.unassigned-report.\(Self.linkedReportID)"]
+    report.scrollToHittable(in: app)
+    XCTAssertTrue(app.staticTexts["The session is unavailable for these event reports."].exists)
+    report.tap()
+    app.staticTexts["report-detail.heading"].assertExists()
+    XCTAssertFalse(app.descendants(matching: .any)["report-detail.session"].exists)
   }
 
   func testRecordDetailSeparatesLocalRecordFromExternalResults() {
@@ -356,6 +373,9 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertFalse(app.buttons["report-detail.session-proof"].exists)
 
     app.navigationBars.buttons.element(boundBy: 0).tap()
+    app.staticTexts["observation-detail.title"].assertExists()
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    app.staticTexts["event-detail.heading"].assertExists()
     let proof = app.buttons["event-detail.proof.1"]
     for _ in 0..<5 where !proof.isHittable { app.swipeUp() }
     XCTAssertTrue(proof.waitForExistence(timeout: 5))
@@ -393,9 +413,11 @@ final class FlatScreenshotTourC: XCTestCase {
   }
 
   private func openReportDetail(_ app: XCUIApplication) {
-    let report = app.buttons["event-detail.report.\(Self.linkedReportID)"]
-    for _ in 0..<5 where !report.isHittable { app.swipeUp() }
-    XCTAssertTrue(report.waitForExistence(timeout: 5))
+    openSession(1, in: app)
+    let linked = app.buttons["observation-detail.report.\(Self.linkedReportID)"]
+    let unassigned = app.buttons["observation-detail.unassigned-report.\(Self.linkedReportID)"]
+    let report = linked.exists ? linked : unassigned
+    report.scrollToHittable(in: app)
     report.tap()
     let heading = app.staticTexts["report-detail.heading"]
     XCTAssertTrue(heading.waitForExistence(timeout: 5))

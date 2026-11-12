@@ -128,6 +128,12 @@ struct ObservationDetailView: View {
             linkStore: coordinator.reportProofLinkStore, sensing: coordinator.sensingCoordinator
           )
           .padding(.top, DS.Space.l)
+          UnassignedEventReports(
+            proof: proof, submissionStore: coordinator.reportSubmissionStore,
+            proofStore: coordinator.proofStore, linkStore: coordinator.reportProofLinkStore,
+            sensing: coordinator.sensingCoordinator
+          )
+          .padding(.top, DS.Space.l)
           NavigationLink { ItemDetailView(proof: proof) } label: {
             BeidTextControlLabel("VIEW THIS SESSION'S RECORD", glyph: .trailing("→", announcing: "View this session's record"))
           }
@@ -287,6 +293,42 @@ struct ObservationDetailView: View {
       Rectangle()
         .fill(DS.Color.strokeHairline)
         .frame(height: DS.Size.hairline)
+    }
+  }
+}
+
+/// Event reports without an authoritative session link remain reachable from
+/// screen 11. Never assign them to the session the user happens to open.
+private struct UnassignedEventReports: View {
+  let proof: Proof
+  @ObservedObject var submissionStore: ReportSubmissionStore
+  @ObservedObject var proofStore: ProofStore
+  @ObservedObject var linkStore: ReportProofLinkStore
+  @ObservedObject var sensing: SensingCoordinator
+
+  var body: some View {
+    if let code = proof.eventCode,
+       case .success(let records) = submissionStore.eventRecords(forEventCode: code) {
+      let unassigned = records.enumerated().filter { _, record in
+        ReportProofLinkPresentation.session(
+          for: record, linkStore: linkStore, proofStore: proofStore,
+          hasSelfProof: { sensing.selfProofRecord(forProofId: $0) != nil }
+        ) == nil
+      }
+      if !unassigned.isEmpty {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+          Text("The session is unavailable for these event reports.")
+            .beidTextStyle(DS.Font.Library.body13)
+            .foregroundStyle(DS.Color.textSecondary)
+          ForEach(unassigned, id: \.element.id) { index, record in
+            EventReportRow(
+              ordinal: index + 1, record: record,
+              identifier: "observation-detail.unassigned-report.\(record.id.uuidString)",
+              submissionStore: submissionStore, proofStore: proofStore, linkStore: linkStore, sensing: sensing
+            )
+          }
+        }
+      }
     }
   }
 }
