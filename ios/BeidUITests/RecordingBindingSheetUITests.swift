@@ -54,6 +54,180 @@ final class RecordingBindingSheetUITests: XCTestCase {
     add(shot)
   }
 
+  // S47: a failed save needs an outcome, while a durable unsigned Record
+  // and existing signing alerts must retain their established routes.
+  func testConfirmedStopAfterSaveFailureExplainsNoSavedRecordAndOffersNextAction() {
+    reachStopOutcomeFixture("save-failure")
+    confirmStop()
+    assertNoSealedOrCollectedClaim()
+    XCTAssertEqual(app.alerts.count, 0, "The save fault has no signing alert to explain STOP")
+
+    let message = app.staticTexts["stop.outcome.message"]
+    XCTAssertTrue(message.waitForExistence(timeout: UITestWait.timeout),
+                  "Confirmed STOP must explain that this session has no saved Record")
+    let text = message.label.lowercased()
+    XCTAssertTrue(text.contains("record") && (text.contains("not saved") || text.contains("could not be saved")))
+    let action = app.buttons["stop.outcome.action"]
+    action.assertHittable()
+    XCTAssertFalse(action.label.isEmpty)
+    repeatStopConfirmation()
+    XCTAssertEqual(app.staticTexts.matching(identifier: "stop.outcome.message").count, 1)
+    XCTAssertEqual(message.label.lowercased(), text)
+    action.tap()
+    app.tabButton("Now").assertHittable()
+    repeatStopConfirmation()
+    XCTAssertFalse(message.exists, "An acknowledged outcome must not be recreated")
+    app.tabButton("Records").tap()
+    app.scrollViews["records.grid"].assertExists()
+    XCTAssertEqual(recordTiles.count, 0, "This injected write failure created no durable Record")
+    assertNoSealedOrCollectedClaim()
+  }
+
+  func testConfirmedStopWithNilSignaturePreservesUnsignedLocalRecordWithoutNewOutcome() {
+    reachStopOutcomeFixture("nil-signature")
+    confirmStop()
+    assertNoSealedOrCollectedClaim()
+    XCTAssertEqual(app.alerts.count, 0, "A nil signature has no existing signing-error alert")
+
+    app.tabButton("Now").assertHittable()
+    repeatStopConfirmation()
+    XCTAssertFalse(app.staticTexts["stop.outcome.message"].exists)
+    XCTAssertFalse(app.buttons["stop.outcome.action"].exists)
+    assertUnsignedLocalRecordIsAccessible()
+  }
+
+  func testLaterSessionHasItsOwnSaveFailureOutcomeAfterAcknowledgement() {
+    reachStopOutcomeFixture("save-failure")
+    confirmStop()
+    app.staticTexts["stop.outcome.message"].assertExists()
+    app.buttons["stop.outcome.action"].tap()
+    let join = app.buttons["home.demo.join"]
+    join.scrollToHittable(in: app)
+    join.tap()
+    app.buttons["scan.stop-sensing"].assertHittable()
+    XCTAssertFalse(app.staticTexts["stop.outcome.message"].exists)
+    confirmStop()
+    app.staticTexts["stop.outcome.message"].assertExists()
+    repeatStopConfirmation()
+    XCTAssertEqual(app.staticTexts.matching(identifier: "stop.outcome.message").count, 1)
+    XCTAssertEqual(app.alerts.count, 0)
+    app.buttons["stop.outcome.action"].tap()
+    app.tabButton("Records").tap()
+    app.scrollViews["records.grid"].assertExists()
+    XCTAssertEqual(recordTiles.count, 0)
+  }
+
+  func testConfirmedStopDuringDetectingRemainsNormalCancellation() {
+    reachStopOutcomeFixture("detecting")
+    app.staticTexts["scan.event-found"].assertExists()
+    confirmStop()
+
+    app.tabButton("Now").assertHittable()
+    repeatStopConfirmation()
+    XCTAssertEqual(app.alerts.count, 0)
+    XCTAssertFalse(app.staticTexts["stop.outcome.message"].exists)
+    assertNoSealedOrCollectedClaim()
+    app.tabButton("Records").tap()
+    app.scrollViews["records.grid"].assertExists()
+    XCTAssertEqual(recordTiles.count, 0)
+    XCTAssertEqual(app.alerts.count, 0)
+    XCTAssertFalse(app.staticTexts["stop.outcome.message"].exists)
+  }
+
+  func testConfirmedStopWithSigningKeyErrorShowsExistingAlertOnlyOnce() {
+    reachStopOutcomeFixture("signing-error")
+    confirmStop()
+
+    let alert = app.alerts["Recording unavailable"]
+    alert.assertHittable()
+    alert.staticTexts["The device signing key is unavailable. Unlock your device and try again."].assertExists()
+    XCTAssertEqual(app.alerts.count, 1)
+    XCTAssertFalse(app.staticTexts["stop.outcome.message"].exists, "Do not duplicate the existing explanation")
+    assertNoSealedOrCollectedClaim()
+    alert.buttons["Close"].tap()
+    alert.assertDisappears()
+    repeatStopConfirmation()
+    assertUnsignedLocalRecordIsAccessible()
+    app.tabButton("Now").tap()
+    app.tabButton("Now").assertHittable()
+    XCTAssertEqual(app.alerts.count, 0, "Returning home must not repeat the acknowledged alert")
+    XCTAssertFalse(app.staticTexts["stop.outcome.message"].exists)
+  }
+
+  func testConfirmedStopAfterSaveFailureWithEndpointsUsesExistingAlertOnlyOnce() {
+    reachStopOutcomeFixture("save-failure-with-endpoints")
+    confirmStop()
+    let alert = app.alerts["Earlier record update failed"]
+    alert.assertHittable()
+    XCTAssertEqual(app.alerts.count, 1)
+    XCTAssertFalse(app.staticTexts["stop.outcome.message"].exists)
+    assertNoSealedOrCollectedClaim()
+    alert.buttons["Close"].tap()
+    alert.assertDisappears()
+    repeatStopConfirmation()
+    app.tabButton("Records").assertHittable()
+    app.tabButton("Records").tap()
+    app.scrollViews["records.grid"].assertExists()
+    XCTAssertEqual(recordTiles.count, 0)
+    XCTAssertEqual(app.alerts.count, 0)
+  }
+
+  private var recordTiles: XCUIElementQuery {
+    app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record."))
+  }
+
+  private func repeatStopConfirmation() {
+    let repeatStop = app.buttons["stop.fixture.repeat-confirmation"]
+    repeatStop.scrollToHittable(in: app)
+    repeatStop.tap()
+  }
+
+  private func reachStopOutcomeFixture(_ mode: String) {
+    app.launchArguments = ["-beid-ui-test", "-beid-stop-outcome-fixture", mode]
+    app.launch()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
+    app.buttons["Allow Bluetooth"].assertHittable()
+    app.buttons["Allow Bluetooth"].tap()
+    app.tabButton("Now").assertHittable()
+    let join = app.buttons["home.demo.join"]
+    join.scrollToHittable(in: app)
+    join.tap()
+    app.buttons["scan.stop-sensing"].assertHittable()
+    XCTAssertEqual(app.alerts.count, 0, "Fixture fault must be armed only after recording setup")
+  }
+
+  private func confirmStop() {
+    app.buttons["scan.stop-sensing"].tap()
+    let stop = app.buttons["scan.stop-confirm.stop"]
+    stop.assertHittable()
+    stop.tap()
+    stop.assertDisappears()
+  }
+
+  private func assertNoSealedOrCollectedClaim() {
+    XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
+    XCTAssertFalse(app.descendants(matching: .any)["scan.proof-collected"].exists)
+    XCTAssertFalse(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].exists)
+    XCTAssertFalse(app.staticTexts["Your record is saved on this phone. You'll find it in Records."].exists)
+  }
+
+  private func assertUnsignedLocalRecordIsAccessible() {
+    app.tabButton("Records").assertHittable()
+    app.tabButton("Records").tap()
+    app.scrollViews["records.grid"].assertExists()
+    XCTAssertEqual(recordTiles.count, 1, "Keep the existing unsigned local Record")
+    let record = recordTiles.firstMatch
+    record.scrollToHittable(in: app)
+    record.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    app.staticTexts["SIGNATURE"].assertExists()
+    app.staticTexts.matching(identifier: "NOT YET AVAILABLE").firstMatch.assertExists()
+    XCTAssertFalse(app.staticTexts["Sealed"].exists)
+    XCTAssertFalse(app.staticTexts["Self-signed on device"].exists)
+    XCTAssertEqual(app.alerts.count, 0)
+  }
+
   func testRecordingMetricsAreFullyVisibleBeforeScrolling() {
     reachRecording()
     SensingVisualOracle.assertInitialMetrics(in: app, test: self, name: "recording-live")
