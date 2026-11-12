@@ -5587,8 +5587,16 @@ final class SensingCoordinator: ObservableObject {
       return false
     }
 
+    #if DEBUG
+    let generation = demoAdvanceGeneration
+    #endif
     demoInterpreterIsParked = false
     onDemoInterpreterCheckpointForTesting?(.resumed(cursor))
+    #if DEBUG
+    // STOP or replacement handled this resume; do not launch its old cursor
+    // or let resumeSensing fall through into fallback demo growth.
+    guard demoAdvanceGeneration == generation else { return true }
+    #endif
     runDemoInterpreter(
       scenario,
       cursor: cursor,

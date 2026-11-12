@@ -260,6 +260,121 @@ final class DemoScenarioInvariantTests: XCTestCase {
     coordinator.stopSensing()
   }
 
+  func testStopAtResumedCheckpointDoesNotRestartDemoInterpreter() async throws {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    coordinator.useDemoEventMode = true
+    coordinator.demoAdvanceArgumentsForTesting = []
+    defer {
+      coordinator.onDemoInterpreterCheckpointForTesting = nil
+      coordinator.stopSensing()
+    }
+    coordinator.runDemoScenario(.signalLostMidway, stepDelayNanos: 0)
+    try await waitingDemoCompletion(coordinator)
+    XCTAssertEqual(ScanFlowContent.route(for: coordinator.phase), .signalLost)
+    XCTAssertTrue(coordinator.hasParkedDemoScenarioForTesting)
+
+    coordinator.demoAdvanceArgumentsForTesting = controlledDemoArguments
+    var resumeCount = 0
+    var abandonedSteps: [DemoScenario.Step] = []
+    coordinator.onDemoInterpreterCheckpointForTesting = { checkpoint in
+      switch checkpoint {
+      case .resumed:
+        resumeCount += 1
+        coordinator.stopSensing()
+      case .step(_, let step):
+        abandonedSteps.append(step)
+        // On old source, abort before its pause can retain a continuation.
+        coordinator.stopSensing()
+      default:
+        break
+      }
+    }
+
+    coordinator.resumeSensing()
+    try await waitingDemoCompletion(coordinator)
+    XCTAssertEqual(resumeCount, 1)
+    XCTAssertTrue(abandonedSteps.isEmpty, "STOP in .resumed must prevent every abandoned primitive")
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertEqual(coordinator.devicesVerified, 0)
+    XCTAssertNil(coordinator.demoAdvanceToken)
+    XCTAssertFalse(coordinator.hasParkedDemoScenarioForTesting)
+  }
+
+  func testReplacementAtResumedCheckpointOwnsEveryAdvance() async throws {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    coordinator.useDemoEventMode = true
+    coordinator.demoAdvanceArgumentsForTesting = []
+    defer {
+      coordinator.onDemoInterpreterCheckpointForTesting = nil
+      coordinator.stopSensing()
+    }
+    coordinator.runDemoScenario(.signalLostMidway, stepDelayNanos: 0)
+    try await waitingDemoCompletion(coordinator)
+    XCTAssertEqual(ScanFlowContent.route(for: coordinator.phase), .signalLost)
+    let resumedCursor = try XCTUnwrap(coordinator.parkedDemoScenarioCursorForTesting)
+    let replacement = DemoScenario.zeroPeersForever
+    XCTAssertFalse(replacement.steps.indices.contains(resumedCursor))
+
+    coordinator.demoAdvanceArgumentsForTesting = controlledDemoArguments
+    var resumeCount = 0
+    var abandonedSteps: [DemoScenario.Step] = []
+    var replacementSteps: [DemoScenario.Step] = []
+    coordinator.onDemoInterpreterCheckpointForTesting = { checkpoint in
+      switch checkpoint {
+      case .resumed:
+        resumeCount += 1
+        coordinator.startSensing(demoScenario: replacement)
+      case .step(let index, let step):
+        if index == resumedCursor {
+          abandonedSteps.append(step)
+          XCTFail("the invalidated resume emitted a primitive after starting its replacement")
+          // Prevent the old resume from overwriting the replacement's waiter.
+          coordinator.stopSensing()
+        } else {
+          replacementSteps.append(step)
+        }
+      default:
+        break
+      }
+    }
+
+    coordinator.resumeSensing()
+    var consumedTokens = Set<UUID>()
+    for _ in replacement.steps {
+      let token = try await waitingAdvance(coordinator)
+      XCTAssertTrue(consumedTokens.insert(token).inserted, "each replacement pause owns a fresh receipt")
+      XCTAssertEqual(ScanFlowContent.route(for: coordinator.phase), .sensing)
+      XCTAssertEqual(coordinator.devicesVerified, 0)
+      XCTAssertTrue(coordinator.advanceDemo(token: token))
+      XCTAssertFalse(coordinator.advanceDemo(token: token))
+    }
+    try await waitingDemoCompletion(coordinator)
+    XCTAssertEqual(resumeCount, 1)
+    XCTAssertTrue(abandonedSteps.isEmpty, "the invalidated resume must never launch a second interpreter")
+    XCTAssertEqual(replacementSteps, replacement.steps)
+    XCTAssertEqual(consumedTokens.count, replacement.steps.count)
+    XCTAssertNil(coordinator.demoAdvanceToken)
+    XCTAssertEqual(ScanFlowContent.route(for: coordinator.phase), .sensing)
+    XCTAssertEqual(coordinator.devicesVerified, 0)
+  }
+
+  private func waitingDemoCompletion(_ coordinator: SensingCoordinator) async throws {
+    let finished = expectation(description: "demo interpreter completes or parks")
+    var didFinish = false
+    let waiter = Task { @MainActor in
+      await coordinator.waitForDemoSequenceToFinish()
+      guard !Task.isCancelled else { return }
+      didFinish = true
+      finished.fulfill()
+    }
+    defer {
+      if !didFinish { coordinator.stopSensing() }
+      waiter.cancel()
+    }
+    await fulfillment(of: [finished], timeout: 2)
+    _ = try XCTUnwrap(didFinish ? true : nil, "demo completion must be bounded")
+  }
+
   private func waitingAdvance(_ coordinator: SensingCoordinator) async throws -> UUID {
     let ready = expectation(description: "interpreter waits for explicit input")
     let subscription = coordinator.$demoAdvanceToken.filter { $0 != nil }.prefix(1).sink { _ in ready.fulfill() }
