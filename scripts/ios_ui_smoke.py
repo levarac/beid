@@ -104,7 +104,12 @@ def result_cases(payload):
             if not identifier.startswith(bundle + "/"):
                 identifier = f"{bundle}/{identifier}"
             unique_tests([identifier], bundle)
-            cases.append((identifier, node.get("result", node.get("testStatus")), case_duration(node)))
+            status = node.get("result", node.get("testStatus"))
+            # A deliberately unexecuted case may have no duration field.
+            # Unknown skips still fail validate_lane; missing passed durations fail.
+            duration = (0.0 if status == "Skipped" and not any(
+                key in node for key in ("durationInSeconds", "duration")) else case_duration(node))
+            cases.append((identifier, status, duration))
         for key in ("children", "testNodes", "subtests"):
             if key in node:
                 walk(node[key], bundle, suite)
@@ -120,7 +125,10 @@ def validate_lane(expected, payload, allowed_skips=()):
         raise ValueError(f"execution ledger mismatch: missing={sorted((Counter(expected) - Counter(identifiers)).elements())}, "
                          f"extra/duplicate={sorted((Counter(identifiers) - Counter(expected)).elements())}")
     for identifier, result, _ in cases:
-        if result != "Passed" and not (result == "Skipped" and identifier in allowed_skips):
+        if identifier in allowed_skips:
+            if result != "Skipped":
+                raise ValueError(f"declared iPhone exclusion did not skip: {identifier}: {result}")
+        elif result != "Passed":
             raise ValueError(f"test did not pass: {identifier}: {result}")
     return cases
 
@@ -171,9 +179,7 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
     for lane, expected in lanes.items():
         all_cases.extend(validate_lane(expected, evidence[lane], skips))
     executed = [identifier for identifier, result, _ in all_cases if result == "Passed"]
-    if mode == "full" and set(executed) - set(unit) != set(ui) - {
-        identifier for identifier, result, _ in all_cases if result == "Skipped" and identifier in skips
-    }:
+    if mode == "full" and set(executed) - set(unit) != set(ui) - set(skips):
         raise ValueError("executed iPhone UI union mismatch")
     return f"{mode}: all {len(all_cases)} cases accounted for; all {len(unit)} BeidTests passed."
 

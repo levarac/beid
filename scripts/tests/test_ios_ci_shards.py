@@ -156,6 +156,21 @@ class AggregateContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.verify()
 
+    def test_iphone_exclusion_must_skip_and_needs_no_execution_duration(self):
+        self.manifest["iphone_skips"] = [ONE]
+        with self.assertRaises(ValueError):
+            self.verify()
+        case = self.evidence["ui-1"]["testNodes"][0]["children"][0]["children"][0]["children"][0]
+        case["result"] = "Skipped"
+        del case["durationInSeconds"]
+        self.verify()
+
+    def test_missing_or_failed_plan_cannot_pass(self):
+        for result in ("failure", "skipped", "cancelled", ""):
+            self.needs["plan"]["result"] = result
+            with self.subTest(result=result), self.assertRaises(ValueError):
+                self.verify()
+
     def test_only_successful_explicit_classifier_skip_can_pass(self):
         self.needs["changes"] = {"result": "success", "outputs": {"ios": "false", "error": "false"}}
         self.needs["plan"]["outputs"]["run"] = "false"

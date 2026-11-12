@@ -141,7 +141,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     requires the iOS 26.5 runtime. `scripts/ci_simulator.py` creates a new
     simulator for each job and returns its UDID; only that device is booted,
     tested and deleted, even on failure. Build-for-testing uses
-    `SWIFT_OPTIMIZATION_LEVEL=-O`. Every completed lane covers all `BeidTests`.
+    `SWIFT_OPTIMIZATION_LEVEL=-O`. Every completed workflow run covers all `BeidTests`.
     Ordinary `pull_request` events also execute only
     `ios/ci/ui-smoke-tests.txt`; when the event payload's labels include
     `ci:full-ui`, the complete `BeidUITests` suite runs. Merge groups, push,
@@ -187,7 +187,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     test is assigned exactly once. Runtime UI enumeration must also equal the
     current Swift source inventory. The two tablet-only methods in
     `scripts/ios-ui-iphone-skips.txt` remain selected and must have result nodes;
-    only their deliberate iPhone Skipped status is allowed.
+    they must report their deliberate iPhone Skipped status. An unexecuted
+    excluded case may omit duration (counted as zero); passed cases require it.
 
     The exact required name `iOS simulator` belongs to an `if: always()` Ubuntu
     aggregate. Full requires successful plan/build/matrix jobs, every expected

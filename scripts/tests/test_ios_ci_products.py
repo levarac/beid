@@ -3,9 +3,11 @@
 import importlib
 import importlib.util
 import json
+import io
 from pathlib import Path
 import plistlib
 import tempfile
+import tarfile
 import unittest
 
 
@@ -31,7 +33,7 @@ class ProductArchiveTest(unittest.TestCase):
     def test_permissions_links_and_xctestrun_paths_survive_relocation(self):
         self.assertIsNotNone(self.tool, "portable product handoff is missing")
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             source, manifest = self.fixture(root)
             archive = root / "products.tar"
             provenance = {"xcode": "Xcode 26.5\nBuild version 17F42", "sdk": "26.5", "arch": "arm64"}
@@ -64,3 +66,24 @@ class ProductArchiveTest(unittest.TestCase):
             run.with_name("Other.xctestrun").write_bytes(content)
             with self.assertRaises(ValueError):
                 self.tool.pack(source, manifest, root / "p.tar", {}, root)
+
+    def test_unsafe_tar_paths_and_links_are_rejected_before_extraction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for index, (name, link) in enumerate((("../escape", None),
+                                                 ("Build/Products/outside", "../../../escape"))):
+                with self.subTest(name=name):
+                    archive_path = root / f"bad-{index}.tar"
+                    with tarfile.open(archive_path, "w") as archive:
+                        data = json.dumps({"sha": "a" * 40}).encode()
+                        metadata = tarfile.TarInfo("manifest.json")
+                        metadata.size = len(data)
+                        archive.addfile(metadata, io.BytesIO(data))
+                        member = tarfile.TarInfo(name)
+                        if link:
+                            member.type, member.linkname = tarfile.SYMTYPE, link
+                        archive.addfile(member)
+                    destination = root / f"dest-{index}"
+                    with self.assertRaises(ValueError):
+                        self.tool.unpack(archive_path, destination, root, "a" * 40, {})
+                    self.assertFalse(destination.exists())
