@@ -50,30 +50,34 @@ final class JoinRefusalUITests: XCTestCase {
     app.buttons["Continue"].tap()
     app.buttons["Allow Bluetooth"].assertHittable()
     app.buttons["Allow Bluetooth"].tap()
-    // Home standby can resolve the device key before JOIN on either idiom.
-    // Acknowledge the first failure on whichever surface reaches it first.
+    // Home standby reads the locked key on both idioms. Wait for that same
+    // failure before JOIN instead of choosing a route from a timing window.
     let alert = app.alerts["Recording unavailable"]
     let message = "The device signing key is unavailable. Unlock your device and try again."
-    func dismissAlert() {
-      alert.assertHittable()
-      alert.staticTexts[message].assertHittable()
-      XCTAssertEqual(app.alerts.count, 1)
-      alert.buttons["Close"].tap()
-      alert.assertDisappears()
-    }
-    let failureOnHome = alert.waitForExistence(timeout: 1)
-    if failureOnHome { dismissAlert() }
-    let receipt = app.staticTexts["fixture.nearby-join.receipt"]
-    receipt.assertHittable()
-    XCTAssertEqual(receipt.label, "joins=0 event=none")
-    let card = app.buttons["home.nearby.join.9adc61d60dda843e"]
-    card.assertHittable()
+    XCTAssertTrue(alert.waitForExistence(timeout: UITestWait.timeout))
+    alert.assertHittable()
+    alert.staticTexts[message].assertHittable()
+    XCTAssertEqual(app.alerts.count, 1)
+    alert.buttons["Close"].tap()
+    alert.assertDisappears()
+
+    let home = app.scrollViews["home.now"]
+    home.assertHittable()
+    let homeReceipt = home.staticTexts["fixture.nearby-join.receipt"]
+    // This diagnostic text is below the fold on iPhone. Read its value;
+    // prove Home is interactive by tapping the actual JOIN control.
+    homeReceipt.assertExists()
+    XCTAssertEqual(homeReceipt.label, "joins=0 event=none")
+    XCTAssertEqual(app.alerts.count, 0)
+    let card = home.buttons["home.nearby.join.9adc61d60dda843e"]
+    card.scrollToHittable(in: app)
     card.tap()
-    if !failureOnHome { dismissAlert() }
 
     let panel = app.scrollViews["scan.cant-join"]
     panel.assertHittable()
-    XCTAssertFalse(alert.exists, "JOIN must not repeat the acknowledged device-key failure")
+    XCTAssertEqual(app.alerts.count, 0, "JOIN must not repeat the acknowledged device-key failure")
+    let receipt = app.staticTexts["fixture.nearby-join.receipt"]
+    receipt.assertHittable()
     XCTAssertEqual(receipt.label, "joins=0 event=none")
     let title = panel.staticTexts["scan.join-refusal"]
     title.scrollToHittable(in: app)
@@ -84,12 +88,23 @@ final class JoinRefusalUITests: XCTestCase {
     app.navigationBars.buttons.firstMatch.tap()
     panel.assertDisappears()
     // Leaving Home stops standby discovery and clears its transient cards.
-    // The home receipt must be usable again even while the key stays locked.
-    receipt.assertHittable()
+    // Scroll to the receipt before checking visibility on either idiom.
+    home.assertHittable()
+    homeReceipt.scrollToHittable(in: app)
+    XCTAssertEqual(homeReceipt.label, "joins=0 event=none")
+    XCTAssertEqual(app.alerts.count, 0, "Back must not repeat the acknowledged device-key failure")
 
-    let repeatedAlert = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: alert)
-    repeatedAlert.isInverted = true
-    XCTAssertEqual(XCTWaiter.wait(for: [repeatedAlert], timeout: 1), .completed)
+    // Re-entering Now retries Home discovery with the same locked key.
+    // Real navigation and scrolling must remain usable after the one Close.
+    app.tabButton("Records").assertHittable()
+    app.tabButton("Records").tap()
+    home.assertDisappears()
+    app.tabButton("Now").assertHittable()
+    app.tabButton("Now").tap()
+    home.assertHittable()
+    homeReceipt.scrollToHittable(in: app)
+    XCTAssertEqual(homeReceipt.label, "joins=0 event=none")
+    XCTAssertEqual(app.alerts.count, 0, "Home discovery must not repeat the acknowledged device-key failure")
   }
 
   func testJoinRefusalPanelIsVisibleAndClearsWhenScanCloses() {
