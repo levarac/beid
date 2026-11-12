@@ -36,7 +36,8 @@ final class VenueLinkSupplyTests: XCTestCase {
       acquisition: acquisition,
       store: store,
       clock: { .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds) },
-      expiry: FakeVenueExpiryScheduler()
+      expiry: FakeVenueExpiryScheduler(),
+      requiresStartConfirmation: false
     )
   }
 

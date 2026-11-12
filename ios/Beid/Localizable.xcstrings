@@ -4079,6 +4079,39 @@
           }
         }
       }
+    },
+    "Pack digest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pack digest"
+          }
+        }
+      }
+    },
+    "Ready to broadcast": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready to broadcast"
+          }
+        }
+      }
+    },
+    "Load saved pack": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load saved pack"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

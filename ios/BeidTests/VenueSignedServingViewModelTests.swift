@@ -31,7 +31,7 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     clockReading = .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds)
   }
 
-  private func makeViewModel(clock: (() -> VenueClockReading)? = nil) -> VenueSignedServingViewModel {
+  private func makeViewModel(clock: (() -> VenueClockReading)? = nil, requiresStartConfirmation: Bool = false) -> VenueSignedServingViewModel {
     VenueSignedServingViewModel(
       verifier: ports,
       broadcasting: ports,
@@ -39,7 +39,8 @@ final class VenueSignedServingViewModelTests: XCTestCase {
       store: store,
       clock: clock ?? { [unowned self] in self.clockReading },
       expiry: expiry,
-      renewal: renewal
+      renewal: renewal,
+      requiresStartConfirmation: requiresStartConfirmation
     )
   }
 
@@ -71,6 +72,56 @@ final class VenueSignedServingViewModelTests: XCTestCase {
   }
 
   // beid#589: injected deadlines, no sleeping and no network.
+  func testValidPackIsReadyWithIdentityBeforeExplicitStart() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 900)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    XCTAssertEqual(viewModel.status, .ready(displayName: VenueServingContractFixture.displayName,
+                                           stopAtUnixSeconds: now + 300))
+    XCTAssertEqual(viewModel.loadedIdentity, fixture.identity)
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertTrue(installCalls.isEmpty)
+    XCTAssertEqual(viewModel.radio.state, .stopped)
+  }
+
+  func testExplicitStartUsesCheckedPackWithoutOriginalDeviceOrNetwork() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    // No acquisition or verification replies remain: any network-dependent start fails the test.
+    let calls = ports.calls.count
+    await viewModel.startBroadcasting()
+    XCTAssertEqual(acquisition.requestedSources.count, 1)
+    XCTAssertEqual(ports.calls.count, calls + 1)
+    XCTAssertEqual(installCalls.count, 1)
+    XCTAssertEqual(viewModel.status, .serving(displayName: VenueServingContractFixture.displayName,
+                                             stopAtUnixSeconds: now + 300))
+  }
+
+  func testExplicitStartAfterPreparedPermitEndsCannotInstallExpiredBytes() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())), .immediate(.blocked(try rejection(.expired)))]
+    await supply(viewModel)
+    clockReading = .available(unixSeconds: now + 300)
+    await viewModel.startBroadcasting()
+    XCTAssertTrue(installCalls.isEmpty)
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+  }
+
+  func testForegroundingPreparedPackStillRequiresExplicitStart() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit())), .immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    viewModel.sceneDidEnterBackground()
+    await viewModel.sceneWillEnterForeground()
+    XCTAssertTrue(installCalls.isEmpty)
+    guard case .ready = viewModel.status else { return XCTFail("a foreground return cannot count as Start") }
+  }
+
   private func renewalReceipt(until: Int64) -> VenueImportedBundle {
     VenueImportedBundle(identity: fixture.identity, publicArtifact: fixture.artifact,
                         broadcastUntilUnixSeconds: until)
@@ -2148,7 +2199,8 @@ extension VenueSignedServingViewModelTests {
         acquisition: acquisition,
         store: store,
         clock: { [unowned self] in self.clockReading },
-        expiry: expiry
+        expiry: expiry,
+        requiresStartConfirmation: false
       )
     }
   }

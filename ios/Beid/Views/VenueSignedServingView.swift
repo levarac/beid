@@ -16,6 +16,7 @@ struct VenueSignedServingView: View {
   @State private var scannerStartFailure: String?
   @State private var scannerRefusal: VenueLinkScanner.Authorization?
   @State private var showsLinkInput = false
+  @State private var fixtureStarted = false
 
   init(viewModel: @autoclosure @escaping () -> VenueSignedServingViewModel) {
     _viewModel = StateObject(wrappedValue: viewModel())
@@ -59,7 +60,16 @@ struct VenueSignedServingView: View {
           )
           .padding(.bottom, DS.Space.m)
         }
-        BeidPrimaryButton("Stop broadcasting") {
+        if isReady {
+          BeidPrimaryButton("Start broadcasting") {
+            if fixtureCode != nil { fixtureStarted = true; return }
+            requestTask?.cancel()
+            requestTask = Task { await viewModel.startBroadcasting() }
+          }
+          .accessibilityIdentifier("Start broadcasting")
+          .padding(.top, DS.Space.s)
+        } else if isBroadcasting {
+          BeidSecondaryButton(title: "Stop broadcasting") {
           guard fixtureCode == nil else { return }
           viewModel.stop()
           venueLinkText = ""
@@ -68,6 +78,7 @@ struct VenueSignedServingView: View {
         }
         .accessibilityIdentifier("Stop broadcasting")
         .padding(.top, DS.Space.s)
+        }
       }
       .frame(maxWidth: DS.Layout.stateContentMaxWidth, alignment: .leading)
       .padding(.horizontal, DS.Space.pageMargin)
@@ -130,8 +141,12 @@ struct VenueSignedServingView: View {
 
   private var linkSection: some View {
     VStack(alignment: .leading, spacing: DS.Space.s) {
-      BeidPrimaryButton("Scan QR code") { scan() }
-        .accessibilityIdentifier("Scan QR code")
+      if isReady {
+        textAction("Scan QR code", identifier: "Scan QR code") { scan() }
+      } else {
+        BeidPrimaryButton("Scan QR code") { scan() }
+          .accessibilityIdentifier("Scan QR code")
+      }
       Button {
         showsLinkInput.toggle()
       } label: {
@@ -245,7 +260,7 @@ struct VenueSignedServingView: View {
       .padding(.bottom, DS.Space.s)
       hairline
       switch effectiveStatus {
-      case .serving(let displayName, let stopAtUnixSeconds):
+      case .serving(let displayName, let stopAtUnixSeconds), .ready(let displayName, let stopAtUnixSeconds):
         keyValueRow("Event") {
           Text(verbatim: displayName)
             .beidTextStyle(DS.Font.Library.labelMono11Time)
@@ -255,6 +270,14 @@ struct VenueSignedServingView: View {
           Text(verbatim: fixtureCode != nil ? "0x1111…1111" : (viewModel.registrarHex ?? "NOT YET AVAILABLE"))
             .beidTextStyle(DS.Font.Library.labelMono11Time)
             .accessibilityIdentifier("venue.registrar")
+        }
+        if let digest = effectiveDigest {
+          keyValueRow("Pack digest") {
+            Text(verbatim: shortEventId(digest))
+              .beidTextStyle(DS.Font.Library.labelMono11Time)
+              .accessibilityIdentifier("venue.digest")
+              .accessibilityLabel(Text(verbatim: digest))
+          }
         }
         keyValueRow("Until") {
           Text(verbatim: fixtureCode != nil ? "THU 10/15 18:00 JST" : Self.instantText(viewModel.broadcastUntilUnixSeconds ?? stopAtUnixSeconds))
@@ -322,8 +345,8 @@ struct VenueSignedServingView: View {
         )
         .padding(.top, DS.Space.m)
       }
-      if viewModel.storedSourceDescription != nil, fixtureCode == nil {
-        textAction(isBroadcasting ? "Refresh pack" : "Start broadcasting", identifier: "Refresh pack") {
+      if viewModel.storedSourceDescription != nil, fixtureCode == nil, !isReady {
+        textAction(isBroadcasting ? "Refresh pack" : "Load saved pack", identifier: "Refresh pack") {
           requestTask?.cancel()
           requestTask = Task { await viewModel.restoreFromStorage() }
         }
@@ -439,6 +462,11 @@ struct VenueSignedServingView: View {
     return false
   }
 
+  private var isReady: Bool {
+    if case .ready = effectiveStatus { return true }
+    return false
+  }
+
   private func supply(_ link: String) {
     requestTask?.cancel()
     requestTask = Task { await viewModel.supply(link: link) }
@@ -466,6 +494,7 @@ struct VenueSignedServingView: View {
     case .acquiring: return "Getting pack"
     case .importing: return "Checking pack"
     case .imported, .evaluating: return "Checking permission"
+    case .ready: return "Ready to broadcast"
     case .serving: return "Asked to broadcast"
     case .blocked: return "Cannot broadcast"
     case .importRejected: return "Pack rejected"
@@ -499,23 +528,30 @@ struct VenueSignedServingView: View {
       let index = arguments.firstIndex(of: "-beid-venue-frame"),
       arguments.indices.contains(index + 1) else { return nil }
     let code = arguments[index + 1]
-    return ["14b", "14d", "14e", "14e2", "14e3", "14f", "14f2", "14f3", "14g"].contains(code) ? code : nil
+    return ["14b", "14b-ready", "14d", "14e", "14e2", "14e3", "14f", "14f2", "14f3", "14g"].contains(code) ? code : nil
     #else
     return nil
     #endif
   }
 
   private var effectiveStatus: VenueServingStatus {
+    if fixtureCode == "14b-ready", !fixtureStarted { return .ready(displayName: "ETH Tokyo 2026", stopAtUnixSeconds: 0) }
     if fixtureCode != nil { return .serving(displayName: "ETH Tokyo 2026", stopAtUnixSeconds: 0) }
     return viewModel.status
   }
 
   private var effectiveEventId: String? {
     if fixtureCode != nil { return "3d1a0000000000000000000000000000000000000000000000000000000077c2" }
-    return viewModel.servingEventIdHex
+    return viewModel.loadedIdentity?.eventIdHex
+  }
+
+  private var effectiveDigest: String? {
+    if fixtureCode != nil { return "e31c1bf3777936e004b5f501fbbb1aa73ac01c42bf83a6256d98bd13242c7f21" }
+    return viewModel.loadedIdentity?.bundleDigestHex
   }
 
   private var effectiveRadio: VenueRadioUpdate {
+    if fixtureCode == "14b-ready", !fixtureStarted { return VenueRadioUpdate(state: .stopped)! }
     if fixtureCode != nil { return VenueRadioUpdate(state: .advertisingRequested)! }
     return viewModel.radio
   }

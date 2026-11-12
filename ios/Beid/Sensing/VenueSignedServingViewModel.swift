@@ -100,6 +100,7 @@ enum VenueServingStatus: Equatable {
   /// scheduled — nothing may be installed from this state.
   case imported(VenueArtifactIdentity)
   case evaluating(VenueArtifactIdentity)
+  case ready(displayName: String, stopAtUnixSeconds: Int64)
   /// The only state that means bytes were handed to the radio. Its facts are
   /// copied from the permit and never recomputed.
   case serving(displayName: String, stopAtUnixSeconds: Int64)
@@ -172,6 +173,9 @@ final class VenueSignedServingViewModel: ObservableObject {
   private var scheduledRenewalEnd: Int64?
   private let canonicalEventIdHex: String?
   private let bundleURLTemplate: String?
+  private let requiresStartConfirmation: Bool
+  private var wantsBroadcasting: Bool
+  private var preparedPermit: VenueServePermit?
 
   /// The effect lease and selected workflow have different lifetimes.
   /// Background revokes a lease but retains the selected public artifact.
@@ -215,6 +219,7 @@ final class VenueSignedServingViewModel: ObservableObject {
   }
 
   var registrarHex: String? { workflow?.receipt?.registrarHex }
+  var loadedIdentity: VenueArtifactIdentity? { workflow?.receipt?.identity }
 
   var canonicalEventIdHexForAcquisition: String? { canonicalEventIdHex }
 
@@ -228,6 +233,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     clock: @escaping () -> VenueClockReading,
     expiry: (any VenueExpiryScheduling)? = nil,
     renewal: (any VenueExpiryScheduling)? = nil,
+    requiresStartConfirmation: Bool = true,
     canonicalEventIdHex: String? = nil,
     bundleURLTemplate: String? = nil
   ) {
@@ -238,6 +244,10 @@ final class VenueSignedServingViewModel: ObservableObject {
     self.clock = clock
     self.canonicalEventIdHex = canonicalEventIdHex
     self.bundleURLTemplate = bundleURLTemplate
+    self.requiresStartConfirmation = requiresStartConfirmation
+    // The contract harness can enter with an already-confirmed operator intent.
+    // Production always uses the default and requires the visible Start action.
+    wantsBroadcasting = !requiresStartConfirmation
     // `VenueExpiryTimer` is `@MainActor`; a default-argument expression is not
     // evaluated in the initializer's own isolation, so the default is
     // constructed here in the (main-actor) init body instead of as a parameter
@@ -362,6 +372,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     cancelRenewal()
     refreshFailure = nil
     currentPermitEnd = nil
+    wantsBroadcasting = !requiresStartConfirmation
     invalidate()
     operationTask?.cancel()
     operationTask = nil
@@ -586,10 +597,25 @@ final class VenueSignedServingViewModel: ObservableObject {
     }
   }
 
+  /// A freshly checked permit can start offline. If time moved outside that
+  /// permit, request a fresh decision; never extend cached install authority.
+  func startBroadcasting() async {
+    guard eligible, activeOperation == nil, let permit = preparedPermit else { return }
+    guard case .ready = status else { return }
+    wantsBroadcasting = true
+    guard case .available(let now) = clock(), now >= permit.startAtUnixSeconds, now < permit.stopAtUnixSeconds else {
+      await refresh()
+      return
+    }
+    preparedPermit = nil
+    install(permit, generation: generation, now: now)
+  }
+
   func stop() {
     cancelRenewal()
     refreshFailure = nil
     currentPermitEnd = nil
+    wantsBroadcasting = false
     invalidate()
     operationTask?.cancel()
     operationTask = nil
@@ -704,7 +730,16 @@ final class VenueSignedServingViewModel: ObservableObject {
           if attempt == 0 { continue }
           break
         }
-        install(permit, generation: lease, now: now)
+        if wantsBroadcasting {
+          install(permit, generation: lease, now: now)
+        } else {
+          preparedPermit = permit
+          currentPermitEnd = permit.stopAtUnixSeconds
+          status = .ready(displayName: permit.displayName, stopAtUnixSeconds: permit.stopAtUnixSeconds)
+          expiry.schedule(stopAtUnixSeconds: permit.stopAtUnixSeconds, now: now) { [weak self] in
+            await self?.handleExpiry(generation: lease)
+          }
+        }
         workflow?.stage = .settled
         return
       }
@@ -885,6 +920,7 @@ final class VenueSignedServingViewModel: ObservableObject {
   @discardableResult
   private func invalidate() -> UUID {
     clearRadio()
+    preparedPermit = nil
     expiry.cancel()
     generation = UUID()
     return generation

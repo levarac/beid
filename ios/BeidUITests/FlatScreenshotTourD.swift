@@ -183,6 +183,21 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertTrue(app.descendants(matching: .any)["Venue link"].exists)
   }
 
+  func testVenuePackRequiresStartBeforeBroadcasting() {
+    openVenue(frame: "14b-ready")
+    XCTAssertTrue(app.staticTexts["READY TO BROADCAST"].exists)
+    XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].exists)
+    XCTAssertTrue(app.staticTexts["venue.registrar"].exists)
+    XCTAssertTrue(app.staticTexts["venue.digest"].exists)
+    XCTAssertTrue(app.staticTexts["venue.until"].exists)
+    let start = app.buttons["Start broadcasting"]
+    XCTAssertTrue(start.isHittable)
+    XCTAssertFalse(app.buttons["Stop broadcasting"].exists)
+    start.tap()
+    XCTAssertTrue(app.buttons["Stop broadcasting"].exists)
+    XCTAssertFalse(app.buttons["Start broadcasting"].exists)
+  }
+
   func testShot_14d_ScanQR() {
     openVenue(frame: "14d")
     app.buttons["Scan QR code"].tap()
