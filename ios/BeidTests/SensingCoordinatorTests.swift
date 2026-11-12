@@ -994,6 +994,36 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
   }
 
+  func testNearbyJoinRefusesExpiredSourceBeforeScheduledRefreshRuns() async throws {
+    let boundary: Int64 = 1_800_000_000_000
+    var now = boundary - 300_000
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    let store = makeNearbyDiscoveryStore(observedAtEpochMillis: now)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinControl: engine,
+      nearbyDiscoveryStore: store, nearbyDiscoveryClock: { now }
+    )
+    coordinator.useDemoEventMode = false
+    defer { coordinator.reset() }
+    let action = try XCTUnwrap(NearbyEventCardListPresentation(
+      candidates: coordinator.nearbyEventCandidates, nowEpochSeconds: now / 1_000
+    ).cards.first?.joinActionEventCodeHashHex)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateAt(index: 0)?.receiverState, .REGISTRY_VERIFIED)
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: action)
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    now = boundary
+    // The permission callback may reach MainActor before the queued expiry
+    // task. Issuance must apply the current source TTL in that ordering too.
+    engine.grantHeldPermissionRequest()
+    try await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(engine.joinAndStartContexts.count, 0)
+    XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
+  }
+
   func testRenderedNearbyActionFailsClosedWhenCandidateExpiresBeforeTap() async throws {
     var nowEpochMillis: Int64 = 1_800_000_000_000
     let engine = RecordingEventJoinControl()
@@ -1623,6 +1653,106 @@ final class SensingCoordinatorTests: XCTestCase {
       "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
         "attempt=none retry_at_epoch_ms=none"
     ])
+  }
+
+  func testVerifiedNearbyEvidenceSurvivesAnEninBoundaryWithoutAnotherRead() throws {
+    let boundary: Int64 = 1_800_000_000_000
+    var now = boundary - 1_000
+    let registry = FakeEventJoinRegistry()
+    let store = makeNearbyDiscoveryStore(observedAtEpochMillis: now)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinRegistry: registry,
+      nearbyDiscoveryStore: store, nearbyDiscoveryClock: { now }
+    )
+    defer { coordinator.reset() }
+
+    for instant in [boundary - 1, boundary, boundary + 1, boundary + 20_000] {
+      now = instant
+      coordinator.refreshNearbyEventDiscovery()
+      let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+      XCTAssertEqual(candidate.receiverState, .REGISTRY_VERIFIED)
+      XCTAssertEqual(candidate.registryStatus, .REGISTERED_VIA_OPERATOR_LOOKUP)
+      let card = try XCTUnwrap(NearbyEventCardListPresentation(
+        candidates: coordinator.nearbyEventCandidates, nowEpochSeconds: now / 1_000
+      ).cards.first)
+      XCTAssertEqual(card.joinActionEventCodeHashHex, nearbyVectorHashHex)
+      XCTAssertEqual(card.eventIdHex, nearbyVectorEventIdHex)
+    }
+    XCTAssertTrue(registry.requestedEventIdHexes.isEmpty)
+  }
+
+  func testRetryDueAtAnEninBoundaryStartsAtThatBoundaryAndRemainsUnverified() async {
+    let boundary: Int64 = 1_800_000_000_000
+    var now = boundary - 5_000
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .readFails(errorCode: nil)
+    let firstFailure = expectation(description: "first failure publishes its retry deadline")
+    let secondFailure = expectation(description: "boundary retry publishes its failure")
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinRegistry: registry, nearbyDiscoveryClock: { now },
+      joinDiagnosticLog: { line in
+        if line.contains("outcome=rejected_verification_unavailable attempt=1") {
+          firstFailure.fulfill()
+        } else if line.contains("outcome=rejected_verification_unavailable attempt=2") {
+          secondFailure.fulfill()
+        }
+      }
+    )
+    defer { coordinator.reset() }
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "boundary-source", eventDisplayName: "Example event",
+      eventCodeHash: Data([0x6c, 0x86, 0xc6, 0xaa, 0xc5, 0xfb, 0x24, 0xbc]),
+      rawContainer: Self.envelopeContainer,
+      verifiedEventIdHex: "0x" + String(repeating: "01", count: 32),
+      registryAgreement: { _ in true }
+    )
+    await fulfillment(of: [firstFailure], timeout: 1)
+    XCTAssertEqual(registry.requestedEventIdHexes.count, 1)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.nextRegistryRetryAtEpochMillis, boundary)
+
+    now = boundary - 1
+    coordinator.refreshNearbyEventDiscovery()
+    XCTAssertEqual(registry.requestedEventIdHexes.count, 1)
+    now = boundary
+    coordinator.refreshNearbyEventDiscovery()
+    await fulfillment(of: [secondFailure], timeout: 1)
+    XCTAssertEqual(registry.requestedEventIdHexes.count, 2)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.nextRegistryRetryAtEpochMillis, boundary + 30_000)
+    XCTAssertNil(NearbyEventCardListPresentation(
+      candidates: coordinator.nearbyEventCandidates, nowEpochSeconds: now / 1_000
+    ).cards.first?.joinActionEventCodeHashHex)
+    XCTAssertNotEqual(coordinator.nearbyEventCandidates.candidateAt(index: 0)?.receiverState, .REGISTRY_VERIFIED)
+  }
+
+  func testExpiredDiscoverySourceCannotBeRestoredByItsLateDefinitionRead() async {
+    var now: Int64 = 1_800_000_000_000
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .holds
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinRegistry: registry, nearbyDiscoveryClock: { now }
+    )
+    defer { coordinator.reset() }
+    let eventId = "0x" + String(repeating: "01", count: 32)
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "expired-source", eventDisplayName: "Example event",
+      eventCodeHash: Data([0x6c, 0x86, 0xc6, 0xaa, 0xc5, 0xfb, 0x24, 0xbc]),
+      rawContainer: Self.envelopeContainer, verifiedEventIdHex: eventId,
+      registryAgreement: { _ in true }
+    )
+    XCTAssertTrue(registry.isHoldingRead)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 1)
+    now += 300_000
+    coordinator.refreshNearbyEventDiscovery()
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+
+    registry.answerHeldRead(with: FakeEventJoinRegistry.admittingResolution(
+      eventIdHex: eventId, nowEpochSeconds: now / 1_000,
+      eventCodeHashHex: "6c86c6aac5fb24bc"
+    ))
+    for _ in 0..<10 { await Task.yield() }
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertNil(coordinator.joinedEventCode)
   }
 
   func testRegistryFailureLogsRetryDeadlineAndRetriesWhenTheClockReachesIt() async throws {
