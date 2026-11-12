@@ -108,6 +108,7 @@ struct RecordSigilSlot: View {
 
   let input: BeidSharedKit.sigil.SigilInput?
   let placement: RecordSigilPlacement
+  var isDeviceRecord = false
 
   var body: some View {
     switch Self.artwork(for: input) {
@@ -121,7 +122,8 @@ struct RecordSigilSlot: View {
         input: input,
         size: placement.size,
         ground: placement.sigilGround,
-        page: placement.page.sigilPage
+        page: placement.page.sigilPage,
+        isDeviceRecord: isDeviceRecord
       )
     }
   }

@@ -1,6 +1,507 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "sigil.record.accessibilitySummary": {
+      "comment": "VoiceOver summary for a device record. Mutual confirmation is decided off device and is unavailable here; never translate this as a measured zero. Keep the detected-device and observed-window counts from this exact rendered layout. Generic measured-layout narration uses sigil.accessibilitySummary.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mutual not available, %1$lld detected, window %2$lld"
+          }
+        }
+      }
+    },
+    "record.receivedProgress": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld OF %2$lld RECEIVED"
+          }
+        }
+      }
+    },
+    "record.openSession": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open session %1$lld, %2$@, %3$@"
+          }
+        }
+      }
+    },
+    "record.event.count": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDS · 1"
+          }
+        }
+      }
+    },
+    "record.event.sessions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SESSIONS · %lld"
+          }
+        }
+      }
+    },
+    "record.openEventRecord": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open record, selected session 1, %@"
+          }
+        }
+      }
+    },
+    "record.selectedSession": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SELECTED SESSION %lld"
+          }
+        }
+      }
+    },
+    "record.selectedWindow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WINDOW %lld"
+          }
+        }
+      }
+    },
+    "Record\ncollected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record\ncollected"
+          }
+        }
+      }
+    },
+    "Attendance\nRecord": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attendance\nRecord"
+          }
+        }
+      }
+    },
+    "SESSIONS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SESSIONS"
+          }
+        }
+      }
+    },
+    "Kept on this phone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kept on this phone"
+          }
+        }
+      }
+    },
+    "REPORT STATUS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "REPORT STATUS"
+          }
+        }
+      }
+    },
+    "NOT YET AVAILABLE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NOT YET AVAILABLE"
+          }
+        }
+      }
+    },
+    "SENT TO": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SENT TO"
+          }
+        }
+      }
+    },
+    "ACCEPTANCE RECEIPT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ACCEPTANCE RECEIPT"
+          }
+        }
+      }
+    },
+    "DELIVERY": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELIVERY"
+          }
+        }
+      }
+    },
+    "DELIVERY TIME": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELIVERY TIME"
+          }
+        }
+      }
+    },
+    "RECEIPT TIME": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECEIPT TIME"
+          }
+        }
+      }
+    },
+    "REPRODUCIBLE MATERIAL": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "REPRODUCIBLE MATERIAL"
+          }
+        }
+      }
+    },
+    "THIRD-PARTY RESULT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "THIRD-PARTY RESULT"
+          }
+        }
+      }
+    },
+    "MUTUAL OBSERVATION": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MUTUAL OBSERVATION"
+          }
+        }
+      }
+    },
+    "INCLUDED IN PUBLISHED DATA": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "INCLUDED IN PUBLISHED DATA"
+          }
+        }
+      }
+    },
+    "EVENT DATA": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "EVENT DATA"
+          }
+        }
+      }
+    },
+    "JOIN ACTION": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JOIN ACTION"
+          }
+        }
+      }
+    },
+    "EVENT WINDOWS ON THIS PHONE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "EVENT WINDOWS ON THIS PHONE"
+          }
+        }
+      }
+    },
+    "EVENT COUNT-ONLY WINDOWS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "EVENT COUNT-ONLY WINDOWS"
+          }
+        }
+      }
+    },
+    "REPORT STATUS UNAVAILABLE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "REPORT STATUS UNAVAILABLE"
+          }
+        }
+      }
+    },
+    "OTHER STORED REPORTS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OTHER STORED REPORTS"
+          }
+        }
+      }
+    },
+    "Reports unavailable for this older record": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reports unavailable for this older record"
+          }
+        }
+      }
+    },
+    "Attendance Record": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attendance Record"
+          }
+        }
+      }
+    },
+    "RECORDS · 0": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDS · 0"
+          }
+        }
+      }
+    },
+    "No records are stored for this event.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No records are stored for this event."
+          }
+        }
+      }
+    },
+    "VIEW THIS SESSION'S RECORD": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VIEW THIS SESSION'S RECORD"
+          }
+        }
+      }
+    },
+    "Artwork is not available for this window.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artwork is not available for this window."
+          }
+        }
+      }
+    },
+    "WINDOW DURATION": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WINDOW DURATION"
+          }
+        }
+      }
+    },
+    "AVG SIGNAL": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AVG SIGNAL"
+          }
+        }
+      }
+    },
+    "REPORTS FOR SELECTED WINDOW": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "REPORTS FOR SELECTED WINDOW"
+          }
+        }
+      }
+    },
+    "Report information is not available for this window.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report information is not available for this window."
+          }
+        }
+      }
+    },
+    "The observation window is unavailable for these reports.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The observation window is unavailable for these reports."
+          }
+        }
+      }
+    },
+    "NO LINKED REPORTS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NO LINKED REPORTS"
+          }
+        }
+      }
+    },
+    "REPORT ID": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "REPORT ID"
+          }
+        }
+      }
+    },
+    "PREPARED ON DEVICE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PREPARED ON DEVICE"
+          }
+        }
+      }
+    },
+    "OBSERVATION DIGEST": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OBSERVATION DIGEST"
+          }
+        }
+      }
+    },
+    "WHAT WAS SENT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WHAT WAS SENT"
+          }
+        }
+      }
+    },
+    "SEALED ON THIS PHONE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SEALED ON THIS PHONE"
+          }
+        }
+      }
+    },
+    "RECORDED ON DEVICE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDED ON DEVICE"
+          }
+        }
+      }
+    },
+    "DESTINATION": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DESTINATION"
+          }
+        }
+      }
+    },
+    "ACCEPTED": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ACCEPTED"
+          }
+        }
+      }
+    },
+    "A signature lets a reader check whether the signed record has changed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A signature lets a reader check whether the signed record has changed."
+          }
+        }
+      }
+    },
     "PEERS PER OBSERVED WINDOW": {
       "comment": "Heading for the Observation Detail bar chart. Each bar is a window with at least one recorded observation; gaps are not zero-filled.",
       "localizations": {
@@ -1412,7 +1913,7 @@
       }
     },
     "sigil.accessibilitySummary": {
-      "comment": "VoiceOver summary spoken in place of the Proof Sigil, the generated circular mark on a proof. It replaces the whole drawing, so it is the only thing a VoiceOver user gets — keep all three numbers. The first number counts nearby people's devices whose presence was mutual (both devices confirmed each other); the second counts devices this device merely detected, without that confirmation; the two never overlap and together they are every device drawn. The third is how many time windows the whole mark spans, not a position or an index into them — \"window\" is the unit of recorded time, roughly a few seconds each, and is not a GUI window. On current builds the first number is always 0, because mutual confirmation is not measurable on the device yet and this project deliberately shows 0 rather than guessing; translate it as a real count of zero, never as \"unknown\" or \"not available\".",
+      "comment": "VoiceOver summary spoken in place of the Proof Sigil, the generated circular mark on a proof. It replaces the whole drawing, so it is the only thing a VoiceOver user gets — keep all three numbers. The first number counts nearby people's devices whose presence was mutual (both devices confirmed each other); the second counts devices this device merely detected, without that confirmation; the two never overlap and together they are every device drawn. The third is how many time windows the whole mark spans, not a position or an index into them — \"window\" is the unit of recorded time, roughly a few seconds each, and is not a GUI window. On current builds the first number is always 0, because mutual confirmation is not measurable on the device yet and this project deliberately shows 0 rather than guessing; translate it as a real count of zero, never as \"unknown\" or \"not available\". Device-record narration uses the separate sigil.record.accessibilitySummary key; this generic measured-layout instruction remains unchanged.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2523,7 +3024,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Session %lld proof"
+            "value": "Record for session %lld"
           }
         }
       }
@@ -2954,7 +3455,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "SESSION PROOF"
+            "value": "SESSION RECORD"
           }
         }
       }

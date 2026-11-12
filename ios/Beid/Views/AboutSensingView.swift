@@ -138,7 +138,7 @@ struct WhatWeSendView: View {
           SensingExplainerRule()
           SensingExplainerDetail(
             title: "A signature from this phone",
-            detail: "It proves the record was not changed after this phone made it."
+            detail: "A signature lets a reader check whether the signed record has changed."
           )
           SensingExplainerRule()
 

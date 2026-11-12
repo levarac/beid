@@ -88,11 +88,11 @@ struct ProofCollectedView: View {
           .beidTextStyle(DS.Font.Library.labelMono11)
           .frame(maxWidth: .infinity)
 
-          RecordSigilSlot(input: sigilInput, placement: .proofCollected)
+          RecordSigilSlot(input: sigilInput, placement: .proofCollected, isDeviceRecord: true)
             .frame(maxWidth: .infinity)
             .padding(.top, DS.Space.m)
 
-          Text("Proof\ncollected")
+          Text("Record\ncollected")
             .beidTextStyle(DS.Font.Library.display46)
             .foregroundStyle(DS.Color.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
@@ -106,11 +106,10 @@ struct ProofCollectedView: View {
           }
           .padding(.top, DS.Space.l)
 
-          // Figma 07 "WHAT WAS SENT →"; decided label WHAT WE SEND (#637),
-          // opening 16's general disclosure (#646). Nothing is claimed sent.
+          // General field disclosure, without claiming a successful delivery.
           BeidTextControl(
-            "What we send",
-            glyph: .trailing("→", announcing: "What we send"),
+            "WHAT WAS SENT",
+            glyph: .trailing("→", announcing: "WHAT WAS SENT"),
             labelColor: DS.Color.textSecondary
           ) {
             showWhatWeSend = true
