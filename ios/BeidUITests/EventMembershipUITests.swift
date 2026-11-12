@@ -194,11 +194,18 @@ final class EventMembershipUITests: XCTestCase {
       app.textFields["Event code"].tap()
       app.textFields["Event code"].typeText("ABANDONED\n")
       assertCodeLookupPending()
+      assertCodeReceipt("submissions=\(index + 1) resumed=\(index)")
       app.navigationBars.buttons.firstMatch.tap()
       app.textFields["Event code"].assertDisappears()
 
-      app.buttons["scan.manual-entry"].tap()
-      app.buttons[completion].tap()
+      app.scrollViews["scan.sensing"].assertHittable()
+      // Finish the fresh route's field-focus handshake before resolving the
+      // completion control's position; the iPad keyboard moves the footer.
+      openScanCodeEntryFromScan()
+      assertFreshCodeEntry()
+      let complete = app.buttons[completion]
+      complete.assertHittable()
+      complete.tap()
       assertCodeReceipt("submissions=\(index + 1) resumed=\(index + 1)")
       assertFreshCodeEntry()
       app.navigationBars.buttons.firstMatch.tap()
