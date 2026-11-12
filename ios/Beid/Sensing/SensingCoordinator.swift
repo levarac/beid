@@ -5182,6 +5182,9 @@ final class SensingCoordinator: ObservableObject {
                               stage: "admission", outcome: "waiting_storage_load")
       return false
     }
+    // A parent read failure must be retried before its checkpoint can block
+    // admission; prepareDeviceSecret is reached only after this gate passes.
+    proofStore?.reloadAfterReadFailure()
     if !selfProofCheckpointStore.isPersistenceSuspended {
       reconcileSelfProofCheckpointIfNeeded()
     }

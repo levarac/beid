@@ -1138,6 +1138,10 @@ final class AppCoordinator: ObservableObject {
   func requestScanClose() {
     guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
       stopConfirmSnapshot == nil else { return }
+    if let proofID = sensingCoordinator.currentProofID, proofStore.proof(withId: proofID) == nil {
+      resetAndDismissScan()
+      return
+    }
     let event: EventSession
     switch sensingCoordinator.phase {
     case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
@@ -1179,6 +1183,7 @@ final class AppCoordinator: ObservableObject {
     let proofID = sensingCoordinator.currentProofID
     if let expectedID = snapshot.proofID, proofID != expectedID { return }
     if let proofID, proofStore.proof(withId: proofID) == nil {
+      resetAndDismissScan()
       return
     }
     let aggregate = sensingCoordinator.sessionAggregate

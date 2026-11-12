@@ -2695,6 +2695,17 @@
     "What we send": {},
     "SENDING": {},
     "About sensing": {},
+    "Privacy Policy": {
+      "comment": "Account sheet link opening beid's privacy policy.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy Policy"
+          }
+        }
+      }
+    },
     "How it works": {},
     "What\nwe send": {},
     "The event you joined": {},
