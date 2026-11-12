@@ -135,7 +135,7 @@ handoff, and a fragment link cannot discover that new handoff by itself.
 The paired-URL acquisition path re-fetches both public artifacts. No path
 synthesizes a handoff or weakens digest agreement to make renewal succeed.
 
-Android is intentionally untouched in this iOS Figma seat. Its existing
+This update covers the native iOS venue-broadcast flow. Android's existing
 `VenueController` owns its platform lifecycle and renewal effects; attendee
 reception and the removed unsigned venue-device/key routes are out of scope.
 
