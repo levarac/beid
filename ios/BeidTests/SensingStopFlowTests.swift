@@ -6,6 +6,33 @@ import XCTest
 
 @MainActor
 final class SensingStopFlowTests: XCTestCase {
+  func testStopAfterFailedProofSaveEndsSensingWithoutClaimingASavedRecord() async throws {
+    let proofURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent("sensing-stop-unsaved-\(UUID().uuidString).json")
+    let proofStore = ProofStore(fileURL: proofURL,
+                                writeData: { _, _ in throw CocoaError(.fileWriteNoPermission) })
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let coordinator = makeCoordinator(sensingCoordinator: sensing, proofStore: proofStore)
+    await reachRecording(coordinator)
+    let proofID = try XCTUnwrap(sensing.currentProofID)
+    XCTAssertNil(proofStore.proof(withId: proofID))
+    XCTAssertNotNil(proofStore.lastPersistenceError)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
+
+    coordinator.requestScanClose()
+    coordinator.confirmStopSensing()
+
+    XCTAssertEqual(sensing.phase, .idle)
+    XCTAssertNil(sensing.currentProofID)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
+    XCTAssertFalse(coordinator.scanPresented)
+    XCTAssertNil(coordinator.stopConfirmSnapshot)
+    XCTAssertNil(coordinator.sealedSnapshot)
+    XCTAssertNil(coordinator.proofCollectedSnapshot)
+    XCTAssertNotNil(proofStore.lastPersistenceError, "stopping must preserve the save failure")
+  }
+
   func testPrejoinStopBypassesConfirmationAndEndsParticipantTransport() {
     let engine = RecordingEventJoinControl()
     let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
@@ -189,7 +216,7 @@ final class SensingStopFlowTests: XCTestCase {
     _ = coordinator.sensingCoordinator.reset()
   }
 
-  func testMissingStoredProofReturnsToTheLiveScan() async {
+  func testConfirmedStopEndsSensingWhenTheStoredProofDisappears() async {
     let coordinator = makeCoordinator()
     await reachRecording(coordinator)
     coordinator.requestScanClose()
@@ -197,12 +224,12 @@ final class SensingStopFlowTests: XCTestCase {
 
     coordinator.confirmStopSensing()
 
-    XCTAssertTrue(coordinator.scanPresented)
+    XCTAssertFalse(coordinator.scanPresented)
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.sealedSnapshot)
     XCTAssertNil(coordinator.proofCollectedSnapshot)
-    XCTAssertNotNil(coordinator.sensingCoordinator.currentProofID)
-    _ = coordinator.sensingCoordinator.reset()
+    XCTAssertNil(coordinator.sensingCoordinator.currentProofID)
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
   }
 
   func testSealedSnapshotUsesObservationsReceivedWhileConfirmationWasOpen() async {
@@ -335,13 +362,14 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertFalse(app.scanPresented)
   }
 
-  private func makeCoordinator(sensingCoordinator: SensingCoordinator? = nil) -> AppCoordinator {
+  private func makeCoordinator(sensingCoordinator: SensingCoordinator? = nil,
+                               proofStore: ProofStore? = nil) -> AppCoordinator {
     let identifier = UUID().uuidString
     let fileURL = FileManager.default.temporaryDirectory
       .appendingPathComponent("sensing-stop-\(identifier).json")
     let defaults = UserDefaults(suiteName: "sensing-stop-\(identifier)")!
     return AppCoordinator(
-      proofStore: ProofStore(fileURL: fileURL),
+      proofStore: proofStore ?? ProofStore(fileURL: fileURL),
       sensingCoordinator: sensingCoordinator,
       registryClient: nil,
       userDefaults: defaults

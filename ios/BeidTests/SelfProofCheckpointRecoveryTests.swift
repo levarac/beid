@@ -21,13 +21,73 @@ import XCTest
 /// instead of the direct `stopSensing()` path.
 @MainActor
 final class SelfProofCheckpointRecoveryTests: XCTestCase {
+  func testNextJoinReloadsRecoveredParentStoreBeforeAdmission() async throws {
+    for entry in ["typed", "nearby", "demo"] {
+      for useRetry in [false, true] {
+        let directory = makeTemporaryDirectory()
+        let proofURL = directory.appendingPathComponent("proofs.json")
+        let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+        let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+        let cryptography = DeterministicSensingCryptography()
+        let proof = Proof(eventName: "Previous", date: Date(), peersVerified: 2, eventCode: "PREVIOUS")
+        XCTAssertTrue(ProofStore(fileURL: proofURL).add(proof))
+        let parentBytes = try Data(contentsOf: proofURL)
+        SelfProofCheckpointStore(fileURL: checkpointURL).save(
+          SelfProofCheckpoint(proofId: proof.id, eventCode: "PREVIOUS", eninStart: 10, eninEnd: 11,
+                              eventSigningPublicKey: cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")))
+        let checkpointBytes = try Data(contentsOf: checkpointURL)
+        try FileManager.default.removeItem(at: proofURL)
+        try FileManager.default.createDirectory(at: proofURL, withIntermediateDirectories: false)
+        let parents = ProofStore(fileURL: proofURL)
+        let engine = RecordingEventJoinControl()
+        let sensing = recoveryCoordinator(
+          directory: directory, store: SelfProofStore(fileURL: selfProofURL), checkpointURL: checkpointURL,
+          cryptography: cryptography, eventJoinControl: engine, proofStore: parents)
+        sensing.useDemoEventMode = false
+
+        for _ in 0..<2 {
+          attemptAdmission(entry, sensing: sensing)
+          await sensing.waitForDemoSequenceToFinish()
+          XCTAssertFalse(parents.hasReadableProofs)
+          XCTAssertTrue(parents.isPersistenceSuspended)
+          XCTAssertEqual(sensing.joinRefusalReasonKey, "storage_recovery_required")
+          XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+          XCTAssertEqual(try Data(contentsOf: checkpointURL), checkpointBytes,
+                         "an unreadable parent must never authorize checkpoint removal")
+          XCTAssertTrue(SelfProofStore(fileURL: selfProofURL).records.isEmpty)
+        }
+
+        try FileManager.default.removeItem(at: proofURL)
+        try parentBytes.write(to: proofURL, options: .atomic)
+        if useRetry {
+          sensing.retrySessionAdmissionAfterStorageFailure()
+        } else {
+          attemptAdmission(entry, sensing: sensing)
+        }
+        await sensing.waitForDemoSequenceToFinish()
+
+        XCTAssertTrue(parents.hasReadableProofs)
+        XCTAssertFalse(parents.isPersistenceSuspended)
+        XCTAssertEqual(parents.proof(withId: proof.id), proof)
+        XCTAssertNotNil(SelfProofStore(fileURL: selfProofURL).durableRecord(forProofId: proof.id))
+        XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+        XCTAssertNil(sensing.joinRefusalReasonKey)
+        XCTAssertEqual(engine.requestJoinPermissionsCallCount, entry == "demo" ? 0 : 1)
+        if entry == "demo" { XCTAssertNotNil(sensing.currentProofID) }
+        _ = sensing.stopSensing()
+      }
+    }
+  }
+
   func testEveryAdmissionPathRefusesPendingRecoveryAndRetriesTheOriginalRequest() async throws {
     for entry in ["typed", "nearby", "demo"] {
       let directory = makeTemporaryDirectory()
       let selfProofURL = directory.appendingPathComponent("self-proofs.json")
       let checkpointURL = directory.appendingPathComponent("checkpoint.json")
       let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-PENDING",
-                                           eninStart: 10, eninEnd: 11)
+                                           eninStart: 10, eninEnd: 11,
+                                           eventSigningPublicKey: DeterministicSensingCryptography()
+                                             .eventSigningPublicKey(eventCode: "EXAMPLE-PENDING"))
       SelfProofCheckpointStore(fileURL: checkpointURL).save(checkpoint)
       var shouldFail = true
       let store = SelfProofStore(fileURL: selfProofURL, writeData: { data, url in
@@ -76,7 +136,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
     sensing.useDemoEventMode = false
     sensing.startSensing(eventCode: "EXAMPLE-NEXT")
     let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-PENDING",
-                                         eninStart: 10, eninEnd: 11)
+                                         eninStart: 10, eninEnd: 11,
+                                         eventSigningPublicKey: DeterministicSensingCryptography()
+                                           .eventSigningPublicKey(eventCode: "EXAMPLE-PENDING"))
     checkpoints.save(checkpoint)
     for index in 0..<BeidConfig.eventConfirmThreshold {
       sensing.handleDetection(enin: 20, rpid: "example-peer-\(index)",
@@ -92,7 +154,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
     let directory = makeTemporaryDirectory()
     let checkpointURL = directory.appendingPathComponent("checkpoint.json")
     SelfProofCheckpointStore(fileURL: checkpointURL).save(
-      SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-PENDING", eninStart: 10, eninEnd: 11))
+      SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-PENDING", eninStart: 10, eninEnd: 11,
+                          eventSigningPublicKey: DeterministicSensingCryptography()
+                            .eventSigningPublicKey(eventCode: "EXAMPLE-PENDING")))
     var shouldFail = true
     let store = SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json"),
                               writeData: { data, url in
@@ -122,7 +186,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
         let selfProofURL = directory.appendingPathComponent("self-proofs.json")
         let checkpointURL = directory.appendingPathComponent("self-proof-checkpoint.json")
         let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-PENDING",
-                                             eninStart: 10, eninEnd: 11)
+                                             eninStart: 10, eninEnd: 11,
+                                             eventSigningPublicKey: DeterministicSensingCryptography()
+                                               .eventSigningPublicKey(eventCode: "EXAMPLE-PENDING"))
         SelfProofCheckpointStore(fileURL: checkpointURL).save(checkpoint)
         if storageUnavailable {
           try FileManager.default.createDirectory(at: selfProofURL, withIntermediateDirectories: false)
@@ -302,13 +368,17 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
         let checkpointURL = directory.appendingPathComponent("checkpoint.json")
         if hasExisting {
           SelfProofCheckpointStore(fileURL: checkpointURL).save(
-            SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-OLD", eninStart: 1, eninEnd: 2))
+            SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-OLD", eninStart: 1, eninEnd: 2,
+                                eventSigningPublicKey: DeterministicSensingCryptography()
+                                  .eventSigningPublicKey(eventCode: "EXAMPLE-OLD")))
           _ = recoveryCoordinator(directory: directory, store: SelfProofStore(fileURL: selfProofURL),
                                   checkpointURL: checkpointURL)
         }
         let existing = SelfProofStore(fileURL: selfProofURL).records
         let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-RETRY",
-                                             eninStart: 3, eninEnd: 4)
+                                             eninStart: 3, eninEnd: 4,
+                                             eventSigningPublicKey: DeterministicSensingCryptography()
+                                               .eventSigningPublicKey(eventCode: "EXAMPLE-RETRY"))
         SelfProofCheckpointStore(fileURL: checkpointURL).save(checkpoint)
         var shouldFail = true
         let store = SelfProofStore(
@@ -348,7 +418,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
     let checkpointURL = directory.appendingPathComponent("checkpoint.json")
     try FileManager.default.createDirectory(at: selfProofURL, withIntermediateDirectories: false)
     let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-SUSPENDED",
-                                         eninStart: 1, eninEnd: 2)
+                                         eninStart: 1, eninEnd: 2,
+                                         eventSigningPublicKey: DeterministicSensingCryptography()
+                                           .eventSigningPublicKey(eventCode: "EXAMPLE-SUSPENDED"))
     SelfProofCheckpointStore(fileURL: checkpointURL).save(checkpoint)
     let store = SelfProofStore(fileURL: selfProofURL)
     for _ in 0..<2 {
@@ -451,7 +523,8 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
         r: [UInt8](repeating: 1, count: 32), s: [UInt8](repeating: 2, count: 32), v: 0))
     BindingRecordStore(fileURL: bindingURL).add(binding)
     SelfProofCheckpointStore(fileURL: checkpointURL).save(
-      SelfProofCheckpoint(proofId: proof.id, eventCode: "EXAMPLE-RESTART", eninStart: 1, eninEnd: 2))
+      SelfProofCheckpoint(proofId: proof.id, eventCode: "EXAMPLE-RESTART", eninStart: 1, eninEnd: 2,
+                          eventSigningPublicKey: eventKey))
     let after = BarnardBackedSelfProofCryptography(keyStorage: FileSeedKeyStorage(fileURL: seedURL))
     XCTAssertEqual(try after.ownerPublicKey(), ownerKey)
     _ = recoveryCoordinator(directory: directory, store: SelfProofStore(fileURL: selfProofURL),
@@ -474,7 +547,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
     let directory = makeTemporaryDirectory()
     let selfProofURL = directory.appendingPathComponent("self-proofs.json")
     let checkpointURL = directory.appendingPathComponent("checkpoint.json")
-    let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "RECOVERY", eninStart: 1, eninEnd: 2)
+    let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "RECOVERY", eninStart: 1, eninEnd: 2,
+                                         eventSigningPublicKey: DeterministicSensingCryptography()
+                                           .eventSigningPublicKey(eventCode: "RECOVERY"))
     SelfProofCheckpointStore(fileURL: checkpointURL).save(checkpoint)
     let store = SelfProofStore(fileURL: selfProofURL)
     try FileManager.default.createDirectory(at: selfProofURL, withIntermediateDirectories: false)
@@ -497,7 +572,8 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
                                    cryptography: any SensingCryptography = DeterministicSensingCryptography(),
                                    checkpointStore: SelfProofCheckpointStore? = nil,
                                    eventJoinControl: (any EventJoinControlling)? = nil,
-                                   joinDiagnosticLog: @escaping (String) -> Void = { _ in })
+                                   joinDiagnosticLog: @escaping (String) -> Void = { _ in },
+                                   proofStore: ProofStore? = nil)
     -> SensingCoordinator {
     SensingCoordinator(
       windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("windows.json")),
@@ -509,7 +585,8 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: cryptography,
       eventJoinControl: eventJoinControl,
-      joinDiagnosticLog: joinDiagnosticLog
+      joinDiagnosticLog: joinDiagnosticLog,
+      proofStore: proofStore
     )
   }
 
