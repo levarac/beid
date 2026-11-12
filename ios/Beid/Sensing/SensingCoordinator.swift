@@ -3086,8 +3086,8 @@ final class SensingCoordinator: ObservableObject {
   }
 
   /// A receipt from this synchronous finalization, not a snapshot of global
-  /// notices. Only its self-proof/checkpoint operations can mark an explaining
-  /// alert; submission callbacks keep their existing, independent delivery.
+  /// notices. Only explicit self-proof/checkpoint and current-window error sites
+  /// can mark an explaining alert; submission callbacks remain independent.
   struct StopResult {
     var selfProof: SelfProofRecord? = nil
     var hasExplainingAlert = false
@@ -3149,10 +3149,10 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func endSensing(stopEngine: Bool) -> StopResult {
-    let result = finalizeSelfProofIfNeeded()
+    var result = finalizeSelfProofIfNeeded()
     persistSessionAggregateSnapshotIfNeeded()
     persistSigilPresenceIfNeeded()
-    closeFinalWindowIfNeeded()
+    closeFinalWindowIfNeeded(onExplainingAlert: { result.hasExplainingAlert = true })
     demoTask?.cancel()
     demoTask = nil
     // Both stop and reset end relay. Relay is a property of an active sensing
@@ -4679,7 +4679,7 @@ final class SensingCoordinator: ObservableObject {
   /// (`currentWindowLedgerOpened == false` — the session never reached
   /// `.recording`), this clears native state without ever calling
   /// `closeWindow`, so no report is signed or persisted for it.
-  private func closeFinalWindowIfNeeded() {
+  private func closeFinalWindowIfNeeded(onExplainingAlert: () -> Void = {}) {
     redeliverPendingWindowReports()
     guard let enin = currentWindowEnin else { return }
     // DemoEvent updates ENIN bookkeeping for self-proof coverage but never
@@ -4693,7 +4693,7 @@ final class SensingCoordinator: ObservableObject {
       Self.ledgerLog.error("Unable to close the native window without an active event code")
       return
     }
-    closeWindow(enin: enin, eventCode: eventCode)
+    closeWindow(enin: enin, eventCode: eventCode, onExplainingAlert: onExplainingAlert)
   }
 
   /// Checkpoints (does not end) an in-progress session when the app
@@ -4763,7 +4763,7 @@ final class SensingCoordinator: ObservableObject {
   /// queues it locally. When enabled, the canonical submission runtime is
   /// called at the same boundary before this legacy payload is cleared or
   /// reconstructed; it owns exact Observation bytes and HTTPS delivery.
-  private func closeWindow(enin: Int, eventCode: String) {
+  private func closeWindow(enin: Int, eventCode: String, onExplainingAlert: () -> Void = {}) {
     guard
       let commit = activeCommit,
       let currentWindowId
@@ -4820,6 +4820,9 @@ final class SensingCoordinator: ObservableObject {
         signature = try sensingCryptography.signWindowReport(eventCode: eventCode, bytes: payload)
       } catch {
         recordEventSigningKeyFailure(.unavailable)
+        // This error signs the explicitly captured closing window; runtime
+        // capture/submission notices above and below do not own this receipt.
+        onExplainingAlert()
         return
       }
       let report = WindowReport(
