@@ -153,20 +153,20 @@ enum OwnerKeyRestorationNotice: String, Identifiable, Equatable {
     case .identityWasReset:
       return String(
         localized: "ownerKeyRestoration.identityReset.title",
-        defaultValue: "Proof identity was reset",
-        comment: "Alert title shown when beid could not restore the device identity used to sign proofs and created a new one."
+        defaultValue: "Signing identity was reset",
+        comment: "Alert title shown when beid could not restore the device's signing identity and created a new one."
       )
     case .savedRecordsUsePreviousIdentity:
       return String(
         localized: "ownerKeyRestoration.savedRecordsMismatch.title",
-        defaultValue: "Some proof records use a previous identity",
-        comment: "Alert title shown when saved proof-related records refer to an owner identity different from the device's current identity."
+        defaultValue: "Some records use a previous signing identity",
+        comment: "Alert title shown when saved records refer to a signing identity different from the device's current identity."
       )
     case .identityWasResetWithSavedRecords:
       return String(
         localized: "ownerKeyRestoration.identityResetWithRecords.title",
-        defaultValue: "Proof identity could not be restored",
-        comment: "Alert title shown when beid both replaced an unreadable proof-signing identity and found saved records that use the previous identity."
+        defaultValue: "Signing identity could not be restored",
+        comment: "Alert title shown when beid replaced an unreadable signing identity and found saved records that use the previous identity."
       )
     }
   }
@@ -176,20 +176,20 @@ enum OwnerKeyRestorationNotice: String, Identifiable, Equatable {
     case .identityWasReset:
       return String(
         localized: "ownerKeyRestoration.identityReset.message",
-        defaultValue: "beid could not restore the identity this device used to sign proofs, so it created a new one. This device can no longer use the previous identity.",
-        comment: "Alert message explaining that an unreadable proof-signing identity was replaced and the previous identity is no longer usable on this device."
+        defaultValue: "beid could not restore the identity this device used to sign records, so it created a new one. This device can no longer use the previous identity.",
+        comment: "Alert message explaining that an unreadable signing identity was replaced and the previous identity is no longer usable on this device."
       )
     case .savedRecordsUsePreviousIdentity:
       return String(
         localized: "ownerKeyRestoration.savedRecordsMismatch.message",
-        defaultValue: "Some saved proof records were created with a different identity. They still exist, but this device can no longer sign as that identity.",
-        comment: "Alert message explaining that saved proof-related records remain on disk but refer to an owner identity this device no longer controls."
+        defaultValue: "Some saved records were created with a different signing identity. They still exist, but this device can no longer sign as that identity.",
+        comment: "Alert message explaining that saved records remain on disk but refer to a signing identity this device no longer controls."
       )
     case .identityWasResetWithSavedRecords:
       return String(
         localized: "ownerKeyRestoration.identityResetWithRecords.message",
-        defaultValue: "beid created a new identity because the saved one could not be restored. Some saved proof records still refer to the previous identity; they still exist, but this device can no longer sign as that identity.",
-        comment: "Alert message explaining both the replacement of an unreadable proof-signing identity and the effect on saved proof-related records."
+        defaultValue: "beid created a new signing identity because the saved one could not be restored. Some saved records still refer to the previous identity; they still exist, but this device can no longer sign as that identity.",
+        comment: "Alert message explaining both the replacement of an unreadable signing identity and the effect on saved records."
       )
     }
   }
@@ -198,8 +198,8 @@ enum OwnerKeyRestorationNotice: String, Identifiable, Equatable {
 enum OwnerKeyOperationFailure: Identifiable, Equatable {
   case unavailable
   var id: String { "owner-key-unavailable" }
-  var title: String { String(localized: "ownerKeyFailure.title", defaultValue: "Proof key is unavailable") }
-  var message: String { String(localized: "ownerKeyFailure.message", defaultValue: "beid could not access the key used for proofs. Proof-key operations are paused. Try again when your device is available.") }
+  var title: String { String(localized: "ownerKeyFailure.title", defaultValue: "Signing key is unavailable") }
+  var message: String { String(localized: "ownerKeyFailure.message", defaultValue: "beid could not access the key used to sign records. Operations that need this key are paused. Try again when your device is available.") }
 }
 
 #if DEBUG
@@ -248,6 +248,14 @@ final class SensingCoordinator: ObservableObject {
   /// Reports a failed device-key resolution before starting or recovering
   /// signing work. An active session keeps its already resolved secret.
   @Published private(set) var eventSigningKeyFailure: EventSigningKeyFailure?
+  private var pendingSigningKeyChangeEvents: [(eventCode: String, reason: EventSigningDiscardReason)] = []
+  var eventSigningKeyNoticeEventCode: String? { pendingSigningKeyChangeEvents.first?.eventCode }
+  private var signingKeyAvailabilityFailure: EventSigningKeyFailure?
+  // Home discovery and explicit JOIN can retry the same unreadable key.
+  // Acknowledgement lasts until a successful read starts a new failure episode.
+  private var hasAcknowledgedDeviceKeyUnavailable = false
+  private var hasUnacknowledgedCaptureFailure = false
+
   /// Wallet connect+binding lifecycle for the event currently being
   /// recorded — see `EventBindingState`. Sub-slice 2a only sets this to
   /// `.pendingConnect`; the interstitial that drives the rest is 2b.
@@ -512,12 +520,25 @@ final class SensingCoordinator: ObservableObject {
     windowReportStore.reports.filter { $0.eventCode == eventCode }.count
   }
 
+  /// Display metadata for an already-linked UUID; absence is never an ENIN guess.
+  func observedWindowIndex(forWindowID windowID: UUID) -> Int64? {
+    guard let reports = try? windowReportStore.persistedReportsForLedgerRecovery(),
+          let report = reports.first(where: { $0.id == windowID }), report.enin >= 0
+    else { return nil }
+    return Int64(report.enin)
+  }
+
+  func availableRecordedWindowCount(forEventCode eventCode: String) -> Int? {
+    guard !isLedgerLoading, let reports = try? windowReportStore.persistedReportsForLedgerRecovery() else { return nil }
+    return reports.filter { EventGrouping.sameEvent($0.eventCode, eventCode) }.count
+  }
+
   /// beid#292's Transparency screen ("Sent"/"Acceptance receipt" rows): the
   /// most-advanced report-submission state recorded for one event. Forwards
   /// to `reportSubmissionRuntime.submissionState(forEventCode:)` — a pure
   /// read of the durable `ReportSubmissionStore`, never a network call.
-  /// `nil` both when the runtime itself is `nil` (report submission is
-  /// gated off in production by `BeidReportSubmissionEnabled`) and when no
+  /// `nil` both when the runtime itself is `nil` (`BeidReportSubmissionEnabled`
+  /// controls submission and is enabled in the shipping app) and when no
   /// submission for this event code has ever been queued — both render
   /// identically on the Transparency screen as an honest "not yet
   /// available," never a false negative.
@@ -625,8 +646,8 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  /// Six observed rows, with one unobserved ENIN gap, for frame 11. The
-  /// isolated screenshot snapshot store is the only output; this never
+  /// Six observed rows, with one unobserved ENIN gap, for frame 11. Only
+  /// isolated aggregate and Sigil display stores are written; this never
   /// enters Barnard, ProofStore, signing, or report submission.
   func injectObservationDetailSnapshotForUITesting(
     proofId: UUID,
@@ -655,10 +676,22 @@ final class SensingCoordinator: ObservableObject {
     let aggregate = BeidSharedKit.aggregation.aggregateObservationsForSession(
       input: input, windowsPerBand: 1
     )
+    let presence = BeidSharedKit.sigil.createSigilPresenceSession()
+    let tokenCount = Int(BeidSharedKit.sigil.sigilPresenceTokensNeeded(
+      session: presence, observations: input
+    ))
+    for index in 0..<tokenCount {
+      let added = BeidSharedKit.sigil.addSigilPresenceToken(
+        session: presence, observations: input,
+        token: String(format: "%032lx", index + 1)
+      )
+      precondition(added, "Unable to prepare isolated Sigil fixture")
+    }
     do {
       try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
+      try sigilPresenceStore.persist(session: presence, observations: input, proofId: proofId)
     } catch {
-      assertionFailure("Unable to persist isolated Observation Detail aggregate fixture: \(error)")
+      assertionFailure("Unable to persist isolated Observation Detail display fixture: \(error)")
     }
   }
   #endif
@@ -685,6 +718,10 @@ final class SensingCoordinator: ObservableObject {
 #if DEBUG
     log.debug("\(message, privacy: .public)")
 #endif
+  }
+
+  static func defaultJoinRefusalLog(_ message: String) {
+    log.error("\(message, privacy: .public)")
   }
 
   /// The Barnard participation operations this coordinator drives (beid#410).
@@ -799,6 +836,7 @@ final class SensingCoordinator: ObservableObject {
   private let bindingRecordStore: BindingRecordStore
   private let selfProofStore: SelfProofStore
   private var selfProofCheckpointStore: SelfProofCheckpointStore
+  private let proofStore: ProofStore?
   /// beid#166 Phase 2: on-device display-convenience store for computed
   /// session-aggregate snapshots. Loaded synchronously, like
   /// `selfProofStore`/`bindingRecordStore` and unlike
@@ -980,8 +1018,27 @@ final class SensingCoordinator: ObservableObject {
   /// Epoch-milliseconds source, injected so tests drive expiry deterministically.
   private let nearbyDiscoveryClock: () -> Int64
 
+  /// False while a join or event session is in progress. A joined code
+  /// outlives STOP (`reset` and `stopSensing` do not clear it), so "something
+  /// is joined" cannot gate selecting an event; an idle coordinator can always
+  /// select one, and selecting replaces the previous code.
+  var canSelectEventToJoin: Bool {
+    if case .idle = phase { return true }
+    return false
+  }
+
+  /// The live session's event code for display, excluding a code retained after STOP.
+  var currentEventCode: String? {
+    canSelectEventToJoin ? nil : joinedEventCode
+  }
+
+  /// The clock nearby-join eligibility is judged against, in epoch seconds.
+  var nearbyDiscoveryNowEpochSeconds: Int64 { nearbyDiscoveryClock() / 1_000 }
+
   /// At most one in-flight expiry wake-up, rescheduled on every publish.
   private var nearbyDiscoveryExpiryTask: Task<Void, Never>?
+  /// Retains Home's request while a prior scan awaits its stopped callback.
+  private var homeStandbyDiscoveryRequested = false
   /// True only while this coordinator has started a Central-only scan for
   /// the pre-join surface. Joining transfers the already-running scan to
   /// Barnard's automatic operation without stopping it; dismissing before a
@@ -1154,6 +1211,7 @@ final class SensingCoordinator: ObservableObject {
   /// anchor "fixed at event time"). Carried on every window report signed
   /// during this session.
   private var activeCommit: Data?
+  private var activeEventSigningPublicKey: Data?
   private var activeProofId: UUID?
   /// The in-flight binding attempt's fixed message, reused across the
   /// wallet `personal_sign` message and the later owner-key wallet-ack so
@@ -1169,9 +1227,12 @@ final class SensingCoordinator: ObservableObject {
   /// Test-replaceable sink for the Debug-only join path diagnostics.
   private let joinDiagnosticLog: (String) -> Void
 
+  /// Test-replaceable effect for the existing public refusal error log.
+  private let joinRefusalLog: (String) -> Void
+
   /// Why the last join attempt was refused, as
-  /// `BeidSharedKit.event.eventJoinFailureReasonKey`'s value, or nil when
-  /// nothing has been refused.
+  /// `BeidSharedKit.event.eventJoinFailureReasonKey`'s value or a native
+  /// storage/loading key. Nil means no refusal or storage wait is active.
   ///
   /// `joinRefusal` already existed and no view ever read it, so a refusal was
   /// visible only in the log: "nothing is happening" looked identical whether
@@ -1182,6 +1243,10 @@ final class SensingCoordinator: ObservableObject {
   /// enum no name, no description and no equality — see
   /// `eventJoinFailureReasonKey`'s own doc for the other half of that.
   @Published private(set) var joinRefusalReasonKey: String?
+
+  // Native storage refusals use their own keys rather than registry reasons.
+  private var storageAdmissionRetry: (() -> Void)?
+  private var admissionAfterLedgerLoad: (() -> Void)?
 
   private var demoStepDelayNanos: UInt64 {
     #if DEBUG
@@ -1220,7 +1285,8 @@ final class SensingCoordinator: ObservableObject {
       RegistryDependencies.createClient(),
     reportSubmissionStore: ReportSubmissionStore? = nil,
     reportProofLinkStore: ReportProofLinkStore? = nil,
-    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
+    proofStore: ProofStore? = nil
   ) {
     let sensingCryptography = BarnardSensingCryptography()
     let allowInsecureLoopbackForTests: Bool
@@ -1275,7 +1341,8 @@ final class SensingCoordinator: ObservableObject {
         RegistryEventIdentityVerificationSource(client: $0)
       },
       nearbyRegistryClient: registryClient,
-      joinDiagnosticLog: joinDiagnosticLog
+      joinDiagnosticLog: joinDiagnosticLog,
+      proofStore: proofStore ?? ProofStore()
     )
   }
 
@@ -1297,7 +1364,8 @@ final class SensingCoordinator: ObservableObject {
     reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     eventJoinControl: (any EventJoinControlling)? = nil,
-    ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard
+    ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
+    proofStore: ProofStore? = nil
   ) {
     self.init(
       windowReportFileURL: directory.appendingPathComponent("window-reports.json"),
@@ -1312,7 +1380,8 @@ final class SensingCoordinator: ObservableObject {
       reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       eventJoinControl: eventJoinControl,
-      ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults
+      ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults,
+      proofStore: proofStore
     )
   }
 
@@ -1349,7 +1418,8 @@ final class SensingCoordinator: ObservableObject {
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
     nearbyRegistryClient:
       ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil,
-    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
+    proofStore: ProofStore? = nil
   ) {
     self.init(
       windowReportStore: WindowReportStore(fileURL: Self.unloadedPlaceholderFileURL()),
@@ -1367,7 +1437,9 @@ final class SensingCoordinator: ObservableObject {
       initialLedgerFailure: nil,
       nearbyRegistryClient: nearbyRegistryClient,
       eventJoinControl: eventJoinControl,
-      joinDiagnosticLog: joinDiagnosticLog
+      joinDiagnosticLog: joinDiagnosticLog,
+      proofStore: proofStore,
+      deferCheckpointRecovery: true
     )
     // Only this initializer chain is actually loading — see
     // `isLedgerLoading`'s doc comment for why the default is `false`.
@@ -1456,10 +1528,14 @@ final class SensingCoordinator: ObservableObject {
       if let loadFailure {
         self.ledgerHealth = .degraded(reason: loadFailure, since: Date())
       }
+      self.rebuildSelfProofDiscardNotices()
       self.reconcileSelfProofCheckpointIfNeeded()
       self.logOwnerKeyRegenerationSignalsIfNeeded()
       self.isLedgerLoading = false
       self.reportSubmissionRuntime?.submitPending()
+      let admission = self.admissionAfterLedgerLoad
+      self.admissionAfterLedgerLoad = nil
+      admission?()
       self.drainQueuedDetectionsAfterLoad()
     }
   }
@@ -1562,9 +1638,11 @@ final class SensingCoordinator: ObservableObject {
       Int64((Date().timeIntervalSince1970 * 1_000).rounded())
     },
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
+    joinRefusalLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinRefusalLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds,
-    deviceSecretStore: DeviceSecretKeychainStore = .shared
+    deviceSecretStore: DeviceSecretKeychainStore = .shared,
+    proofStore: ProofStore? = nil
   ) {
     guard
       let store = try? UnsentWindowLedgerStore(fileURL: unsentWindowLedgerFileURL),
@@ -1590,9 +1668,11 @@ final class SensingCoordinator: ObservableObject {
       eventJoinRegistry: eventJoinRegistry,
       nearbyDiscoveryStore: nearbyDiscoveryStore,
       joinDiagnosticLog: joinDiagnosticLog,
+      joinRefusalLog: joinRefusalLog,
       participantRelayControl: participantRelayControl,
       relayCadenceNanoseconds: relayCadenceNanoseconds,
-      deviceSecretStore: deviceSecretStore
+      deviceSecretStore: deviceSecretStore,
+      proofStore: proofStore
     )
   }
 
@@ -1621,9 +1701,12 @@ final class SensingCoordinator: ObservableObject {
     nearbyDiscoveryStore injectedNearbyDiscoveryStore:
       ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore? = nil,
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
+    joinRefusalLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinRefusalLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds,
-    deviceSecretStore: DeviceSecretKeychainStore = .shared
+    deviceSecretStore: DeviceSecretKeychainStore = .shared,
+    proofStore: ProofStore? = nil,
+    deferCheckpointRecovery: Bool = false
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
     var ledgerFailure = initialLedgerFailure
@@ -1649,6 +1732,7 @@ final class SensingCoordinator: ObservableObject {
     self.windowReportStore = windowReportStore
     self.selfProofStore = selfProofStore
     self.selfProofCheckpointStore = selfProofCheckpointStore
+    self.proofStore = proofStore
     self.bindingRecordStore = bindingRecordStore
     self.sessionAggregateSnapshotStore = sessionAggregateSnapshotStore
     // Production always passes its store (the private convenience init
@@ -1669,6 +1753,7 @@ final class SensingCoordinator: ObservableObject {
     self.nearbyDiscoveryClock = nearbyDiscoveryClock
     self.nearbyRegistryClient = nearbyRegistryClient
     self.joinDiagnosticLog = joinDiagnosticLog
+    self.joinRefusalLog = joinRefusalLog
     self.eventJoinRegistry = eventJoinRegistry
       ?? nearbyRegistryClient.map { RegistryEventJoinRegistry(client: $0) }
     let nearbyDiscoveryStore = injectedNearbyDiscoveryStore
@@ -1698,10 +1783,41 @@ final class SensingCoordinator: ObservableObject {
       guard let self else { return }
       Task { @MainActor in self.handle(event) }
     }
-    self.reportSubmissionRuntime?.onEventSigningKeyFailure = { [weak self] failure in
-      self?.eventSigningKeyFailure = failure
+    reconcileSigningKeyChangeAcknowledgements()
+    self.reportSubmissionRuntime?.isSigningKeyChangeAcknowledged = { [weak proofStore] eventCode in
+      proofStore?.isSigningKeyChangeAcknowledged(forEventCode: eventCode) == true
     }
-    reconcileSelfProofCheckpointIfNeeded()
+    self.reportSubmissionRuntime?.onRecoveryDeviceKeyRead = { [weak self] in
+      self?.hasAcknowledgedDeviceKeyUnavailable = false
+    }
+    self.reportSubmissionRuntime?.onEventSigningKeyFailure = { [weak self] failure in
+      if !failure.isDiscardNotice {
+        self?.hasUnacknowledgedCaptureFailure = true
+        self?.recordEventSigningKeyFailure(failure)
+      }
+    }
+    self.reportSubmissionRuntime?.onSigningKeyChange = { [weak self] eventCode, reason in
+      self?.recordSigningKeyChange(forEventCode: eventCode, reason: reason)
+    }
+    if !deferCheckpointRecovery {
+      rebuildSelfProofDiscardNotices()
+      reconcileSelfProofCheckpointIfNeeded()
+    }
+  }
+
+  private func rebuildSelfProofDiscardNotices() {
+    guard !selfProofCheckpointStore.isPersistenceSuspended else { return }
+    // A terminal parent is not a completed discard while its input remains.
+    let retainedCheckpointProofId = selfProofCheckpointStore.checkpoint?.proofId
+    let unacknowledgedEvents = (proofStore?.unacknowledgedSigningDiscardEvents(
+      excludingProofId: retainedCheckpointProofId
+    ) ?? [])
+      .subtracting(reportSubmissionRuntime?.acknowledgedSigningKeyChangeEventCodes ?? [])
+    for eventCode in unacknowledgedEvents.sorted() {
+      recordSigningKeyChange(
+        forEventCode: eventCode, reason: proofStore?.signingDiscardReason(forEventCode: eventCode) ?? .unverifiable
+      )
+    }
   }
 
   isolated deinit {
@@ -1735,6 +1851,9 @@ final class SensingCoordinator: ObservableObject {
     case .state(let state):
       isScanning = state.isScanning
       isAdvertising = state.isAdvertising
+      if homeStandbyDiscoveryRequested && !isScanning {
+        startHomeStandbyDiscovery()
+      }
     case .detection(let detection):
       handleDetection(
         enin: detection.enin,
@@ -1874,7 +1993,7 @@ final class SensingCoordinator: ObservableObject {
         venue: nil,
         canonicalEventIdHex: pendingCanonicalEventIdHex
       )
-      beginEventFoundSessionState(session)
+      guard beginEventFoundSessionState(session) else { return }
       observe(
         enin: enin,
         rpid: rpid,
@@ -2495,6 +2614,12 @@ final class SensingCoordinator: ObservableObject {
   /// whichever manual or nearby join code is current.
   func leaveEvent() {
     invalidateEventIdentityVerification()
+    admissionAfterLedgerLoad = nil
+    storageAdmissionRetry = nil
+    if joinRefusalReasonKey == "storage_loading" || joinRefusalReasonKey == "storage_recovery_required" {
+      joinRefusalReasonKey = nil
+      phase = .idle
+    }
     // Leaving invalidates an in-flight join the same way stopping does: a
     // permission grant or registry read still outstanding must not join an
     // event the user has just left (beid#410).
@@ -2543,13 +2668,17 @@ final class SensingCoordinator: ObservableObject {
     demoEvent: EventSession? = nil,
     demoScenario: DemoScenario? = nil
   ) {
+    let selectedEventCode = eventCode ?? joinedEventCode
+    let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
+    guard prepareForSessionAdmission(retry: { [weak self] in
+      self?.startSensing(eventCode: selectedEventCode, eventIdHex: canonicalEventIdHex,
+                         demoEvent: demoEvent, demoScenario: demoScenario)
+    }) else { return }
     // No `?? "beid-demo-event"` any more (beid#410, gh#101). That fallback let
     // a host that had never joined anything start its radio on a hardcoded
     // event code — an ungated path with a built-in destination. The real path
     // below now starts nothing at all when no event has been selected, which
     // is the correct answer to "sense what?" with no answer.
-    let selectedEventCode = eventCode ?? joinedEventCode
-    let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     resetSessionState()
     // Starting a session ends whatever event the previous one was joined to, so
     // the gate closes here (beid#437). Explicitly here rather than inside
@@ -2575,7 +2704,7 @@ final class SensingCoordinator: ObservableObject {
       }
       runDemoScenario(selectedScenario, stepDelayNanos: demoStepDelayNanos)
     } else {
-      guard prepareDeviceSecret() else { return }
+      guard prepareDeviceSecret(suppressAcknowledgedOutage: true) else { return }
       engine.requestJoinPermissions { [weak self] canScan, canAdvertise in
         guard let self else { return }
         Task { @MainActor in
@@ -2584,6 +2713,12 @@ final class SensingCoordinator: ObservableObject {
           // joins with `phase` already `.idle`.
           guard self.isCurrentJoinAttempt(joinGeneration) else { return }
           guard canScan, canAdvertise else {
+            emitJoinStageDiagnostic(
+              self.joinDiagnosticLog,
+              eventIdHex: canonicalEventIdHex,
+              stage: "admission",
+              outcome: "rejected_permission_denied"
+            )
             self.stopParticipantRelay()
             // Undo the optimistic `.sensing` set above. Without this the
             // screen keeps saying it is sensing over a radio that never
@@ -2759,7 +2894,7 @@ final class SensingCoordinator: ObservableObject {
         )
       return .refuse(
         .registryReadFailed,
-        "Registry read produced no definition (\(readFailureErrorCode ?? "no error code")); starting nothing.",
+        "Registry read produced no definition; starting nothing.",
         BeidSharedKit.event.eventJoinFailureReasonKey(reason: reason)
       )
     }
@@ -2777,10 +2912,9 @@ final class SensingCoordinator: ObservableObject {
         nowEpochSeconds: nowEpochSeconds
       )
     else {
-      // Ask the shared decision *why*, so the refusal is diagnosable rather
-      // than merely a refusal. The verdict is logged rather than mapped to a
-      // case: its generated Swift surface has no name, description or
-      // equality — see `EventJoinRefusal`.
+      // Ask the shared decision why and map its verdict to the stable reason
+      // key before categorical logging. Swift Export exposes no enum name or
+      // equality here — see `EventJoinRefusal`.
       let verdict = ExportedKotlinPackages.org.levarac.parallax.discovery
         .operatorLookupJoinEligibility(
           joinCode: joinCode,
@@ -2807,8 +2941,21 @@ final class SensingCoordinator: ObservableObject {
   func applyJoinGateDecision(_ decision: JoinGateDecision) {
     switch decision {
     case .admit(let context):
+      let code = pendingEventCode ?? context.joinCode
+      let eventId = context.eventIdHex
+      guard prepareForSessionAdmission(retry: { [weak self] in
+        self?.startSensing(eventCode: code, eventIdHex: eventId)
+      }) else { return }
       // The attempt prepared the engine and signer before requesting
       // permissions. Keep that resolved storage across both join waits.
+      // Session signing retains the selected code, including a human code
+      // distinct from the capability's canonical Event ID.
+      let eventCode = pendingEventCode ?? context.joinCode
+      guard let publicKey = resolvedEventSigningPublicKey(eventCode: eventCode) else {
+        refuseJoin(.eventSigningKeyUnavailable, "The device signing key is unavailable.", reasonKey: "device_key_unavailable")
+        return
+      }
+      activeEventSigningPublicKey = publicKey
       joinRefusal = nil
       pendingEventName = context.eventName
       emitJoinStageDiagnostic(
@@ -2820,6 +2967,7 @@ final class SensingCoordinator: ObservableObject {
       // `startAuto()` keeps an already-running Central scan alive and adds
       // advertising. From this instant it is automatic-operation transport,
       // not a discovery-only scan this pre-join flow may later stop.
+      homeStandbyDiscoveryRequested = false
       discoveryOnlyScanOwned = false
       engine.joinAndStart(context)
       // The relay gate opens here, from the capability the gate just admitted,
@@ -2860,14 +3008,10 @@ final class SensingCoordinator: ObservableObject {
   /// Only `definitionNotEligible` has a verdict of its own; the rest are
   /// classified from what was available when the read was attempted.
   ///
-  /// `registryReadFailed` is `UNKNOWN` rather than `NETWORK_REQUIRED`, which
-  /// is the tempting answer: the definition read only runs once the
-  /// code-to-id lookup already succeeded, so a device that cannot reach the
-  /// network fails earlier and arrives here as `noCanonicalEventId` carrying
-  /// the lookup's own error code. Reaching this branch means an answer came
-  /// back carrying no definition. Carrying the *definition* read's error code
-  /// through as well would let it say more; the adapter currently collapses a
-  /// failed read to nil, and changing that is its own change.
+  /// These are fallbacks for callers without a classified reason key.
+  /// Registry-read failures normally carry the definition read's shared
+  /// error-code classification; eligibility refusals carry the verdict's
+  /// shared reason key. A read failure without that key falls back to UNKNOWN.
   private static func sharedReason(
     for refusal: EventJoinRefusal,
     lookupErrorCode: String?
@@ -2906,7 +3050,6 @@ final class SensingCoordinator: ObservableObject {
     _ message: String,
     reasonKey: String? = nil
   ) {
-    Self.log.error("\(message, privacy: .public)")
     let outcome: String
     switch refusal {
     case .noRegistryConfigured:
@@ -2926,10 +3069,12 @@ final class SensingCoordinator: ObservableObject {
       stage: "admission",
       outcome: "rejected_\(outcome)"
     )
-    joinRefusal = refusal
-    joinRefusalReasonKey = reasonKey ?? BeidSharedKit.event.eventJoinFailureReasonKey(
+    let refusalReasonKey = reasonKey ?? BeidSharedKit.event.eventJoinFailureReasonKey(
       reason: Self.sharedReason(for: refusal, lookupErrorCode: joinedLookupErrorCode)
     )
+    joinRefusalLog("join_refused outcome=rejected_\(outcome) reason=\(refusalReasonKey)")
+    joinRefusal = refusal
+    joinRefusalReasonKey = refusalReasonKey
     joinRegistryRequest = nil
     stopParticipantRelay()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
@@ -3014,6 +3159,10 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func resetSessionState() {
+    homeStandbyDiscoveryRequested = false
+    reportSubmissionRuntime?.endSigningSession()
+    storageAdmissionRetry = nil
+    admissionAfterLedgerLoad = nil
     invalidateEventIdentityVerification()
     aggregationRuntime = AggregationRuntime()
     sigilPresenceSession = BeidSharedKit.sigil.createSigilPresenceSession()
@@ -3064,13 +3213,14 @@ final class SensingCoordinator: ObservableObject {
     joinRefusal = nil
     joinRefusalReasonKey = nil
     activeCommit = nil
+    activeEventSigningPublicKey = nil
     activeProofId = nil
     pendingBindingMessage = nil
     bindingState = .none
     recordingSurfaceReady = false
   }
 
-  private func prepareDeviceSecret(prepareEngine: Bool = true) -> Bool {
+  private func prepareDeviceSecret(prepareEngine: Bool = true, suppressAcknowledgedOutage: Bool = false) -> Bool {
     do {
       if let cryptography = sensingCryptography as? BarnardSensingCryptography {
         let storage = try cryptography.prepareSession()
@@ -3078,13 +3228,25 @@ final class SensingCoordinator: ObservableObject {
       } else if prepareEngine {
         try keychainEngine?.prepare()
       }
-      eventSigningKeyFailure = nil
+      hasAcknowledgedDeviceKeyUnavailable = false
+      // Reading a new session's key does not resolve an earlier capture.
+      if !hasUnacknowledgedCaptureFailure { signingKeyAvailabilityFailure = nil }
+      eventSigningKeyFailure = pendingSigningKeyChangeEvents.first?.reason.failure ?? signingKeyAvailabilityFailure
       // Complete any existing launch checkpoint with the resolved secret
       // before a new session can replace that checkpoint.
+      proofStore?.reloadAfterReadFailure()
       reconcileSelfProofCheckpointIfNeeded()
+      guard selfProofCheckpointStore.checkpoint == nil else {
+        discoveryOnlyScanOwned = false
+        engine.stopAutomaticOperation()
+        refuseJoin(.eventSigningKeyUnavailable, "The earlier record could not be completed.", reasonKey: "device_key_unavailable")
+        return false
+      }
       return true
     } catch {
-      eventSigningKeyFailure = .unavailable
+      if !suppressAcknowledgedOutage || !hasAcknowledgedDeviceKeyUnavailable {
+        recordEventSigningKeyFailure(.unavailable)
+      }
       discoveryOnlyScanOwned = false
       engine.stopAutomaticOperation()
       refuseJoin(
@@ -3100,16 +3262,79 @@ final class SensingCoordinator: ObservableObject {
     do {
       return try sensingCryptography.eventSigningPublicKey(eventCode: eventCode)
     } catch {
-      eventSigningKeyFailure = .unavailable
+      recordEventSigningKeyFailure(.unavailable)
       return nil
     }
   }
 
+  private func recordSigningKeyChange(forEventCode eventCode: String, reason: EventSigningDiscardReason) {
+    if let index = pendingSigningKeyChangeEvents.firstIndex(where: { $0.eventCode == eventCode }) {
+      if reason == .unverifiable { pendingSigningKeyChangeEvents[index].reason = reason }
+    } else {
+      pendingSigningKeyChangeEvents.append((eventCode, reason))
+    }
+    eventSigningKeyFailure = pendingSigningKeyChangeEvents.first?.reason.failure
+  }
+
+  private func reconcileSigningKeyChangeAcknowledgements() {
+    // Either durable acknowledgement completes an interrupted dismissal.
+    let acknowledgedEvents = (proofStore?.acknowledgedSigningKeyChangeEventCodes ?? [])
+      .union(reportSubmissionRuntime?.acknowledgedSigningKeyChangeEventCodes ?? [])
+    do {
+      try proofStore?.acknowledgeSigningKeyChanges(forEventCodes: acknowledgedEvents)
+      for eventCode in acknowledgedEvents.sorted() {
+        try reportSubmissionRuntime?.acknowledgeSigningKeyChanges(forEventCode: eventCode)
+      }
+    } catch {
+      recordEventSigningKeyFailure(.discardFailed)
+    }
+  }
+
+  private func recordEventSigningKeyFailure(_ failure: EventSigningKeyFailure) {
+    signingKeyAvailabilityFailure = failure
+    eventSigningKeyFailure = pendingSigningKeyChangeEvents.first?.reason.failure ?? failure
+  }
+
   func dismissEventSigningKeyFailure() {
-    eventSigningKeyFailure = nil
+    if eventSigningKeyFailure == .discardFailed, let pending = pendingSigningKeyChangeEvents.first {
+      // Closing the update error leaves the original notice unacknowledged.
+      eventSigningKeyFailure = pending.reason.failure
+      return
+    }
+    do {
+      if let eventCode = pendingSigningKeyChangeEvents.first?.eventCode {
+        try proofStore?.acknowledgeSigningKeyChanges(forEventCodes: [eventCode])
+        try reportSubmissionRuntime?.acknowledgeSigningKeyChanges(forEventCode: eventCode)
+        pendingSigningKeyChangeEvents.removeFirst()
+      } else {
+        if signingKeyAvailabilityFailure == .unavailable {
+          hasAcknowledgedDeviceKeyUnavailable = true
+        }
+        hasUnacknowledgedCaptureFailure = false
+        signingKeyAvailabilityFailure = nil
+      }
+      eventSigningKeyFailure = pendingSigningKeyChangeEvents.first?.reason.failure ?? signingKeyAvailabilityFailure
+    } catch {
+      // Keep the pending notice, but present the failed acknowledgement first.
+      eventSigningKeyFailure = .discardFailed
+    }
   }
 
   // MARK: - Nearby event discovery (B005 pre-join hints, gh#100 Stage 1)
+
+  @Published private(set) var homeDemoEventAvailable = false
+
+  /// Home discovery never starts a demo recording before an explicit JOIN.
+  /// The existing scan entry remains available to older callers.
+  func startHomeStandbyDiscovery() {
+    guard case .idle = phase else { return }
+    homeStandbyDiscoveryRequested = true
+    if useDemoEventMode {
+      homeDemoEventAvailable = true
+      return
+    }
+    startNearbyEventDiscovery()
+  }
 
   /// Starts Central-only B005 discovery while no event has been selected.
   ///
@@ -3127,7 +3352,7 @@ final class SensingCoordinator: ObservableObject {
       return
     }
     guard !discoveryOnlyScanOwned, !isScanning, !isAdvertising else { return }
-    guard prepareDeviceSecret() else { return }
+    guard prepareDeviceSecret(suppressAcknowledgedOutage: true) else { return }
     discoveryOnlyScanOwned = true
     engine.startDiscoveryScan()
   }
@@ -3138,6 +3363,10 @@ final class SensingCoordinator: ObservableObject {
   /// it does not call Barnard, the registry, or any production join path.
   func injectJoinRefusalForUITesting() {
     guard ProcessInfo.processInfo.arguments.contains("-beid-join-refusal-fixture") else {
+      return
+    }
+    if ProcessInfo.processInfo.arguments.contains("-beid-storage-refusal-fixture") {
+      refuseSessionAdmissionForStorage(retry: { [weak self] in _ = self?.reset() })
       return
     }
     joinRefusal = .registryReadFailed
@@ -3199,6 +3428,8 @@ final class SensingCoordinator: ObservableObject {
   /// `discoveryOnlyScanOwned` is false and dismissing this surface cannot stop
   /// the joined session's automatic operation.
   func stopNearbyEventDiscovery() {
+    homeStandbyDiscoveryRequested = false
+    homeDemoEventAvailable = false
     let shouldStopOwnedScan = discoveryOnlyScanOwned && !isAdvertising
     discoveryOnlyScanOwned = false
     clearNearbyEventDiscovery()
@@ -3211,7 +3442,10 @@ final class SensingCoordinator: ObservableObject {
   /// wake-up and race tests use the same entry so expired sources and due
   /// registry retries are reflected in the current join authority together.
   func refreshNearbyEventDiscovery() {
-    let refreshedAt = nearbyDiscoveryClock()
+    refreshNearbyEventDiscovery(asOf: nearbyDiscoveryClock())
+  }
+
+  private func refreshNearbyEventDiscovery(asOf refreshedAt: Int64) {
     let update = ExportedKotlinPackages.org.levarac.parallax.discovery
       .refreshNearbyEventDiscovery(
         store: nearbyDiscoveryStore,
@@ -3221,14 +3455,32 @@ final class SensingCoordinator: ObservableObject {
     resolveNearbyCandidates(update.snapshot)
   }
 
+  /// What a nearby card's tap does (beid#464). Order is load-bearing and
+  /// matches Android's `EventJoinViewModel.joinNearbyEvent`: refuse a card
+  /// shared did not make joinable, then re-read the clock, then join. Not
+  /// `private`, so `BeidTests` can run the tap path directly.
+  func joinNearbyEvent(card: NearbyEventCard, clockPreflight: ClockPreflightController?) {
+    guard let eventCodeHashHex = card.joinActionEventCodeHashHex else { return }
+    // Re-read the clock preflight at the moment of joining, as Android does:
+    // shared re-measures an expired cache and catches a clock changed since
+    // the scan opened.
+    if let clockPreflight {
+      Task { await clockPreflight.check() }
+    }
+    joinNearbyEvent(eventCodeHashHex: eventCodeHashHex)
+  }
+
   /// One-tap nearby join (beid#141). The action carries only the stable B005
-  /// hash. After the permission wait resumes, this method re-reads the
-  /// coordinator's current snapshot and asks the shared issuer for a fresh
+  /// hash. After the permission wait resumes, this method advances the
+  /// shared snapshot and asks the shared issuer for a fresh
   /// capability; a displayed Event ID, list position, selected state, or
   /// display-only validity window is never join authority.
   func joinNearbyEvent(eventCodeHashHex: String) {
     guard case .idle = phase else { return }
-    guard prepareDeviceSecret() else { return }
+    guard prepareForSessionAdmission(retry: { [weak self] in
+      self?.joinNearbyEvent(eventCodeHashHex: eventCodeHashHex)
+    }) else { return }
+    guard prepareDeviceSecret(suppressAcknowledgedOutage: true) else { return }
     resetSessionState()
     let generation = joinAttemptGeneration
     reportSubmissionRuntime?.submitPending()
@@ -3238,6 +3490,12 @@ final class SensingCoordinator: ObservableObject {
       Task { @MainActor in
         guard self.isCurrentJoinAttempt(generation) else { return }
         guard canScan, canAdvertise else {
+          emitJoinStageDiagnostic(
+            self.joinDiagnosticLog,
+            eventIdHex: nil,
+            stage: "admission",
+            outcome: "rejected_permission_denied"
+          )
           self.stopParticipantRelay()
           self.phase = Self.payloadlessNativePhase(
             BeidSharedKit.sensing.scanPhaseAfterStopSensing()
@@ -3248,7 +3506,9 @@ final class SensingCoordinator: ObservableObject {
         // incorrectly answers the same callback twice, only the first answer
         // can reach Barnard.
         self.joinAttemptGeneration &+= 1
-        let nowEpochSeconds = self.nearbyDiscoveryClock() / 1_000
+        let nowEpochMillis = self.nearbyDiscoveryClock()
+        self.refreshNearbyEventDiscovery(asOf: nowEpochMillis)
+        let nowEpochSeconds = nowEpochMillis / 1_000
         guard let context = ExportedKotlinPackages.org.levarac.parallax.discovery
           .RegistryVerifiedJoinContext.Companion.shared.fromNearbyCandidate(
             candidates: self.nearbyEventCandidates,
@@ -3264,7 +3524,12 @@ final class SensingCoordinator: ObservableObject {
             )
           self.refuseJoin(
             .definitionNotEligible,
-            "Current nearby candidate is not eligible (\(String(describing: verdict))); starting nothing."
+            "Current nearby candidate is not eligible (\(String(describing: verdict))); starting nothing.",
+            reasonKey: BeidSharedKit.event.eventJoinFailureReasonKey(
+              reason: BeidSharedKit.event.eventJoinFailureReasonForJoinEligibility(
+                eligibility: verdict
+              )
+            )
           )
           return
         }
@@ -3951,12 +4216,18 @@ final class SensingCoordinator: ObservableObject {
   /// mode (`runDemoSequence`, beid#189, whose first synthesized device
   /// drives the same transition through the same shared reducer via
   /// `applyPhaseDecision`).
-  private func beginEventFoundSessionState(_ session: EventSession) {
+  private func beginEventFoundSessionState(_ session: EventSession) -> Bool {
+    guard prepareForSessionAdmission(retry: { [weak self] in
+      self?.startSensing(eventCode: session.id, eventIdHex: session.canonicalEventIdHex)
+    }) else { return false }
+    let capturedPublicKey = activeEventSigningPublicKey
     resetSessionState()
-    guard let eventSigningKey = resolvedEventSigningPublicKey(eventCode: session.id) else { return }
-    guard let ownerKey = resolvedOwnerPublicKey() else { return }
+    guard let eventSigningKey = capturedPublicKey ?? resolvedEventSigningPublicKey(eventCode: session.id) else { return false }
+    activeEventSigningPublicKey = eventSigningKey
+    guard let ownerKey = resolvedOwnerPublicKey() else { return false }
     let salt = Data(randomSource.randomBytes(count: 16))
     activeCommit = EventCommitment.compute(eventSigningKey: eventSigningKey, ownerKey: ownerKey, salt: salt)
+    return true
   }
 
   /// Threshold-confirm (D3, §4.3): creates the `Proof` the instant
@@ -3985,7 +4256,7 @@ final class SensingCoordinator: ObservableObject {
   // conformance sub-slice C, `docs/specs/barnard-binding-conformance.md`
   // §2.3/§2.4)
   //
-  // The interstitial (`EventBindingSheetView`) drives these; this type owns
+  // The interstitial (the removed binding sheet) drives these; this type owns
   // the message/signing/persistence side so the view only ever handles the
   // wallet connector's `connect()`/`requestPersonalSign(messageHex:)` calls.
 
@@ -4228,7 +4499,7 @@ final class SensingCoordinator: ObservableObject {
   /// from `declineBinding()`: this is the round trip failing, not the user
   /// dismissing the sheet before starting one. `retryable` is `false` only
   /// when retrying cannot succeed (the ERC-6492 smart-wallet result,
-  /// beid#382), so the sheet offers Close instead of Try Again.
+  /// beid#382), so the sheet offers Close instead of Try again.
   func failBinding(reason: String, retryable: Bool) {
     pendingBindingMessage = nil
     bindingState = .failed(reason: reason, retryable: retryable)
@@ -4515,7 +4786,8 @@ final class SensingCoordinator: ObservableObject {
       enin: enin,
       peerRpids: closingPeerRpids,
       reporterRpid: closingReporterRpid,
-      participantCommitment: commit
+      participantCommitment: commit,
+      eventSigningPublicKey: activeEventSigningPublicKey
     )
 
     let observationReference: String
@@ -4535,7 +4807,7 @@ final class SensingCoordinator: ObservableObject {
       do {
         signature = try sensingCryptography.signWindowReport(eventCode: eventCode, bytes: payload)
       } catch {
-        eventSigningKeyFailure = .unavailable
+        recordEventSigningKeyFailure(.unavailable)
         return
       }
       let report = WindowReport(
@@ -4653,14 +4925,18 @@ final class SensingCoordinator: ObservableObject {
     proofId: UUID,
     eventCode: String,
     eninStart: UInt64,
-    eninEnd: UInt64
-  ) -> SelfProofRecord? {
+    eninEnd: UInt64,
+    capturedPublicKey: Data?,
+    signingCryptography: (any SensingCryptography)? = nil
+  ) throws -> SelfProofRecord? {
     let eventIdHash = EventIdHash.compute(eventCode: eventCode)
-    guard let eventSigningPublicKey = resolvedEventSigningPublicKey(eventCode: eventCode) else { return nil }
+    let cryptography = try (signingCryptography ?? sensingCryptography)
+      .signingSnapshot(eventCode: eventCode, matching: capturedPublicKey)
+    guard let eventSigningPublicKey = capturedPublicKey else { return nil }
     guard let ownerPublicKey = resolvedOwnerPublicKey() else { return nil }
     let signature: SensingRecoverableSignature?
     do {
-      signature = try sensingCryptography.signSelfProof(
+      signature = try cryptography.signSelfProof(
         eventIdHash: eventIdHash,
         eventSigningPublicKey: eventSigningPublicKey,
         eninStart: eninStart,
@@ -4713,6 +4989,7 @@ final class SensingCoordinator: ObservableObject {
   /// it is stale and must not be reconciled again on a later launch.
   @discardableResult
   private func finalizeSelfProofIfNeeded() -> SelfProofRecord? {
+    checkpointSelfProofStateIfNeeded()
     guard
       let proofId = activeProofId,
       let eventCode = currentBindingEvent?.id,
@@ -4722,20 +4999,60 @@ final class SensingCoordinator: ObservableObject {
       return nil
     }
 
-    guard
-      let record = makeSelfProofRecord(
+    if proofStore?.proof(withId: proofId)?.selfProofDiscardedForKeyChange == true {
+      discardSelfProofCheckpoint(proofId: proofId)
+      return nil
+    }
+    do {
+      guard let record = try makeSelfProofRecord(
         proofId: proofId,
         eventCode: eventCode,
         eninStart: UInt64(start),
-        eninEnd: UInt64(end)
-      )
-    else {
+        eninEnd: UInt64(end),
+        capturedPublicKey: activeEventSigningPublicKey
+      ) else { return nil }
+      return persistSelfProofRecord(record)
+    } catch let error as EventSigningKeyContinuityError {
+      discardSelfProofCheckpoint(proofId: proofId, reason: error.discardReason)
+    } catch {
+      recordEventSigningKeyFailure(.unavailable)
+    }
+    return nil
+  }
+
+  private func persistSelfProofRecord(_ record: SelfProofRecord) -> SelfProofRecord? {
+    do {
+      if selfProofStore.record(forProofId: record.proofId) == nil {
+        try selfProofStore.addDurably(record)
+      }
+      if selfProofCheckpointStore.checkpoint?.proofId == record.proofId {
+        try selfProofCheckpointStore.clearDurably()
+      }
+      return record
+    } catch {
+      recordEventSigningKeyFailure(.discardFailed)
       return nil
     }
+  }
 
-    selfProofStore.add(record)
-    selfProofCheckpointStore.clear()
-    return record
+  private func discardSelfProofCheckpoint(proofId: UUID, reason: EventSigningDiscardReason = .unverifiable) {
+    do {
+      guard let proofStore else { throw CocoaError(.fileReadNoSuchFile) }
+      try proofStore.discardSelfProofForKeyChange(
+        for: proofId, reason: reason,
+        acknowledgedEventCodes: reportSubmissionRuntime?.acknowledgedSigningKeyChangeEventCodes ?? []
+      )
+      if selfProofCheckpointStore.checkpoint?.proofId == proofId {
+        try selfProofCheckpointStore.clearDurably()
+      }
+      if let parent = proofStore.proof(withId: proofId), !parent.signingKeyChangeNoticeAcknowledged {
+        recordSigningKeyChange(
+          forEventCode: parent.eventCode ?? parent.id.uuidString, reason: parent.selfProofDiscardReason ?? .unverifiable
+        )
+      }
+    } catch {
+      recordEventSigningKeyFailure(.discardFailed)
+    }
   }
 
   // MARK: - Session aggregate snapshot (beid#166 Phase 2)
@@ -4832,11 +5149,9 @@ final class SensingCoordinator: ObservableObject {
   /// exactly like `finalizeSelfProofIfNeeded()` itself — there is nothing to
   /// checkpoint before `.recording` begins.
   ///
-  /// Demo mode never reaches this: `advanceDemoWindow()` deliberately never
-  /// calls `openNewWindowState` (its own doc comment — demo mode produces no
-  /// window reports), so a demo session's self-proof stays reachable only
-  /// through the graceful `stopSensing()`/`reset()` path, unchanged by this
-  /// sub-slice.
+  /// Demo window rotation does not call this because it produces no window
+  /// reports. Finalization checkpoints the final range for every session,
+  /// including demo sessions, before attempting the self-proof save.
   private func checkpointSelfProofStateIfNeeded() {
     guard
       let proofId = activeProofId,
@@ -4846,19 +5161,82 @@ final class SensingCoordinator: ObservableObject {
     else {
       return
     }
+    if let proofStore, !proofStore.hasPersistedProof(withId: proofId) {
+      recordEventSigningKeyFailure(.discardFailed)
+      return
+    }
     selfProofCheckpointStore.save(
       SelfProofCheckpoint(
         proofId: proofId,
         eventCode: eventCode,
         eninStart: UInt64(start),
-        eninEnd: UInt64(end)
+        eninEnd: UInt64(end),
+        eventSigningPublicKey: activeEventSigningPublicKey
       )
     )
   }
 
-  /// Runs once, at the end of `init` — i.e. once per cold launch, on both
-  /// `AppCoordinator`'s production `SensingCoordinator` and any test-
-  /// constructed instance. If a checkpoint survived from a session that
+  /// A new session must not replace the only recovery input for an older one.
+  /// Loading waits for the real store; an empty placeholder grants no admission.
+  private func prepareForSessionAdmission(retry: @escaping () -> Void) -> Bool {
+    if isLedgerLoading {
+      joinAttemptGeneration &+= 1
+      let generation = joinAttemptGeneration
+      admissionAfterLedgerLoad = { [weak self] in
+        guard let self, self.isCurrentJoinAttempt(generation) else { return }
+        self.phase = .idle
+        retry()
+      }
+      joinRefusal = nil
+      joinRefusalReasonKey = "storage_loading"
+      phase = .sensing
+      emitJoinStageDiagnostic(joinDiagnosticLog, eventIdHex: nil,
+                              stage: "admission", outcome: "waiting_storage_load")
+      return false
+    }
+    // A parent read failure must be retried before its checkpoint can block
+    // admission; prepareDeviceSecret is reached only after this gate passes.
+    proofStore?.reloadAfterReadFailure()
+    if !selfProofCheckpointStore.isPersistenceSuspended {
+      reconcileSelfProofCheckpointIfNeeded()
+    }
+    guard !selfProofCheckpointStore.isPersistenceSuspended,
+          !selfProofStore.isPersistenceSuspended,
+          selfProofCheckpointStore.checkpoint == nil else {
+      refuseSessionAdmissionForStorage(retry: retry)
+      return false
+    }
+    storageAdmissionRetry = nil
+    if joinRefusalReasonKey == "storage_loading" || joinRefusalReasonKey == "storage_recovery_required" {
+      joinRefusalReasonKey = nil
+    }
+    return true
+  }
+
+  private func refuseSessionAdmissionForStorage(retry: @escaping () -> Void) {
+    joinAttemptGeneration &+= 1
+    joinRegistryRequest?.cancel()
+    joinRegistryRequest = nil
+    admissionAfterLedgerLoad = nil
+    storageAdmissionRetry = retry
+    demoTask?.cancel()
+    demoTask = nil
+    stopParticipantRelay()
+    engine.stopAutomaticOperation()
+    joinRefusal = nil
+    joinRefusalReasonKey = "storage_recovery_required"
+    phase = .idle
+    Self.ledgerLog.error("session_admission outcome=blocked_storage_recovery")
+    emitJoinStageDiagnostic(joinDiagnosticLog, eventIdHex: nil,
+                            stage: "admission", outcome: "blocked_storage_recovery")
+  }
+
+  func retrySessionAdmissionAfterStorageFailure() {
+    storageAdmissionRetry?()
+  }
+
+  /// Runs after store loading and before another session is admitted.
+  /// If a checkpoint survived from a session that
   /// never reached a graceful end (§7.1 Option B: a device kill after
   /// binding completed but before `stopSensing()`/`reset()` ran), signs and
   /// persists the missing `SelfProofRecord` from the checkpoint's
@@ -4871,24 +5249,64 @@ final class SensingCoordinator: ObservableObject {
   /// checkpoint is stale and must not be reconciled into a duplicate.
   private func reconcileSelfProofCheckpointIfNeeded() {
     guard let checkpoint = selfProofCheckpointStore.checkpoint else { return }
-    guard selfProofStore.record(forProofId: checkpoint.proofId) == nil else {
-      selfProofCheckpointStore.clear()
+    if let proofStore {
+      guard proofStore.hasReadableProofs else {
+        recordEventSigningKeyFailure(.discardFailed)
+        return
+      }
+      guard let parent = proofStore.proof(withId: checkpoint.proofId) else {
+        do {
+          _ = try sensingCryptography.recoverySigningSnapshot()
+          hasAcknowledgedDeviceKeyUnavailable = false
+        } catch {
+          recordEventSigningKeyFailure(.unavailable)
+          return
+        }
+        do {
+          // Without a parent this input cannot produce a collected record.
+          try proofStore.discardOrphanedSelfProof(
+            checkpoint, acknowledgedEventCodes: reportSubmissionRuntime?.acknowledgedSigningKeyChangeEventCodes ?? []
+          )
+          try selfProofCheckpointStore.clearDurably()
+          if !proofStore.isSigningKeyChangeAcknowledged(forEventCode: checkpoint.eventCode) {
+            recordSigningKeyChange(forEventCode: checkpoint.eventCode, reason: .unverifiable)
+          }
+        } catch {
+          recordEventSigningKeyFailure(.discardFailed)
+        }
+        return
+      }
+      if parent.selfProofDiscardedForKeyChange {
+        discardSelfProofCheckpoint(proofId: checkpoint.proofId)
+        return
+      }
+    }
+    guard selfProofStore.durableRecord(forProofId: checkpoint.proofId) == nil else {
+      do {
+        try selfProofCheckpointStore.clearDurably()
+      } catch {
+        recordEventSigningKeyFailure(.discardFailed)
+      }
       return
     }
 
-    guard
-      let record = makeSelfProofRecord(
+    do {
+      let signingCryptography = try sensingCryptography.recoverySigningSnapshot()
+      hasAcknowledgedDeviceKeyUnavailable = false
+      guard let record = try makeSelfProofRecord(
         proofId: checkpoint.proofId,
         eventCode: checkpoint.eventCode,
         eninStart: checkpoint.eninStart,
-        eninEnd: checkpoint.eninEnd
-      )
-    else {
-      return
+        eninEnd: checkpoint.eninEnd,
+        capturedPublicKey: checkpoint.eventSigningPublicKey,
+        signingCryptography: signingCryptography
+      ) else { return }
+      _ = persistSelfProofRecord(record)
+    } catch let error as EventSigningKeyContinuityError {
+      discardSelfProofCheckpoint(proofId: checkpoint.proofId, reason: error.discardReason)
+    } catch {
+      recordEventSigningKeyFailure(.unavailable)
     }
-
-    selfProofStore.add(record)
-    selfProofCheckpointStore.clear()
   }
 
   // MARK: - Demo sequence
@@ -4958,6 +5376,9 @@ final class SensingCoordinator: ObservableObject {
     stepDelayNanos: UInt64,
     stopRoute: ScanFlowContent.Route?
   ) {
+    guard prepareForSessionAdmission(retry: { [weak self] in
+      self?.runDemoScenario(scenario, stepDelayNanos: stepDelayNanos, stopRoute: stopRoute)
+    }) else { return }
     demoTask?.cancel()
     guard prepareDeviceSecret(prepareEngine: false) else { return }
     let session = EventSession(
@@ -4972,7 +5393,7 @@ final class SensingCoordinator: ObservableObject {
     // `runDemoScenario` remains callable from tests and previews without
     // `startSensing()`, so make its `.sensing` precondition explicit.
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
-    beginEventFoundSessionState(session)
+    guard beginEventFoundSessionState(session) else { return }
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
 
     let resolvedScenario = scenario.replacingEvent(session)
@@ -5194,12 +5615,14 @@ final class SensingCoordinator: ObservableObject {
   }
 
   func waitForDemoSequenceToFinish() async {
+    await ledgerLoadTask?.value
     await demoTask?.value
   }
 
   /// Preview/test seam: a scenario is settled only after each primitive has
   /// yielded one render turn, or it has deliberately parked at Signal Lost.
   func waitForDemoScenarioPreviewToSettle() async {
+    await ledgerLoadTask?.value
     await demoTask?.value
   }
 

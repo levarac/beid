@@ -3,11 +3,30 @@
 
 import SwiftUI
 
-/// Identity held while the live coordinator continues sensing. `proofID` is
-/// nil only in the gated screenshot fixture.
+/// Identity held while sensing continues. A record ID may not exist yet
+/// when the participant requests a stop during initial detection.
 struct SensingStopConfirmSnapshot {
   let proofID: UUID?
   let event: EventSession
+
+  /// What the confirmation says. Before any record exists, stopping saves
+  /// nothing, so the copy must not promise a record.
+  var copy: SensingStopConfirmCopy { SensingStopConfirmCopy(hasRecord: proofID != nil) }
+}
+
+struct SensingStopConfirmCopy: Equatable {
+  let body: String
+  let stopTitle: String
+
+  init(hasRecord: Bool) {
+    if hasRecord {
+      body = String(localized: "Your record will be saved on this phone. You can join this event again later.")
+      stopTitle = String(localized: "Stop and keep record")
+    } else {
+      body = String(localized: "Nothing has been recorded yet. You can join this event again later.")
+      stopTitle = String(localized: "Stop sensing")
+    }
+  }
 }
 
 struct SensingStopConfirmView: View {
@@ -39,38 +58,29 @@ struct SensingStopConfirmView: View {
           Text("Stop sensing?")
             .beidTextStyle(DS.Font.Library.title19)
             .foregroundStyle(DS.Color.labelOnActionPrimary)
-          Text("Stop sensing to seal and keep what you've recorded on this phone. You can sense this event again later.")
+          Text(verbatim: snapshot.copy.body)
             .beidTextStyle(DS.Font.Library.body15)
             .foregroundStyle(DS.Color.textSecondaryOnInk)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, DS.Space.s)
 
-          Text("SO FAR")
-            .beidTextStyle(DS.Font.Library.labelMono10)
-            .foregroundStyle(DS.Color.textSecondaryOnInk)
-            .padding(.top, DS.Space.xxl)
+          if showsMetrics {
+            Text("SO FAR")
+              .beidTextStyle(DS.Font.Library.labelMono10)
+              .foregroundStyle(DS.Color.textSecondaryOnInk)
+              .padding(.top, DS.Space.xxl)
 
-          metrics
-            .padding(.top, DS.Space.s)
+            metrics
+              .padding(.top, DS.Space.s)
+          }
 
           Spacer(minLength: DS.Space.xxl)
 
-          Button {
-            BeidDesign.haptic()
-            onStop()
-          } label: {
-            Text("Stop and keep record")
-              .beidTextStyle(DS.Font.Library.title16)
-              .foregroundStyle(DS.Color.labelOnActionInverse)
-              .frame(maxWidth: .infinity)
-              .frame(minHeight: DS.Size.primaryButtonMinHeight)
-              .background(DS.Color.actionInverse, in: Capsule())
-          }
-          .buttonStyle(.plain)
+          BeidPrimaryButton(LocalizedStringKey(snapshot.copy.stopTitle), tone: .inverse, action: onStop)
           .accessibilityIdentifier("scan.stop-confirm.stop")
 
           BeidTextControl(
-            "Keep sensing",
+            "KEEP SENSING",
             labelColor: DS.Color.labelOnActionPrimary,
             accessibilityLabel: "Keep sensing",
             action: onKeepSensing
@@ -87,6 +97,11 @@ struct SensingStopConfirmView: View {
     .accessibilityIdentifier("scan.stop-confirm")
   }
 
+  /// Hidden only when there is no record and both values would read zero.
+  private var showsMetrics: Bool {
+    snapshot.proofID != nil || sensing.devicesVerified > 0 || sensing.firstSightingAt != nil
+  }
+
   private var eventDetail: String? {
     var parts: [String] = []
     if let venue = snapshot.event.venue, !venue.isEmpty { parts.append(venue) }
@@ -97,29 +112,27 @@ struct SensingStopConfirmView: View {
   }
 
   private var metrics: some View {
-    let items = [
-      SensingMetric(value: String(sensing.sessionAggregate?.mutualDeviceCount ?? 0), label: "MUTUAL"),
-      SensingMetric(value: String(sensing.devicesVerified), label: "DETECTED"),
-      SensingMetric(value: String(sensing.sessionAggregate?.windowCount ?? 0), label: "WINDOWS")
-    ]
-    return HStack(alignment: .top, spacing: 0) {
-      ForEach(items) { item in
-        VStack(alignment: .leading, spacing: DS.Space.xs) {
-          Text(verbatim: item.value)
-            .beidTextStyle(DS.Font.Library.displayNumber40)
-            .foregroundStyle(DS.Color.labelOnActionPrimary)
-          Text(verbatim: item.label)
-            .beidTextStyle(DS.Font.Library.labelMono10)
-            .foregroundStyle(DS.Color.textSecondaryOnInk)
+    TimelineView(.periodic(from: .now, by: 1)) { context in
+      let elapsed = sensing.firstSightingAt.map {
+        sensing.sensingPresentationNow(context.date).timeIntervalSince($0)
+      } ?? 0
+      let items = [
+        SensingMetric(value: String(sensing.devicesVerified), label: "DEVICES HEARD"),
+        SensingMetric(value: ElapsedTimeFormat.minutesSeconds(elapsed), label: "ELAPSED")
+      ]
+      HStack(alignment: .top, spacing: 0) {
+        ForEach(items) { item in
+          VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Text(verbatim: item.value)
+              .beidTextStyle(DS.Font.Library.displayNumber40)
+              .foregroundStyle(DS.Color.labelOnActionPrimary)
+            Text(verbatim: item.label)
+              .beidTextStyle(DS.Font.Library.labelMono10)
+              .foregroundStyle(DS.Color.textSecondaryOnInk)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(
-      "\(sensing.sessionAggregate?.mutualDeviceCount ?? 0) mutual, "
-        + "\(sensing.devicesVerified) detected, "
-        + "window \(sensing.sessionAggregate?.windowCount ?? 0)"
-    )
   }
 }

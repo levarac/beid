@@ -111,20 +111,16 @@ enum SensingRadarProjection {
     return (nodes, edges)
   }
 
-  /// Mutuality is the caller's real `SessionAggregate.mutualDeviceCount`, not
-  /// inferred from the detected-only drawing. A value of zero is spoken.
-  /// Never speak or expose private peer IDs.
+  /// Nearby observations do not establish whether another phone heard this
+  /// phone. Speak only the number heard and never expose peer identifiers.
   static func accessibilitySummary(
     peers: [SensingRadarPeer],
-    mutualDeviceCount: Int,
-    observedWindowCount: Int
+    mutualDeviceCount _: Int,
+    observedWindowCount _: Int
   ) -> String {
-    String(
-      localized: "sensingRadar.accessibilitySummary",
-      defaultValue: "\(mutualDeviceCount) mutual, \(peers.count) detected, window \(observedWindowCount)",
-      comment: "VoiceOver summary of the sensing radar. The first count comes from the real session aggregate and may be zero; detected counts the drawn peers; window is the aggregate's observed-window count, including an open first window. No peer identifier is spoken. Mutuality does not determine any individual node's style."
-    )
+    "\(peers.count) devices heard"
   }
+
 }
 
 /// A reusable sensing-time radar. `peers` must include unmeasured detections;

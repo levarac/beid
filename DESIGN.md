@@ -83,17 +83,23 @@ beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
 - **Flat 2b — Library** (node `189-2`) is the authority for **values**:
   the color variable collection `Flat 2b / Color`, the text styles, and
   the components.
-- **Flat 2b — Screens** (node `183-2`) is the authority for **layouts**
-  (the spec lists 18 screens; 22 frames at the 2026-09-22 read, below).
-- "Minimal v4" and the Liquid Glass-era "Fixed" page are historical input
-  only.
+- **The 1.1 screen specification** is the authority for **layouts and
+  behavior**: Fixed v2 is the base, with v3–v5 deltas applied in order.
+  The final specification wins when an earlier screen disagrees. Now owns
+  current actions and explicit JOIN; Records owns saved records and events.
+  Now's DO THIS NOW and FROM THE ORGANIZER tiles use Flat 2b fills and a
+  12pt radius (`DS.Radius.control`); nearby candidate cards retain the 20pt
+  `DS.Radius.nowCard`. Records shows one Attendance per event, preserving
+  its stored recording sessions inside the existing detail routes.
+- The earlier Flat 2b Screens and Liquid Glass-era Fixed layouts are
+  historical input only; the latter is distinct from the Fixed v2 base.
 - The product name is **beid**. "SenseProof" on the Flat 2b board and in
   its spec is the designer's mistake, not a rename (owner, 2026-09-22).
 
 | Artifact | Canonical for |
 | --- | --- |
 | Figma "Flat 2b — Library" (`189-2`) | Design values: colors, text styles, components |
-| Figma "Flat 2b — Screens" (`183-2`) | Screen layouts |
+| The 1.1 screen specification, Fixed v2 plus v3–v5 deltas | Screen layouts and behavior |
 | `ios/Beid/DesignSystem/Tokens.swift` | The `DS` namespace: all color/space/radius/size/font/motion tokens and artwork generators — what ships, and the only place code reads values |
 | `ios/Beid/DesignSystem/Colors.xcassets` | Color values: the 13 Library variables, each a single-appearance colorset named after its Library variable (since #628, §4/§5). The app does not follow the OS appearance: the app target's Info.plist sets `UIUserInterfaceStyle` to `Light` (#632, §14) |
 | `.swiftlint.yml` (repo root) | Enforcement rules for banned raw values |
@@ -279,13 +285,15 @@ Beid MUST NOT feel like:
 - a generic event app (no confetti-by-default, no marketing gradients),
 - a leaderboard.
 
-Wallet is optional (`OnboardingMode.guestFirst` exists). The UI MUST read
-fully coherent to a user who never connects a wallet.
+For 1.1, Welcome uses Continue and enters Bluetooth setup without a wallet
+step. Onboarding and sensing MUST remain coherent without a wallet.
 
 > **Owner resolution, 2026-09-26 (Open item 2,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** Wallet-optional
 > onboarding is settled. The MUST above remains binding: 01 Welcome uses
 > the guest-first Get Started route, and wallet connection is optional.
+> **Superseded for 1.1:** Continue enters Bluetooth setup with no wallet
+> step; wallet controls do not belong to onboarding or sensing.
 
 ## 2. Non-Negotiables
 
@@ -444,18 +452,18 @@ as-is.
 
 | Motif | Meaning | UI use | Avoid |
 | --- | --- | --- | --- |
-| **Encounter Field** | Nearby people sensed over time | `SensingView` pulse rings, proximity/sensing states, scan-flow backgrounds | Radar/sonar clichés, sci-fi neon, spinning sweeps |
-| **Proof Seal** | An encounter became durable | `RecordingView` entrance ceremony, proof card/detail artwork | Generic checkmark-only success, confetti |
+| **Encounter Field** | Nearby devices observed over time | `SensingView` pulse rings, proximity/sensing states, scan-flow backgrounds | Radar/sonar clichés, sci-fi neon, spinning sweeps |
+| **Record Seal** | An encounter became durable | `RecordingView` entrance ceremony, record card/detail artwork | Generic checkmark-only success, confetti |
 | **Ledger Trace** | A verifiable record exists behind this artifact | Metadata rows in `ItemDetailView`, address row in `AccountSheetView`, monospaced identifiers | Blockchain jargon, wallet chrome, explorer-link prominence |
-| **Event Artifact** | A proof is a collectible memory of a real event | `ProofCardView` cards, `CollectionHomeView` grid, event recap | NFT-marketplace aesthetics, price/rarity framing |
+| **Event Artifact** | A record is a collectible memory of a real event | `ProofCardView` cards, `CollectionHomeView` grid, event recap | NFT-marketplace aesthetics, price/rarity framing |
 
 Concrete do/don't pair (the empty state of `CollectionHomeView`):
 
 ```
 DO:
 Empty state uses the `encounter-field-empty` Encounter Field asset,
-title "No proofs yet",
-body "Start sensing at an event to collect your first proof.",
+title "No records yet",
+body "Start sensing at an event to collect your first record.",
 CTA "Sense Event",
 background DS.Color.surfaceCanvas.
 
@@ -489,9 +497,9 @@ share this grandfathered string; see #24's treatment in
 Voice registers by moment:
 
 - **Sensing** (`SensingView`, `EventFoundView`): calm, factual, present tense.
-  "Sensing automatically." No exclamation marks.
-- **Recording and proof entrance** (`RecordingView`): one short,
-  declarative, slightly formal entrance moment ("Proof collected."), then
+  "Listening for nearby events." No exclamation marks.
+- **Recording and record entrance** (`RecordingView`): one short,
+  declarative, slightly formal entrance moment ("Record collected."), then
   calm factual recording status. Give the entrance one quiet moment of
   weight, not a celebration.
 - **Recovery** (`SignalLostView`, `BluetoothOffView`): plain instructions,
@@ -638,7 +646,7 @@ and where their uses went:
   uses `statusOff` (the radio is not transmitting; the paired text says
   why).
 - `proofSeal` — tints use `actionPrimary`; text and icons use
-  `textPrimary`. A sealed proof is none of on / pending / off.
+  `textPrimary`. A sealed record is none of on / pending / off.
 - `statusCaution` — error text and warning icons use `textPrimary`: Flat
   2b has no "error" color, and red text on `bg` fails AA (3.41:1). The
   radio's `.waitingForBluetooth` dot uses `statusPending`; refusal and
@@ -818,7 +826,7 @@ they cite are the current ones, since #628):
   > `ink` fill → `bg` label; the `proofSeal`/`signalWarning`/`signalActive`
   > pairings describe today's code and are migration debt until #628. "In
   > both modes" now means the single appearance (§14).*
-- MUST: A proof's appearance is its **Sigil**, drawn deterministically
+- MUST: A record's appearance is its **Sigil**, drawn deterministically
   from observation data, with no image assets (spec §5; #633). Same data,
   same Sigil.
 - Migration debt: until #633 lands the Sigil,
@@ -875,7 +883,7 @@ spec §3.2; §0 records which styles were observed in Figma.
 | --- | --- | --- | --- | --- | --- |
 | Display/60 | Bricolage Grotesque ExtraBold | 60 | −2% | 100% | Home title "Events" |
 | Display/52 | 〃 | 52 | −2% | 100% | Onboarding titles (spec only; not observed in Figma, §0) |
-| Display/46 | 〃 | 46 | −1.5% | 100% | Screen titles (event name, Session 1, Report #2, Proof collected) |
+| Display/46 | 〃 | 46 | −1.5% | 100% | Screen titles (event name, Session 1, Report #2, Record collected) |
 | Display/Number 40 | 〃 | 40 | −1% | auto | Sensing figures |
 | Display/Address 34 | 〃 | 34 | −1% | auto | Account sheet address (typeface open: spec §10-5, #642) |
 | Title/19 · 17 · 16 · 15 | DM Sans Bold | 19–15 | 0 | auto | Row titles, buttons, key-value values |
@@ -1042,7 +1050,7 @@ older systems match.
 > | Token | Style | Role | Constraint |
 > | --- | --- | --- | --- |
 > | `DS.Font.screenTitle` | `.largeTitle` bold | Screen title | Max one per screen |
-> | `DS.Font.ceremonyTitle` | `.title` bold | "Proof Collected" entrance in `RecordingView` | Ceremony moments only |
+> | `DS.Font.ceremonyTitle` | `.title` bold | "Record Collected" entrance in `RecordingView` | Ceremony moments only |
 > | `DS.Font.sectionTitle` | `.title3` semibold | State/section titles | |
 > | `DS.Font.cardTitle` | `.subheadline` semibold | Card titles | `lineLimit(1)` + truncation on cards |
 > | `DS.Font.body` | `.body` | Body copy | |
@@ -1507,7 +1515,7 @@ Real components in this codebase. Each entry is the contract for reuse.
 > also has no Android counterpart (§5). Not renamed, not deferred to
 > another component — absent.
 
-- Purpose: One collected proof in the `CollectionHomeView` grid.
+- Purpose: One collected record in the `CollectionHomeView` grid.
 - Use when: Rendering a `Proof` in a collection context.
 - Don't use when: Event-level summaries, onboarding illustrations, detail
   hero (that is `ItemDetailView`'s header).
@@ -1542,20 +1550,16 @@ Real components in this codebase. Each entry is the contract for reuse.
 > see §11's Android note on the scan flow for the verified current shape.
 > This is a structural difference, not a missing name.
 
-- Purpose: Full-screen cover hosting the sensing flow, switching on
+- Purpose: Pushed detail hosting the sensing flow, switching on
   `SensingCoordinator.phase` (`ScanPhase`: idle/sensing → eventFound →
   recording, with signalLost branch).
-- Use when: The single entry point to sensing; presented via
-  `fullScreenCover` from `RootView`.
+- Use when: Open details from Now's `NavigationStack` through
+  `navigationDestination(isPresented:)`.
 - Don't use when: Anything else — there is exactly one scan flow.
-- Rules: phase transitions animate with `DS.Motion.standard`; a trailing
-  close (X) button is always reachable in the toolbar; each phase view owns
-  its content but not its chrome.
-- *Flat 2b (2026-09-22): the close (X) is superseded — the exit becomes
-  the monospaced text control `CLOSE` (and `DONE` when finished), with a
-  44×44pt hit region (§12, #631, #636). The "always reachable exit" rule
-  itself stands.* *Flat 2b v2 (2026-10-15, beid#730): the exit is the
-  system `.close` item and the finish is `.done` (§12, #732).*
+- Rules: native Back returns to Now without ending participation. The lower
+  STOP SENSING control opens confirmation, while DONE is available after
+  successful finalization. Each phase view owns content, and this container
+  owns its navigation and stop controls. See §11 for the lifecycle contract.
 
 ### Component: Sensing pulse (in SensingView)
 
@@ -1845,7 +1849,7 @@ Real components in this codebase. Each entry is the contract for reuse.
 > and in production use (`BeidPrimaryButton`, verified across
 > `WelcomeScreen`/`EventJoinScreen`/`ManualEventCodeScreen`).
 
-- Purpose: The one main action per screen ("Get Started", "Sense Event",
+- Purpose: The one main action per screen ("Continue", "Sense Event",
   "Try Again", "Done"). A convention, not a reusable component (yet).
   **[Android's actual CTA strings for this same role are "Get Started"
   (`welcome_get_started`) and "Join event" (`event_join_button`) — not
@@ -1915,8 +1919,9 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
 - **Root switch**: `RootView` switches on `AppScreen`
   (welcome / walletConnect / eventCodeEntry / bluetoothPermission /
   bluetoothOff / home).
-  Onboarding order depends on `OnboardingMode` (walletFirst | guestFirst).
-  MUST: both orders stay coherent; no screen may assume a wallet exists.
+  Both legacy `OnboardingMode` values enter Bluetooth permission directly;
+  the compatibility flag does not introduce a wallet onboarding step.
+  MUST: no screen may assume a wallet exists.
   **[Android counterpart, verified `Screen.kt` + `AppNavHost.kt`: a
   Compose-Navigation graph over nine routes — `Welcome`,
   `BluetoothPermission`, `BluetoothOff`, `EventJoin`, `Account`,
@@ -1945,30 +1950,21 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   collection-home screen yet." Promoting a screen to this role is
   explicitly deferred to #141 (per `Screen.kt`/`RecordsScreen.kt`'s own
   kdoc), not something this document should describe as already true.]**
-- **Scan flow (05–06d)**: `fullScreenCover` — sensing is a modal session with
-  a clear exit (a trailing close (X) button). Phase progression is linear;
-  `SignalLostView` (06d) is the recovery branch and MUST always offer "Try
-  Again". **[Android's current shape differs structurally, not just by
-  name: `EventJoinScreen`'s `ScanPhaseDetail` (verified) renders
-  Sensing/EventFound/Recording/SignalLost as a `when` branch inside one
-  non-modal screen — no full-screen-cover container, no close (X) button
-  (there is nothing separate to close; leaving happens via `Account`'s
-  "Leave Event"). The SignalLost branch's actual button reads "Resume"
-  (`event_join_resume_sensing` — verified `strings.xml`), not "Try Again."
-  Separately, and not part of this bullet's iOS-described flow at all:
-  `EventJoinScreen` already offers **automatic nearby-event discovery**
-  (`NearbyEventCards`, BLE-driven, verified `EventJoinScreen.kt`) before a
-  user ever enters a code — iOS's current entry flow has no equivalent
-  auto-discovery card list. This is a concrete case of Android currently
-  being ahead of iOS on the entry flow, not behind it; this document does
-  not take a position on whether or how that gets reconciled.]**
-  *Flat 2b annotation (2026-09-22, beid#627,
-  [D-627](docs/decisions/issue-627-flat-2b.md)): the "trailing close (X)
-  button" is superseded by the monospaced text control `CLOSE` (§12,
-  #631, #636); the modal session with a clear exit stands. The bullets in
-  this section describe today's screens; the Flat 2b screens replace them
-  through #635–#644.* *Flat 2b v2 (2026-10-15, beid#730): the exit is the
-  system `.close` item again, not a text control (§12, #732).*
+- **Sensing detail (05–07)**: push from the Now tab's `NavigationStack`.
+  The native Back button and interactive pop gesture return to Now without
+  ending participation, changing the live session, or stopping its radio.
+  The lower `STOP SENSING` control opens the stop confirmation. `Keep sensing`
+  returns to the unchanged session; `Stop and keep record` finalizes the
+  record and ends participation, including participant advertising and relay.
+  Only successful durable finalization may show the saved-record screen and
+  say that the app can be closed. There is no threshold-based transition or
+  countdown. While sensing, show devices heard and elapsed time without a
+  mutual count or an achievement state. DONE advances to the collected-record
+  screen, and View collection opens Records. Returning to Now resumes nearby
+  discovery without joining another event.
+  **[Android retains its native event-join surface for this release; the
+  corresponding navigation and stop-confirmation changes are deferred to
+  its next application flow.]**
 - **Detail (08)**: push via `navigationDestination(item:)` from the grid.
   **[Android counterpart: `Screen.RecordDetail` is a parameterized
   Compose-Navigation route (`"records/{recordId}"`), pushed from
@@ -2064,12 +2060,14 @@ visual language).
 > in violation until an Android follow-up is scheduled (none exists as of
 > 2026-09-22).
 
-**Flat 2b v2: no icons in content; the navigation bar and toolbar are the
-OS's (owner decision 2026-10-15, beid#730, A2; implementation #732).**
+**Flat 2b: no icons in content; navigation bars, toolbars and the Now /
+Records tab bar are OS-standard controls (the 1.1 screen specification).**
 
 - MUST: The app draws no icons in content. Controls inside a screen are
   monospaced uppercase text in DM Mono (§6): `COPY`, `PASTE`, `OPEN →`,
   `ENTER EVENT CODE →`.
+- MUST: The Now / Records tab bar uses `TabView` with system symbols and
+  titles. Its labels use the system font and its appearance belongs to the OS.
 - MUST: Navigation-bar and toolbar items are OS-standard items, not
   app-drawn controls. Back is the `NavigationStack` back button; close and
   done are the system `.close` and `.done` items (`Button(role: .close)` /
@@ -2089,7 +2087,7 @@ OS's (owner decision 2026-10-15, beid#730, A2; implementation #732).**
   bar items (`sharedBackgroundVisibility(.hidden)`,
   `UIBarButtonItem.hidesSharedBackground`). The 2026-09-25 decision that
   suppressed it is withdrawn (§8).
-- Beyond the navigation bar and toolbar, the only exception is the OS
+- Beyond the navigation bar, toolbar and tab bar, the only exception is the OS
   status bar. OS-drawn chrome the app does not draw itself (system alerts
   and confirmation dialogs, the keyboard, permission dialogs, sheets) is
   outside this rule. There are no other exceptions.
@@ -2105,14 +2103,14 @@ OS's (owner decision 2026-10-15, beid#730, A2; implementation #732).**
 - **SHARE is not part of this contract** (owner decision 2026-09-22,
   settled item C in D-627). The 2026-07-28 rejection (§C, Item Detail
   reskin row: "no share action exists in the app") stands; no share
-  feature exists. #631 and #638 remove SHARE from 09 Proof Detail's nav
+  feature exists. #631 and #638 remove SHARE from 09 Record Detail's nav
   row.
 - Back is the standard `NavigationStack` back button (owner decision
   2026-09-25; this closed D-627 open item 5, `← PARENT` text was not
   adopted).
 - The two accessibility MUSTs quoted below ("Decorative images use
   `.accessibilityHidden(true)`" and "Symbols paired with text scale with
-  Dynamic Type") apply to the navigation-bar symbols and to any image or
+  Dynamic Type") apply to the navigation-bar and tab-bar symbols and to any image or
   glyph that remains.
 
 > **Superseded 2026-10-15 (owner decision, beid#730, A2).** Figma "Flat 2b
@@ -2395,6 +2393,25 @@ Kept unchanged:
 
 ## 15. Copywriting Voice
 
+The on-screen item is **Record**; its full name is **participation record**.
+Code identifiers and actual cryptographic proofs retain their existing names.
+One event has one Attendance entry, with its stored sessions still accessible.
+The entry opens the earliest stored session by default; the Record screen names
+that selected session and uses only its own UUID, artwork, binding and reports.
+A later session's receipt must never upgrade the other sessions.
+
+Record detail separates local sealing, the actual report destination, a stored
+operator acceptance receipt, reproducible external material and a third-party
+result. Preparing a report or starting a request establishes no delivery.
+External material and the third-party result are unavailable until a real data
+source exists; a receipt alone establishes neither. Do not title an unavailable
+result VERIFIED. Missing historical duration, ending time and delivery/receipt
+times remain unavailable; creation or signing times are not substitutes.
+Selected-window artwork uses the same saved session's observed-window ranks.
+Unknown report-window links keep a report-only detail route rather than being
+attached to a guessed window. Existing wallet-bound records keep Bound to wallet;
+these screens offer no new wallet connection.
+
 > **Platform scope:** mixed, annotated per bullet. The voice/vocabulary/
 > forbidden-term/trust-model/error-formula/CTA-shape rules are
 > platform-neutral. The localization *mechanism* (String Catalog) is
@@ -2474,15 +2491,21 @@ lives in `AGENTS.md`.
   > verbatim for history and for any future widening of the locale set;
   > the term choice itself was not overturned.
 
-- Vocabulary: "proof", "encounter", "event", "sense/sensing", "collect",
-  "seal", "verify". A proof is **collected** or **sealed**, never "minted",
+- Welcome uses the exact headline "Record you were there." and subtitle
+  "Your phones say hello to each other, and keep a note anyone can verify."
+  These are the approved Welcome exception to the general presence-copy
+  caution. Other copy describes observations, explicit JOIN and foreground
+  sensing without promising background operation.
+- Vocabulary: "record", "participation record", "encounter", "event", "sense/sensing", "collect",
+  "seal", "verify". A record is **collected** or **sealed**, never "minted",
   "dropped", or "claimed". **[Platform-neutral; Android's actual strings
   already comply, e.g. `event_join_button` = "Join event",
   `records_signature_status_bound`/`records_signature_status_self_proof`
   (verified `strings.xml`) — no "minted"/"dropped"/"claimed" found.]**
-- FORBIDDEN in user-facing copy: "NFT", "token", "on-chain", "gas", "mint",
+- FORBIDDEN in user-facing copy: "prove", "proof of presence", "automatically",
+  "no codes", "no taps", "NFT", "token", "on-chain", "gas", "mint",
   "airdrop", "web3". Wallet copy says what the wallet does for the user
-  ("sign your proofs"), not what protocol it speaks. **[Platform-neutral;
+  ("associate a wallet with a record"), not what protocol it speaks. **[Platform-neutral;
   no violation found in current Android `strings.xml` (grepped for each
   forbidden term).]**
 - *Flat 2b annotation (2026-09-22,
@@ -2532,8 +2555,8 @@ lives in `AGENTS.md`.
   sentence-case titles (§12). The in-content text controls (`COPY`,
   `OPEN →`) still meet both rules, and that part stays open.*
 - Error formula: what happened + why + one action. Model:
-  "beid lost the connection to {event}. Move closer and we'll pick it back
-  up automatically." + "Try Again". **[Platform-neutral principle; Android
+  "beid lost the connection to {event}. Move closer and try again." +
+  "Try Again". **[Platform-neutral principle; Android
   has no screen dedicated to this exact formula yet — see §11's note on
   the scan-flow recovery branch, whose actual button reads "Resume," not
   "Try Again."]**
@@ -2768,7 +2791,7 @@ to.]**
 | `size.radar.centerDot` | `DS.Size.radarCenterDot` | 8 pt | Ink dot at the centre of the white disc |
 | `size.radar.detectedNode` | `DS.Size.radarDetectedNode` / `radarDetectedNodeStroke` | 8 / 1.5 pt | Detected-only node diameter and idle outline width |
 | `size.sensing.sealedSigil` | `DS.Size.sensingSealedSigil` | 300 pt | Frame 06 Sensing — Sealed artwork slot (Figma node `184:65`); shows the record's own Sigil from on-device presence (beid#653), and the neutral ring for a record without data |
-| `size.proofDetail.sigil` | `DS.Size.proofDetailSigil` | 200 pt | Frame 09 Proof Detail artwork slot (Figma node `204:36`); shows the record's own Sigil from on-device presence (beid#653), and the neutral `RecordSigilSlot` ring for a record without data |
+| `size.proofDetail.sigil` | `DS.Size.proofDetailSigil` | 200 pt | Frame 09 Record Detail artwork slot (Figma node `204:36`); shows the record's own Sigil from on-device presence (beid#653), and the neutral `RecordSigilSlot` ring for a record without data |
 | `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
 | `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | Legacy gradient-avatar diameter; no longer used by `ItemDetailView` after frame 09 |
 | `type.screen.title` | `DS.Font.screenTitle` | `Library.display46` — Bricolage Grotesque ExtraBold 46 / `.largeTitle` | Screen titles |

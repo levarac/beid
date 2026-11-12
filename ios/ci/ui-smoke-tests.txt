@@ -2,15 +2,15 @@
 # Keep outside project.yml source roots. Full runs must also execute every entry.
 # Welcome: follows HOW IT WORKS through sensing information and disclosure.
 BeidUITests/FlatScreenshotTourA/testWelcomeHowItWorksOpensAboutSensingAndWhatWeSend
-# Home: completes onboarding and opens/cancels event-code entry from an empty collection.
+# Home: completes onboarding and opens/cancels event-code entry after 30 empty seconds.
 BeidUITests/FlatScreenshotTourB/testShot_04b_Empty
-# Join: submits an event code and observes the same Account row become disabled.
-BeidUITests/EventMembershipUITests/testJoinEventRowDisablesImmediatelyAfterJoining
-# Sensing: closes Scan, checks background sensing, and stops it from Home.
-BeidUITests/ContinuousSensingIndicatorUITests/testHomeShowsContinuousSensingAndClearsAfterStop
+# Join: submits an Account event code, dismisses code entry and shows sensing.
+BeidUITests/EventMembershipUITests/testAccountSheetJoinDismissesCodeEntryAndShowsSensing
+# Sensing: closes details and resumes continuing sensing through Now.
+BeidUITests/ContinuousSensingIndicatorUITests/testHomeResumesContinuousSensingThroughDetails
 # Refusal: checks the typed network refusal and its reset through visible-screen waits.
 BeidUITests/JoinRefusalUITests/testJoinRefusalPanelIsVisibleAndClearsWhenScanCloses
-# Records: opens a past-event row, checks report state, and reaches Proof detail.
+# Records: opens its event list, checks report state, and reaches record detail.
 BeidUITests/FlatScreenshotTourB/testShot_08_EventDetail
 # Record detail: missing observation bytes show one unavailable state, not invented metrics.
 BeidUITests/FlatScreenshotTourC/testObservationDetailWithMissingSnapshotShowsOneUnavailableState

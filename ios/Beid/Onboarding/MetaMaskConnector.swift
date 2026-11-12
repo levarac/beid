@@ -42,7 +42,6 @@ protocol MetaMaskTransport: AnyObject {
 @MainActor
 final class MetaMaskConnector: ObservableObject, WalletConnector {
   static let shared = MetaMaskConnector(transport: MetaMaskSDKTransport())
-  static let appStoreURL = URL(string: "https://apps.apple.com/app/id1438144202")!
 
   /// Starts at `.restored(hint)` instead of `.idle` when a cached hint
   /// exists (beid#315 / dispatch#26 condition 1) — read once here, at

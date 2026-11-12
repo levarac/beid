@@ -9,12 +9,190 @@ import math
 from pathlib import Path
 import re
 import sys
+from collections import Counter
 
-from scripts.run_local_tests import parse_xcresult_tests
+from scripts.run_local_tests import parse_xcresult_tests, validate_xcresult_summary
 
 
 IDENTIFIER = re.compile(r"BeidUITests/[A-Za-z_]\w*/test\w+")
 DEFAULT_LIST = Path("ios/ci/ui-smoke-tests.txt")
+DEFAULT_DURATIONS = Path("scripts/ios-ui-durations.json")
+IPHONE_SKIPS = Path("scripts/ios-ui-iphone-skips.txt")
+UNIT_SKIPS = Path("scripts/ios-unit-debug-simulator-skips.txt")
+
+
+def unique_tests(tests, bundle):
+    if not isinstance(tests, list) or not tests:
+        raise ValueError(f"empty or malformed {bundle} enumeration")
+    pattern = re.compile(rf"{bundle}/[A-Za-z_]\w*/test\w+")
+    if any(not isinstance(test, str) or not pattern.fullmatch(test) for test in tests):
+        raise ValueError(f"invalid {bundle} identifier")
+    if len(set(tests)) != len(tests):
+        raise ValueError(f"duplicate {bundle} identifier")
+    return sorted(tests)
+
+
+def parse_enumeration(payload):
+    """Read xcodebuild -enumerate-tests' hierarchical JSON (not source counts)."""
+    if not isinstance(payload, dict) or payload.get("errors") or not payload.get("values"):
+        raise ValueError("invalid or failed Xcode test enumeration")
+    tests = {"BeidTests": [], "BeidUITests": []}
+
+    def walk(nodes, bundle=None, suite=None):
+        if not isinstance(nodes, list):
+            raise ValueError("malformed enumeration children")
+        for node in nodes:
+            if not isinstance(node, dict) or not isinstance(node.get("name"), str):
+                raise ValueError("malformed enumeration node")
+            name = node["name"]
+            if name in tests:
+                walk(node.get("children", []), name)
+            elif bundle and suite is None:
+                walk(node.get("children", []), bundle, name.removeprefix(bundle + "."))
+            elif bundle:
+                if node.get("children"):
+                    raise ValueError("unexpected nested test enumeration")
+                tests[bundle].append(f"{bundle}/{suite}/{name.removesuffix('()')}")
+            else:
+                walk(node.get("children", []))
+
+    walk(payload["values"])
+    return {bundle: unique_tests(items, bundle) for bundle, items in tests.items()}
+
+
+def shard_tests(tests, durations, count):
+    """Longest-first scheduling, with identifier and shard index as tie breakers."""
+    tests = unique_tests(tests, "BeidUITests")
+    if isinstance(count, bool) or count not in (2, 3):
+        raise ValueError("UI shard count must be 2 or 3 (at most four test jobs)")
+    weights = {}
+    for test in tests:
+        # New methods always get a positive weight and exactly one assignment.
+        value = durations.get(test, 20.0)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+            raise ValueError(f"invalid test duration: {test}")
+        weights[test] = value
+    shards, loads = [[] for _ in range(count)], [0.0] * count
+    for test in sorted(tests, key=lambda test: (-weights[test], test)):
+        index = min(range(count), key=lambda index: (loads[index], index))
+        shards[index].append(test)
+        loads[index] += weights[test]
+    if any(not shard for shard in shards):
+        raise ValueError("empty UI shard")
+    return [sorted(shard) for shard in shards]
+
+
+def result_cases(payload):
+    """Normalize case identifiers; retain duplicates so the ledger can reject them."""
+    cases = []
+
+    def walk(node, bundle=None, suite=None):
+        if isinstance(node, list):
+            for child in node:
+                walk(child, bundle, suite)
+            return
+        if not isinstance(node, dict):
+            return
+        kind = str(node.get("nodeType", node.get("type", ""))).lower()
+        if "bundle" in kind:
+            bundle, suite = node.get("name"), None
+        if kind == "test suite" and bundle:
+            suite = str(node.get("name", "")).removeprefix(bundle + ".")
+        if kind == "test case":
+            if bundle not in ("BeidTests", "BeidUITests"):
+                raise ValueError(f"unexpected test bundle: {bundle}")
+            identifier = str(node.get("nodeIdentifier") or f"{suite}/{node.get('name', '')}").removesuffix("()")
+            if not identifier.startswith(bundle + "/"):
+                identifier = f"{bundle}/{identifier}"
+            unique_tests([identifier], bundle)
+            status = node.get("result", node.get("testStatus"))
+            # A deliberately unexecuted case may have no duration field.
+            # Unknown skips still fail validate_lane; missing passed durations fail.
+            duration = (0.0 if status == "Skipped" and not any(
+                key in node for key in ("durationInSeconds", "duration")) else case_duration(node))
+            cases.append((identifier, status, duration))
+        for key in ("children", "testNodes", "subtests"):
+            if key in node:
+                walk(node[key], bundle, suite)
+
+    walk(payload)
+    return cases
+
+
+def validate_lane(expected, payload, allowed_skips=()):
+    cases = result_cases(payload)
+    identifiers = [case[0] for case in cases]
+    if Counter(identifiers) != Counter(expected):
+        raise ValueError(f"execution ledger mismatch: missing={sorted((Counter(expected) - Counter(identifiers)).elements())}, "
+                         f"extra/duplicate={sorted((Counter(identifiers) - Counter(expected)).elements())}")
+    for identifier, result, _ in cases:
+        if identifier in allowed_skips:
+            if result != "Skipped":
+                raise ValueError(f"declared environment exclusion did not skip: {identifier}: {result}")
+        elif result != "Passed":
+            raise ValueError(f"test did not pass: {identifier}: {result}")
+    return cases
+
+
+def validate_unit_skips(skips, unit):
+    if not isinstance(skips, list):
+        raise ValueError("missing or malformed Debug Simulator unit skip list")
+    if skips and not set(unique_tests(skips, "BeidTests")) <= set(unit):
+        raise ValueError("stale Debug Simulator unit skip list")
+    return skips
+
+
+def classifier_skip(event, needs):
+    changes = needs.get("changes", {})
+    outputs = changes.get("outputs", {})
+    return (event == "pull_request" and changes.get("result") == "success"
+            and outputs.get("ios") == "false" and outputs.get("error") == "false")
+
+
+def validate_aggregate(event, needs, manifest, evidence, sha):
+    if needs.get("plan", {}).get("result") != "success":
+        raise ValueError("test plan did not succeed")
+    plan = needs["plan"].get("outputs", {})
+    if classifier_skip(event, needs):
+        if plan.get("run") != "false" or any(needs.get(job, {}).get("result") != "skipped"
+                                               for job in ("build", "tests")):
+            raise ValueError("classifier skip has inconsistent job results")
+        return "Classifier skip: no iOS-affecting changes."
+    mode = plan.get("mode")
+    if plan.get("run") != "true" or mode not in ("full", "smoke"):
+        raise ValueError("missing or invalid test plan")
+    for job in ("build", "tests") if mode == "full" else ("build",):
+        if needs.get(job, {}).get("result") != "success":
+            raise ValueError(f"needed job did not succeed: {job}")
+    if mode == "smoke" and needs.get("tests", {}).get("result") != "skipped":
+        raise ValueError("smoke must execute in one macOS job")
+    if not isinstance(manifest, dict) or manifest.get("sha") != sha or manifest.get("mode") != mode:
+        raise ValueError("manifest head or mode mismatch")
+    unit = unique_tests(manifest.get("unit"), "BeidTests")
+    ui = unique_tests(manifest.get("ui"), "BeidUITests")
+    unit_skips = validate_unit_skips(manifest.get("unit_skips"), unit)
+    skips = manifest.get("iphone_skips", [])
+    if not isinstance(skips, list) or len(set(skips)) != len(skips) or not set(skips) <= set(ui):
+        raise ValueError("invalid explicit iPhone skip list")
+    if mode == "smoke":
+        lanes = {"build": unit + manifest["smoke"]}
+    else:
+        shards = manifest.get("shards", [])
+        if not isinstance(shards, list) or len(shards) not in (2, 3) or any(not shard for shard in shards):
+            raise ValueError("missing UI shards")
+        if Counter(test for shard in shards for test in shard) != Counter(ui):
+            raise ValueError("UI shard union has a gap or duplicate")
+        lanes = {"unit": unit, **{f"ui-{index + 1}": shard for index, shard in enumerate(shards)}}
+    if evidence.keys() != lanes.keys():
+        raise ValueError(f"missing or extra lane artifacts: expected={sorted(lanes)}, actual={sorted(evidence)}")
+    all_cases = []
+    for lane, expected in lanes.items():
+        all_cases.extend(validate_lane(expected, evidence[lane], skips + unit_skips))
+    executed = [identifier for identifier, result, _ in all_cases if result == "Passed"]
+    if mode == "full" and set(executed) - set(unit) != set(ui) - set(skips):
+        raise ValueError("executed iPhone UI union mismatch")
+    return (f"{mode}: all {len(all_cases)} cases accounted for; "
+            f"BeidTests: {len(unit) - len(unit_skips)} passed, {len(unit_skips)} skipped.")
 
 
 def compute_mode(event_name: str, payload: object) -> str:
@@ -55,7 +233,7 @@ def selection_arguments(mode: str, tests: list[str]) -> list[str]:
             if mode == "smoke" else [])
 
 
-def validate_sources(tests: list[str], source_root: Path) -> None:
+def source_tests(source_root: Path, bundle="BeidUITests") -> list[str]:
     """Bind each method to its Swift class, ignoring comments and string literals."""
     available = set()
     tokens = re.compile(r'//[^\n]*|/\*.*?\*/|""".*?"""|"(?:\\.|[^"\\])*"', re.S)
@@ -68,7 +246,12 @@ def validate_sources(tests: list[str], source_root: Path) -> None:
                 depth += (text[end] == "{") - (text[end] == "}")
                 end += 1
             for method in re.findall(r"\bfunc\s+(test\w+)\s*\(", text[start:end - 1]):
-                available.add(f"BeidUITests/{match[1]}/{method}")
+                available.add(f"{bundle}/{match[1]}/{method}")
+    return sorted(available)
+
+
+def validate_sources(tests: list[str], source_root: Path) -> None:
+    available = set(source_tests(source_root))
     missing = set(tests) - available
     if missing:
         raise ValueError(f"smoke methods missing from UI sources: {sorted(missing)}")
@@ -150,6 +333,28 @@ def main() -> int:
     mode = sub.add_parser("mode")
     mode.add_argument("--event-name", required=True)
     mode.add_argument("--event-path", type=Path, required=True)
+    shards = sub.add_parser("shards", help="enumerate and balance the complete UI suite")
+    shards.add_argument("--enumeration", type=Path, required=True)
+    shards.add_argument("--output", type=Path, required=True)
+    shards.add_argument("--count", type=int, required=True)
+    shards.add_argument("--mode", choices=("full", "smoke"), required=True)
+    shards.add_argument("--sha", required=True)
+    shards.add_argument("--durations", type=Path, default=DEFAULT_DURATIONS)
+    for command in ("lane-arguments", "verify-lane"):
+        child = sub.add_parser(command)
+        child.add_argument("--manifest", type=Path, required=True)
+        child.add_argument("--lane", required=True)
+        if command == "verify-lane":
+            child.add_argument("--tests-json", type=Path, required=True)
+            child.add_argument("--summary-json", type=Path, required=True)
+            child.add_argument("--summary", type=Path, required=True)
+    aggregate = sub.add_parser("aggregate")
+    aggregate.add_argument("--event-name", required=True)
+    aggregate.add_argument("--needs-json", type=Path, required=True)
+    aggregate.add_argument("--evidence-root", type=Path, required=True)
+    aggregate.add_argument("--attempt", required=True)
+    aggregate.add_argument("--sha", required=True)
+    aggregate.add_argument("--summary", type=Path, required=True)
     for command in ("arguments", "verify"):
         child = sub.add_parser(command)
         child.add_argument("--mode", required=True)
@@ -166,6 +371,74 @@ def main() -> int:
             except (OSError, ValueError):
                 payload = None
             print(f"mode={compute_mode(args.event_name, payload)}")
+            return 0
+        if args.command == "shards":
+            enumerated = parse_enumeration(json.loads(args.enumeration.read_text()))
+            if set(enumerated["BeidUITests"]) != set(source_tests(Path("ios/BeidUITests"))):
+                raise ValueError("runtime UI enumeration differs from Swift source inventory")
+            skips = parse_smoke_list(IPHONE_SKIPS.read_text())
+            if not set(skips) <= set(enumerated["BeidUITests"]):
+                raise ValueError("stale iPhone skip list")
+            unit_skips = unique_tests([
+                identifier for line in UNIT_SKIPS.read_text().splitlines()
+                if (identifier := line.partition("#")[0].strip())
+            ], "BeidTests")
+            validate_unit_skips(unit_skips, enumerated["BeidTests"])
+            smoke = parse_smoke_list(DEFAULT_LIST.read_text())
+            validate_sources(smoke, Path("ios/BeidUITests"))
+            duration_data = json.loads(args.durations.read_text())
+            manifest = {"sha": args.sha, "mode": args.mode,
+                        "unit": enumerated["BeidTests"], "ui": enumerated["BeidUITests"],
+                        "iphone_skips": skips, "unit_skips": unit_skips, "smoke": smoke,
+                        "shards": shard_tests(enumerated["BeidUITests"], duration_data["seconds"], args.count)}
+            args.output.write_text(json.dumps(manifest, indent=2) + "\n")
+            return 0
+        if args.command in ("lane-arguments", "verify-lane"):
+            manifest = json.loads(args.manifest.read_text())
+            if args.lane == "build" and manifest["mode"] == "smoke":
+                selected = manifest["unit"] + manifest["smoke"]
+                arguments = selection_arguments("smoke", manifest["smoke"])
+            elif args.lane == "unit" and manifest["mode"] == "full":
+                selected, arguments = manifest["unit"], ["-only-testing:BeidTests"]
+            elif re.fullmatch(r"ui-[1-3]", args.lane) and manifest["mode"] == "full":
+                selected = manifest["shards"][int(args.lane[-1]) - 1]
+                arguments = [f"-only-testing:{test}" for test in selected]
+            else:
+                raise ValueError(f"invalid lane: {args.lane}")
+            if args.command == "lane-arguments":
+                print("\n".join(arguments))
+                return 0
+            payload = json.loads(args.tests_json.read_text())
+            unit_skips = validate_unit_skips(manifest.get("unit_skips"), manifest["unit"])
+            cases = validate_lane(selected, payload, manifest["iphone_skips"] + unit_skips)
+            summary = json.loads(args.summary_json.read_text())
+            warnings = validate_xcresult_summary(summary, parse_xcresult_tests(payload))
+            if warnings or summary.get("result") != "Passed":
+                raise ValueError(f"invalid or failing result summary: {warnings}")
+            with args.summary.open("a", encoding="utf-8") as output:
+                output.write(f"\n### {args.lane} execution evidence\n\n")
+                output.write("Durations sum Test Case nodes, excluding suite totals; not wall time.\n\n")
+                for bundle in ("BeidTests", "BeidUITests"):
+                    items = [item for item in cases if item[0].startswith(bundle + "/")]
+                    if items:
+                        output.write(f"{bundle}: {len(items)} cases; {sum(item[2] for item in items):.3f} s.\n\n")
+            return 0
+        if args.command == "aggregate":
+            needs = json.loads(args.needs_json.read_text())
+            evidence, manifest = {}, None
+            prefix = f"ios-evidence-{args.attempt}-"
+            for folder in args.evidence_root.iterdir():
+                if not folder.is_dir() or not folder.name.startswith(prefix):
+                    raise ValueError(f"unexpected evidence entry: {folder.name}")
+                lane = folder.name.removeprefix(prefix)
+                if lane == "build":
+                    manifest = json.loads((folder / "manifest.json").read_text())
+                if (folder / "test-tree.json").exists():
+                    evidence[lane] = json.loads((folder / "test-tree.json").read_text())
+            message = validate_aggregate(args.event_name, needs, manifest, evidence, args.sha)
+            print(message)
+            with args.summary.open("a", encoding="utf-8") as output:
+                output.write(f"\n### iOS simulator aggregate\n\n{message}\n")
             return 0
         tests = parse_smoke_list(args.list.read_text(encoding="utf-8"))
         if args.command == "arguments":
@@ -189,7 +462,7 @@ def main() -> int:
                 output.write(line)
                 print(line.strip())
         return 0
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, KeyError, IndexError, TypeError) as error:
         print(f"iOS UI evidence failed: {error}", file=sys.stderr)
         return 1
 

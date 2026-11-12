@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import XCTest
+import UIKit
 
 enum UITestWait {
   // Navigation and accessibility snapshots can take more than five seconds
@@ -51,5 +52,25 @@ extension XCUIElement {
       scrollView.swipeUp()
     }
     assertHittable(file: file, line: line)
+  }
+}
+
+extension XCUIApplication {
+  func tabButton(_ label: String) -> XCUIElement {
+    if UIDevice.current.userInterfaceIdiom == .pad {
+      return buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+    }
+    return tabBars.buttons[label]
+  }
+
+  func openRecordsByEvent() {
+    let recordsTab = tabButton("Records")
+    recordsTab.assertHittable()
+    recordsTab.tap()
+    if collectionViews["records.events"].exists { return }
+    let byEvent = buttons["records.by-event"]
+    byEvent.assertHittable()
+    byEvent.tap()
+    collectionViews["records.events"].assertExists()
   }
 }

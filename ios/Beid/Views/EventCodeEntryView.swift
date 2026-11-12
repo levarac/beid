@@ -77,7 +77,7 @@ struct EventCodeEntryView: View {
             VStack(alignment: .leading, spacing: 0) {
               title
 
-              Text("Only needed if an event didn’t appear automatically. Ask the organizer for the code.")
+              Text("If your event is not listed, ask the organizer for its event code and paste it here.")
                 .beidTextStyle(DS.Font.Library.body15)
                 .foregroundStyle(DS.Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -96,8 +96,8 @@ struct EventCodeEntryView: View {
             EventCodeJoinButton(action: submit)
 
             if mode == .onboarding && !isScreenshotFixture {
-              BeidSecondaryButton(title: "Connect wallet instead") {
-                coordinator.returnToWalletConnect()
+              BeidSecondaryButton(title: "Continue without a code") {
+                coordinator.returnToBluetoothPermission()
               }
               .tint(DS.Color.actionPrimary)
             }
@@ -139,16 +139,16 @@ struct EventCodeEntryView: View {
             .textCase(nil)
             .beidTextStyle(DS.Font.Library.labelMono10)
             .foregroundStyle(DS.Color.textPrimary)
-            .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+            .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget, alignment: .trailing)
             .contentShape(Rectangle())
             .accessibilityLabel(Text(verbatim: String(localized: "Paste event code")))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("eventCode.paste")
       }
-      .frame(minHeight: 44)
+      .frame(minHeight: DS.Size.minHitTarget)
 
-      TextField("Event code", text: $code, prompt: Text("e.g. ETHTOKYO2026"))
+      TextField("Event code", text: $code, prompt: Text("eventCode.input.placeholder"))
         .beidTextStyle(DS.Font.Library.displayAddress34)
         .foregroundStyle(DS.Color.textPrimary)
         .textInputAutocapitalization(.characters)
@@ -186,7 +186,7 @@ struct EventCodeEntryView: View {
         HStack(spacing: Layout.errorDotGap) {
           Circle()
             .fill(DS.Color.statusOff)
-            .frame(width: 7, height: 7)
+            .frame(width: DS.Onboarding.statusDot, height: DS.Onboarding.statusDot)
             .accessibilityHidden(true)
           if errorKind == .emptyCode {
             Text("Event code required")
@@ -257,18 +257,7 @@ private struct EventCodeJoinButton: View {
   let action: () -> Void
 
   var body: some View {
-    Button {
-      BeidDesign.haptic()
-      action()
-    } label: {
-      Text("Join Event")
-        .beidTextStyle(DS.Font.Library.title16)
-        .foregroundStyle(DS.Color.labelOnActionPrimary)
-        .frame(maxWidth: .infinity, minHeight: 56)
-        .background(DS.Color.actionPrimary, in: Capsule())
-        .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
+    BeidPrimaryButton("Join event", action: action)
   }
 }
 

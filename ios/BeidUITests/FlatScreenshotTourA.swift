@@ -13,12 +13,31 @@ final class FlatScreenshotTourA: XCTestCase {
 
   func testShot_01_Welcome() {
     launch()
+    assertExactText("Record you were there.", message: "Welcome must use the approved Record headline")
+    assertExactText(
+      "Your phones say hello to each other, and keep a note anyone can verify.",
+      message: "Welcome must use the approved keep-a-note explanation"
+    )
+    XCTAssertTrue(
+      app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "beid")).firstMatch
+        .waitForExistence(timeout: 5),
+      "Welcome must retain its brand label"
+    )
+    XCTAssertTrue(app.buttons["Continue"].exists)
+    XCTAssertFalse(app.buttons["Connect Wallet"].exists)
+    XCTAssertFalse(app.buttons["Connect wallet instead"].exists)
     capture("01 Welcome")
   }
 
   func testShot_02_EnableBluetooth() {
     launch()
     showBluetoothPermission()
+    assertExactText(
+      "beid uses Bluetooth Low Energy to find nearby events and hear nearby phones.",
+      message: "Bluetooth permission must describe device observation"
+    )
+    assertExplainerCopy()
+    XCTAssertFalse(app.buttons["Connect Wallet"].exists)
     capture("02 Enable Bluetooth")
   }
 
@@ -27,6 +46,7 @@ final class FlatScreenshotTourA: XCTestCase {
     showBluetoothPermission()
     app.buttons["Allow Bluetooth"].tap()
     XCTAssertTrue(app.buttons["Open Settings"].waitForExistence(timeout: 5))
+    assertExactText("beid can’t find nearby events or record observations while Bluetooth is off.")
     capture("03 Bluetooth Off")
   }
 
@@ -46,7 +66,7 @@ final class FlatScreenshotTourA: XCTestCase {
     let paste = app.buttons["eventCode.paste"]
     XCTAssertTrue(paste.exists)
     XCTAssertEqual(paste.label, "Paste event code")
-    XCTAssertTrue(app.buttons["Join Event"].exists)
+    XCTAssertTrue(app.buttons["Join event"].exists)
   }
 
   func testShot_13b_Error() {
@@ -69,11 +89,12 @@ final class FlatScreenshotTourA: XCTestCase {
 
   /// Follow the actual Account sheet route so the Cancel toolbar item
   /// and nested-sheet presentation are part of each captured frame.
-  private func openAccountEventCodeEntry(frame: String) {
-    app.launchArguments = ["-beid-ui-test", frame]
+  private func openAccountEventCodeEntry(frame: String? = nil) {
+    app.launchArguments = ["-beid-ui-test"]
+    if let frame { app.launchArguments.append(frame) }
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
@@ -82,14 +103,14 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(account.waitForExistence(timeout: 5))
     account.tap()
 
-    let joinEvent = app.buttons["Join Event"]
+    let joinEvent = app.buttons["Join event"]
     let list = app.collectionViews.firstMatch
     var attempts = 0
     while !joinEvent.exists && attempts < 6 {
       list.swipeUp()
       attempts += 1
     }
-    XCTAssertTrue(joinEvent.exists, "Account's Join Event row was not reachable")
+    XCTAssertTrue(joinEvent.exists, "Account's Join event row was not reachable")
     joinEvent.tap()
     XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
   }
@@ -110,14 +131,127 @@ final class FlatScreenshotTourA: XCTestCase {
   }
 
   private func showBluetoothPermission() {
-    let getStarted = app.buttons["Get Started"]
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
+    let getStarted = app.buttons["Continue"]
+    XCTAssertTrue(
+      getStarted.waitForExistence(timeout: 5),
+      "Welcome must offer its primary action before Bluetooth permission"
+    )
     getStarted.tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
   }
 
   private func capture(_ frameCode: String) {
     keepScreenshot(named: frameCode)
+  }
+
+  func testWelcomeVersionMatchesTheAppMetadataInAccount() {
+    launch()
+    let version = app.staticTexts["welcome.version"]
+    XCTAssertTrue(
+      version.waitForExistence(timeout: 5),
+      "Welcome must expose the actual app short version"
+    )
+    let welcomeVersion = version.label
+    showBluetoothPermission()
+    app.buttons["Allow Bluetooth"].tap()
+    XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
+    app.buttons["home.account"].tap()
+    let accountVersion = app.staticTexts["account.version.value"]
+    XCTAssertTrue(accountVersion.waitForExistence(timeout: 5))
+    XCTAssertTrue(accountVersion.label.hasPrefix("beid "))
+    let metadata = String(accountVersion.label.dropFirst("beid ".count))
+    let shortVersion = metadata.components(separatedBy: " (").first ?? ""
+    XCTAssertFalse(shortVersion.isEmpty)
+    XCTAssertEqual(welcomeVersion, "V \(shortVersion)")
+  }
+
+  func testEventCodeGuidanceSupportsPasteWithoutAShortCodeExample() {
+    openAccountEventCodeEntry()
+    assertExactText(
+      "If your event is not listed, ask the organizer for its event code and paste it here.",
+      message: "Event code entry must describe organizer-supplied paste input"
+    )
+    let field = app.textFields["Event code"]
+    XCTAssertTrue(field.waitForExistence(timeout: 5))
+    XCTAssertEqual(field.placeholderValue, "Paste event code")
+    XCTAssertTrue(app.buttons["eventCode.paste"].exists)
+    XCTAssertFalse(app.buttons["Connect wallet instead"].exists)
+    XCTAssertTrue(app.buttons["Cancel"].exists)
+    app.buttons["Cancel"].tap()
+    XCTAssertTrue(app.buttons["account.aboutSensing"].waitForExistence(timeout: 5))
+  }
+
+  func testWelcomeExplanationDescribesJoinAndForegroundSensing() {
+    launch()
+    app.buttons["welcome.howItWorks"].tap()
+    XCTAssertTrue(app.buttons["aboutSensing.whatWeSend"].waitForExistence(timeout: 5))
+    assertExplainerCopy()
+  }
+
+  func testWelcomeExplanationReportsUnavailableSendingDetails() {
+    launch()
+    app.buttons["welcome.howItWorks"].tap()
+    let scroll = app.scrollViews["aboutSensing.scroll"]
+    XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+    let capability = app.staticTexts.matching(
+      NSPredicate(format: "label CONTAINS %@", "Sending is on.")
+    ).firstMatch
+    for _ in 0..<5 where !capability.isHittable { scroll.swipeUp() }
+    XCTAssertTrue(capability.isHittable, "About must describe the actual enabled sending capability")
+    assertContainsText(
+      "Sending details are not available here.",
+      message: "About must make unavailable sending details explicit"
+    )
+    assertExactText("SENDING STATUS")
+    XCTAssertFalse(app.staticTexts["SENDING STATUS · ALL SAVED OBSERVATIONS"].exists)
+    XCTAssertFalse(app.staticTexts["Up to date"].exists)
+  }
+
+  func testAboutEnabledCapabilityKeepsSendingDetailsUnavailable() {
+    assertSendingCapability(setting: "on", expected: "Sending is on.")
+  }
+
+  func testAboutDisabledCapabilityKeepsSendingDetailsUnavailable() {
+    assertSendingCapability(setting: "off", expected: "Sending is off in this version.")
+  }
+
+  private func assertSendingCapability(setting: String, expected: String) {
+    app.launchArguments = ["-beid-ui-test", "-beid-about-sending", setting]
+    app.launch()
+    app.buttons["welcome.howItWorks"].tap()
+    let scroll = app.scrollViews["aboutSensing.scroll"]
+    XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+    let capability = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", expected)).firstMatch
+    for _ in 0..<5 where !capability.isHittable { scroll.swipeUp() }
+    XCTAssertTrue(capability.isHittable)
+    assertContainsText("Sending details are not available here.")
+    assertExactText("SENDING STATUS")
+    XCTAssertFalse(app.staticTexts["SENDING STATUS · ALL SAVED OBSERVATIONS"].exists)
+    XCTAssertFalse(app.staticTexts["Up to date"].exists)
+    let otherState = setting == "on"
+      ? "Sending is off in this version." : "Sending is on."
+    XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", otherState)).firstMatch.exists)
+  }
+
+  private func assertExplainerCopy() {
+    assertContainsText("Choose your event", message: "The explanation must require explicit event selection")
+    assertContainsText("beid looks for nearby events. Tap JOIN when your event appears.")
+    assertContainsText("Private by design")
+    assertContainsText("Phones exchange rotating anonymous IDs, not names or wallet addresses.")
+    assertContainsText("Keep beid open")
+    assertContainsText("Keep the app open while sensing. Tap STOP SENSING when you want to finish.")
+  }
+
+  private func assertExactText(_ text: String, message: String = "Expected complete screen copy") {
+    let element = app.staticTexts.matching(NSPredicate(format: "label == %@", text)).firstMatch
+    XCTAssertTrue(element.waitForExistence(timeout: 5), message)
+    XCTAssertEqual(element.label, text, message)
+  }
+
+  private func assertContainsText(_ text: String, message: String = "Expected complete explanation copy") {
+    let element = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+    XCTAssertTrue(element.waitForExistence(timeout: 5), message)
+    XCTAssertTrue(element.label.contains(text), message)
   }
 
   // MARK: - #646 About sensing / What we send
@@ -170,7 +304,7 @@ final class FlatScreenshotTourA: XCTestCase {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]

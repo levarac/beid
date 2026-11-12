@@ -77,22 +77,37 @@ struct BeidHeroHeader: View {
 }
 
 struct BeidPrimaryButton: View {
+  /// Fill and label pairing. `.inverse` is for ink grounds (DESIGN.md §5).
+  enum Tone {
+    case primary
+    case inverse
+  }
+
   let title: LocalizedStringKey
   let labelColor: Color
+  let tone: Tone
+  let hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle
+  let role: ButtonRole?
   let action: () -> Void
 
   init(
     _ title: LocalizedStringKey,
-    labelColor: Color = DS.Color.labelOnActionPrimary,
+    tone: Tone = .primary,
+    labelColor: Color? = nil,
+    haptic: UIImpactFeedbackGenerator.FeedbackStyle = .light,
+    role: ButtonRole? = nil,
     action: @escaping () -> Void
   ) {
     self.title = title
-    self.labelColor = labelColor
+    self.tone = tone
+    self.labelColor = labelColor ?? (tone == .inverse ? DS.Color.labelOnActionInverse : DS.Color.labelOnActionPrimary)
+    self.hapticStyle = haptic
+    self.role = role
     self.action = action
   }
 
   var body: some View {
-    Button(action: performAction, label: label)
+    Button(role: role, action: performAction, label: label)
       .buttonStyle(.plain)
   }
 
@@ -104,12 +119,12 @@ struct BeidPrimaryButton: View {
       .foregroundStyle(labelColor)
       .frame(maxWidth: .infinity)
       .frame(minHeight: DS.Size.primaryButtonMinHeight)
-      .background(DS.Color.actionPrimary, in: Capsule())
+      .background(tone == .inverse ? DS.Color.actionInverse : DS.Color.actionPrimary, in: Capsule())
       .contentShape(Capsule())
   }
 
   private func performAction() {
-    BeidDesign.haptic()
+    BeidDesign.haptic(hapticStyle)
     action()
   }
 }
@@ -127,7 +142,7 @@ struct BeidSecondaryButton: View {
   private func label() -> some View {
     Text(title)
       .font(DS.Font.cardTitle)
-      .frame(maxWidth: .infinity, minHeight: 44)
+      .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
   }
 
   private func performAction() {
@@ -136,48 +151,18 @@ struct BeidSecondaryButton: View {
   }
 }
 
-/// One benefit/permission bullet: a title and optionally a second, smaller
-/// supporting sentence (screen 02's three Bluetooth benefits — DESIGN.md §10).
-/// Omit `subtitle` for a title-only row.
-struct BeidBulletRow: View {
-  let title: LocalizedStringKey
-  var subtitle: LocalizedStringKey?
-
-  var body: some View {
-    HStack(alignment: subtitle == nil ? .center : .top, spacing: DS.Space.s) {
-      VStack(alignment: .leading, spacing: DS.Space.xs) {
-        Text(title)
-          .font(DS.Font.cardTitle)
-          .foregroundStyle(DS.Color.textPrimary)
-
-        if let subtitle {
-          Text(subtitle)
-            .font(DS.Font.meta)
-            .foregroundStyle(DS.Color.textSecondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-      }
-
-      Spacer(minLength: 0)
-    }
-  }
-}
-
 struct BeidStatusPill: View {
   enum State {
-    case sensingAutomatically
     case sensingPaused
 
     fileprivate var label: LocalizedStringKey {
       switch self {
-      case .sensingAutomatically: "Sensing automatically"
       case .sensingPaused: "Sensing paused"
       }
     }
 
     fileprivate var dotColor: Color {
       switch self {
-      case .sensingAutomatically: DS.Color.statusOn
       case .sensingPaused: DS.Color.statusPending
       }
     }
@@ -199,48 +184,6 @@ struct BeidStatusPill: View {
     .padding(.horizontal, DS.Space.m)
     .padding(.vertical, DS.Space.s)
     .beidSurface(cornerRadius: DS.Radius.pill)
-  }
-}
-
-/// Sequential numbered instructions in a bordered card — one filled index
-/// badge + one line per step (screen 03's "Open Settings / Tap Bluetooth /
-/// Switch it on" — DESIGN.md §10). The badge fill follows the ambient
-/// `.tint()` (so it picks up whichever fill the hosting screen sets, e.g.
-/// `actionPrimary` on a recovery screen); `labelColor` must be the on-fill
-/// pairing token for that same tint (see DESIGN.md §5's CTA-label rule —
-/// the same pairing applies to any text sitting on a tint fill).
-struct BeidNumberedStepList: View {
-  let steps: [LocalizedStringKey]
-  var labelColor: Color = DS.Color.labelOnActionPrimary
-
-  var body: some View {
-    VStack(spacing: 0) {
-      ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-        HStack(spacing: DS.Space.m) {
-          Text("\(index + 1)")
-            .font(DS.Font.meta.weight(.semibold))
-            .foregroundStyle(labelColor)
-            .frame(width: DS.Size.stepBadge, height: DS.Size.stepBadge)
-            .background(.tint, in: Circle())
-
-          Text(step)
-            .font(DS.Font.body)
-            .foregroundStyle(DS.Color.textPrimary)
-
-          Spacer(minLength: 0)
-        }
-        .padding(.horizontal, DS.Space.m)
-        .padding(.vertical, DS.Space.s)
-        .accessibilityElement(children: .combine)
-
-        if index < steps.count - 1 {
-          Divider()
-            .padding(.leading, DS.Space.m + DS.Size.stepBadge + DS.Space.m)
-        }
-      }
-    }
-    .padding(.vertical, DS.Space.xs)
-    .beidSurface(cornerRadius: DS.Radius.card)
   }
 }
 

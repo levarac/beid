@@ -49,7 +49,7 @@ struct ProofCollectedSnapshot: Sendable {
   var shortRecordID: String { RecordIDDisplay.abbreviated(recordID) }
 
   var withValue: String {
-    let peers = "\(detectedPeerCount) \(detectedPeerCount == 1 ? "peer" : "peers")"
+    let peers = "\(detectedPeerCount) \(detectedPeerCount == 1 ? "device" : "devices")"
     guard let observedWindowCount else { return peers }
     let windows = "\(observedWindowCount) \(observedWindowCount == 1 ? "window" : "windows")"
     return "\(peers) · \(windows)"
@@ -88,11 +88,11 @@ struct ProofCollectedView: View {
           .beidTextStyle(DS.Font.Library.labelMono11)
           .frame(maxWidth: .infinity)
 
-          RecordSigilSlot(input: sigilInput, placement: .proofCollected)
+          RecordSigilSlot(input: sigilInput, placement: .proofCollected, isDeviceRecord: true)
             .frame(maxWidth: .infinity)
             .padding(.top, DS.Space.m)
 
-          Text("Proof\ncollected")
+          Text("Record\ncollected")
             .beidTextStyle(DS.Font.Library.display46)
             .foregroundStyle(DS.Color.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
@@ -106,11 +106,10 @@ struct ProofCollectedView: View {
           }
           .padding(.top, DS.Space.l)
 
-          // Figma 07 "WHAT WAS SENT →"; decided label WHAT WE SEND (#637),
-          // opening 16's general disclosure (#646). Nothing is claimed sent.
+          // General field disclosure, without claiming a successful delivery.
           BeidTextControl(
-            "What we send",
-            glyph: .trailing("→", announcing: "What we send"),
+            "WHAT WAS SENT",
+            glyph: .trailing("→", announcing: "What was sent"),
             labelColor: DS.Color.textSecondary
           ) {
             showWhatWeSend = true
@@ -120,7 +119,7 @@ struct ProofCollectedView: View {
 
           Spacer(minLength: DS.Space.l)
 
-          BeidPrimaryButton("View collection", action: onViewCollection)
+          BeidPrimaryButton("View records", action: onViewCollection)
             .tint(DS.Color.actionPrimary)
             .padding(.bottom, DS.Space.m)
         }
@@ -140,7 +139,7 @@ struct ProofCollectedView: View {
               if #available(iOS 26, *) {
                 Button(role: .confirm) { showWhatWeSend = false }
               } else {
-                Button("Done") { showWhatWeSend = false }
+                Button("Done", systemImage: "checkmark") { showWhatWeSend = false }
               }
             }
           }

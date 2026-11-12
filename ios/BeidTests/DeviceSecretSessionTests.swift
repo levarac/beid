@@ -13,6 +13,1512 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testUnreadablePendingCaptureStoreSuppressesCompletionNoticesUntilReloaded() throws {
+    let directory = try makeDirectory()
+    let submissionURL = directory.appendingPathComponent("submissions.json")
+    let seeded = ReportSubmissionStore(fileURL: submissionURL)
+    let capture = try seedCapture(in: seeded, publicKey: nil)
+    try seeded.addExclusion(ReportSubmissionExclusion(
+      id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+      enin: capture.enin, peerCount: capture.peerRpids.count, reasonCode: "signing-key-changed", createdAt: Date()
+    ))
+    let pendingURL = directory.appendingPathComponent("submissions.pending.json")
+    let preservedURL = directory.appendingPathComponent("preserved.json")
+    try FileManager.default.moveItem(at: pendingURL, to: preservedURL)
+    try FileManager.default.createDirectory(at: pendingURL, withIntermediateDirectories: false)
+    let unreadable = ReportSubmissionStore(fileURL: submissionURL)
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let bundle = try enabledBundle(in: directory)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: bundle, eventSigningCryptography: makeCryptography(keychain), definitionProvider: provider, store: unreadable
+    ))
+    defer { runtime.stop() }
+    var notices: [String] = []
+    runtime.onSigningKeyChange = { eventCode, _ in notices.append(eventCode) }
+
+    XCTAssertTrue(unreadable.signingKeyChangeEventCodes.isEmpty)
+    XCTAssertNil(runtime.eventSigningKeyFailure)
+    XCTAssertTrue(notices.isEmpty)
+
+    try FileManager.default.removeItem(at: pendingURL)
+    try FileManager.default.moveItem(at: preservedURL, to: pendingURL)
+    let reloaded = ReportSubmissionStore(fileURL: submissionURL)
+    XCTAssertEqual(reloaded.pendingCaptures.map(\.id), [capture.id])
+    XCTAssertTrue(reloaded.signingKeyChangeEventCodes.isEmpty)
+    let resumed = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: bundle, eventSigningCryptography: makeCryptography(keychain), definitionProvider: provider, store: reloaded
+    ))
+    defer { resumed.stop() }
+    resumed.onSigningKeyChange = { eventCode, _ in notices.append(eventCode) }
+    resumed.submitPending()
+
+    XCTAssertTrue(ReportSubmissionStore(fileURL: submissionURL).pendingCaptures.isEmpty)
+    XCTAssertEqual(notices, ["PREVIOUS"])
+    XCTAssertEqual(resumed.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(keychain.readCount, 0)
+    XCTAssertNil(provider.completion)
+  }
+
+  func testOrphanDiscardDecisionSurvivesRemovalAndRelaunchUntilAcknowledged() throws {
+    let directory = try makeDirectory()
+    _ = try seedCheckpoint(in: directory, publicKey: nil)
+    let parentURL = directory.appendingPathComponent("proofs.json")
+    try FileManager.default.removeItem(at: parentURL)
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    var removalAttempted = false
+    let checkpoints = SelfProofCheckpointStore(fileURL: checkpointURL, removeFile: { _ in
+      removalAttempted = true
+      let decisions = ProofStore(fileURL: parentURL)
+      XCTAssertEqual(decisions.unacknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+      XCTAssertTrue(decisions.proofs.isEmpty)
+      throw CocoaError(.fileWriteNoPermission)
+    })
+    let interrupted = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), checkpointStore: checkpoints
+    )
+    XCTAssertTrue(removalAttempted)
+    XCTAssertEqual(interrupted.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(interrupted.eventSigningKeyNoticeEventCode)
+    XCTAssertNotNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+
+    let removed = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertEqual(removed.eventSigningKeyFailure, .unverifiable)
+    let decisions = ProofStore(fileURL: parentURL)
+    XCTAssertTrue(decisions.proofs.isEmpty)
+    decisions.add(Proof(eventName: "Another event", date: Date(), peersVerified: 1, eventCode: "OTHER"))
+
+    let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertEqual(relaunched.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertEqual(relaunched.eventSigningKeyFailure, .unverifiable)
+    relaunched.dismissEventSigningKeyFailure()
+
+    XCTAssertEqual(ProofStore(fileURL: parentURL).acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+    XCTAssertNil(makeCoordinator(directory: directory, cryptography: makeCryptography(keychain)).eventSigningKeyFailure)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
+  func testOrphanCheckpointRemainsWhenDiscardDecisionCannotBeSaved() throws {
+    let directory = try makeDirectory()
+    _ = try seedCheckpoint(in: directory, publicKey: nil)
+    let parentURL = directory.appendingPathComponent("proofs.json")
+    try FileManager.default.removeItem(at: parentURL)
+    let parents = ProofStore(fileURL: parentURL)
+    try FileManager.default.createDirectory(at: parentURL, withIntermediateDirectories: false)
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let original = try Data(contentsOf: checkpointURL)
+    let coordinator = makeCoordinator(
+      directory: directory,
+      cryptography: makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))),
+      proofStore: parents
+    )
+
+    XCTAssertTrue(try Data(contentsOf: checkpointURL) == original)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertTrue(parents.unacknowledgedSigningKeyChangeEventCodes.isEmpty)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
+  func testAsyncInitializationWaitsForRealCheckpointBeforeRebuildingDiscardNotice() async throws {
+    let directory = try makeDirectory()
+    let proofId = try seedCheckpoint(in: directory, publicKey: nil)
+    let parents = ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+    try parents.discardSelfProofForKeyChange(for: proofId)
+    let checkpointURL = directory.appendingPathComponent("self-proof-checkpoint.json")
+    try FileManager.default.moveItem(at: directory.appendingPathComponent("checkpoint.json"), to: checkpointURL)
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))),
+      proofStore: parents
+    )
+
+    XCTAssertTrue(coordinator.isLedgerLoading)
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertNotNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
+  func testAsyncInitializationDoesNotAnnounceDiscardWithUnreadableCheckpoint() async throws {
+    let directory = try makeDirectory()
+    let proofId = try seedCheckpoint(in: directory, publicKey: nil)
+    let parents = ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+    try parents.discardSelfProofForKeyChange(for: proofId)
+    let checkpointURL = directory.appendingPathComponent("self-proof-checkpoint.json")
+    try FileManager.default.createDirectory(at: checkpointURL, withIntermediateDirectories: false)
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))),
+      proofStore: parents
+    )
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: checkpointURL.path))
+  }
+
+  func testUnreadableParentStoreRetainsCheckpointUntilJoinCanReloadIt() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let parentURL = directory.appendingPathComponent("proofs.json")
+    let preservedURL = directory.appendingPathComponent("preserved.json")
+    try FileManager.default.moveItem(at: parentURL, to: preservedURL)
+    try FileManager.default.createDirectory(at: parentURL, withIntermediateDirectories: false)
+    let parents = ProofStore(fileURL: parentURL)
+    XCTAssertTrue(parents.isPersistenceSuspended)
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let original = try Data(contentsOf: checkpointURL)
+    let reads = keychain.readCount
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), eventJoinControl: engine, proofStore: parents
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertTrue(try Data(contentsOf: checkpointURL) == original)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertFalse(engine.isHoldingPermissionRequest)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertFalse(parents.hasReadableProofs)
+    XCTAssertEqual(coordinator.joinRefusalReasonKey, "storage_recovery_required")
+    // Admission must wait for readable parent records before preparing a session key.
+    XCTAssertEqual(keychain.readCount, reads)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+
+    try FileManager.default.removeItem(at: parentURL)
+    try FileManager.default.moveItem(at: preservedURL, to: parentURL)
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertFalse(parents.isPersistenceSuspended)
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertNotNil(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).record(forProofId: proofId))
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+    XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertNil(coordinator.joinRefusalReasonKey)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+  }
+
+  func testOrphanCheckpointSurvivesKeychainReadFailure() throws {
+    let directory = try makeDirectory()
+    _ = try seedCheckpoint(in: directory, publicKey: nil)
+    try FileManager.default.removeItem(at: directory.appendingPathComponent("proofs.json"))
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let original = try Data(contentsOf: checkpointURL)
+    let keychain = InMemoryDeviceSecretKeychain(
+      storedData: Data(repeating: 0x31, count: 32), readResults: [.failure(errSecInteractionNotAllowed)]
+    )
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), eventJoinControl: engine
+    )
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    XCTAssertTrue(try Data(contentsOf: checkpointURL) == original)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unverifiable)
+  }
+
+  func testCheckpointRequiresDurablySavedParent() throws {
+    let directory = try makeDirectory()
+    let parentURL = directory.appendingPathComponent("proofs.json")
+    let parents = ProofStore(fileURL: parentURL)
+    try FileManager.default.createDirectory(at: parentURL, withIntermediateDirectories: false)
+    let coordinator = makeCoordinator(
+      directory: directory,
+      cryptography: makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))),
+      proofStore: parents
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "SESSION")
+    for index in 0..<BeidConfig.eventConfirmThreshold {
+      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)",
+                                  detectedDisplayId: DetectionFixture.displayId(device: index))
+    }
+    coordinator.handleDetection(enin: 2, rpid: "peer-last",
+                                detectedDisplayId: DetectionFixture.displayId(device: 0))
+
+    let proofId = try XCTUnwrap(coordinator.currentProofID)
+    // An atomic-write failure leaves committed history unchanged, even in memory.
+    XCTAssertTrue(parents.proofs.isEmpty)
+    XCTAssertNotNil(parents.lastPersistenceError)
+    XCTAssertFalse(parents.hasPersistedProof(withId: proofId))
+    XCTAssertNil(parents.proof(withId: proofId))
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+  }
+
+  func testCheckpointAcknowledgementFailureIsShownBeforePendingNotice() throws {
+    try assertAcknowledgementFailureKeepsPendingNotice(blockParentWrite: true)
+  }
+
+  func testWindowAcknowledgementFailureKeepsPendingNoticeAfterParentWrite() throws {
+    try assertAcknowledgementFailureKeepsPendingNotice(blockParentWrite: false)
+  }
+
+  private func assertAcknowledgementFailureKeepsPendingNotice(blockParentWrite: Bool) throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: blockParentWrite ? publicKey : nil)
+    let parentURL = directory.appendingPathComponent("proofs.json")
+    let parents = ProofStore(fileURL: parentURL)
+    let submissionURL = directory.appendingPathComponent("submissions.json")
+    let store = ReportSubmissionStore(fileURL: submissionURL)
+    _ = try seedCapture(in: store, publicKey: blockParentWrite ? publicKey : nil)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain),
+      proofStore: parents, reportSubmissionRuntime: runtime
+    )
+    runtime.submitPending()
+    let notice: EventSigningKeyFailure = blockParentWrite ? .changed : .unverifiable
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, notice)
+    let blockedURL = blockParentWrite ? parentURL : directory.appendingPathComponent("submissions.exclusions.json")
+    let preservedURL = directory.appendingPathComponent("preserved.json")
+    try FileManager.default.moveItem(at: blockedURL, to: preservedURL)
+    try FileManager.default.createDirectory(at: blockedURL, withIntermediateDirectories: false)
+
+    coordinator.dismissEventSigningKeyFailure()
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertEqual(
+      coordinator.eventSigningKeyFailure?.message, "Changes to a record from an earlier session could not be saved."
+    )
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertEqual(parents.isSigningKeyChangeAcknowledged(forEventCode: "PREVIOUS"), !blockParentWrite)
+    XCTAssertTrue(store.acknowledgedSigningKeyChangeEventCodes.isEmpty)
+
+    coordinator.dismissEventSigningKeyFailure()
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, notice)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertTrue(store.acknowledgedSigningKeyChangeEventCodes.isEmpty)
+    try FileManager.default.removeItem(at: blockedURL)
+    try FileManager.default.moveItem(at: preservedURL, to: blockedURL)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertEqual(ProofStore(fileURL: parentURL).acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+    XCTAssertEqual(ReportSubmissionStore(fileURL: submissionURL).acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
+  func testCheckpointDiscardNoticeWaitsForRemoval() throws {
+    try assertCheckpointDiscardNoticeWaitsForRemoval(parentDecisionAlreadySaved: false)
+  }
+
+  func testCheckpointDiscardNoticeWaitsForRemovalOnRelaunch() throws {
+    try assertCheckpointDiscardNoticeWaitsForRemoval(parentDecisionAlreadySaved: true)
+  }
+
+  private func assertCheckpointDiscardNoticeWaitsForRemoval(parentDecisionAlreadySaved: Bool) throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let parentURL = directory.appendingPathComponent("proofs.json")
+    if parentDecisionAlreadySaved {
+      try ProofStore(fileURL: parentURL).discardSelfProofForKeyChange(for: proofId)
+    }
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    var removalFails = true
+    let checkpoints = SelfProofCheckpointStore(fileURL: checkpointURL, removeFile: { url in
+      if removalFails { throw CocoaError(.fileWriteNoPermission) }
+      try FileManager.default.removeItem(at: url)
+    })
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), checkpointStore: checkpoints
+    )
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertEqual(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint?.proofId, proofId)
+    XCTAssertTrue(try XCTUnwrap(ProofStore(fileURL: parentURL).proof(withId: proofId)).selfProofDiscardedForKeyChange)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+
+    removalFails = false
+    keychain.storedData = Data(repeating: 0x31, count: 32)
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertNil(relaunched.eventSigningKeyFailure)
+  }
+
+  func testOrphanCheckpointIsDiscardedOnceWithoutBlockingLaterJoins() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    try FileManager.default.removeItem(at: directory.appendingPathComponent("proofs.json"))
+    let reads = keychain.readCount
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), eventJoinControl: engine
+    )
+
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertGreaterThan(keychain.readCount, reads)
+    XCTAssertEqual(
+      coordinator.eventSigningKeyFailure?.message,
+      "A record from an earlier session could not be checked and was discarded."
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "NEXT")
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+
+    let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertNil(relaunched.eventSigningKeyFailure)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
+  func testManualJoinUsesTheHumanCodeForWindowAndSelfProofSigning() async throws {
+    let directory = try makeDirectory()
+    let humanCode = "SESSION"
+    let eventIdHex = String(repeating: "11", count: 32)
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(FakeEventJoinRegistry.admittingResolution(eventIdHex: eventIdHex))
+    let reports = WindowReportStore(fileURL: directory.appendingPathComponent("reports.json"))
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: provider, store: store, allowInsecureLoopbackForTests: true
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: cryptography, reports: reports,
+      eventJoinControl: engine, eventJoinRegistry: registry, reportSubmissionRuntime: runtime
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: humanCode, eventIdHex: eventIdHex)
+    try await Task.sleep(nanoseconds: 20_000_000)
+    XCTAssertEqual(engine.joinedCodes, [eventIdHex])
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: humanCode)
+    XCTAssertFalse(try cryptography.eventSigningPublicKey(eventCode: eventIdHex) == publicKey)
+    let reads = keychain.readCount
+    keychain.readResults = Array(repeating: .failure(errSecInteractionNotAllowed), count: 20)
+    let reporterRpid = "01" + String(repeating: "bb", count: 16)
+    for index in 0..<BeidConfig.eventConfirmThreshold {
+      coordinator.handleDetection(
+        enin: 1, rpid: "01" + String(format: "%032x", index + 1),
+        detectedDisplayId: DetectionFixture.displayId(device: index), reporterRpid: reporterRpid
+      )
+    }
+    guard case .recording(let session, _) = coordinator.phase else {
+      return XCTFail("recording must have started")
+    }
+    XCTAssertEqual(session.id, humanCode)
+    coordinator.handleDetection(
+      enin: 2, rpid: "01" + String(repeating: "cc", count: 16),
+      detectedDisplayId: DetectionFixture.displayId(device: 0), reporterRpid: reporterRpid
+    )
+    let checkpoint = try XCTUnwrap(SelfProofCheckpointStore(
+      fileURL: directory.appendingPathComponent("checkpoint.json")
+    ).checkpoint)
+    XCTAssertEqual(checkpoint.eventCode, humanCode)
+    XCTAssertTrue(checkpoint.eventSigningPublicKey == publicKey)
+    let capture = try XCTUnwrap(ReportSubmissionStore(
+      fileURL: directory.appendingPathComponent("submissions.json")
+    ).pendingCaptures.first)
+    XCTAssertEqual(capture.eventCode, humanCode)
+    XCTAssertEqual(capture.eventIdHex, eventIdHex)
+    XCTAssertTrue(capture.eventSigningPublicKey == publicKey)
+    XCTAssertTrue(store.exclusions.isEmpty)
+    let report = try XCTUnwrap(reports.reports.first)
+    var payload = Data(humanCode.utf8)
+    payload.append(contentsOf: withUnsafeBytes(of: Int64(1).bigEndian) { Array($0) })
+    payload.append(hexData(report.commitHex))
+    for rpid in capture.peerRpids.sorted() { payload.append(contentsOf: rpid.utf8) }
+    XCTAssertTrue(BarnardCoreSigning.recoverPublicKey(
+      recoveryId: report.signatureV, r: Array(hexData(report.signatureRHex)),
+      s: Array(hexData(report.signatureSHex)), messageHash32: Array(SHA256.hash(data: payload))
+    ) == Array(publicKey))
+
+    let receiptKeyHex = "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+    let server = try StubOperatorServer(
+      eventId: Data(repeating: 0x11, count: 32),
+      signingPrivateKey: [UInt8](repeating: 0, count: 31) + [2], signingPublicKey: hexData(receiptKeyHex)
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let configuration = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.submission
+      .createSubmissionOperatorConfiguration(
+        endpoint: endpoint.absoluteString, receiptPublicKeyHex: receiptKeyHex,
+        eventIdHex: eventIdHex, eventDefinitionDigestHex: String(repeating: "22", count: 32),
+        validFrom: nil, validUntil: nil, allowInsecureLoopbackForTests: true
+      ))
+    try XCTUnwrap(provider.completion)(VerifiedSubmissionDefinition(configuration: configuration))
+    try await server.waitFor(postCount: 1)
+    let signed = try XCTUnwrap(store.records.first)
+    let evidence = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.observation
+      .createMutualSensingWindowEvidence(
+        idHex: capture.id.uuidString.replacingOccurrences(of: "-", with: "").lowercased(), eventIdHex: eventIdHex,
+        eventDefinitionDigestHex: String(repeating: "22", count: 32), observerHex: hexString(publicKey),
+        finalizedAt: capture.finalizedAt, reporterRpidHex: capture.reporterRpid, enin: Int64(capture.enin),
+        observedRpidHexes: capture.peerRpids, rpidClaimHex: nil,
+        participantCommitmentHex: capture.participantCommitment.map { hexString($0) }, legacyPeerCount: nil
+      ))
+    let eligible = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.observation
+      .prepareMutualSensingObservation(evidence: evidence) as?
+      ExportedKotlinPackages.org.levarac.parallax.observation.ObservationPreparationResult.Eligible)
+    let digest = Array(SHA256.hash(data: Data(kotlinBytes: eligible.prepared.signatureStructure.toByteArray())))
+    let compact = hexData(signed.signedObservationHex).suffix(64)
+    XCTAssertEqual(signed.eventCode, humanCode)
+    XCTAssertTrue((0...1).contains { recoveryId in
+      BarnardCoreSigning.recoverPublicKey(
+        recoveryId: recoveryId, r: Array(compact.prefix(32)), s: Array(compact.suffix(32)), messageHash32: digest
+      ) == Array(publicKey)
+    })
+
+    let record = try XCTUnwrap(coordinator.stopSensing())
+    XCTAssertEqual(record.eventCode, humanCode)
+    XCTAssertTrue(record.eventIdHashHex == hexString(EventIdHash.compute(eventCode: humanCode)))
+    XCTAssertTrue(record.eventSigningPublicKeyHex == hexString(publicKey))
+    XCTAssertTrue(BarnardCoreSigning.verifySelfProof(
+      eventIdHash: Array(hexData(record.eventIdHashHex)), eventSigningPublicKey: Array(publicKey),
+      eninStart: record.eninStart, eninEnd: record.eninEnd, ownerPublicKey: Array(hexData(record.ownerPublicKeyHex)),
+      signature: BarnardCoreRecoverableSignature(
+        r: Array(hexData(record.signatureRHex)), s: Array(hexData(record.signatureSHex)), v: record.signatureV
+      )
+    ))
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertEqual(reports.reports.count, 2)
+    XCTAssertTrue(store.exclusions.isEmpty)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertEqual(keychain.readCount, reads)
+  }
+
+  func testParentAcknowledgementReconcilesExclusionsAfterInterruptedDismissal() throws {
+    try assertInterruptedAcknowledgementIsReconciled(parentAcknowledged: true)
+  }
+
+  func testExclusionAcknowledgementReconcilesParentsBeforePresentingNotices() throws {
+    try assertInterruptedAcknowledgementIsReconciled(parentAcknowledged: false)
+  }
+
+  func testParentAcknowledgementSuppressesRepeatedNoticeWhenReconciliationCannotWrite() throws {
+    try assertInterruptedAcknowledgementIsReconciled(parentAcknowledged: true, blockExclusionWrite: true)
+  }
+
+  private func assertInterruptedAcknowledgementIsReconciled(
+    parentAcknowledged: Bool, blockExclusionWrite: Bool = false
+  ) throws {
+    let directory = try makeDirectory()
+    let proofId = try seedCheckpoint(in: directory, publicKey: nil)
+    let parents = ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+    try parents.discardSelfProofForKeyChange(for: proofId)
+    try SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).clearDurably()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let capture = try seedCapture(in: store, publicKey: nil)
+    try store.addExclusion(ReportSubmissionExclusion(
+      id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+      enin: capture.enin, peerCount: capture.peerRpids.count,
+      reasonCode: "signing-key-changed", createdAt: Date()
+    ))
+    try store.removePendingCapture(id: capture.id)
+    if parentAcknowledged {
+      try parents.acknowledgeSigningKeyChanges(forEventCodes: ["PREVIOUS"])
+    } else {
+      try store.acknowledgeSigningKeyChanges(forEventCodes: ["PREVIOUS"])
+    }
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let reloaded = ReportSubmissionStore(fileURL: fileURL)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: reloaded
+    ))
+    defer { runtime.stop() }
+    let exclusionURL = directory.appendingPathComponent("submissions.exclusions.json")
+    let preservedURL = directory.appendingPathComponent("preserved-exclusions.json")
+    if blockExclusionWrite {
+      try FileManager.default.moveItem(at: exclusionURL, to: preservedURL)
+      try FileManager.default.createDirectory(at: exclusionURL, withIntermediateDirectories: false)
+    }
+
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: runtime
+    )
+
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertEqual(keychain.readCount, 0)
+    if blockExclusionWrite {
+      XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+      XCTAssertTrue(reloaded.pendingCaptures.isEmpty)
+      XCTAssertEqual(coordinator.eventSigningKeyFailure?.title, "Earlier record update failed")
+      XCTAssertEqual(
+        coordinator.eventSigningKeyFailure?.message,
+        "Changes to a record from an earlier session could not be saved."
+      )
+      XCTAssertTrue(reloaded.acknowledgedSigningKeyChangeEventCodes.isEmpty)
+      try FileManager.default.removeItem(at: exclusionURL)
+      try FileManager.default.moveItem(at: preservedURL, to: exclusionURL)
+    } else {
+      XCTAssertNil(coordinator.eventSigningKeyFailure)
+      XCTAssertEqual(reloaded.acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+      XCTAssertTrue(try XCTUnwrap(ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+        .proof(withId: proofId)).signingKeyChangeNoticeAcknowledged)
+    }
+    runtime.stop()
+    let relaunchedStore = ReportSubmissionStore(fileURL: fileURL)
+    let relaunchedRuntime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: relaunchedStore
+    ))
+    defer { relaunchedRuntime.stop() }
+    let relaunched = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: relaunchedRuntime
+    )
+    XCTAssertNil(relaunched.eventSigningKeyFailure)
+    XCTAssertEqual(relaunchedStore.acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+    XCTAssertTrue(relaunchedStore.records.isEmpty)
+    XCTAssertTrue(relaunchedStore.pendingCaptures.isEmpty)
+  }
+
+  func testRecoveryReadClearsAcknowledgedDeviceKeyOutageBeforeAnotherDiscoveryFailure() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    let capture = try seedCapture(in: store, publicKey: publicKey)
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+    let engine = RecordingEventJoinControl()
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: cryptography, eventJoinControl: engine, reportSubmissionRuntime: runtime
+    )
+    coordinator.useDemoEventMode = false
+    keychain.readResults = Array(repeating: .failure(errSecInteractionNotAllowed), count: 8)
+
+    coordinator.startHomeStandbyDiscovery()
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    coordinator.dismissEventSigningKeyFailure()
+    coordinator.startHomeStandbyDiscovery()
+    coordinator.joinNearbyEvent(eventCodeHashHex: String(repeating: "ab", count: 16))
+    XCTAssertNil(coordinator.eventSigningKeyFailure, "Home and JOIN must not repeat the acknowledged outage")
+    XCTAssertEqual(coordinator.joinRefusal, .eventSigningKeyUnavailable)
+
+    keychain.readResults = []
+    let reads = keychain.readCount
+    coordinator.retryPendingSubmissionsOnForeground()
+    XCTAssertEqual(keychain.readCount, reads + 1, "recovery must freshly read the device secret")
+    XCTAssertNotNil(provider.completion, "the successful read must reach definition resolution")
+    XCTAssertEqual(store.pendingCaptures.map(\.id), [capture.id], "definition resolution is still pending")
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    coordinator.startHomeStandbyDiscovery()
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable, "a new outage needs a new alert")
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 0)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+  }
+
+  func testCaptureReadFailureIsAnnouncedAfterAcknowledgedDeviceKeyOutage() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(directory: directory, cryptography: cryptography, reportSubmissionRuntime: runtime)
+    coordinator.useDemoEventMode = false
+    keychain.readResults = Array(repeating: .failure(errSecInteractionNotAllowed), count: 8)
+
+    coordinator.startHomeStandbyDiscovery()
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+
+    let capture = try seedCapture(in: store, publicKey: publicKey)
+    coordinator.retryPendingSubmissionsOnForeground()
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable, "acknowledging discovery must not hide capture failures")
+    XCTAssertEqual(store.pendingCaptures.map(\.id), [capture.id])
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertTrue(store.exclusions.isEmpty)
+    XCTAssertNil(provider.completion)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+  }
+
+  func testCheckpointRecoveryReadClearsAcknowledgedDeviceKeyOutageBeforeJoinFailure() throws {
+    let directory = try makeDirectory()
+    let secret = Data(repeating: 0x31, count: 32)
+    let keychain = InMemoryDeviceSecretKeychain(storedData: secret)
+    let cryptography = makeCryptography(keychain)
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    let coordinator = makeCoordinator(directory: directory, cryptography: cryptography)
+    coordinator.useDemoEventMode = false
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+
+    keychain.readResults = [.found(secret), .failure(errSecInteractionNotAllowed)]
+    let reads = keychain.readCount
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertEqual(keychain.readCount, reads + 2, "checkpoint recovery succeeds before the next session read fails")
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertEqual(coordinator.joinRefusal, .eventSigningKeyUnavailable)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+  }
+
+  func testStartingSessionRetainsPendingCaptureReadFailureUntilDismissed() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    let capture = try seedCapture(in: store, publicKey: publicKey)
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(directory: directory, cryptography: cryptography, reportSubmissionRuntime: runtime)
+    coordinator.useDemoEventMode = false
+    let reads = keychain.readCount
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertEqual(keychain.readCount, reads + 2)
+    XCTAssertEqual(coordinator.phase, .sensing)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+      .pendingCaptures.map(\.id), [capture.id])
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertTrue(store.exclusions.isEmpty)
+    XCTAssertNil(provider.completion)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    coordinator.stopSensing()
+  }
+
+  func testStartingSessionRetainsPendingCaptureCleanupFailure() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    _ = try seedCapture(in: ReportSubmissionStore(fileURL: fileURL), publicKey: publicKey)
+    try Data("unreadable".utf8).write(to: directory.appendingPathComponent("submissions.exclusions.json"))
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(directory: directory, cryptography: cryptography, reportSubmissionRuntime: runtime)
+    coordinator.useDemoEventMode = false
+
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertEqual(store.pendingCaptures.count, 1)
+    XCTAssertTrue(store.records.isEmpty)
+    coordinator.stopSensing()
+  }
+
+  func testPendingCaptureRecoveryReadsCurrentKeyDespiteCachedSession() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    _ = try cryptography.prepareSession()
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+
+    runtime.submitPending()
+
+    XCTAssertTrue(store.pendingCaptures.isEmpty)
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertEqual(store.exclusions.count, 1)
+    XCTAssertEqual(runtime.eventSigningKeyFailure, .changed)
+    XCTAssertNil(provider.completion)
+    XCTAssertTrue(try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS") == publicKey)
+  }
+
+  func testPendingCaptureRecoveryReadFailureIgnoresCachedSession() throws {
+    try assertCachedRecoveryReadFailure(checkpoint: false, missingKey: false)
+  }
+
+  func testPendingCaptureWithoutKeySurvivesRecoveryReadFailureDespiteCachedSession() throws {
+    try assertCachedRecoveryReadFailure(checkpoint: false, missingKey: true)
+  }
+
+  func testCheckpointRecoveryReadsCurrentKeyDespiteCachedSession() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    _ = try cryptography.prepareSession()
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+
+    let coordinator = makeCoordinator(directory: directory, cryptography: cryptography)
+
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertTrue(try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS") == publicKey)
+  }
+
+  func testCheckpointRecoveryReadFailureIgnoresCachedSession() throws {
+    try assertCachedRecoveryReadFailure(checkpoint: true, missingKey: false)
+  }
+
+  func testCheckpointWithoutKeySurvivesRecoveryReadFailureDespiteCachedSession() throws {
+    try assertCachedRecoveryReadFailure(checkpoint: true, missingKey: true)
+  }
+
+  private func assertCachedRecoveryReadFailure(checkpoint: Bool, missingKey: Bool) throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    _ = try cryptography.prepareSession()
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    if checkpoint {
+      _ = try seedCheckpoint(in: directory, publicKey: missingKey ? nil : publicKey)
+    } else {
+      _ = try seedCapture(in: store, publicKey: missingKey ? nil : publicKey)
+    }
+    let inputURL = directory.appendingPathComponent(checkpoint ? "checkpoint.json" : "submissions.pending.json")
+    let original = try Data(contentsOf: inputURL)
+    let reads = keychain.readCount
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(directory: directory, cryptography: cryptography, reportSubmissionRuntime: runtime)
+
+    if !checkpoint { runtime.submitPending() }
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    XCTAssertEqual(keychain.readCount, reads + 1)
+    XCTAssertTrue(try Data(contentsOf: inputURL) == original)
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertTrue(store.exclusions.isEmpty)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertNil(provider.completion)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount + keychain.removeCount, 0)
+  }
+
+  func testActiveCaptureKeepsSessionKeyUntilTheNextSession() async throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(directory: directory, cryptography: cryptography, reportSubmissionRuntime: runtime)
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "SESSION")
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "SESSION")
+    let reads = keychain.readCount
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    runtime.captureAndQueueWindow(
+      id: UUID(), eventCode: "SESSION", eventIdHex: String(repeating: "11", count: 32),
+      enin: 1, peerRpids: [], reporterRpid: "01" + String(repeating: "bb", count: 16),
+      participantCommitment: nil, eventSigningPublicKey: publicKey
+    )
+    try XCTUnwrap(provider.completion)(nil)
+    try await Task.sleep(nanoseconds: 20_000_000)
+    provider.completion = nil
+    runtime.submitPending()
+    XCTAssertNotNil(provider.completion)
+    XCTAssertEqual(keychain.readCount, reads)
+    XCTAssertNil(runtime.eventSigningKeyFailure)
+    try XCTUnwrap(provider.completion)(nil)
+    try await Task.sleep(nanoseconds: 20_000_000)
+    provider.completion = nil
+    keychain.readResults = []
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertTrue(store.pendingCaptures.isEmpty)
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertNil(provider.completion)
+    coordinator.stopSensing()
+  }
+
+  func testRelaunchCheckpointWithMatchingKeyProducesAVerifiableRecord() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+
+    let record = try XCTUnwrap(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json"))
+      .record(forProofId: proofId))
+    XCTAssertTrue(record.eventSigningPublicKeyHex == hexString(publicKey))
+    XCTAssertTrue(BarnardCoreSigning.verifySelfProof(
+      eventIdHash: Array(hexData(record.eventIdHashHex)),
+      eventSigningPublicKey: Array(hexData(record.eventSigningPublicKeyHex)),
+      eninStart: record.eninStart, eninEnd: record.eninEnd,
+      ownerPublicKey: Array(hexData(record.ownerPublicKeyHex)),
+      signature: BarnardCoreRecoverableSignature(
+        r: Array(hexData(record.signatureRHex)), s: Array(hexData(record.signatureSHex)), v: record.signatureV
+      )
+    ))
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+  }
+
+  func testRelaunchCheckpointWithChangedKeyIsDroppedAndReportedOnce() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertNotNil(coordinator.eventSigningKeyFailure)
+    XCTAssertNotEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    XCTAssertEqual(
+      coordinator.eventSigningKeyFailure?.message,
+      "A record from an earlier session could not be saved because this device's signing key changed. It was discarded."
+    )
+    let parent = try XCTUnwrap(ProofStore(fileURL: directory.appendingPathComponent("proofs.json")).proof(withId: proofId))
+    XCTAssertTrue(parent.selfProofDiscardedForKeyChange)
+    XCTAssertFalse(parent.signingKeyChangeNoticeAcknowledged)
+    let interrupted = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertEqual(interrupted.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(interrupted.eventSigningKeyFailure?.message, coordinator.eventSigningKeyFailure?.message)
+    interrupted.dismissEventSigningKeyFailure()
+    let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertNil(relaunched.eventSigningKeyFailure)
+  }
+
+  func testChangedCheckpointRetainsInputWhenParentDecisionCannotBeSaved() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let fileURL = directory.appendingPathComponent("proofs.json")
+    let parents = ProofStore(fileURL: fileURL)
+    try FileManager.default.removeItem(at: fileURL)
+    try FileManager.default.createDirectory(at: fileURL, withIntermediateDirectories: false)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain), proofStore: parents)
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertEqual(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint?.proofId, proofId)
+    XCTAssertFalse(try XCTUnwrap(parents.proof(withId: proofId)).selfProofDiscardedForKeyChange)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
+  func testDurableParentDiscardPreventsSigningAfterInterruptedCheckpointRemoval() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let parents = ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+    try parents.discardSelfProofForKeyChange(for: proofId)
+    let reads = keychain.readCount
+
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(keychain.readCount, reads)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertTrue(try XCTUnwrap(ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+      .proof(withId: proofId)).selfProofDiscardedForKeyChange)
+  }
+
+  func testRelaunchCheckpointReadFailurePreservesInputsWithoutSigning() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let url = directory.appendingPathComponent("checkpoint.json")
+    let original = try Data(contentsOf: url)
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    XCTAssertTrue(try Data(contentsOf: url) == original)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+  }
+
+  func testRelaunchCheckpointWithoutCapturedKeyIsDropped() throws {
+    let directory = try makeDirectory()
+    _ = try seedCheckpoint(in: directory, publicKey: nil)
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertEqual(
+      coordinator.eventSigningKeyFailure?.message,
+      "A record from an earlier session could not be checked and was discarded."
+    )
+    let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertEqual(relaunched.eventSigningKeyFailure?.message, coordinator.eventSigningKeyFailure?.message)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+  }
+
+  func testStartingSessionKeepsDiscardNoticeUntilDismissed() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    coordinator.useDemoEventMode = false
+
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    coordinator.stopSensing()
+    coordinator.startSensing(eventCode: "NEXT")
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    coordinator.stopSensing()
+  }
+
+  func testUnlockThenStartKeepsThePendingCaptureDiscardNotice() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: runtime
+    )
+    coordinator.useDemoEventMode = false
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    runtime.submitPending()
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertTrue(store.pendingCaptures.isEmpty)
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    coordinator.stopSensing()
+  }
+
+  func testPendingCaptureWithChangedKeyIsDroppedAndReportedOnce() throws {
+    try assertPendingCaptureIsDropped(captureKeyIsMissing: false)
+  }
+
+  func testPendingCaptureWithoutCapturedKeyIsDropped() throws {
+    try assertPendingCaptureIsDropped(captureKeyIsMissing: true)
+  }
+
+  func testAcknowledgedEventDoesNotRepeatNoticeForLaterWindowsOrRelaunch() throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
+    ))
+    var notices = 0
+    runtime.onEventSigningKeyFailure = { if $0 == .changed { notices += 1 } }
+    runtime.submitPending()
+    XCTAssertEqual(notices, 1)
+    try runtime.acknowledgeSigningKeyChanges()
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    runtime.submitPending()
+    XCTAssertEqual(notices, 1)
+    runtime.stop()
+    let reloaded = ReportSubmissionStore(fileURL: fileURL)
+    _ = try seedCapture(in: reloaded, publicKey: publicKey)
+    let relaunched = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: reloaded
+    ))
+    defer { relaunched.stop() }
+    relaunched.onEventSigningKeyFailure = { if $0 == .changed { notices += 1 } }
+    relaunched.submitPending()
+    XCTAssertEqual(notices, 1)
+    _ = try seedCapture(in: reloaded, publicKey: publicKey, eventCode: "OTHER")
+    relaunched.submitPending()
+    XCTAssertEqual(notices, 2)
+    XCTAssertTrue(reloaded.pendingCaptures.isEmpty)
+    XCTAssertTrue(reloaded.records.isEmpty)
+    XCTAssertEqual(reloaded.exclusions.count, 4)
+  }
+
+  func testUnacknowledgedWindowDiscardNoticeSurvivesRelaunch() throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let capture = try seedCapture(in: store, publicKey: publicKey)
+    try store.addExclusion(ReportSubmissionExclusion(
+      id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+      enin: capture.enin, peerCount: capture.peerRpids.count,
+      reasonCode: "signing-key-changed", createdAt: Date()
+    ))
+    try store.removePendingCapture(id: capture.id)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: ReportSubmissionStore(fileURL: fileURL)
+    ))
+    defer { runtime.stop() }
+
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: runtime
+    )
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).exclusions.allSatisfy {
+      $0.signingKeyChangeNoticeAcknowledged == true
+    })
+  }
+
+  func testCheckpointAcknowledgementAlsoSuppressesLaterWindowNoticesForTheEvent() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: runtime
+    )
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    coordinator.dismissEventSigningKeyFailure()
+
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    runtime.submitPending()
+
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertNil(runtime.eventSigningKeyFailure)
+    XCTAssertTrue(store.pendingCaptures.isEmpty)
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).exclusions.allSatisfy {
+      $0.signingKeyChangeNoticeAcknowledged == true
+    })
+  }
+
+  func testDistinctEventsRequireSeparateNoticeDismissals() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    _ = try seedCapture(in: store, publicKey: publicKey, eventCode: "OTHER")
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: runtime
+    )
+    runtime.submitPending()
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+
+    coordinator.dismissEventSigningKeyFailure()
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "OTHER")
+    XCTAssertEqual(store.acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertEqual(store.acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS", "OTHER"])
+  }
+
+  func testPendingCaptureReadFailurePreservesInputsWithoutSigning() throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let capture = try seedCapture(in: store, publicKey: publicKey)
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+
+    runtime.submitPending()
+
+    XCTAssertEqual(runtime.eventSigningKeyFailure, .unavailable)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.map(\.id), [capture.id])
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertTrue(store.exclusions.isEmpty)
+    XCTAssertNil(provider.completion)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+  }
+
+  func testRelaunchPendingCaptureWithMatchingKeySignsWithTheCapturedKey() async throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let capture = try seedCapture(in: ReportSubmissionStore(fileURL: fileURL), publicKey: publicKey)
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let receiptKeyHex = "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+    let server = try StubOperatorServer(
+      eventId: Data(repeating: 0x11, count: 32),
+      signingPrivateKey: [UInt8](repeating: 0, count: 31) + [2], signingPublicKey: hexData(receiptKeyHex)
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let configuration = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.submission
+      .createSubmissionOperatorConfiguration(
+        endpoint: endpoint.absoluteString, receiptPublicKeyHex: receiptKeyHex,
+        eventIdHex: capture.eventIdHex, eventDefinitionDigestHex: String(repeating: "22", count: 32),
+        validFrom: nil, validUntil: nil, allowInsecureLoopbackForTests: true
+      ))
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: provider, store: store, allowInsecureLoopbackForTests: true
+    ))
+    defer { runtime.stop() }
+
+    runtime.submitPending()
+    try XCTUnwrap(provider.completion)(VerifiedSubmissionDefinition(configuration: configuration))
+    try await server.waitFor(postCount: 1)
+
+    let record = try XCTUnwrap(store.records.first)
+    let evidence = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.observation
+      .createMutualSensingWindowEvidence(
+        idHex: capture.id.uuidString.replacingOccurrences(of: "-", with: "").lowercased(), eventIdHex: capture.eventIdHex!,
+        eventDefinitionDigestHex: String(repeating: "22", count: 32), observerHex: hexString(publicKey),
+        finalizedAt: capture.finalizedAt, reporterRpidHex: capture.reporterRpid, enin: Int64(capture.enin),
+        observedRpidHexes: capture.peerRpids, rpidClaimHex: nil,
+        participantCommitmentHex: nil, legacyPeerCount: nil
+      ))
+    let eligible = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.observation
+      .prepareMutualSensingObservation(evidence: evidence) as?
+      ExportedKotlinPackages.org.levarac.parallax.observation.ObservationPreparationResult.Eligible)
+    let digest = Array(SHA256.hash(data: Data(kotlinBytes: eligible.prepared.signatureStructure.toByteArray())))
+    let compact = hexData(record.signedObservationHex).suffix(64)
+    XCTAssertTrue((0...1).contains { recoveryId in
+      BarnardCoreSigning.recoverPublicKey(
+        recoveryId: recoveryId, r: Array(compact.prefix(32)), s: Array(compact.suffix(32)), messageHash32: digest
+      ) == Array(publicKey)
+    })
+    XCTAssertTrue(store.pendingCaptures.isEmpty)
+    XCTAssertNil(runtime.eventSigningKeyFailure)
+  }
+
+  private func assertPendingCaptureIsDropped(captureKeyIsMissing: Bool) throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    _ = try seedCapture(in: store, publicKey: captureKeyIsMissing ? nil : publicKey)
+    if !captureKeyIsMissing { keychain.storedData = Data(repeating: 0x42, count: 32) }
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+    var notices = 0
+    runtime.onEventSigningKeyFailure = { _ in notices += 1 }
+
+    runtime.submitPending()
+
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.isEmpty)
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertEqual(store.exclusions.count, 1)
+    XCTAssertNotEqual(runtime.eventSigningKeyFailure, .unavailable)
+    XCTAssertEqual(
+      runtime.eventSigningKeyFailure?.message,
+      captureKeyIsMissing
+        ? "A record from an earlier session could not be checked and was discarded."
+        : "A record from an earlier session could not be saved because this device's signing key changed. It was discarded."
+    )
+    XCTAssertNil(provider.completion)
+    runtime.submitPending()
+    XCTAssertEqual(notices, 1)
+    let relaunched = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: ReportSubmissionStore(fileURL: fileURL)
+    ))
+    defer { relaunched.stop() }
+    XCTAssertEqual(relaunched.eventSigningKeyFailure?.message, runtime.eventSigningKeyFailure?.message)
+  }
+
+  private func seedCheckpoint(in directory: URL, publicKey: Data?) throws -> UUID {
+    let proofId = UUID()
+    ProofStore(fileURL: directory.appendingPathComponent("proofs.json")).add(Proof(
+      id: proofId, eventName: "Previous event", date: Date(), peersVerified: 1, eventCode: "PREVIOUS"
+    ))
+    var record: [String: Any] = [
+      "proofId": proofId.uuidString, "eventCode": "PREVIOUS", "eninStart": 1, "eninEnd": 2
+    ]
+    record["eventSigningPublicKey"] = publicKey?.base64EncodedString()
+    try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "record": record])
+      .write(to: directory.appendingPathComponent("checkpoint.json"), options: .atomic)
+    return proofId
+  }
+
+  private func seedCapture(
+    in store: ReportSubmissionStore, publicKey: Data?, eventCode: String = "PREVIOUS"
+  ) throws -> ReportSubmissionCapture {
+    let capture = ReportSubmissionCapture(
+      id: UUID(), eventCode: eventCode, eventIdHex: String(repeating: "11", count: 32),
+      enin: 1, peerRpids: ["01" + String(repeating: "aa", count: 16)],
+      reporterRpid: "01" + String(repeating: "bb", count: 16), participantCommitment: nil
+    )
+    var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(capture)) as? [String: Any])
+    object["eventSigningPublicKey"] = publicKey?.base64EncodedString()
+    let captured = try JSONDecoder().decode(ReportSubmissionCapture.self, from: JSONSerialization.data(withJSONObject: object))
+    try store.addPendingCapture(captured)
+    return captured
+  }
+
+  func testCheckpointSurvivesARecordWriteFailure() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let original = try Data(contentsOf: checkpointURL)
+    let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+    var shouldFail = true
+    let records = SelfProofStore(fileURL: selfProofURL, writeData: { data, url in
+      if shouldFail { throw CocoaError(.fileWriteNoPermission) }
+      try data.write(to: url, options: .atomic)
+    })
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain),
+      eventJoinControl: engine, selfProofStore: records
+    )
+
+    XCTAssertEqual(try Data(contentsOf: checkpointURL), original)
+    XCTAssertNotNil(records.lastPersistenceError)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "NEXT")
+
+    // A failed record write requires storage recovery, not a replacement signing key.
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertEqual(coordinator.joinRefusalReasonKey, "storage_recovery_required")
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(try Data(contentsOf: checkpointURL), original)
+    XCTAssertTrue(SelfProofStore(fileURL: selfProofURL).records.isEmpty)
+
+    shouldFail = false
+    coordinator.retrySessionAdmissionAfterStorageFailure()
+
+    let recovered = SelfProofStore(fileURL: selfProofURL)
+    XCTAssertEqual(recovered.records.count, 1)
+    XCTAssertNotNil(recovered.durableRecord(forProofId: proofId))
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertNil(records.lastPersistenceError)
+    XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertNil(coordinator.joinRefusalReasonKey)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+  }
+
+  func testExcludedCaptureCannotSignAfterItsRemovalWasInterrupted() throws {
+    try assertDiscardNoticeWaitsForCaptureRemoval(exclusionAlreadySaved: false)
+  }
+
+  func testExcludedCaptureDoesNotShowDiscardNoticeBeforeRemovalOnRelaunch() throws {
+    try assertDiscardNoticeWaitsForCaptureRemoval(exclusionAlreadySaved: true)
+  }
+
+  private func assertDiscardNoticeWaitsForCaptureRemoval(exclusionAlreadySaved: Bool) throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let pendingURL = directory.appendingPathComponent("submissions.pending.json")
+    let preservedURL = directory.appendingPathComponent("preserved.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let capture = try seedCapture(in: store, publicKey: publicKey)
+    if exclusionAlreadySaved {
+      try store.addExclusion(ReportSubmissionExclusion(
+        id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+        enin: capture.enin, peerCount: capture.peerRpids.count,
+        reasonCode: "signing-key-changed", createdAt: Date()
+      ))
+    }
+    let runtimeStore = exclusionAlreadySaved ? ReportSubmissionStore(fileURL: fileURL) : store
+    try FileManager.default.moveItem(at: pendingURL, to: preservedURL)
+    try FileManager.default.createDirectory(at: pendingURL, withIntermediateDirectories: false)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: provider, store: runtimeStore
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: runtime
+    )
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+
+    runtime.submitPending()
+
+    XCTAssertEqual(runtimeStore.pendingCaptures.count, 1)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).exclusions.count, 1)
+    XCTAssertTrue(runtimeStore.records.isEmpty)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    try FileManager.default.removeItem(at: pendingURL)
+    try FileManager.default.moveItem(at: preservedURL, to: pendingURL)
+    keychain.storedData = Data(repeating: 0x31, count: 32)
+    runtime.submitPending()
+
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.isEmpty)
+    XCTAssertTrue(runtimeStore.records.isEmpty)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertNil(provider.completion)
+  }
+
+  func testUnreadableExclusionsPreventKeyDerivationAndSigning() throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let initialStore = ReportSubmissionStore(fileURL: fileURL)
+    let capture = try seedCapture(in: initialStore, publicKey: publicKey)
+    try initialStore.addExclusion(ReportSubmissionExclusion(
+      id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+      enin: capture.enin, peerCount: capture.peerRpids.count,
+      reasonCode: "signing-key-changed", createdAt: Date()
+    ))
+    try Data("unreadable".utf8).write(to: directory.appendingPathComponent("submissions.exclusions.json"))
+    let reads = keychain.readCount
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+
+    runtime.submitPending()
+
+    XCTAssertEqual(keychain.readCount, reads)
+    XCTAssertNil(provider.completion)
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertEqual(store.pendingCaptures.map(\.id), [capture.id])
+    XCTAssertEqual(runtime.eventSigningKeyFailure, .discardFailed)
+  }
+
   func testManualJoinKeepsResolvedSecretAcrossPermissionWait() async throws {
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let cryptography = makeCryptography(keychain)
@@ -240,6 +1746,8 @@ final class DeviceSecretSessionTests: XCTestCase {
     guard case .recording = coordinator.phase else { return XCTFail("recording must have started") }
     coordinator.handleDetection(enin: 2, rpid: "peer-next",
                                 detectedDisplayId: DetectionFixture.displayId(device: 0))
+    XCTAssertTrue(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json"))
+      .checkpoint?.eventSigningPublicKey == publicKey)
     coordinator.checkpointOpenWindowForBackgrounding()
     coordinator.handleDetection(enin: 3, rpid: "peer-last",
                                 detectedDisplayId: DetectionFixture.displayId(device: 0))
@@ -272,8 +1780,13 @@ final class DeviceSecretSessionTests: XCTestCase {
     let directory = try makeDirectory()
     let proofId = UUID()
     let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    ProofStore(fileURL: directory.appendingPathComponent("proofs.json")).add(Proof(
+      id: proofId, eventName: "Previous event", date: Date(), peersVerified: 1, eventCode: "PREVIOUS"
+    ))
+    let publicKey = try makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32)))
+      .eventSigningPublicKey(eventCode: "PREVIOUS")
     SelfProofCheckpointStore(fileURL: checkpointURL).save(SelfProofCheckpoint(
-      proofId: proofId, eventCode: "PREVIOUS", eninStart: 1, eninEnd: 2
+      proofId: proofId, eventCode: "PREVIOUS", eninStart: 1, eninEnd: 2, eventSigningPublicKey: publicKey
     ))
     let keychain = InMemoryDeviceSecretKeychain(
       storedData: Data(repeating: 0x31, count: 32),
@@ -327,8 +1840,10 @@ final class DeviceSecretSessionTests: XCTestCase {
       id: UUID(), eventCode: "SESSION", eventIdHex: String(repeating: "11", count: 32),
       enin: 1, peerRpids: ["01" + String(repeating: "aa", count: 16)],
       reporterRpid: "01" + String(repeating: "bb", count: 16),
-      participantCommitment: Data(repeating: 0x55, count: 32)
+      participantCommitment: Data(repeating: 0x55, count: 32), eventSigningPublicKey: publicKey
     )
+    XCTAssertTrue(ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+      .pendingCaptures.first?.eventSigningPublicKey == publicKey)
     let completion = try XCTUnwrap(provider.completion)
     keychain.storedData = Data(repeating: 0x42, count: 32)
     _ = try cryptography.prepareSession()
@@ -354,6 +1869,8 @@ final class DeviceSecretSessionTests: XCTestCase {
       readResults: Array(repeating: .failure(errSecInteractionNotAllowed), count: 8)
     )
     let provider = DelayedDeviceSecretDefinitionProvider()
+    let publicKey = try makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32)))
+      .eventSigningPublicKey(eventCode: "PREVIOUS")
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: provider, store: store
@@ -363,7 +1880,8 @@ final class DeviceSecretSessionTests: XCTestCase {
     runtime.captureAndQueueWindow(
       id: UUID(), eventCode: "PREVIOUS", eventIdHex: String(repeating: "11", count: 32),
       enin: 1, peerRpids: ["01" + String(repeating: "aa", count: 16)],
-      reporterRpid: "01" + String(repeating: "bb", count: 16), participantCommitment: nil
+      reporterRpid: "01" + String(repeating: "bb", count: 16), participantCommitment: nil,
+      eventSigningPublicKey: publicKey
     )
 
     XCTAssertEqual(runtime.eventSigningKeyFailure, .unavailable)
@@ -384,19 +1902,29 @@ final class DeviceSecretSessionTests: XCTestCase {
     directory: URL, cryptography: BarnardSensingCryptography, reports: WindowReportStore? = nil,
     eventJoinControl: (any EventJoinControlling)? = SessionJoinControl(),
     eventJoinRegistry: (any EventJoinRegistry)? = nil,
-    deviceSecretStore: DeviceSecretKeychainStore = .shared
+    deviceSecretStore: DeviceSecretKeychainStore = .shared,
+    proofStore: ProofStore? = nil,
+    selfProofStore: SelfProofStore? = nil,
+    checkpointStore: SelfProofCheckpointStore? = nil,
+    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil
   ) -> SensingCoordinator {
-    SensingCoordinator(
+    let parents = proofStore ?? ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+    let coordinator = SensingCoordinator(
       windowReportStore: reports ?? WindowReportStore(fileURL: directory.appendingPathComponent("reports.json")),
-      selfProofStore: SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")),
-      selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")),
+      selfProofStore: selfProofStore ?? SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")),
+      selfProofCheckpointStore: checkpointStore
+        ?? SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")),
       bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("aggregate.json")),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
-      sensingCryptography: cryptography, eventJoinControl: eventJoinControl,
+      sensingCryptography: cryptography, reportSubmissionRuntime: reportSubmissionRuntime,
+      eventJoinControl: eventJoinControl,
       eventJoinRegistry: eventJoinRegistry, joinDiagnosticLog: { _ in },
-      deviceSecretStore: deviceSecretStore
+      deviceSecretStore: deviceSecretStore,
+      proofStore: parents
     )
+    coordinator.onProofCollected = { parents.add($0) }
+    return coordinator
   }
 
   private func makeDirectory() throws -> URL {
@@ -417,6 +1945,10 @@ final class DeviceSecretSessionTests: XCTestCase {
     return try XCTUnwrap(Bundle(url: url))
   }
 
+  private func hexString(_ data: Data) -> String {
+    data.map { String(format: "%02x", $0) }.joined()
+  }
+
   private func hexData(_ value: String) -> Data {
     var bytes: [UInt8] = []
     var index = value.startIndex
@@ -426,6 +1958,12 @@ final class DeviceSecretSessionTests: XCTestCase {
       index = next
     }
     return Data(bytes)
+  }
+}
+
+private extension Data {
+  init(kotlinBytes bytes: ExportedKotlinPackages.kotlin.ByteArray) {
+    self.init((0..<Int(bytes.size)).map { UInt8(bitPattern: bytes[Int32($0)]) })
   }
 }
 

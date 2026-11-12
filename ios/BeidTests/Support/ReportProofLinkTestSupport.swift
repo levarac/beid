@@ -81,7 +81,8 @@ final class ReportProofLinkRuntimeSpy: WindowReportSubmissionRuntimeProtocol {
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
-    participantCommitment: Data?
+    participantCommitment: Data?,
+    eventSigningPublicKey: Data?
   ) {
     captures.append(
       Capture(

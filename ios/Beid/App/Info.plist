@@ -50,9 +50,9 @@
 		<string>metamask</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>beid uses Bluetooth to automatically sense nearby events and collect proof of attendance.</string>
+	<string>beid uses Bluetooth to exchange signals with nearby devices and keep a record of what it observes.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>beid uses Bluetooth to automatically sense nearby events and collect proof of attendance.</string>
+	<string>beid uses Bluetooth to exchange signals with nearby devices and keep a record of what it observes.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>beid uses the camera only to scan a venue link QR code when a venue device is set up.</string>
 	<key>UIAppFonts</key>

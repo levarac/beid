@@ -9,9 +9,9 @@ struct BluetoothPermissionView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 
   private let steps: [FlatOnboardingSteps.Step] = [
-    .init("Events find you", detail: "Nearby events appear automatically — no codes, no search."),
+    .init("sensing.explainer.chooseEvent.title", detail: "sensing.explainer.chooseEvent.detail"),
     .init("Private by design", detail: "Phones exchange rotating anonymous IDs, not names or wallet addresses."),
-    .init("Zero effort", detail: "Sensing runs quietly in the background. Nothing to tap."),
+    .init("sensing.explainer.keepOpen.title", detail: "sensing.explainer.keepOpen.detail"),
   ]
 
   var body: some View {
@@ -27,7 +27,7 @@ struct BluetoothPermissionView: View {
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, DS.Onboarding.titleGap)
 
-        Text("beid senses nearby events and people over Bluetooth Low Energy — that’s how it proves you were really there.")
+        Text("beid uses Bluetooth Low Energy to find nearby events and hear nearby phones.")
           .beidTextStyle(DS.Font.Library.body15)
           .foregroundStyle(DS.Color.textSecondary)
           .fixedSize(horizontal: false, vertical: true)

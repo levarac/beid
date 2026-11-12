@@ -5,14 +5,13 @@ import SwiftUI
 
 struct RootView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     Group {
       switch coordinator.screen {
       case .welcome:
         WelcomeView()
-      case .walletConnect:
-        WalletConnectView()
       case .eventCodeEntry:
         EventCodeEntryView()
       case .bluetoothPermission:
@@ -34,13 +33,8 @@ struct RootView: View {
       isActive: !coordinator.scanPresented
     ))
     .tint(DS.Color.actionPrimary)
-    .animation(DS.Motion.screenTransition, value: coordinator.screen)
-    .fullScreenCover(isPresented: $coordinator.scanPresented) {
-      ScanFlowView(sensing: coordinator.sensingCoordinator)
-        .environmentObject(coordinator)
-        .tint(DS.Color.actionPrimary)
-        .presentationBackground(DS.Color.surfaceCanvas)
-    }
+    .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: coordinator.screen)
+
   }
 }
 
@@ -52,7 +46,7 @@ private struct OwnerKeyFailurePresenter: ViewModifier {
       Alert(
         title: Text(verbatim: failure.title),
         message: Text(verbatim: failure.message),
-        primaryButton: .default(Text(String(localized: "ownerKeyFailure.retry", defaultValue: "Try Again"))) {
+        primaryButton: .default(Text(String(localized: "ownerKeyFailure.retry", defaultValue: "Try again"))) {
           sensingCoordinator.retryOwnerKeyOperation()
         },
         secondaryButton: .cancel(Text(String(localized: "ownerKeyFailure.dismiss", defaultValue: "Close")))
@@ -102,18 +96,34 @@ private struct OwnerKeyRestorationNoticePresenter: ViewModifier {
   }
 }
 
+private struct PresentedEventSigningKeyFailure: Identifiable {
+  let failure: EventSigningKeyFailure
+  let eventCode: String?
+  var id: String { eventCode.map { "\(failure.id):\($0)" } ?? failure.id }
+}
+
 struct EventSigningKeyFailurePresenter: ViewModifier {
   @ObservedObject var sensingCoordinator: SensingCoordinator
   let isActive: Bool
 
+  private var presentedFailure: PresentedEventSigningKeyFailure? {
+    sensingCoordinator.eventSigningKeyFailure.map {
+      PresentedEventSigningKeyFailure(failure: $0, eventCode: sensingCoordinator.eventSigningKeyNoticeEventCode)
+    }
+  }
+
   func body(content: Content) -> some View {
-    content.alert(item: Binding(
-      get: { isActive ? sensingCoordinator.eventSigningKeyFailure : nil },
+    let presented = presentedFailure
+    return content.alert(item: Binding(
+      get: { isActive ? presented : nil },
       set: {
-        if isActive, $0 == nil { sensingCoordinator.dismissEventSigningKeyFailure() }
+        if isActive, $0 == nil, presented?.id == presentedFailure?.id {
+          sensingCoordinator.dismissEventSigningKeyFailure()
+        }
       }
-    )) { failure in
-      Alert(
+    )) { notice in
+      let failure = notice.failure
+      return Alert(
         title: Text(verbatim: failure.title),
         message: Text(verbatim: failure.message),
         dismissButton: .default(Text(String(localized: "eventSigningKeyFailure.dismiss", defaultValue: "Close")))

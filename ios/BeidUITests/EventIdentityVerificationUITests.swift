@@ -17,11 +17,11 @@ final class EventIdentityVerificationUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["home.scan"]
+    let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
 
@@ -31,16 +31,12 @@ final class EventIdentityVerificationUITests: XCTestCase {
     let simulateSignalLost = app.buttons["Simulate Signal Lost"]
     XCTAssertTrue(simulateSignalLost.waitForExistence(timeout: 30))
     XCTAssertFalse(identityVerificationRow.exists)
-    let cancel = app.buttons["Cancel"]
-    XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Recording must offer the binding sheet")
-    XCTAssertTrue(cancel.isHittable, "The binding sheet Cancel control must be tappable")
-    cancel.tap()
-    XCTAssertFalse(cancel.exists, "Cancel must dismiss the binding sheet")
+    XCTAssertFalse(app.buttons["Cancel"].exists, "Recording must not present a wallet sheet")
     XCTAssertTrue(simulateSignalLost.isHittable, "Live recording must expose Signal Lost")
     XCTAssertFalse(identityVerificationRow.exists)
     simulateSignalLost.tap()
 
-    XCTAssertTrue(app.staticTexts["Signal Lost"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Signal lost"].waitForExistence(timeout: 5))
     XCTAssertFalse(identityVerificationRow.exists)
   }
 

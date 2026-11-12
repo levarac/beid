@@ -26,7 +26,7 @@ enum NearbyJoinUITestFixture {
     let now = Int64(Date().timeIntervalSince1970)
     let store = ExportedKotlinPackages.org.levarac.parallax.discovery.createNearbyEventDiscoveryStore()
     _ = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
-      store: store, peripheralId: "nearby-ui-fixture", eventDisplayName: "Community night",
+      store: store, peripheralId: "nearby-ui-fixture", eventDisplayName: "Sample gathering",
       eventCodeHashHex: hash, rawContainerHex: "03000004", agreesWithRegistry: false,
       additionalNamesOmitted: false, additionalEventsOmitted: false, observedAtEpochMillis: now * 1_000
     )
@@ -43,6 +43,28 @@ enum NearbyJoinUITestFixture {
       verifiedDefinitionValidFromEpochSeconds: now - 60,
       verifiedDefinitionValidUntilEpochSeconds: now + 3_600
     )
+    if ProcessInfo.processInfo.arguments.contains("-beid-nearby-multiple-fixture") {
+      let otherHash = "ffffffffffffffff"
+      let otherId = String(repeating: "22", count: 32)
+      _ = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
+        store: store, peripheralId: "second-sample", eventDisplayName: "Second sample event",
+        eventCodeHashHex: otherHash, rawContainerHex: "03000004", agreesWithRegistry: false,
+        additionalNamesOmitted: false, additionalEventsOmitted: false, observedAtEpochMillis: now * 1_000
+      )
+      guard let otherAttempt = ExportedKotlinPackages.org.levarac.parallax.discovery
+        .beginNearbyEventRegistryResolutionFromHex(store: store, eventCodeHashHex: otherHash)
+      else { preconditionFailure("Expected sample registration request") }
+      _ = ExportedKotlinPackages.org.levarac.parallax.discovery.completeNearbyEventRegistryResolutionFromHex(
+        store: store, attempt: otherAttempt, result: .VERIFIED,
+        resolvedEventIdHex: otherId, verifiedDefinitionJoinMode: .OPEN,
+        verifiedDefinitionEventIdHex: otherId, verifiedDefinitionEventCodeHashHex: otherHash,
+        envelopeAgreesWithRegistry: true,
+        verifiedDefinitionHashHex: String(repeating: "ab", count: 32),
+        registryBlockHashHex: String(repeating: "cd", count: 32),
+        verifiedDefinitionValidFromEpochSeconds: now - 60,
+        verifiedDefinitionValidUntilEpochSeconds: now + 3_600
+      )
+    }
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("nearby-ui-\(UUID().uuidString)")
     let deviceSecretStore: DeviceSecretKeychainStore
     if ProcessInfo.processInfo.arguments.contains("-beid-device-key-unavailable-fixture") {

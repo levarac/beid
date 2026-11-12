@@ -138,8 +138,8 @@ enum DS {
     static let sensingSealedSigil: CGFloat = 300
     /// Flat 2b 09 Proof Detail artwork slot (node 204:36).
     static let proofDetailSigil: CGFloat = 200
-    /// `ProofCardView`'s circular per-proof gradient avatar diameter.
-    static let proofCardArtwork: CGFloat = 76
+    /// Saved-record artwork in the two-column Records grid.
+    static let recordsGridSigil: CGFloat = 104
     /// Legacy detail gradient-avatar diameter, superseded by
     /// `proofDetailSigil` in frame 09.
     static let itemDetailArtwork: CGFloat = 190
@@ -176,8 +176,6 @@ enum DS {
     static let compactPrimaryButtonMinHeight: CGFloat = 52
     /// `Button/Primary` Size=Small width (Home's Scan).
     static let compactPrimaryButtonWidth: CGFloat = 140
-    /// Numbered badge diameter for step lists (`BeidNumberedStepList`).
-    static let stepBadge: CGFloat = 28
   }
 
   // MARK: - Layout
@@ -441,7 +439,7 @@ enum DS {
 
     /// One per screen. Large screen title. `Display/46`.
     static let screenTitle = Library.display46.font
-    /// Section and state titles (e.g. "Sensing automatically"). `Title/19`.
+    /// Section and state titles (e.g. "Sensing paused"). `Title/19`.
     static let sectionTitle = Library.title19.font
     /// Card and row titles (e.g. event name on a proof card). The Library's
     /// `Row/List` title, `Title/17`.

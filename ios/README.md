@@ -19,10 +19,8 @@ curl -sSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
 unzip -q "$XCODEGEN_TMP/xcodegen.zip" -d "$XCODEGEN_TMP"
 export PATH="$XCODEGEN_TMP/xcodegen/bin:$PATH"
 test "$(xcodegen --version | awk '{print $2}')" = "$XCODEGEN_VERSION"
-cd ios
-xcodegen generate
-open Beid.xcodeproj
-cd ..
+scripts/xcodegen_generate_checked.sh
+open ios/Beid.xcodeproj
 ```
 
 `project.yml` is the source of truth, but `Beid.xcodeproj` is committed for
@@ -138,40 +136,32 @@ manifest and published the `v0.1.0` tag.
 
 For local barnard development, drag a local `barnard` checkout into Xcode to
 create a package override, or temporarily point `project.yml` at a local
-`path:` and re-run `xcodegen generate`; do not commit the override.
+`path:` and re-run `scripts/xcodegen_generate_checked.sh` from the repository
+root; do not commit the override.
 
 ## Onboarding flag
 
-Resolved 2026-07-26: the default entry flow is event-first (`guestFirst`).
-Wallet connect and binding happen after event confirmation, not at Welcome —
-see `docs/specs/onboarding-redesign.md`. Both orders remain implemented
-behind a single flag so `walletFirst` stays flippable for demos:
+`OnboardingMode` retains its legacy values for compatibility. Both values
+now follow Welcome → Bluetooth permission → Now. Changing the flag does
+not introduce a wallet step or a recording-time binding sheet:
 
 ```swift
 // Beid/Models/OnboardingMode.swift
-static let current: OnboardingMode = .guestFirst  // or .walletFirst
+static let current: OnboardingMode = .guestFirst
 ```
 
-- `.walletFirst`: Welcome → Connect Wallet → Bluetooth permission → home,
-  with manual event-code entry as the wallet-optional secondary path.
-- `.guestFirst` (default): Welcome → Bluetooth permission → home, with wallet
-  connect deferred to the Account sheet.
-
-Flip the flag and rebuild to demo the other order — `OnboardingFlagTests`
-exercises both branches (the inapplicable one self-skips via `XCTSkip`
-rather than being commented out, so both stay compiled and typo-checked).
-
-The wallet step uses a direct app-to-app wallet connection (MetaMask) — see
-"WalletConnect" below.
+`OnboardingFlagTests` checks the Bluetooth entry and legacy return routes.
+Mode-specific compatibility tests remain compiled; an inapplicable mode
+self-skips via `XCTSkip`. Existing wallet bindings and connector support
+remain available to legacy record handling.
 
 ## WalletConnect
 
-`WalletConnectView` (onboarding) and the Account sheet's "Connect Wallet"
-action both use `WalletConnectPairingView`
-(`Beid/Views/WalletConnectView.swift`), which drives a `WalletConnector`:
-`MetaMaskConnector` wraps MetaMask's direct app-to-app mobile SDK. The
-selected connector is retained by `AppCoordinator`, so proof signing uses
-the same session that supplied the connected address.
+v1.1 has no wallet-connect entry in onboarding or the Account sheet. The
+unused pairing view and its previews have been removed. `WalletConnector`,
+`MetaMaskConnector`, and their tests remain for legacy record handling and
+compatibility. The connector history and SDK notes below describe that
+retained support, not a shipping v1.1 wallet flow.
 
 WalletConnect (Reown) — a relay-based pairing SDK that was beid's original
 third wallet option — was removed entirely (gh#250, DECISIONS 2026-08-20):
@@ -232,21 +222,17 @@ tests cover an absent MetaMask installation, disconnect cleanup despite stale
 SDK state, and a late connect response after cancellation.
 
 `cancelPendingOperation()` (dispatch#26 condition 3) is a separate, lighter
-primitive from `disconnect()`: it is what Cancel/Try Again/Start Over in
+primitive from `disconnect()`: it is what Cancel/Try again/Start Over in
 onboarding, the Account sheet, and the connect+binding interstitial call, and
 it leaves the wallet SDK's own persisted session and the cached
 `WalletHintStore` hint alone. `disconnect()` is reserved for the explicit
 "Disconnect Wallet" action — it is the one that tears down both.
 
-**Still requires a physical-device E2E, and it is a release gate, not a
-nice-to-have:** install a current MetaMask Mobile build and a beid build,
-then verify connect → `personal_sign` → automatic return to beid, including
-MetaMask and beid cold starts. The Simulator cannot settle this because it
-does not provide the installed-wallet round trip. The procedure lives in
-`docs/field-test-procedure.md`; per DECISIONS 2026-08-21, if that
-verification fails, the promotion to Release reverts — see the note above
-on what that means for wallet-connect availability now that Coinbase
-Wallet is gone.
+Before restoring any wallet UI, its physical-device E2E would need to verify
+connect → `personal_sign` → return to beid, including MetaMask and beid cold
+starts. The Simulator cannot settle the installed-wallet round trip. The
+historical procedure lives in `docs/field-test-procedure.md`; v1.1 ships no
+wallet flow to validate.
 
 ## DemoEvent mode
 
@@ -299,7 +285,7 @@ cards or text-only stand-ins.
 `05 Sensing → 06a Event Found → 06b Recording`. The proof lands in
 `ProofStore` when recording starts. Recording stays live as the peer count
 grows. On confirmed stop, successful finalization shows 06 Sealed; DONE
-advances to persistent 07 Proof Collected, whose View collection action
+advances to persistent 07 Proof Collected, whose View records action
 returns to 04 home.
 
 Release configurations, including TestFlight and App Store archives, always
@@ -400,19 +386,12 @@ Lost" button on the Recording screen while in DemoEvent mode.
 
 ## What's stubbed / out of scope for this slice
 
-- **Wallet**: direct app-to-app connect/sign for MetaMask is wired (see
-  "WalletConnect" above). Its real-device round trip has never been
-  verified at all — see "MetaMask connector" above and
-  `docs/field-test-procedure.md`. Once a
-  wallet is connected, Item Detail's `ProofSignatureControlsView` calls
-  `AppCoordinator.signProof(_:)`, which builds a `SignaturePayload`, hashes
-  its canonical JSON with `signingDigestHex()`, requests `personal_sign`
-  through the selected `WalletConnector`, and persists the returned
-  `SignatureRecord` in the proof's `signatureState`. This is the
-  **PROVISIONAL local convenience signature** defined in
-  `ProofSignature.swift`: it is not the protocol's self-proof, does not
-  prove physical attendance by itself, and no backend or verifier may
-  depend on its payload.
+- **Wallet**: v1.1 exposes no wallet-connect or wallet-signing UI. The
+  connector, `AppCoordinator.signProof(_:)`, and legacy signature models
+  remain for compatibility and tests (see "WalletConnect" above). The
+  **PROVISIONAL local convenience signature** in `ProofSignature.swift`
+  is not the protocol's self-proof, does not prove physical attendance by
+  itself, and no backend or verifier may depend on its payload.
 - **Chain**: no on-chain calls anywhere (`BarnardIdentity.proveRpidOwnership`
   is available in the barnard SDK but not called from the app in this
   slice).
@@ -455,9 +434,8 @@ Issue #121.
 01 Welcome, 02 Bluetooth permission guide, 03 Bluetooth-off, 04 Collection
 home (+04b empty state), 05 Scan (radar), 06a Event Found, 06b Recording,
 06d Signal Lost, 06 Sealed, 07 Proof Collected, 08 Item Detail, 09 Account sheet
-— plus Connect Wallet and manual Enter
-Event Code screens for the `.walletFirst` onboarding order (not in the
-original 9-screen list).
+— plus manual Enter Event Code. Legacy wallet views remain in the source
+but are not introduced by the onboarding flag.
 
 All screens use the repository design-system tokens, adaptive layouts, and
 current custom artwork documented in `DESIGN.md`; the original blue-accent

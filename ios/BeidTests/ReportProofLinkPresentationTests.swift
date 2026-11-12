@@ -39,8 +39,8 @@ final class ReportProofLinkPresentationTests: XCTestCase {
 
     XCTAssertEqual(session?.proof.id, proofs[1].id)
     XCTAssertEqual(session?.ordinal, 2)
-    XCTAssertEqual(session?.proofState, "RECORDED ON DEVICE")
-    XCTAssertEqual(session?.proofSubtitle, "RECORDED ON DEVICE · 0000…0002")
+    XCTAssertEqual(session?.proofState, "RECORDED ON THIS PHONE")
+    XCTAssertEqual(session?.proofSubtitle, "RECORDED ON THIS PHONE · 0000…0002")
   }
 
   /// Old records stay unlinked even when a same-event Proof exists nearby;
@@ -65,6 +65,10 @@ final class ReportProofLinkPresentationTests: XCTestCase {
     let proofs = seedThreeSessions(in: stores.proofs)
     let record = makeRecord(id: 9, createdAt: 150)
     XCTAssertEqual(stores.links.proofId(forWindowId: record.id), .failure(.unreadable))
+    XCTAssertThrowsError(try ReportProofLinkPresentation.readReports(
+      for: proofs[0], submissionStore: stores.submissions,
+      linkStore: stores.links, proofStore: stores.proofs
+    ).get())
 
     XCTAssertNil(ReportProofLinkPresentation.session(
       for: record, linkStore: stores.links, proofStore: stores.proofs, hasSelfProof: { _ in true }
@@ -142,7 +146,7 @@ final class ReportProofLinkPresentationTests: XCTestCase {
       for: record, linkStore: stores.links, proofStore: stores.proofs,
       hasSelfProof: { $0 == proofs[0].id }
     )
-    XCTAssertEqual(recorded?.proofState, "RECORDED ON DEVICE")
+    XCTAssertEqual(recorded?.proofState, "RECORDED ON THIS PHONE")
     XCTAssertEqual(recorded?.proofState, SessionDisplay.proofState(hasSelfProof: false))
 
     for subtitle in [sealed?.proofSubtitle, recorded?.proofSubtitle].compactMap({ $0 }) {

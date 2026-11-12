@@ -21,6 +21,7 @@ func makeIsolatedSensingCoordinator(
     Int64((Date().timeIntervalSince1970 * 1_000).rounded())
   },
   joinDiagnosticLog: @escaping (String) -> Void = { _ in },
+  joinRefusalLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinRefusalLog,
   relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
 ) -> SensingCoordinator {
   let directory = FileManager.default.temporaryDirectory
@@ -57,6 +58,7 @@ func makeIsolatedSensingCoordinator(
     nearbyDiscoveryStore: nearbyDiscoveryStore,
     nearbyDiscoveryClock: nearbyDiscoveryClock,
     joinDiagnosticLog: joinDiagnosticLog,
+    joinRefusalLog: joinRefusalLog,
     participantRelayControl: participantRelayControl,
     relayCadenceNanoseconds: relayCadenceNanoseconds
   )
@@ -758,9 +760,16 @@ final class SensingCoordinatorTests: XCTestCase {
     )
     coordinator.useDemoEventMode = false
 
-    coordinator.startNearbyEventDiscovery()
+    coordinator.startHomeStandbyDiscovery()
     coordinator.joinNearbyEvent(eventCodeHashHex: nearbyVectorHashHex)
     try? await Task.sleep(nanoseconds: 20_000_000)
+    let stopped = expectation(description: "A stopped-state callback reaches the admitted session")
+    let observation = coordinator.$isScanning.dropFirst().prefix(1).sink { _ in stopped.fulfill() }
+    engine.emitState(isScanning: false)
+    await fulfillment(of: [stopped], timeout: 1)
+    observation.cancel()
+    XCTAssertEqual(coordinator.phase, .sensing)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 1, "An admitted session must not resume home discovery")
     coordinator.stopNearbyEventDiscovery()
 
     XCTAssertEqual(engine.startDiscoveryScanCallCount, 1)
@@ -904,6 +913,57 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(coordinator.phase, .sensing)
   }
 
+  func testNearbyJoinLogsSharedExpiryReasonAfterPermissionWait() async throws {
+    let validUntilEpochSeconds: Int64 = 1_800_000_000
+    var nowEpochMillis = validUntilEpochSeconds * 1_000 + 900
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    var refusalLines: [String] = []
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      nearbyDiscoveryStore: makeNearbyDiscoveryStore(
+        observedAtEpochMillis: nowEpochMillis,
+        validFromEpochSeconds: validUntilEpochSeconds - 60,
+        validUntilEpochSeconds: validUntilEpochSeconds
+      ),
+      nearbyDiscoveryClock: { nowEpochMillis },
+      joinRefusalLog: { refusalLines.append($0) }
+    )
+    coordinator.useDemoEventMode = false
+    let actionHash = try XCTUnwrap(
+      NearbyEventCardListPresentation(
+        candidates: coordinator.nearbyEventCandidates,
+        nowEpochSeconds: nowEpochMillis / 1_000
+      ).cards.first?.joinActionEventCodeHashHex
+    )
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: actionHash)
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    XCTAssertEqual(coordinator.phase, .sensing)
+    let returnedToIdle = expectation(description: "expired nearby join returns to idle")
+    let phaseObservation = coordinator.$phase.dropFirst().sink { phase in
+      if phase == .idle { returnedToIdle.fulfill() }
+    }
+    defer { phaseObservation.cancel() }
+
+    // Cross the inclusive validity boundary while retaining the candidate.
+    // Removing it would test NOT_REGISTRY_VERIFIED instead of DEFINITION_EXPIRED.
+    nowEpochMillis += 100
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 1)
+    engine.grantHeldPermissionRequest()
+    await fulfillment(of: [returnedToIdle], timeout: 1)
+
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertTrue(engine.joinAndStartContexts.isEmpty)
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
+    XCTAssertEqual(refusalLines, [
+      "join_refused outcome=rejected_definition_not_eligible reason=event_not_active"
+    ])
+  }
+
   func testRenderedNearbyActionFailsClosedWhenCandidateExpiresDuringPermissionWait() async {
     var nowEpochMillis: Int64 = 1_800_000_000_000
     let engine = RecordingEventJoinControl()
@@ -931,6 +991,36 @@ final class SensingCoordinatorTests: XCTestCase {
     try? await Task.sleep(nanoseconds: 20_000_000)
 
     XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
+  }
+
+  func testNearbyJoinRefusesExpiredSourceBeforeScheduledRefreshRuns() async throws {
+    let boundary: Int64 = 1_800_000_000_000
+    var now = boundary - 300_000
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    let store = makeNearbyDiscoveryStore(observedAtEpochMillis: now)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinControl: engine,
+      nearbyDiscoveryStore: store, nearbyDiscoveryClock: { now }
+    )
+    coordinator.useDemoEventMode = false
+    defer { coordinator.reset() }
+    let action = try XCTUnwrap(NearbyEventCardListPresentation(
+      candidates: coordinator.nearbyEventCandidates, nowEpochSeconds: now / 1_000
+    ).cards.first?.joinActionEventCodeHashHex)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateAt(index: 0)?.receiverState, .REGISTRY_VERIFIED)
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: action)
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    now = boundary
+    // The permission callback may reach MainActor before the queued expiry
+    // task. Issuance must apply the current source TTL in that ordering too.
+    engine.grantHeldPermissionRequest()
+    try await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(engine.joinAndStartContexts.count, 0)
     XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
   }
 
@@ -991,6 +1081,71 @@ final class SensingCoordinatorTests: XCTestCase {
 
     XCTAssertEqual(engine.joinAndStartContexts.count, 1)
     XCTAssertEqual(engine.joinedCodes, [nearbyVectorEventIdHex])
+  }
+
+  private func makeStandbyApp(
+    store: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore,
+    clock: @escaping () -> Int64
+  ) -> (AppCoordinator, SensingCoordinator) {
+    let sensing = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: RecordingEventJoinControl(),
+      nearbyDiscoveryStore: store,
+      nearbyDiscoveryClock: clock
+    )
+    sensing.useDemoEventMode = false
+    let defaults = UserDefaults(suiteName: "SensingCoordinatorTests.standby.\(UUID().uuidString)")!
+    let app = AppCoordinator(sensingCoordinator: sensing, registryClient: nil, userDefaults: defaults)
+    app.screen = .home
+    return (app, sensing)
+  }
+
+  /// The code-entry timer follows joinability, not the candidate count: the
+  /// count stays 1 while a verified definition expires and comes back.
+  func testStandbyTimerFollowsJoinabilityWhileTheCandidateCountIsUnchanged() {
+    let validUntilEpochSeconds: Int64 = 1_800_000_000
+    var nowEpochMillis = (validUntilEpochSeconds - 30) * 1_000
+    let store = makeNearbyDiscoveryStore(
+      observedAtEpochMillis: nowEpochMillis,
+      validFromEpochSeconds: validUntilEpochSeconds - 60,
+      validUntilEpochSeconds: validUntilEpochSeconds
+    )
+    let (app, sensing) = makeStandbyApp(store: store, clock: { nowEpochMillis })
+
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertEqual(sensing.nearbyEventCandidates.candidateCount, 1)
+    XCTAssertNil(app.homeStandby.listeningStartedAt, "a joinable candidate stops the timer")
+
+    nowEpochMillis = (validUntilEpochSeconds + 10) * 1_000
+    sensing.refreshNearbyEventDiscovery()
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertEqual(sensing.nearbyEventCandidates.candidateCount, 1)
+    XCTAssertNotNil(app.homeStandby.listeningStartedAt, "an expired definition restarts the timer")
+
+    nowEpochMillis = (validUntilEpochSeconds - 30) * 1_000
+    sensing.refreshNearbyEventDiscovery()
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertNil(app.homeStandby.listeningStartedAt, "becoming joinable again stops the timer")
+  }
+
+  func testUnverifiedCandidateDoesNotStopTheStandbyTimer() {
+    let store = ExportedKotlinPackages.org.levarac.parallax.discovery.createNearbyEventDiscoveryStore()
+    _ = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventHintFromHex(
+      store: store,
+      peripheralId: "peripheral-unresolved",
+      eventDisplayName: "Unverified beacon",
+      eventCodeHashHex: "0102030405060708",
+      censusHex: nil,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_800_000_000_000
+    )
+    let (app, sensing) = makeStandbyApp(store: store, clock: { 1_800_000_000_000 })
+
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+
+    XCTAssertEqual(sensing.nearbyEventCandidates.candidateCount, 1)
+    XCTAssertNotNil(app.homeStandby.listeningStartedAt)
   }
 
   func testDefinitionExpiryPublishesADisabledProjectionBeforeSourceTTL() async throws {
@@ -1439,6 +1594,51 @@ final class SensingCoordinatorTests: XCTestCase {
     )
   }
 
+  func testNearbyJoinLogsPermissionRefusalBeforeASuccessfulRetry() async throws {
+    for (canScan, canAdvertise) in [(false, false), (false, true), (true, false)] {
+      let engine = RecordingEventJoinControl()
+      engine.permissionOutcome = .reports(canScan: canScan, canAdvertise: canAdvertise)
+      var lines: [String] = []
+      let coordinator = makeIsolatedSensingCoordinator(
+        for: self,
+        eventJoinControl: engine,
+        nearbyDiscoveryStore: makeNearbyDiscoveryStore(),
+        nearbyDiscoveryClock: { 1_800_000_000_000 },
+        joinDiagnosticLog: { lines.append($0) }
+      )
+      coordinator.useDemoEventMode = false
+
+      coordinator.joinNearbyEvent(eventCodeHashHex: nearbyVectorHashHex)
+      try await Task.sleep(nanoseconds: 20_000_000)
+
+      XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+      XCTAssertEqual(coordinator.phase, .idle)
+      XCTAssertFalse(engine.didJoin)
+      XCTAssertEqual(lines, [
+        "join_stage event_id=unknown stage=admission outcome=rejected_permission_denied " +
+          "attempt=none retry_at_epoch_ms=none"
+      ])
+
+      engine.permissionOutcome = .granted
+      coordinator.joinNearbyEvent(eventCodeHashHex: nearbyVectorHashHex)
+      try await Task.sleep(nanoseconds: 20_000_000)
+
+      XCTAssertEqual(engine.requestJoinPermissionsCallCount, 2)
+      XCTAssertEqual(engine.joinAndStartContexts.count, 1)
+      XCTAssertEqual(coordinator.phase, .sensing)
+      // A granted retry refreshes candidates before admission. This fixture has
+      // no registry client, so the refresh reports that missing dependency.
+      XCTAssertEqual(lines, [
+        "join_stage event_id=unknown stage=admission outcome=rejected_permission_denied " +
+          "attempt=none retry_at_epoch_ms=none",
+        "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
+          "attempt=none retry_at_epoch_ms=none",
+        "join_stage event_id=5d5891b9 stage=admission outcome=admitted " +
+          "attempt=none retry_at_epoch_ms=none"
+      ])
+    }
+  }
+
   func testJoinDiagnosticsRejectMalformedIdentifiersAndKeepReceiptFieldsPrivate() {
     var lines: [String] = []
     let coordinator = makeIsolatedSensingCoordinator(
@@ -1457,6 +1657,106 @@ final class SensingCoordinatorTests: XCTestCase {
       "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
         "attempt=none retry_at_epoch_ms=none"
     ])
+  }
+
+  func testVerifiedNearbyEvidenceSurvivesAnEninBoundaryWithoutAnotherRead() throws {
+    let boundary: Int64 = 1_800_000_000_000
+    var now = boundary - 1_000
+    let registry = FakeEventJoinRegistry()
+    let store = makeNearbyDiscoveryStore(observedAtEpochMillis: now)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinRegistry: registry,
+      nearbyDiscoveryStore: store, nearbyDiscoveryClock: { now }
+    )
+    defer { coordinator.reset() }
+
+    for instant in [boundary - 1, boundary, boundary + 1, boundary + 20_000] {
+      now = instant
+      coordinator.refreshNearbyEventDiscovery()
+      let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+      XCTAssertEqual(candidate.receiverState, .REGISTRY_VERIFIED)
+      XCTAssertEqual(candidate.registryStatus, .REGISTERED_VIA_OPERATOR_LOOKUP)
+      let card = try XCTUnwrap(NearbyEventCardListPresentation(
+        candidates: coordinator.nearbyEventCandidates, nowEpochSeconds: now / 1_000
+      ).cards.first)
+      XCTAssertEqual(card.joinActionEventCodeHashHex, nearbyVectorHashHex)
+      XCTAssertEqual(card.eventIdHex, nearbyVectorEventIdHex)
+    }
+    XCTAssertTrue(registry.requestedEventIdHexes.isEmpty)
+  }
+
+  func testRetryDueAtAnEninBoundaryStartsAtThatBoundaryAndRemainsUnverified() async {
+    let boundary: Int64 = 1_800_000_000_000
+    var now = boundary - 5_000
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .readFails(errorCode: nil)
+    let firstFailure = expectation(description: "first failure publishes its retry deadline")
+    let secondFailure = expectation(description: "boundary retry publishes its failure")
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinRegistry: registry, nearbyDiscoveryClock: { now },
+      joinDiagnosticLog: { line in
+        if line.contains("outcome=rejected_verification_unavailable attempt=1") {
+          firstFailure.fulfill()
+        } else if line.contains("outcome=rejected_verification_unavailable attempt=2") {
+          secondFailure.fulfill()
+        }
+      }
+    )
+    defer { coordinator.reset() }
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "boundary-source", eventDisplayName: "Example event",
+      eventCodeHash: Data([0x6c, 0x86, 0xc6, 0xaa, 0xc5, 0xfb, 0x24, 0xbc]),
+      rawContainer: Self.envelopeContainer,
+      verifiedEventIdHex: "0x" + String(repeating: "01", count: 32),
+      registryAgreement: { _ in true }
+    )
+    await fulfillment(of: [firstFailure], timeout: 1)
+    XCTAssertEqual(registry.requestedEventIdHexes.count, 1)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.nextRegistryRetryAtEpochMillis, boundary)
+
+    now = boundary - 1
+    coordinator.refreshNearbyEventDiscovery()
+    XCTAssertEqual(registry.requestedEventIdHexes.count, 1)
+    now = boundary
+    coordinator.refreshNearbyEventDiscovery()
+    await fulfillment(of: [secondFailure], timeout: 1)
+    XCTAssertEqual(registry.requestedEventIdHexes.count, 2)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.nextRegistryRetryAtEpochMillis, boundary + 30_000)
+    XCTAssertNil(NearbyEventCardListPresentation(
+      candidates: coordinator.nearbyEventCandidates, nowEpochSeconds: now / 1_000
+    ).cards.first?.joinActionEventCodeHashHex)
+    XCTAssertNotEqual(coordinator.nearbyEventCandidates.candidateAt(index: 0)?.receiverState, .REGISTRY_VERIFIED)
+  }
+
+  func testExpiredDiscoverySourceCannotBeRestoredByItsLateDefinitionRead() async {
+    var now: Int64 = 1_800_000_000_000
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .holds
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinRegistry: registry, nearbyDiscoveryClock: { now }
+    )
+    defer { coordinator.reset() }
+    let eventId = "0x" + String(repeating: "01", count: 32)
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "expired-source", eventDisplayName: "Example event",
+      eventCodeHash: Data([0x6c, 0x86, 0xc6, 0xaa, 0xc5, 0xfb, 0x24, 0xbc]),
+      rawContainer: Self.envelopeContainer, verifiedEventIdHex: eventId,
+      registryAgreement: { _ in true }
+    )
+    XCTAssertTrue(registry.isHoldingRead)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 1)
+    now += 300_000
+    coordinator.refreshNearbyEventDiscovery()
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+
+    registry.answerHeldRead(with: FakeEventJoinRegistry.admittingResolution(
+      eventIdHex: eventId, nowEpochSeconds: now / 1_000,
+      eventCodeHashHex: "6c86c6aac5fb24bc"
+    ))
+    for _ in 0..<10 { await Task.yield() }
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertNil(coordinator.joinedEventCode)
   }
 
   func testRegistryFailureLogsRetryDeadlineAndRetriesWhenTheClockReachesIt() async throws {
@@ -1706,8 +2006,15 @@ final class OwnerKeyRestorationNoticeTests: XCTestCase {
     let failure = OwnerKeyOperationFailure.unavailable
 
     XCTAssertEqual(failure.id, "owner-key-unavailable")
-    XCTAssertEqual(failure.title, "Proof key is unavailable")
-    XCTAssertTrue(failure.message.contains("operations are paused"))
+    XCTAssertEqual(
+      failure.title, "Signing key is unavailable",
+      "Unavailable-key title must name the signing key"
+    )
+    XCTAssertEqual(
+      failure.message,
+      "beid could not access the key used to sign records. Operations that need this key are paused. Try again when your device is available.",
+      "Unavailable-key message must preserve the broader operation pause"
+    )
     XCTAssertNotEqual(failure.title, OwnerKeyRestorationNotice.identityWasReset.title)
   }
 
@@ -1757,10 +2064,14 @@ final class OwnerKeyRestorationNoticeTests: XCTestCase {
     )
 
     XCTAssertEqual(notice, .identityWasReset)
-    XCTAssertEqual(notice?.title, "Proof identity was reset")
+    XCTAssertEqual(
+      notice?.title, "Signing identity was reset",
+      "Identity-reset title must name the signing identity"
+    )
     XCTAssertEqual(
       notice?.message,
-      "beid could not restore the identity this device used to sign proofs, so it created a new one. This device can no longer use the previous identity."
+      "beid could not restore the identity this device used to sign records, so it created a new one. This device can no longer use the previous identity.",
+      "Identity-reset message must retain the previous-identity limitation"
     )
   }
 
@@ -1771,10 +2082,14 @@ final class OwnerKeyRestorationNoticeTests: XCTestCase {
     )
 
     XCTAssertEqual(notice, .savedRecordsUsePreviousIdentity)
-    XCTAssertEqual(notice?.title, "Some proof records use a previous identity")
+    XCTAssertEqual(
+      notice?.title, "Some records use a previous signing identity",
+      "Saved-record mismatch title must name the previous signing identity"
+    )
     XCTAssertEqual(
       notice?.message,
-      "Some saved proof records were created with a different identity. They still exist, but this device can no longer sign as that identity."
+      "Some saved records were created with a different signing identity. They still exist, but this device can no longer sign as that identity.",
+      "Saved-record mismatch message must retain the records and signing limitation"
     )
   }
 
@@ -1785,10 +2100,14 @@ final class OwnerKeyRestorationNoticeTests: XCTestCase {
     )
 
     XCTAssertEqual(notice, .identityWasResetWithSavedRecords)
-    XCTAssertEqual(notice?.title, "Proof identity could not be restored")
+    XCTAssertEqual(
+      notice?.title, "Signing identity could not be restored",
+      "Combined-reset title must name the signing identity"
+    )
     XCTAssertEqual(
       notice?.message,
-      "beid created a new identity because the saved one could not be restored. Some saved proof records still refer to the previous identity; they still exist, but this device can no longer sign as that identity."
+      "beid created a new signing identity because the saved one could not be restored. Some saved records still refer to the previous identity; they still exist, but this device can no longer sign as that identity.",
+      "Combined-reset message must retain both replacement and saved-record consequences"
     )
   }
 
@@ -1937,7 +2256,8 @@ private final class DiscoveryIsolationReportRuntimeSpy: WindowReportSubmissionRu
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
-    participantCommitment: Data?
+    participantCommitment: Data?,
+    eventSigningPublicKey: Data?
   ) {
     captureCalls += 1
   }

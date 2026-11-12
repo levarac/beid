@@ -31,15 +31,13 @@ private struct HomeClockFixtureDateSource: TrustedDateSource {
 }
 #endif
 
-/// Root state machine for onboarding + the collection home. Order of the
-/// wallet step is decided once at init from `OnboardingMode.current`; see
-/// README "Onboarding flag".
+/// Root routing for onboarding and the collection home.
 @MainActor
 final class AppCoordinator: ObservableObject {
   @Published var screen: AppScreen = .welcome
   @Published var walletAddress: String?
   /// The address from this process's live connector session, if any — the
-  /// only wallet-address value `EventBindingSheetView.performBinding` is
+  /// only wallet-address value the former event-binding sheet was
   /// allowed to read for its "already connected" fast path (beid#315
   /// structural containment; see `LiveWalletAddress`'s doc comment in
   /// `WalletConnector.swift`). `walletAddress` above stays a plain,
@@ -47,12 +45,15 @@ final class AppCoordinator: ObservableObject {
   /// assign it directly) and is never read on that path.
   @Published private(set) var liveWalletAddress: LiveWalletAddress?
   @Published var scanPresented = false
+  @Published var selectedHomeTab: HomeTab = .now
+  @Published private(set) var homeStandby = HomeStandbyState()
+  @Published private(set) var homeStandbyDiscoveryActive = false
+  @Published private(set) var nowEventRegistration: HomeEventRegistration?
+  #if DEBUG
+  @Published private(set) var homeStandbyFixtureTime: TimeInterval = 0
+  @Published private(set) var homeStandbyFixtureHasCandidate = false
+  #endif
   @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
-  private enum ScanStopIntent {
-    case keepAutomaticTransport
-    case stopAutomaticTransport
-  }
-  private var pendingStopIntent: ScanStopIntent?
   @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
   @Published private(set) var proofCollectedSnapshot: ProofCollectedSnapshot?
   @Published var selectedProof: Proof?
@@ -61,7 +62,13 @@ final class AppCoordinator: ObservableObject {
   /// signing/reporting store, and is set only by the UI-test launch gate.
   private(set) var proofDetailScreenshotPresentation: ProofDetailPresentation?
   #endif
-  @Published var accountSheetPresented = false
+  @Published var accountSheetPresented = false {
+    didSet {
+      if oldValue, !accountSheetPresented {
+        cancelPendingJoinAttempt()
+      }
+    }
+  }
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
   /// Home's 04b code sheet. Closing it cancels a pending lookup, whatever
@@ -77,7 +84,6 @@ final class AppCoordinator: ObservableObject {
       }
     }
   }
-  @Published var dailySummaryPresented = false
 
   private(set) var walletConnector: (any WalletConnector)?
 
@@ -168,6 +174,7 @@ final class AppCoordinator: ObservableObject {
     #else
     linkStore = reportProofLinkStore ?? ReportProofLinkStore()
     #endif
+    let resolvedProofStore = proofStore ?? ProofStore()
     self.registryClient = registryClient
     self.reportSubmissionStore = reportStore
     self.joinDiagnosticLog = joinDiagnosticLog
@@ -183,14 +190,16 @@ final class AppCoordinator: ObservableObject {
         self.sensingCoordinator = SensingCoordinator(
           registryClient: registryClient, reportSubmissionStore: reportStore,
           reportProofLinkStore: linkStore,
-          joinDiagnosticLog: joinDiagnosticLog
+          joinDiagnosticLog: joinDiagnosticLog,
+          proofStore: resolvedProofStore
         )
       }
       #else
       self.sensingCoordinator = SensingCoordinator(
         registryClient: registryClient, reportSubmissionStore: reportStore,
         reportProofLinkStore: linkStore,
-        joinDiagnosticLog: joinDiagnosticLog
+        joinDiagnosticLog: joinDiagnosticLog,
+        proofStore: resolvedProofStore
       )
       #endif
     }
@@ -220,7 +229,7 @@ final class AppCoordinator: ObservableObject {
     )
     #endif
     self.walletConnector = walletConnector
-    self.proofStore = proofStore ?? ProofStore()
+    self.proofStore = resolvedProofStore
     self.userDefaults = userDefaults
     self.bluetoothMonitor = bluetoothMonitor
     #if DEBUG
@@ -419,13 +428,6 @@ final class AppCoordinator: ObservableObject {
   /// exists to prevent — a restored user must never be dropped onto `.home`
   /// with a dead radio).
   ///
-  /// `.walletFirst` restore is intentionally left exactly as
-  /// `beginOnboarding()`'s existing `.walletConnect` routing — i.e. it does
-  /// not skip wallet-connect. Deciding how a previously-connected wallet
-  /// should restore intersects #202 Q6 (wallet-unconnected guest handling),
-  /// which is explicitly out of scope here; `.walletFirst` isn't
-  /// `OnboardingMode.current` in production, so this is a documented,
-  /// accepted limitation, not a regression.
   private func restoreAfterOnboarding() {
     beginOnboarding()
     if screen == .bluetoothPermission {
@@ -434,25 +436,19 @@ final class AppCoordinator: ObservableObject {
   }
 
   func beginOnboarding() {
-    switch onboardingMode {
-    case .walletFirst:
-      screen = .walletConnect
-    case .guestFirst:
-      screen = .bluetoothPermission
-    }
+    screen = .bluetoothPermission
   }
 
-  /// `address` is supplied by `WalletConnectPairingView` (MetaMask) once a
-  /// session settles.
+  /// Legacy compatibility entry for a settled connector session.
+  /// v1.1 onboarding has no wallet-connect step.
   func completeWalletConnect(address: LiveWalletAddress, connector: (any WalletConnector)? = nil) {
     recordWalletConnection(address: address, connector: connector)
     screen = .bluetoothPermission
   }
 
-  /// Takes `LiveWalletAddress`, not a plain `String` — every production
-  /// caller already has one, straight from a connector's own successful
-  /// `connect()`/`connectAndSign()` (see `WalletConnectPairingView.onConnected`
-  /// and `EventBindingSheetView`'s restored-hint fast path). This is part of
+  /// Takes `LiveWalletAddress`, not a plain `String`, so compatibility
+  /// callers must supply a connector's successful `connect()` or
+  /// `connectAndSign()` result. v1.1 has no wallet-connect UI. This is part of
   /// beid#315's structural containment: a bare `String` (e.g. read from a
   /// `CachedWalletHint`) cannot be passed here without first being wrapped in
   /// a visible `LiveWalletAddress(...)` construction.
@@ -464,25 +460,19 @@ final class AppCoordinator: ObservableObject {
     walletAddress = address.address
   }
 
-  /// Wallet-optional fallback from `WalletConnectView`'s secondary action:
-  /// join an event by manually entered code instead of connecting a wallet.
-  func skipWalletForEventCode() {
-    screen = .eventCodeEntry
-  }
-
   /// The way back out of `EventCodeEntryView` for a user who doesn't
   /// actually have a code — this is a root-switch screen (not a modal
   /// push), so there is no system back affordance without this.
   ///
   /// Also abandons any join attempt still resolving its lookup: without
   /// this, a user who taps this while a code-entry lookup is in flight and
-  /// then reaches `.walletConnect` could later be silently yanked into
+  /// then leaves code entry could later be silently yanked into
   /// `.bluetoothPermission` when that stale lookup finally completes and
   /// `joinEvent` succeeds — a screen change the user never asked for, for
   /// an event they explicitly walked away from (beid#258 P1-1 round-2 fix).
-  func returnToWalletConnect() {
+  func returnToBluetoothPermission() {
     cancelPendingJoinAttempt()
-    screen = .walletConnect
+    screen = .bluetoothPermission
   }
 
   /// Validates and joins the manually entered event code
@@ -511,7 +501,9 @@ final class AppCoordinator: ObservableObject {
   /// `EventCodeEntryView` presented as a sheet over the Account sheet (see
   /// `AccountSheetView`'s `eventCodeEntrySheetPresented` binding). Unlike
   /// `joinEvent(code:)`, success here just dismisses the sheet — it never
-  /// touches `screen`, since the user is already past onboarding.
+  /// touches `screen`, since the user is already past onboarding. It then
+  /// finishes like every other post-onboarding code join
+  /// (`startSensingAfterSuccessfulJoin`).
   @discardableResult
   func joinEventFromAccountSheet(
     code rawCode: String,
@@ -525,8 +517,24 @@ final class AppCoordinator: ObservableObject {
     ) {
       return error
     }
-    eventCodeEntrySheetPresented = false
+    startSensingAfterSuccessfulJoin()
     return nil
+  }
+
+  /// The one way a successful post-onboarding code join finishes (home code
+  /// sheet, Account sheet, Rejoin): v1.1 has no separate start-sensing
+  /// button, so the join itself must start sensing and show the sensing
+  /// screen from the Now tab.
+  private func startSensingAfterSuccessfulJoin() {
+    homeEventCodeSheetPresented = false
+    eventCodeEntrySheetPresented = false
+    accountSheetPresented = false
+    nowEventRegistration = nil
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
+    selectedHomeTab = .now
+    sensingCoordinator.startSensing()
+    scanPresented = true
   }
 
   /// Best-effort code -> canonical registry Event ID lookup, via the
@@ -702,11 +710,8 @@ final class AppCoordinator: ObservableObject {
   /// Home's 04b entry has its own sheet flag so the Account sheet cannot
   /// race to present its private wrapper for the same coordinator binding.
   func joinEventFromHomeResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
-    let outcome = await joinEventFromAccountSheetResolvingCanonicalId(code: code)
-    if case .completed(nil) = outcome {
-      homeEventCodeSheetPresented = false
-    }
-    return outcome
+    // The shared success path closes the home code sheet and starts sensing.
+    await joinEventFromAccountSheetResolvingCanonicalId(code: code)
   }
 
   /// Manual rescue from the nearby-event scan surface. It preserves the same
@@ -732,7 +737,7 @@ final class AppCoordinator: ObservableObject {
 
   /// Call when the account-sheet join surface is dismissed (Cancel or
   /// swipe) while a lookup may still be in flight — see
-  /// `cancelPendingJoinAttempt`'s doc comment and `returnToWalletConnect`'s
+  /// `cancelPendingJoinAttempt`'s doc comment and `returnToBluetoothPermission`'s
   /// onboarding-side equivalent.
   func cancelPendingAccountSheetJoinAttempt() {
     cancelPendingJoinAttempt()
@@ -783,10 +788,11 @@ final class AppCoordinator: ObservableObject {
 
   /// Rejoins a previously joined event by an already-known `Proof.eventCode`
   /// (beid#230's past-events list), instead of retyping it through
-  /// `EventCodeEntryView`. A no-op while an event is already joined —
-  /// matches the single-slot invariant `EventMembershipUITests` already
-  /// covers for "Join Event"; the caller is expected to disable the row the
-  /// same way, but this does not rely on that as its only guard.
+  /// `EventCodeEntryView`. A no-op while a join or session is in progress
+  /// (`SensingCoordinator.canSelectEventToJoin`) — the single-slot invariant
+  /// "Join event" enforces; the caller is expected to disable its control the
+  /// same way, but this does not rely on that as its only guard. A joined
+  /// code survives STOP, so an idle coordinator may rejoin and replaces it.
   ///
   /// Routes through `attemptJoinEvent(code:)` (beid#226, DECISIONS
   /// 2026-08-20) so there is exactly one iOS call site into
@@ -796,14 +802,13 @@ final class AppCoordinator: ObservableObject {
   /// `attemptJoinEvent`'s normalization here means a legacy-cased stored
   /// code rejoins to the same RPID a fresh join of the same text derives
   /// today, instead of reproducing whatever it happened to canonicalize to
-  /// under the old, platform-diverging rule. The return value is discarded:
-  /// a stored `Proof.eventCode` cannot normalize to empty (it was itself
-  /// produced by a successful join), and a `.joinFailed` here has no
-  /// separate UI to report to, matching this function's pre-existing
-  /// `Bool`-discarding call into `SensingCoordinator`.
+  /// under the old, platform-diverging rule. A failed attempt has no separate
+  /// UI to report to, so it simply does nothing; a successful one finishes
+  /// like every other code join (`startSensingAfterSuccessfulJoin`).
   func rejoinPastEvent(code: String, canonicalEventIdHex: String? = nil) {
-    guard sensingCoordinator.joinedEventCode == nil else { return }
-    _ = attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex)
+    guard sensingCoordinator.canSelectEventToJoin else { return }
+    guard attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex) == nil else { return }
+    startSensingAfterSuccessfulJoin()
   }
 
   /// Presents `EventCodeEntryView` in account-sheet mode as a sheet over the
@@ -903,9 +908,120 @@ final class AppCoordinator: ObservableObject {
     )
   }
 
+  var homeStandbyNow: TimeInterval {
+    #if DEBUG
+    if isHomeStandbyFixture { return homeStandbyFixtureTime }
+    #endif
+    return ProcessInfo.processInfo.systemUptime
+  }
+
+  var homeBluetoothIsOff: Bool {
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test"),
+      ProcessInfo.processInfo.arguments.contains("-beid-now-bluetooth-off-fixture") { return true }
+    #endif
+    return bluetoothMonitor.isPoweredOff
+  }
+
+  var homeHasDemoCandidate: Bool {
+    #if DEBUG
+    if isHomeStandbyFixture { return homeStandbyFixtureHasCandidate }
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"),
+      arguments.contains("-beid-home-frame-04b") || arguments.contains("-beid-home-frame-04c") {
+      return false
+    }
+    #endif
+    return sensingCoordinator.homeDemoEventAvailable
+  }
+
+  /// Starts only discovery while Now's root is visible and interactive.
+  /// Joining owns its own in-flight evidence; leaving that phase must not
+  /// clear a candidate before the permission completion consumes it.
+  func updateHomeStandby(isVisible: Bool, isSceneActive: Bool) {
+    let isIdle: Bool
+    if case .idle = sensingCoordinator.phase { isIdle = true } else { isIdle = false }
+    let isEnabled = isVisible && isSceneActive && screen == .home
+      && selectedHomeTab == .now && !scanPresented && !accountSheetPresented
+      && !homeEventCodeSheetPresented && !homeBluetoothIsOff && isIdle && !sensingCoordinator.isAdvertising
+    if isEnabled && !homeStandbyDiscoveryActive {
+      homeStandbyDiscoveryActive = true
+      #if DEBUG
+      if !isHomeStandbyFixture {
+        sensingCoordinator.startHomeStandbyDiscovery()
+      }
+      #else
+      sensingCoordinator.startHomeStandbyDiscovery()
+      #endif
+    } else if !isEnabled && homeStandbyDiscoveryActive {
+      homeStandbyDiscoveryActive = false
+      if isIdle { sensingCoordinator.stopNearbyEventDiscovery() }
+    }
+    // Same projection the Now tab renders: a card whose JOIN control is
+    // disabled (no registration-verified event) must not stop the timer.
+    let nearbyCards = NearbyEventCardListPresentation(
+      candidates: sensingCoordinator.nearbyEventCandidates,
+      nowEpochSeconds: sensingCoordinator.nearbyDiscoveryNowEpochSeconds
+    ).cards
+    let hasJoinableCandidates = nearbyCards.contains { $0.joinActionEventCodeHashHex != nil }
+      || homeHasDemoCandidate
+    homeStandby.update(
+      isEnabled: isEnabled,
+      hasJoinableCandidates: hasJoinableCandidates,
+      now: homeStandbyNow
+    )
+  }
+
+  func joinNearbyEventFromHome(_ card: NearbyEventCard) {
+    guard card.joinActionEventCodeHashHex != nil else { return }
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
+    nowEventRegistration = homeRegistration(for: card)
+    sensingCoordinator.joinNearbyEvent(card: card, clockPreflight: clockPreflight)
+    scanPresented = true
+  }
+
+  func homeRegistration(for card: NearbyEventCard) -> HomeEventRegistration? {
+    guard let context = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .RegistryVerifiedJoinContext.Companion.shared.fromNearbyCandidate(
+        candidates: sensingCoordinator.nearbyEventCandidates,
+        eventCodeHashHex: card.eventCodeHashHex,
+        nowEpochSeconds: Int64(Date().timeIntervalSince1970.rounded(.down))
+      ), let name = context.eventName,
+      let starts = card.displayValidFromEpochSeconds,
+      let ends = card.displayValidUntilEpochSeconds else { return nil }
+    return HomeEventRegistration(
+      name: name,
+      startsAt: Date(timeIntervalSince1970: TimeInterval(starts)),
+      endsAt: Date(timeIntervalSince1970: TimeInterval(ends))
+    )
+  }
+
+  func joinDemoEventFromHome() {
+    nowEventRegistration = nil
+    startScan()
+  }
+
+  #if DEBUG
+  var isHomeStandbyFixture: Bool {
+    let arguments = ProcessInfo.processInfo.arguments
+    return arguments.contains("-beid-ui-test") && arguments.contains("-beid-now-standby-fixture")
+  }
+
+  func advanceHomeStandbyFixture(by seconds: TimeInterval) {
+    guard isHomeStandbyFixture else { return }
+    homeStandbyFixtureTime += seconds
+  }
+
+  func setHomeStandbyFixtureCandidate(_ present: Bool) {
+    guard isHomeStandbyFixture else { return }
+    homeStandbyFixtureHasCandidate = present
+  }
+  #endif
+
   func startScan() {
+    selectedHomeTab = .now
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
     #if DEBUG
@@ -980,110 +1096,110 @@ final class AppCoordinator: ObservableObject {
     await clockPreflight.check()
   }
 
-  /// Legacy close entry point. It follows the same Proof gate as every new
-  /// caller, so no caller can bypass the confirmation for an actual Proof.
+  /// Retained for callers that explicitly request the stop flow.
   func finishScan() {
     requestScanClose()
   }
 
-  private func resetAndDismissScan(intent: ScanStopIntent) {
+  private func resetAndDismissScan() {
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
     cancelPendingJoinAttempt()
     scanPresented = false
     sensingCoordinator.stopNearbyEventDiscovery()
-    switch intent {
-    case .keepAutomaticTransport:
-      sensingCoordinator.reset()
-    case .stopAutomaticTransport:
-      sensingCoordinator.stopSensing()
+    sensingCoordinator.stopSensing()
+  }
+
+  /// Only STOP SENSING ends participation. The Bluetooth-off screen is also
+  /// reached from the Now tab while an event session is active, so opening
+  /// Settings from there must not reset (finalize) that session.
+  var shouldResetSensingBeforeOpeningBluetoothSettings: Bool {
+    Self.shouldResetSensing(
+      beforeOpeningBluetoothSettingsIn: sensingCoordinator.phase,
+      joinedEventCode: sensingCoordinator.joinedEventCode
+    )
+  }
+
+  static func shouldResetSensing(
+    beforeOpeningBluetoothSettingsIn phase: ScanPhase,
+    joinedEventCode: String?
+  ) -> Bool {
+    switch phase {
+    case .idle: return true
+    case .sensing: return joinedEventCode == nil
+    case .eventFound, .recording, .signalLost: return false
     }
   }
 
-  /// Scan CLOSE preserves automatic operation after ending this session.
-  /// A stored Proof still passes through 05e before finalization.
+  /// Returning with Back never calls this method. Only an explicit stop
+  /// requests confirmation for the current participation.
   func requestScanClose() {
-    requestScanClose(intent: .keepAutomaticTransport)
-  }
-
-  /// Home Stop sensing uses the same Proof gate and 05e confirmation, but
-  /// stops automatic transport after confirmation or immediately prejoin.
-  func requestHomeStopSensing() {
-    requestScanClose(intent: .stopAutomaticTransport)
-  }
-
-  private func requestScanClose(intent: ScanStopIntent) {
     guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
       stopConfirmSnapshot == nil else { return }
-    guard let proofID = sensingCoordinator.currentProofID,
-      proofStore.proof(withId: proofID) != nil
-    else {
-      resetAndDismissScan(intent: intent)
+    if let proofID = sensingCoordinator.currentProofID, proofStore.proof(withId: proofID) == nil {
+      resetAndDismissScan()
       return
     }
     let event: EventSession
     switch sensingCoordinator.phase {
-    case .recording(let currentEvent, _), .signalLost(let currentEvent, _):
+    case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
       event = currentEvent
-    case .idle, .sensing, .eventFound:
-      resetAndDismissScan(intent: intent)
+    case .idle, .sensing:
+      resetAndDismissScan()
       return
     }
     stopConfirmSnapshot = SensingStopConfirmSnapshot(
-      proofID: proofID,
+      proofID: sensingCoordinator.currentProofID,
       event: event
     )
-    pendingStopIntent = intent
+    selectedHomeTab = .now
     scanPresented = true
+  }
+
+  func requestHomeStopSensing() {
+    requestScanClose()
   }
 
   func keepSensing() {
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
   }
 
-  /// The single confirmed finalization entry for Scan CLOSE and Home Stop.
-  /// Clear the pending confirmation before ending the session so a repeated
-  /// tap cannot finalize again. Scan keeps automatic transport; Home stops it.
-  /// A nil return keeps the Proof but dismisses without a sealed claim.
+  /// Consume the confirmation before performing effects so repeated taps
+  /// cannot finalize twice. A different session cannot use an old request.
   func confirmStopSensing() {
-    guard let snapshot = stopConfirmSnapshot, let proofID = snapshot.proofID,
-      let intent = pendingStopIntent else { return }
+    guard let snapshot = stopConfirmSnapshot else { return }
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
-    guard sensingCoordinator.currentProofID == proofID else {
-      // A newer session may have taken this slot while 05e was open. Keep
-      // that live session visible; only an externally reset session exits.
-      if sensingCoordinator.currentProofID == nil { scanPresented = false }
+    let event: EventSession
+    switch sensingCoordinator.phase {
+    case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
+      event = currentEvent
+    case .idle, .sensing:
+      scanPresented = false
       return
     }
-    guard proofStore.proof(withId: proofID) != nil else {
-      // Still sensing, but the record vanished: return to the live screen
-      // without finalizing or making a sealed claim.
+    guard event.sessionID == snapshot.event.sessionID else { return }
+    let proofID = sensingCoordinator.currentProofID
+    if let expectedID = snapshot.proofID, proofID != expectedID { return }
+    if let proofID, proofStore.proof(withId: proofID) == nil {
+      resetAndDismissScan()
       return
     }
     let aggregate = sensingCoordinator.sessionAggregate
     let detectedDeviceCount = sensingCoordinator.devicesVerified
     let firstSightingAt = sensingCoordinator.firstSightingAt
+    let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
-    let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
-    let selfProof: SelfProofRecord?
-    switch intent {
-    case .keepAutomaticTransport:
-      selfProof = sensingCoordinator.reset()
-    case .stopAutomaticTransport:
-      selfProof = sensingCoordinator.stopSensing()
-    }
-    guard selfProof?.proofId == proofID else {
+    let selfProof = sensingCoordinator.stopSensing()
+    guard let proofID, selfProof?.proofId == proofID,
+      proofStore.proof(withId: proofID) != nil else {
       scanPresented = false
       return
     }
     sealedSnapshot = SensingSealedSnapshot(
       recordID: proofID,
-      event: snapshot.event,
+      event: event,
       aggregate: aggregate,
       detectedDeviceCount: detectedDeviceCount,
       firstSightingAt: firstSightingAt,
@@ -1106,13 +1222,13 @@ final class AppCoordinator: ObservableObject {
       detectedPeerCount: sealedSnapshot.detectedDeviceCount,
       observedWindowCount: sealedSnapshot.aggregate.map { Int($0.windowCount) }
     )
-    self.sealedSnapshot = nil
   }
 
   func viewCollectionAfterProofCollected() {
     guard proofCollectedSnapshot != nil else { return }
     proofCollectedSnapshot = nil
     scanPresented = false
+    selectedHomeTab = .records
   }
 
   // MARK: - Item detail

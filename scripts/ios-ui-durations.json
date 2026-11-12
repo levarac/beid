@@ -1,0 +1,17 @@
+{
+  "provenance": "Seed: local iPad UI measurement (92 cases, 1938 s). Replace with hosted iPhone test-tree.json durations after the first runs. Only measured per-method values are recorded; missing/new methods use 20 s and identifier/index tie breakers.",
+  "seconds": {
+    "BeidUITests/BeidIPadLayoutTests/testProofStoreDoesNotAccumulateAcrossUITestLaunches": 81.2,
+    "BeidUITests/BeidIPadLayoutTests/testPrimaryFlowInPortrait": 78.5,
+    "BeidUITests/BeidIPadLayoutTests/testPrimaryFlowInLandscape": 78.4,
+    "BeidUITests/BeidIPadLayoutTests/testParticipationSummaryHeadlineHidesNumericMutualCount": 61.7,
+    "BeidUITests/BeidBackNavigationUITests/testLeadingEdgeSwipePopsProofDetailBackToCollection": 56.8,
+    "BeidUITests/FlatScreenshotTourC/testSelectingObservedWindowExposesThatSelection": 51.4,
+    "BeidUITests/BeidIPadLayoutTests/testProofDetailStatusReflectsStoredSelfProof": 44.3,
+    "BeidUITests/NowNavigationUITests/testRecordsGridHasOneAttendancePerEventAndKeepsSessions": 42.8,
+    "BeidUITests/BeidBackNavigationUITests/testLeadingEdgeSwipeOnTheRootScreenIsHarmless": 42.5,
+    "BeidUITests/BeidIPadLayoutTests/testRecordCardsNavigateIndependentlyInLandscape": 40.8,
+    "BeidUITests/BeidIPadLayoutTests/testRecordCardsNavigateIndependentlyInPortrait": 39.7,
+    "BeidUITests/JoinRefusalUITests/testDeviceKeyFailureAppearsOnOpenScanFlowAndDismissesOnce": 37.6
+  }
+}

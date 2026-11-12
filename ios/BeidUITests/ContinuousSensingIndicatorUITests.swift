@@ -3,8 +3,7 @@
 
 import XCTest
 
-/// Runtime acceptance for beid#200: closing the scan surface must leave a
-/// truthful, actionable indication while transport continues.
+/// Returning from sensing details preserves the live participation.
 final class ContinuousSensingIndicatorUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -12,31 +11,31 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
     continueAfterFailure = false
   }
 
-  func testHomeShowsContinuousSensingAndClearsAfterStop() {
+  func testHomeResumesContinuousSensingThroughDetails() {
     app.launchArguments = ["-beid-ui-test", "-beid-continuous-sensing-fixture"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["home.scan"]
+    let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.scrollViews["scan.sensing"].waitForExistence(timeout: 30))
 
-    app.buttons["Close"].tap()
+    app.navigationBars.buttons.element(boundBy: 0).tap()
 
-    let indicator = app.staticTexts["Sensing continues in background"]
+    let indicator = app.buttons["home.open-details"]
     XCTAssertTrue(indicator.waitForExistence(timeout: 5))
-    let stopButton = app.buttons["collection.stop-sensing"]
-    XCTAssertTrue(stopButton.exists)
-    XCTAssertTrue(stopButton.isHittable)
-    XCTAssertTrue(senseEvent.isHittable, "Scan stays available while sensing continues")
-
-    stopButton.tap()
-    XCTAssertFalse(app.staticTexts["Stop sensing?"].exists, "prejoin Home Stop needs no Proof confirmation")
-    XCTAssertFalse(indicator.waitForExistence(timeout: 5))
-    XCTAssertFalse(stopButton.exists)
+    XCTAssertFalse(app.buttons["collection.stop-sensing"].exists)
+    let details = app.buttons["home.open-details"]
+    XCTAssertTrue(details.isHittable)
+    details.tap()
+    XCTAssertTrue(app.scrollViews["scan.sensing"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
+    XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    XCTAssertTrue(indicator.waitForExistence(timeout: 5))
   }
 }

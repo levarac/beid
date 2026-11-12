@@ -25,12 +25,21 @@ final class ProofDetailPresentationTests: XCTestCase {
     XCTAssertEqual(bindingOnly.signature, "Bound to wallet")
   }
 
+  func testDiscardedSelfProofShowsAnIncompleteRecording() {
+    let value = ProofDetailPresentation(
+      method: "Bluetooth Sensing", hasSelfProof: false, hasBinding: false,
+      deviceCount: nil, windowCount: nil, sessionCount: 1, selfProofDiscardedForKeyChange: true
+    )
+    XCTAssertEqual(value.status, "Recording incomplete")
+    XCTAssertEqual(value.signature, "Not yet available")
+  }
+
   func testMissingAggregateIsUnavailableRatherThanZero() {
     let value = makePresentation(
       selfProof: false, binding: false, devices: nil, windows: nil
     )
     XCTAssertEqual(value.withValue, "Not yet available")
-    XCTAssertFalse(value.withValue.contains("0 peers"))
+    XCTAssertFalse(value.withValue.contains("0 devices"))
     XCTAssertFalse(value.withValue.contains("0 windows"))
   }
 
@@ -38,7 +47,7 @@ final class ProofDetailPresentationTests: XCTestCase {
     let oneSession = makePresentation(
       selfProof: true, binding: false, devices: 15, windows: 6
     )
-    XCTAssertEqual(oneSession.withValue, "15 peers · 6 windows")
+    XCTAssertEqual(oneSession.withValue, "15 devices · 6 windows")
 
     let multipleSessions = makePresentation(
       selfProof: true, binding: false, devices: 15, windows: 6, sessions: 3
@@ -51,12 +60,12 @@ final class ProofDetailPresentationTests: XCTestCase {
     let singular = makePresentation(
       selfProof: true, binding: false, devices: 1, windows: 1
     )
-    XCTAssertEqual(singular.withValue, "1 peer · 1 window")
+    XCTAssertEqual(singular.withValue, "1 device · 1 window")
 
     let zero = makePresentation(
       selfProof: true, binding: false, devices: 0, windows: 0
     )
-    XCTAssertEqual(zero.withValue, "0 peers · 0 windows")
+    XCTAssertEqual(zero.withValue, "0 devices · 0 windows")
   }
 
   func testRecordIDShorthandHasAFixedLiteralVectorOnBothScreens() {

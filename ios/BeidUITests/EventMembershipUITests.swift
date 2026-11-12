@@ -3,9 +3,8 @@
 
 import XCTest
 
-/// Regression coverage for Account's Join Event re-render (gh#101).
-/// AppCoordinator does not republish the joined code, so the row must observe
-/// SensingCoordinator and disable while the same Account sheet stays open.
+/// Coverage for Account's Join event row (gh#101). Joining from the Account
+/// sheet starts sensing and presents the sensing screen (v1.1).
 final class EventMembershipUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -13,14 +12,14 @@ final class EventMembershipUITests: XCTestCase {
     continueAfterFailure = false
   }
 
-  func testJoinEventRowDisablesImmediatelyAfterJoining() {
+  func testAccountSheetJoinDismissesCodeEntryAndShowsSensing() {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
 
     app.buttons["home.account"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
@@ -28,12 +27,12 @@ final class EventMembershipUITests: XCTestCase {
     // Lower rows can exist in the accessibility tree while sitting behind
     // the footer. Scroll until the whole tappable row is unobstructed.
     let list = app.collectionViews.firstMatch
-    scrollUntilTappable(app.buttons["Join Event"], in: list)
+    scrollUntilTappable(app.buttons["Join event"], in: list)
 
-    // Only one "Join Event" element exists in the tree here — the nested
+    // Only one "Join event" element exists in the tree here — the nested
     // event-code sheet is not presented yet, so there's no collision with
-    // EventCodeEntryView's own "Join Event" submit button.
-    let joinEventRow = app.buttons["Join Event"]
+    // EventCodeEntryView's own "Join event" submit button.
+    let joinEventRow = app.buttons["Join event"]
     XCTAssertTrue(isUnobstructed(joinEventRow, in: list))
     XCTAssertTrue(joinEventRow.isEnabled)
     joinEventRow.tap()
@@ -42,24 +41,19 @@ final class EventMembershipUITests: XCTestCase {
     XCTAssertTrue(codeField.waitForExistence(timeout: 5))
     codeField.tap()
     // Submit via the keyboard's Join return-key action (onSubmit) rather
-    // than tapping a button labeled "Join Event" — this avoids the label
+    // than tapping a button labeled "Join event" — this avoids the label
     // collision with the Account-sheet row while both could be in the tree.
     codeField.typeText("ETHTOKYO2026\n")
 
-    // Wait for the asynchronous join to dismiss its nested sheet, leaving
-    // this same Account sheet open. Only EventMembershipSections observes
-    // the joined code directly, so disabling here protects its re-render.
+    // A successful join from the Account sheet closes the code sheet and the
+    // Account sheet, selects the Now tab and presents the sensing screen,
+    // which carries STOP SENSING once an event is joined.
     let codeSheetGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: codeField)
     wait(for: [codeSheetGone], timeout: 15)
-    let joinDisabled = expectation(for: NSPredicate(format: "isEnabled == false"), evaluatedWith: joinEventRow)
-    wait(for: [joinDisabled], timeout: 5)
-    XCTAssertFalse(app.buttons["Leave Event"].exists)
-    XCTAssertFalse(
-      joinEventRow.isEnabled,
-      "Join Event should disable immediately when the current session joins"
+    XCTAssertTrue(
+      app.buttons["scan.stop-sensing"].waitForExistence(timeout: 10),
+      "joining from the Account sheet must start sensing and show the sensing screen"
     )
-    app.buttons["Done"].tap()
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
 
   /// An offscreen List row may already `exist`, so require its full frame to

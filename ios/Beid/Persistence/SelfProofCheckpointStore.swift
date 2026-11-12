@@ -28,9 +28,14 @@ final class SelfProofCheckpointStore: ObservableObject {
   var isPersistenceSuspended: Bool { persistenceSuspensionReason != nil }
 
   private let fileURL: URL
+  private let removeFile: (URL) throws -> Void
 
-  init(fileURL: URL? = nil) {
+  init(
+    fileURL: URL? = nil,
+    removeFile: @escaping (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) }
+  ) {
     self.fileURL = fileURL ?? Self.defaultFileURL()
+    self.removeFile = removeFile
     load()
   }
 
@@ -55,6 +60,17 @@ final class SelfProofCheckpointStore: ObservableObject {
     guard checkpoint != nil else { return }
     checkpoint = nil
     persist()
+  }
+
+  /// Leaves the in-memory input intact unless its durable removal succeeds.
+  func clearDurably() throws {
+    if let persistenceSuspensionReason { throw persistenceSuspensionReason }
+    do {
+      try removeFile(fileURL)
+    } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileNoSuchFileError {
+      // A completed removal is also safe when repeated.
+    }
+    checkpoint = nil
   }
 
   private func load() {

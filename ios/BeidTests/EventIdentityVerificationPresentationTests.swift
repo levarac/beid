@@ -15,7 +15,7 @@ final class EventIdentityVerificationPresentationTests: XCTestCase {
     )
 
     XCTAssertEqual(presentation.messageKey, "event.identityVerification.checking")
-    XCTAssertEqual(presentation.defaultMessage, "Checking event registry…")
+    XCTAssertEqual(presentation.defaultMessage, "Checking event registration…")
     XCTAssertFalse(presentation.isVerified)
     XCTAssertEqual(
       presentation.statusAccessibilityIdentifier,
@@ -31,7 +31,7 @@ final class EventIdentityVerificationPresentationTests: XCTestCase {
     )
 
     XCTAssertEqual(presentation.messageKey, "event.identityVerification.verified")
-    XCTAssertEqual(presentation.defaultMessage, "Event identity verified")
+    XCTAssertEqual(presentation.defaultMessage, "Event registration matched")
     XCTAssertTrue(presentation.isVerified)
     XCTAssertEqual(
       presentation.statusAccessibilityIdentifier,
@@ -52,7 +52,7 @@ final class EventIdentityVerificationPresentationTests: XCTestCase {
     XCTAssertEqual(unavailable.messageKey, "event.identityVerification.unavailable")
     XCTAssertEqual(
       unavailable.defaultMessage,
-      "Event registry is temporarily unavailable."
+      "Event registration can't be checked right now."
     )
     XCTAssertFalse(unavailable.isVerified)
     XCTAssertEqual(
@@ -65,7 +65,7 @@ final class EventIdentityVerificationPresentationTests: XCTestCase {
     XCTAssertEqual(notFound.messageKey, "event.identityVerification.notFound")
     XCTAssertEqual(
       notFound.defaultMessage,
-      "No registry definition was found for this event."
+      "This event isn't registered."
     )
     XCTAssertFalse(notFound.isVerified)
     XCTAssertEqual(

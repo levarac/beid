@@ -37,7 +37,7 @@ import XCTest
 /// get a real, test-controlled suspension point without a flaky
 /// wall-clock-dependent test. A naive *sequential* version of this test
 /// (`Task { await coordinator.joinEventResolvingCanonicalId(...) }` then
-/// immediately `coordinator.returnToWalletConnect()`) does **not** work:
+/// immediately `coordinator.returnToBluetoothPermission()`) does **not** work:
 /// Swift's `Task { }` creation never suspends its creator, so the
 /// cancellation's generation bump provably runs before the child task's own
 /// bump — the reverse of a real abandon-mid-lookup. `ContinuationRelay`
@@ -231,11 +231,11 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
   }
 
   /// Same shape as the race above, but "first" is superseded by
-  /// `cancelPendingJoinAttempt` (via `returnToWalletConnect`, its only
+  /// `cancelPendingJoinAttempt` (via `returnToBluetoothPermission`, its only
   /// production caller) instead of by a second join attempt — the onboarding
   /// join surface's path behind the beid#258 P1-1 round-2 fix (abandoning
   /// the join surface must invalidate whatever lookup was still in flight).
-  func testReturnToWalletConnectWhileSuspendedSupersedesTheInFlightOnboardingAttempt() async throws {
+  func testReturnToBluetoothPermissionWhileSuspendedSupersedesTheInFlightOnboardingAttempt() async throws {
     let coordinator = AppCoordinator(registryClient: nil)
     let relay = ContinuationRelay()
     coordinator.resolveCanonicalEventIdHexOverride = { _ in
@@ -244,7 +244,7 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
 
     async let outcome = coordinator.joinEventResolvingCanonicalId(code: "abandoned")
     await relay.waitUntilSuspended()
-    coordinator.returnToWalletConnect()
+    coordinator.returnToBluetoothPermission()
     await relay.resume(returning: "0x" + String(repeating: "aa", count: 32))
 
     let resolvedOutcome = await outcome
@@ -277,6 +277,52 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
     let resolvedOutcome = await outcome
     XCTAssertEqual(resolvedOutcome, .superseded)
     XCTAssertNil(coordinator.sensingCoordinator.joinedCanonicalEventIdHex)
+  }
+
+  func testDismissingAccountSheetWhileSuspendedCancelsPastEventRejoin() async {
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: RecordingEventJoinControl())
+    sensing.useDemoEventMode = false
+    let coordinator = AppCoordinator(sensingCoordinator: sensing, registryClient: nil)
+    let relay = ContinuationRelay()
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: await relay.suspend(), errorCode: nil)
+    }
+    coordinator.accountSheetPresented = true
+
+    async let rejoin: Void = coordinator.rejoinPastEventResolvingCanonicalId(code: "abandoned")
+    await relay.waitUntilSuspended()
+    coordinator.accountSheetPresented = false
+    await relay.resume(returning: "0x" + String(repeating: "aa", count: 32))
+    await rejoin
+
+    XCTAssertNil(sensing.joinedEventCode)
+    XCTAssertNil(sensing.joinedCanonicalEventIdHex)
+    XCTAssertEqual(sensing.phase, .idle)
+    XCTAssertFalse(coordinator.scanPresented)
+  }
+
+  func testPastEventRejoinCompletesWhenAccountSheetStaysOpen() async {
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: RecordingEventJoinControl())
+    sensing.useDemoEventMode = false
+    let coordinator = AppCoordinator(sensingCoordinator: sensing, registryClient: nil)
+    let relay = ContinuationRelay()
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: await relay.suspend(), errorCode: nil)
+    }
+    coordinator.accountSheetPresented = true
+    let eventIdHex = "0x" + String(repeating: "aa", count: 32)
+
+    async let rejoin: Void = coordinator.rejoinPastEventResolvingCanonicalId(code: "kept")
+    await relay.waitUntilSuspended()
+    await relay.resume(returning: eventIdHex)
+    await rejoin
+
+    XCTAssertEqual(sensing.joinedEventCode, "kept")
+    XCTAssertEqual(sensing.joinedCanonicalEventIdHex, eventIdHex)
+    XCTAssertEqual(sensing.phase, .sensing)
+    XCTAssertTrue(coordinator.scanPresented)
+    XCTAssertFalse(coordinator.accountSheetPresented)
+    _ = sensing.stopSensing()
   }
 
   /// PR #716 review (Codex, P2): Home's 04b sheet presents through

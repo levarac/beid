@@ -28,7 +28,7 @@ enum SessionDisplay {
   static func proofTitle(_ ordinal: Int) -> String {
     String(
       localized: "eventDetail.proof.title",
-      defaultValue: "Session \(ordinal) proof",
+      defaultValue: "Record for session \(ordinal)",
       comment: "Opens the existing detail for the stored Proof collected in this numbered recording session."
     )
   }
@@ -46,7 +46,7 @@ enum SessionDisplay {
     }
     return String(
       localized: "eventDetail.proof.state.recorded",
-      defaultValue: "RECORDED ON DEVICE",
+      defaultValue: "RECORDED ON THIS PHONE",
       comment: "Proof row state when no self-proof signature record exists for this exact stored Proof."
     )
   }
@@ -57,6 +57,16 @@ enum SessionDisplay {
 struct LinkedReport: Equatable {
   let ordinal: Int
   let record: ReportSubmissionRecord
+}
+
+/// Input reports are already scoped by authoritative session UUID links.
+enum WindowReportSelection {
+  static func reports(
+    _ reports: [LinkedReport], at windowIndex: Int64,
+    windowIndexForReport: (UUID) -> Int64?
+  ) -> [LinkedReport] {
+    reports.filter { windowIndexForReport($0.record.id) == windowIndex }
+  }
 }
 
 /// The session a report was closed in, for frame 12.
@@ -81,6 +91,7 @@ struct LinkedSession: Equatable {
 /// event is unlinked, never a guess.
 @MainActor
 enum ReportProofLinkPresentation {
+  enum ReadError: Error { case unavailable }
   static func session(
     for record: ReportSubmissionRecord,
     linkStore: ReportProofLinkStore,
@@ -106,18 +117,28 @@ enum ReportProofLinkPresentation {
     linkStore: ReportProofLinkStore,
     proofStore: ProofStore
   ) -> [LinkedReport] {
+    (try? readReports(
+      for: proof, submissionStore: submissionStore, linkStore: linkStore, proofStore: proofStore
+    ).get()) ?? []
+  }
+
+  static func readReports(
+    for proof: Proof,
+    submissionStore: ReportSubmissionStore,
+    linkStore: ReportProofLinkStore,
+    proofStore: ProofStore
+  ) -> Result<[LinkedReport], ReadError> {
     guard proofStore.proof(withId: proof.id) != nil,
           let eventCode = proof.eventCode,
           case .success(let records) = submissionStore.eventRecords(forEventCode: eventCode),
-          case .success(let windowIds) = linkStore.windowIds(forProofId: proof.id),
-          !windowIds.isEmpty
-    else { return [] }
-    return records.enumerated().compactMap { offset, record in
+          case .success(let windowIds) = linkStore.windowIds(forProofId: proof.id)
+    else { return .failure(.unavailable) }
+    return .success(records.enumerated().compactMap { offset, record in
       guard windowIds.contains(record.id),
             EventGrouping.sameEvent(proof.eventCode, record.eventCode)
       else { return nil }
       return LinkedReport(ordinal: offset + 1, record: record)
-    }
+    })
   }
 }
 
@@ -134,11 +155,24 @@ struct EventReportRow: View {
 
   var body: some View {
     NavigationLink {
-      ReportDetailView(
-        recordID: record.id, reportIndex: ordinal, submissionStore: submissionStore,
-        proofStore: proofStore, linkStore: linkStore, sensing: sensing
-      )
-      .toolbar(.visible, for: .navigationBar)
+      if let session = ReportProofLinkPresentation.session(
+        for: record, linkStore: linkStore, proofStore: proofStore,
+        hasSelfProof: { sensing.selfProofRecord(forProofId: $0) != nil }
+      ), let window = sensing.observedWindowIndex(forWindowID: record.id),
+         let aggregate = sensing.sessionAggregateSnapshot(forProofId: session.proof.id),
+         ObservationDetailPresentation(aggregate: aggregate)?.windows.contains(where: { $0.windowIndex == window }) == true {
+        ObservationDetailView(
+          proof: session.proof, sessionNumber: session.ordinal,
+          aggregate: aggregate,
+          initialWindowIndex: window, initialReportID: record.id
+        )
+      } else {
+        ReportDetailView(
+          recordID: record.id, reportIndex: ordinal, submissionStore: submissionStore,
+          proofStore: proofStore, linkStore: linkStore, sensing: sensing
+        )
+        .toolbar(.visible, for: .navigationBar)
+      }
     } label: {
       VStack(alignment: .leading, spacing: DS.Space.xs) {
         HStack {

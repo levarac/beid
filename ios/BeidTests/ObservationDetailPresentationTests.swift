@@ -36,4 +36,46 @@ final class ObservationDetailPresentationTests: XCTestCase {
   func testMissingSnapshotDoesNotBecomeAnEmptyMeasuredChart() {
     XCTAssertNil(ObservationDetailPresentation(aggregate: nil))
   }
+
+  func testSelectedSigilUsesObservedRanksAndLeavesFullInputUnchanged() throws {
+    let observations = BeidSharedKit.aggregation.createAggregationObservationInput()
+    for (window, peer) in [(Int64(100), "a"), (102, "a"), (109, "b")] {
+      XCTAssertTrue(BeidSharedKit.aggregation.addAggregationObservation(
+        input: observations, windowIndex: window, peerKey: peer,
+        displayId: peer, mutual: false
+      ))
+    }
+    let aggregate = BeidSharedKit.aggregation.aggregateObservationsForSession(
+      input: observations, windowsPerBand: 1
+    )
+    let presentation = try XCTUnwrap(ObservationDetailPresentation(aggregate: aggregate))
+    let source = BeidSharedKit.sigil.createSigilInput(windowCount: 3)
+    XCTAssertTrue(BeidSharedKit.sigil.addSigilPresence(input: source, peerKey: "a", windowIndex: 0, presence: 1))
+    XCTAssertTrue(BeidSharedKit.sigil.addSigilPresence(input: source, peerKey: "a", windowIndex: 1, presence: 1))
+    XCTAssertTrue(BeidSharedKit.sigil.addSigilPresence(input: source, peerKey: "b", windowIndex: 2, presence: 1))
+    let proofID = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+    let selected = try XCTUnwrap(presentation.selectedSigilInput(
+      storedInput: source, storedProofID: proofID, selectedProofID: proofID, throughWindowIndex: 102
+    ))
+    XCTAssertFalse(selected === source)
+    let layout = BeidSharedKit.sigil.layoutSigil(input: selected, size: 200, ground: .DISC)
+    XCTAssertEqual(layout.windowCount, 2)
+    XCTAssertEqual(layout.detectedPeerCount, 1)
+    XCTAssertEqual(layout.mutualPeerCount, 0)
+    XCTAssertEqual(source.windowCount, 3)
+    XCTAssertEqual(BeidSharedKit.sigil.layoutSigil(input: source, size: 200, ground: .DISC).detectedPeerCount, 2)
+    XCTAssertNil(presentation.selectedSigilInput(
+      storedInput: source, storedProofID: proofID, selectedProofID: UUID(), throughWindowIndex: 102
+    ))
+    XCTAssertNil(presentation.selectedSigilInput(
+      storedInput: source, storedProofID: proofID, selectedProofID: proofID, throughWindowIndex: 101
+    ))
+    XCTAssertNil(presentation.selectedSigilInput(
+      storedInput: BeidSharedKit.sigil.createSigilInput(windowCount: 2),
+      storedProofID: proofID, selectedProofID: proofID, throughWindowIndex: 102
+    ))
+    XCTAssertNil(presentation.selectedSigilInput(
+      storedInput: nil, storedProofID: proofID, selectedProofID: proofID, throughWindowIndex: 102
+    ))
+  }
 }

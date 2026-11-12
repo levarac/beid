@@ -21,7 +21,7 @@ Also check the event's validity window (its start and end time). Outside it, joi
 ## 1. Join on iPhone
 
 1. Install Beid (the current TestFlight build, or your own development build).
-2. Open Collection → Sense Event → Enter event code, type `<EVENT_CODE>`, and tap Join Event.
+2. Open Collection → Sense Event → Enter event code, type `<EVENT_CODE>`, and tap Join event.
 3. If the device is already in another event, leave it first, then join.
 
 ## 2. Broadcast as the venue (one iPhone)

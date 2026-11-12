@@ -36,7 +36,8 @@ private final class DemoScenarioSubmissionRuntimeSpy: WindowReportSubmissionRunt
     enin _: Int,
     peerRpids _: Set<String>,
     reporterRpid _: String?,
-    participantCommitment _: Data?
+    participantCommitment _: Data?,
+    eventSigningPublicKey: Data?
   ) {
     captureAndQueueWindowCallCount += 1
   }
@@ -361,7 +362,7 @@ final class DemoScenarioInvariantTests: XCTestCase {
   ///
   /// `crowdSurge` never reaches Signal Lost — no step of it ever asks for that
   /// phase. A preview that quietly rendered the terminal Recording screen
-  /// under a "Signal Lost" label would be a fixture lying about what it shows,
+  /// under a "Signal lost" label would be a fixture lying about what it shows,
   /// which is worse than showing nothing. The seam reports the miss instead,
   /// and this test is what stops a later change from making the miss silent.
   func testAnUnreachableScreenIsReportedRatherThanSilentlySubstituted() async {

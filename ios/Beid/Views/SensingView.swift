@@ -106,7 +106,7 @@ struct NearbyEventCardListPresentation {
   var showsManualEntryRescue: Bool { true }
 }
 
-/// Screen 05: Scan screen with a radar animation, "Sensing automatically".
+/// Prejoin discovery, with manual event-code entry when needed.
 struct SensingView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @ObservedObject private var sensing: SensingCoordinator
@@ -127,11 +127,23 @@ struct SensingView: View {
       ScrollView {
         BeidAdaptiveContent {
           VStack(spacing: DS.Space.l) {
-            BeidStatusPill(state: .sensingAutomatically)
+            if isListeningAfterJoin {
+              Text("Listening for nearby phones…")
+                .beidTextStyle(DS.Font.Library.labelMono11)
+            } else {
+              Text("Listening for nearby events")
+                .beidTextStyle(DS.Font.Library.labelMono11)
+            }
 
             radar
 
-            Text("Walk into an event — it will show up here automatically.")
+            Group {
+              if isListeningAfterJoin {
+                Text("Keep the app open. Sensing starts when beid hears another phone at this event.")
+              } else {
+                Text("Nearby events appear here. Tap JOIN to begin sensing.")
+              }
+            }
               .font(DS.Font.body)
               .foregroundStyle(DS.Color.textSecondary)
               .multilineTextAlignment(.center)
@@ -183,6 +195,14 @@ struct SensingView: View {
     .accessibilityIdentifier("scan.sensing")
   }
 
+  /// True once JOIN was tapped (or an event code accepted) and no other
+  /// phone has been heard yet: the phase is `.sensing`, so telling the
+  /// participant to tap JOIN again would be wrong.
+  var isListeningAfterJoin: Bool {
+    if case .sensing = sensing.phase { return true }
+    return false
+  }
+
   private var isPreJoin: Bool {
     if case .idle = sensing.phase { return true }
     return false
@@ -197,10 +217,8 @@ struct SensingView: View {
 
   /// What to say about a refused join, or nil when nothing was refused.
   ///
-  /// The reason is `shared/`'s (`eventJoinFailureReasonKey`); these sentences
-  /// are this host's, and they are the same English Android already ships
-  /// (`event_join_error_*`), so one situation does not read as two different
-  /// products.
+  /// Registry reasons come from `shared/` (`eventJoinFailureReasonKey`).
+  /// Native storage/loading reasons describe this host's recovery effects.
   ///
   /// Until beid#472 there was nothing here at all. `SensingCoordinator` held
   /// the refusal and no view read it, so a radio that never started looked
@@ -211,6 +229,10 @@ struct SensingView: View {
     switch key {
     case "device_key_unavailable":
       return LocalizedStringKey(EventSigningKeyFailure.unavailable.message)
+    case "storage_recovery_required":
+      return "beid couldn't access saved records. Try again before joining another event."
+    case "storage_loading":
+      return "beid is loading saved records before joining another event. Please wait."
     case "network_required":
       return "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again."
     case "event_not_found":
@@ -242,11 +264,20 @@ struct SensingView: View {
   /// its accessibility identifier are kept here; its copy is not.
   private func joinRefusalNotice(_ message: LocalizedStringKey) -> some View {
     BeidPanel {
-      Text(message)
-        .font(DS.Font.supporting)
-        .foregroundStyle(DS.Color.textPrimary)
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      VStack(alignment: .leading, spacing: DS.Space.s) {
+        Text(message)
+          .font(DS.Font.supporting)
+          .foregroundStyle(DS.Color.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        if sensing.joinRefusalReasonKey == "storage_recovery_required" {
+          Button("Try again") { sensing.retrySessionAdmissionAfterStorageFailure() }
+            .buttonStyle(.plain)
+            .font(DS.Font.supporting)
+            .frame(minHeight: DS.Size.minHitTarget)
+            .accessibilityIdentifier("scan.storage-retry")
+        }
+      }
     }
     .accessibilityElement(children: .combine)
     .accessibilityIdentifier("scan.join-refusal")
@@ -306,25 +337,12 @@ struct SensingView: View {
       .accessibilityIdentifier("scan.nearby-events.omitted")
   }
 
-  /// What a nearby card's tap does, as a named method rather than a closure
-  /// buried in the `Button` below, so `BeidTests` can run it (beid#464).
-  ///
-  /// Not `private`, and the same seam shape
-  /// `SensingCoordinator.handleEventInfoHint` already uses: a closure inside
-  /// a SwiftUI `Button` is unreachable from a test without a view-inspection
-  /// dependency this repository does not have, which left the join-time clock
-  /// check below asserted by nothing. Order is load-bearing and matches
-  /// Android's `EventJoinViewModel.joinNearbyEvent`: refuse a card shared did
-  /// not make joinable, then re-read the clock, then join.
+  /// What a nearby card's tap does. The logic lives in
+  /// `SensingCoordinator.joinNearbyEvent(card:clockPreflight:)` so the Now tab
+  /// can run it without constructing this view (beid#464); this stays a named
+  /// method so `BeidTests` can still reach the tap path from a view.
   func joinNearbyEventTapped(_ card: NearbyEventCard) {
-    guard let eventCodeHashHex = card.joinActionEventCodeHashHex else { return }
-    // Re-read the clock preflight at the moment of joining, as Android does:
-    // shared re-measures an expired cache and catches a clock changed since
-    // the scan opened.
-    if let clockPreflight {
-      Task { await clockPreflight.check() }
-    }
-    sensing.joinNearbyEvent(eventCodeHashHex: eventCodeHashHex)
+    sensing.joinNearbyEvent(card: card, clockPreflight: clockPreflight)
   }
 
   private func nearbyEventCard(_ card: NearbyEventCard, selected: Bool) -> some View {
@@ -414,7 +432,7 @@ struct SensingView: View {
   private var missingBeaconNameLabel: String {
     String(
       localized: "nearbyEvent.beaconName.missing",
-      defaultValue: "No name announced by nearby beacon",
+      defaultValue: "This event didn't send a name",
       comment: "Fallback shown when a nearby Bluetooth candidate has no display name. The candidate remains visible."
     )
   }
@@ -430,7 +448,7 @@ struct SensingView: View {
   private var waitingForVerificationLabel: String {
     String(
       localized: "nearbyEvent.verification.waiting",
-      defaultValue: "Waiting for event verification",
+      defaultValue: "Checking event registration…",
       comment: "Non-interactive nearby-event card status: registry evidence is not currently sufficient to join this candidate."
     )
   }
@@ -438,7 +456,7 @@ struct SensingView: View {
   private var verifiedLabel: String {
     String(
       localized: "nearbyEvent.verification.verified",
-      defaultValue: "Verified",
+      defaultValue: "Event registration matched",
       comment: "Status on an interactive nearby-event card whose registry evidence currently permits a join. This is separate from the display-only Selected state."
     )
   }
@@ -491,8 +509,7 @@ struct SensingView: View {
   }
 
   private func pulseAnimation(delay: Double) -> Animation {
-    .easeOut(duration: 1.8)
-      .repeatForever(autoreverses: false)
+    DS.Motion.sensingPulse
       .delay(delay)
   }
 }
@@ -506,7 +523,20 @@ struct SensingView: View {
 /// The live, joined-event portion of Flat 2b's 05 family. Values are read
 /// from the same coordinator that records the session. Figma's counts and
 /// event details are examples, never defaults for a production session.
+private struct FirstSensingHintKey: EnvironmentKey {
+  static let defaultValue = false
+}
+
+extension EnvironmentValues {
+  var showsFirstSensingHint: Bool {
+    get { self[FirstSensingHintKey.self] }
+    set { self[FirstSensingHintKey.self] = newValue }
+  }
+}
+
 struct SensingSessionSurface: View {
+  @Environment(\.showsFirstSensingHint) private var showsFirstSensingHint
+  @AppStorage("beid.sensing.firstTimeHintShown") private var hasShownFirstTimeHint = false
   enum Presentation: Equatable {
     case detecting
     case detectingLong
@@ -549,16 +579,20 @@ struct SensingSessionSurface: View {
 
             SensingRadarView(
               peers: radarPeers,
-              mutualDeviceCount: Int(sensing.sessionAggregate?.mutualDeviceCount ?? 0),
+              mutualDeviceCount: 0,
               observedWindowCount: observedWindowCount ?? 0,
-              showsEdges: presentation.showsEdges,
+              showsEdges: false,
               size: max(0, min(DS.Size.radarField, geometry.size.width - DS.Space.pageMargin))
             )
             // Keep the measured radar centered without widening the inset content.
             .frame(width: contentWidth)
             .padding(.top, DS.Space.m)
 
+            metrics(at: now)
+              .padding(.top, DS.Space.m)
+
             SensingWindowBars(aggregate: sensing.sessionAggregate, firstSightingAt: sensing.firstSightingAt)
+              .accessibilityHidden(true)
               .frame(width: contentWidth)
               .padding(.top, DS.Space.l)
 
@@ -566,9 +600,6 @@ struct SensingSessionSurface: View {
               .fill(DS.Color.strokeHairlineOnInk)
               .frame(width: contentWidth, height: DS.Size.hairline)
               .padding(.top, DS.Space.l)
-
-            metrics(at: now)
-              .padding(.top, DS.Space.m)
 
             if EventIdentityVerificationPresentation.forStatus(event.identityVerification) != nil {
               BeidPanel {
@@ -633,23 +664,11 @@ struct SensingSessionSurface: View {
   }
 
   private func metrics(at now: Date) -> some View {
-    let elapsed = sensing.firstSightingAt.map { max(0, Int(now.timeIntervalSince($0))) }
-    // The mutual count is shared's actual mutual scope. It is zero today
-    // because no production observation carries reciprocal evidence; it is
-    // never inferred from signal strength or the all-observation count.
-    var items = [
-      SensingMetric(value: String(sensing.sessionAggregate?.mutualDeviceCount ?? 0), label: "MUTUAL"),
-      SensingMetric(value: String(sensing.devicesVerified), label: "DETECTED")
+    let elapsed = sensing.firstSightingAt.map { now.timeIntervalSince($0) } ?? 0
+    let items = [
+      SensingMetric(value: String(sensing.devicesVerified), label: "DEVICES HEARD"),
+      SensingMetric(value: ElapsedTimeFormat.minutesSeconds(elapsed), label: "ELAPSED")
     ]
-    if let elapsed {
-      let isSearching = effectivePresentation(at: now) == .detectingLong
-      items.append(SensingMetric(
-        value: isSearching && elapsed < 60
-          ? String(format: "0:%02d", elapsed)
-          : "\(elapsed / 60)′",
-        label: isSearching ? "SEARCHING" : "ELAPSED"
-      ))
-    }
     return HStack(alignment: .top, spacing: 0) {
       ForEach(items) { item in
         VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -663,49 +682,32 @@ struct SensingSessionSurface: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(
-      "\(sensing.sessionAggregate?.mutualDeviceCount ?? 0) mutual, "
-        + "\(sensing.devicesVerified) detected, "
-        + "window \(observedWindowCount ?? 0)"
-    )
   }
 
-  private func effectivePresentation(at now: Date) -> Presentation {
-    guard presentation == .detecting,
-      let firstSightingAt = sensing.firstSightingAt,
-      now.timeIntervalSince(firstSightingAt) >= 20
-    else { return presentation }
-    return .detectingLong
-  }
-
-  @ViewBuilder
-  private func footer(at now: Date) -> some View {
-    switch effectivePresentation(at: now) {
-    case .detecting:
-      Text("Looking for peers · stay nearby")
-        .beidTextStyle(DS.Font.Library.labelMono9)
+  private func footer(at _: Date) -> some View {
+    VStack(alignment: .leading, spacing: DS.Space.m) {
+      Text("Keep the app open nearby to help phones observe each other and keep signed records.")
+        .beidTextStyle(DS.Font.Library.body13)
         .foregroundStyle(DS.Color.textSecondaryOnInk)
-    case .detectingLong:
-      NavigationLink {
-        EventCodeEntryView(mode: .scanFlow)
-      } label: {
-        BeidTextControlLabel(
-          "Not finding it? Enter event code",
-          glyph: .trailing("→", announcing: "Enter event code"),
-          labelColor: DS.Color.labelOnActionPrimary
-        )
+      if showsFirstSensingHint || presentation != .steady {
+        NavigationLink {
+          AboutSensingView()
+        } label: {
+          BeidTextControlLabel(
+            showsFirstSensingHint || presentation == .detectingFirstTime ? "FIRST TIME? HOW THIS WORKS" : "HOW SENSING WORKS",
+            glyph: .trailing("→", announcing: "How sensing works"),
+            labelColor: DS.Color.labelOnActionPrimary
+          )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(showsFirstSensingHint || presentation == .detectingFirstTime ? "scan.first-time.about" : "scan.about")
+        .onAppear {
+          if showsFirstSensingHint { hasShownFirstTimeHint = true }
+        }
       }
-      .buttonStyle(.plain)
-      .accessibilityIdentifier("scan.manual-entry")
-    case .detectingFirstTime:
-      // 15 About sensing is owned by Stream A and does not exist yet. The
-      // first-time Figma footer is omitted until its destination is real.
-      EmptyView()
-    case .steady:
-      EmptyView()
     }
   }
+
 }
 
 struct SensingMetric: Identifiable {
@@ -732,7 +734,7 @@ struct SensingWindowBars: View {
   var body: some View {
     VStack(spacing: DS.Space.s) {
       GeometryReader { geometry in
-        let barGap: CGFloat = 6
+        let barGap = DS.Size.observationChartBarGap
         HStack(alignment: .bottom, spacing: barGap) {
           ForEach(0..<6, id: \.self) { index in
             Rectangle()
@@ -790,7 +792,8 @@ struct SensingPrejoinRouter: View {
         reason: reason,
         code: sensing.joinedEventCode,
         event: nil,
-        candidate: nil
+        candidate: nil,
+        onRetry: { sensing.retrySessionAdmissionAfterStorageFailure() }
       )
     } else {
       SensingView(sensing: sensing, clockPreflight: clockPreflight)
@@ -812,11 +815,23 @@ enum SensingCantJoinReason {
     }
   }
 
+  var isStorageRefusal: Bool {
+    if case .refused("storage_recovery_required") = self { return true }
+    return false
+  }
+
+  var isStorageLoading: Bool {
+    if case .refused("storage_loading") = self { return true }
+    return false
+  }
+
   var title: LocalizedStringKey {
     switch self {
     case .refused(let key):
       switch key {
       case "device_key_unavailable": LocalizedStringKey(EventSigningKeyFailure.unavailable.title)
+      case "storage_recovery_required": "Saved records unavailable"
+      case "storage_loading": "Loading saved records"
       case "network_required": "No network connection"
       case "event_not_found": "Code not registered"
       case "code_mismatch": "Code mismatch"
@@ -832,6 +847,10 @@ enum SensingCantJoinReason {
       switch key {
       case "device_key_unavailable":
         LocalizedStringKey(EventSigningKeyFailure.unavailable.message)
+      case "storage_recovery_required":
+        "beid couldn't access saved records. Try again before joining another event."
+      case "storage_loading":
+        "beid is loading saved records before joining another event. Please wait."
       case "network_required":
         "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again."
       case "event_not_found":
@@ -857,6 +876,7 @@ struct SensingCantJoinView: View {
   let code: String?
   let event: EventSession?
   let candidate: NearbyEventCard?
+  var onRetry: (() -> Void)?
 
   var body: some View {
     GeometryReader { geometry in
@@ -899,14 +919,23 @@ struct SensingCantJoinView: View {
           }
 
           Spacer(minLength: DS.Space.xl)
-          NavigationLink {
-            EventCodeEntryView(mode: .scanFlow)
-          } label: {
-            BeidTextControlLabel("Enter event code instead", labelColor: DS.Color.labelOnActionPrimary)
-              .frame(maxWidth: .infinity)
+          if reason.isStorageRefusal, let onRetry {
+            Button(action: onRetry) {
+              BeidTextControlLabel("Try again", labelColor: DS.Color.labelOnActionPrimary)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("scan.storage-retry")
+          } else if !reason.isStorageLoading {
+            NavigationLink {
+              EventCodeEntryView(mode: .scanFlow)
+            } label: {
+              BeidTextControlLabel("Enter event code instead", labelColor: DS.Color.labelOnActionPrimary)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("scan.manual-entry")
           }
-          .buttonStyle(.plain)
-          .accessibilityIdentifier("scan.manual-entry")
         }
         .frame(minHeight: geometry.size.height, alignment: .top)
         .padding(.horizontal, DS.Space.pageMargin)
@@ -925,7 +954,7 @@ struct SensingCantJoinView: View {
 
       if let event {
         if event.identityVerification == .verified {
-          identityRow("Registry", value: "Verified")
+          identityRow("Registration", value: "Matched")
         }
         identityRow("Code", value: event.id)
       }

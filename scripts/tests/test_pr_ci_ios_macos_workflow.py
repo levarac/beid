@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -54,7 +55,9 @@ def step_block(text: str, name: str) -> str:
     marker = f"      - name: {name}\n"
     start = text.index(marker)
     next_step = text.find("\n      - ", start + len(marker))
-    return text[start:] if next_step == -1 else text[start:next_step]
+    next_job = re.search(r"\n  [\w-]+:\n", text[start:])
+    boundaries = [index for index in (next_step, start + next_job.start() if next_job else -1) if index != -1]
+    return text[start:min(boundaries)] if boundaries else text[start:]
 
 
 class PrCiIosMacosWorkflowTest(unittest.TestCase):
@@ -142,15 +145,15 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertNotIn("if:", mode)
         self.assertEqual(text.count("scripts.ios_ui_smoke mode"), 1)
         run = step_block(text, "Test without rebuilding")
-        self.assertNotIn("if:", run)
-        self.assertIn("TEST_MODE: ${{ steps.test-mode.outputs.mode }}", run)
+        self.assertIn("if: ${{ needs.plan.outputs.mode == 'smoke' }}", run)
+        self.assertIn("TEST_MODE: ${{ needs.plan.outputs.mode }}", run)
         self.assertIn('scripts.ios_ui_smoke arguments', run)
         self.assertIn('"${test_args[@]}"', run)
         check = step_block(text, "Verify UI execution and bundle durations")
-        self.assertIn("if: always()", check)
-        self.assertIn("TEST_MODE: ${{ steps.test-mode.outputs.mode }}", check)
+        self.assertIn("if: ${{ always() && needs.plan.outputs.mode == 'smoke' }}", check)
+        self.assertIn("TEST_MODE: ${{ needs.plan.outputs.mode }}", check)
         self.assertIn('xcresulttool get test-results tests', check)
-        self.assertIn('scripts.ios_ui_smoke verify', check)
+        self.assertIn('scripts.ios_ui_smoke verify-lane --lane build', check)
         self.assertNotIn("continue-on-error", text)
 
     def test_selection_shell_passes_exact_arguments_in_both_modes(self):
@@ -171,6 +174,7 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
                     capture_output=True, env={**os.environ,
                         "PATH": str(folder) + os.pathsep + os.environ["PATH"],
                         "CI_OUTPUT_ROOT": str(folder), "SIMULATOR_UDID": "owned",
+                        "XCTESTRUN": str(folder / "Beid.xctestrun"),
                         "TEST_MODE": mode, "XCODE_EXIT": str(child_exit)})
                 self.assertEqual(result.returncode, child_exit, result.stderr)
                 argv = json.loads(result.stdout)

@@ -196,7 +196,17 @@ enum SigilDrawing {
     return String(
       localized: "sigil.accessibilitySummary",
       defaultValue: "\(mutualPeers) mutual, \(detectedPeers) detected, window \(windows)",
-      comment: "VoiceOver summary spoken in place of the Proof Sigil, the generated circular mark on a proof. It replaces the whole drawing, so it is the only thing a VoiceOver user gets — keep all three numbers. The first number counts nearby people's devices whose presence was mutual (both devices confirmed each other); the second counts devices this device merely detected, without that confirmation; the two never overlap and together they are every device drawn. The third is how many time windows the whole mark spans, not a position or an index into them — \"window\" is the unit of recorded time, roughly a few seconds each, and is not a GUI window. On current builds the first number is always 0, because mutual confirmation is not measurable on the device yet and this project deliberately shows 0 rather than guessing; translate it as a real count of zero, never as \"unknown\" or \"not available\"."
+      comment: "VoiceOver summary spoken in place of the Proof Sigil, the generated circular mark on a proof. It replaces the whole drawing, so it is the only thing a VoiceOver user gets — keep all three numbers. The first number counts nearby people's devices whose presence was mutual (both devices confirmed each other); the second counts devices this device merely detected, without that confirmation; the two never overlap and together they are every device drawn. The third is how many time windows the whole mark spans, not a position or an index into them — \"window\" is the unit of recorded time, roughly a few seconds each, and is not a GUI window. On current builds the first number is always 0, because mutual confirmation is not measurable on the device yet and this project deliberately shows 0 rather than guessing; translate it as a real count of zero, never as \"unknown\" or \"not available\". Device-record narration uses the separate sigil.record.accessibilitySummary key; this generic measured-layout instruction remains unchanged."
+    )
+  }
+
+  static func recordAccessibilitySummary(for layout: BeidSharedKit.sigil.SigilLayout) -> String {
+    let detectedPeers = Int(layout.detectedPeerCount)
+    let windows = Int(layout.windowCount)
+    return String(
+      localized: "sigil.record.accessibilitySummary",
+      defaultValue: "Devices heard: \(detectedPeers). Window \(windows). Mutual check not available yet.",
+      comment: "VoiceOver summary for a device record. Mutual confirmation is decided off device and is unavailable here; never translate this as a measured zero. Keep the detected-device and observed-window counts from this exact rendered layout. Generic measured-layout narration uses sigil.accessibilitySummary."
     )
   }
 
@@ -276,6 +286,7 @@ struct BeidSigilView: View {
   let ground: BeidSharedKit.sigil.SigilGround
   /// The page under the Sigil; decides mark color only (`SigilPage`).
   var page: SigilPage = .canvas
+  var isDeviceRecord = false
 
   var body: some View {
     let layout = BeidSharedKit.sigil.layoutSigil(
@@ -292,7 +303,9 @@ struct BeidSigilView: View {
     }
     .frame(width: size, height: size)
     .accessibilityElement()
-    .accessibilityLabel(Text(SigilDrawing.accessibilitySummary(for: layout)))
+    .accessibilityLabel(Text(isDeviceRecord
+      ? SigilDrawing.recordAccessibilitySummary(for: layout)
+      : SigilDrawing.accessibilitySummary(for: layout)))
     .accessibilityHidden(SigilDrawing.isAccessibilityHidden(for: layout))
   }
 }
@@ -300,8 +313,7 @@ struct BeidSigilView: View {
 // MARK: - Preview fixtures
 
 /// Preview-only helper, built through the same shared calls production code
-/// would use rather than a hand-rolled stand-in — the same arrangement, and
-/// the same reason, as `PreviewAggregateFactory`.
+/// would use rather than a hand-rolled stand-in.
 ///
 /// Fixture data only. Presence 2 (mutual) does not exist on the device today
 /// (DECISIONS 2026-08-09, 2026-09-23), so a preview is the only place the

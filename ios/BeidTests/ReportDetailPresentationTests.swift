@@ -5,6 +5,47 @@ import XCTest
 @testable import Beid
 
 final class ReportDetailPresentationTests: XCTestCase {
+  func testRecordLadderAlwaysHasFourRungsAndOnlyReceiptsAdvanceDelivery() {
+    let pending = RecordSendingLadderPresentation(hasSelfProof: true, records: [record(state: .submitting)])
+    XCTAssertEqual(pending.rungs.map(\.number), [1, 2, 3, 4])
+    XCTAssertEqual(pending.rungs.map(\.title), [
+      "SEALED ON THIS PHONE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"
+    ])
+    XCTAssertEqual(pending.rungs.map(\.reached), [true, false, false, false])
+
+    for incomplete in [
+      record(state: .prepared), record(state: .accepted),
+      record(state: .accepted, receipt: "ab", terminalError: "local-error")
+    ] {
+      XCTAssertEqual(
+        RecordSendingLadderPresentation(hasSelfProof: false, records: [incomplete]).rungs.map(\.reached),
+        [false, false, false, false]
+      )
+    }
+    let accepted = RecordSendingLadderPresentation(
+      hasSelfProof: true, records: [record(state: .accepted, receipt: "ab")]
+    )
+    XCTAssertEqual(accepted.rungs.map(\.reached), [true, true, true, false])
+    XCTAssertEqual(accepted.rungs[1].title, "SENT TO https://example.invalid:443")
+  }
+
+  func testRecordLadderKeepsPartialAndUnavailableDeliveryPending() {
+    let mixed = RecordSendingLadderPresentation(hasSelfProof: false, records: [
+      record(state: .accepted, receipt: "ab"), record(state: .prepared)
+    ])
+    XCTAssertEqual(mixed.rungs[0].title, "RECORDED ON THIS PHONE")
+    XCTAssertEqual(mixed.rungs.map(\.reached), [false, false, false, false])
+    for records in [nil, []] as [[ReportSubmissionRecord]?] {
+      let missing = RecordSendingLadderPresentation(hasSelfProof: false, records: records)
+      XCTAssertEqual(missing.rungs.count, 4)
+      XCTAssertEqual(missing.rungs.map(\.reached), [false, false, false, false])
+    }
+  }
+
+  func testExcludedWindowsUseAReasonNeutralLabel() {
+    XCTAssertEqual(ReportDetailPresentation.excludedWindowLabel, "Not submittable")
+  }
+
   func testSubmittingDoesNotClaimSentOrAccepted() {
     let presentation = ReportDetailPresentation(record: record(state: .submitting))
     XCTAssertEqual(presentation.caption, "SUBMISSION IN PROGRESS")
@@ -15,7 +56,7 @@ final class ReportDetailPresentationTests: XCTestCase {
 
   func testPreparedTimeIsOnlyShownForPreparation() {
     let presentation = ReportDetailPresentation(record: record(state: .prepared))
-    XCTAssertEqual(presentation.caption, "PREPARED ON DEVICE")
+    XCTAssertEqual(presentation.caption, "PREPARED ON THIS PHONE")
     XCTAssertEqual(presentation.delivery, "NOT SENT")
     XCTAssertTrue(presentation.showsPreparedAt)
   }
@@ -42,26 +83,61 @@ final class ReportDetailPresentationTests: XCTestCase {
     XCTAssertEqual(presentation.delivery, "DELIVERY UNCONFIRMED")
   }
 
-  func testTransparencySubmittingIsDeliveryUnconfirmed() {
-    let display = TransparencySubmissionDisplay(state: .submitting, receiptStored: false)
-    XCTAssertTrue(display.isSubmitting)
-    XCTAssertFalse(display.isSent)
+  func testMixedWindowsDoNotBorrowAnotherWindowsReceipt() {
+    let records = [
+      record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000001"), state: .accepted, receipt: "ab"),
+      record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000002"), state: .prepared),
+      record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000003"), state: .accepted)
+    ]
+    let progress = ReportProgressPresentation(records: records)
+    XCTAssertEqual(progress.summary, "1 OF 3 RECEIVED")
+    XCTAssertEqual(progress.receivedCount, 1)
+    XCTAssertEqual(ReportProgressPresentation(records: [records[1]]).summary, "PREPARED ON THIS PHONE")
+    XCTAssertEqual(ReportProgressPresentation(records: [records[2]]).summary, "STATUS UNAVAILABLE")
+    XCTAssertEqual(ReportProgressPresentation(records: []).summary, "NO LINKED REPORTS")
   }
 
-  func testTransparencyAcceptanceRequiresStoredReceipt() {
-    XCTAssertFalse(TransparencySubmissionDisplay(state: .accepted, receiptStored: false).isSent)
-    XCTAssertTrue(TransparencySubmissionDisplay(state: .accepted, receiptStored: true).isSent)
+  func testStoppedWindowDoesNotContributeReceiptSuccess() {
+    let stopped = record(state: .accepted, receipt: "ab", terminalError: "local-error")
+    XCTAssertEqual(ReportProgressPresentation(records: [stopped]).receivedCount, 0)
+    XCTAssertEqual(ReportProgressPresentation(records: [stopped]).summary, "SUBMISSION STOPPED")
+  }
+
+  func testWindowSelectionKeepsEveryKnownReportAndItsOwnServerReceipt() {
+    let first = record(
+      id: UUID(uuidString: "00000000-0000-4000-8000-000000000001"),
+      endpoint: "https://first.example.invalid/observations", state: .accepted, receipt: "ab"
+    )
+    let second = record(
+      id: UUID(uuidString: "00000000-0000-4000-8000-000000000002"),
+      endpoint: "https://second.example.invalid/observations", state: .prepared
+    )
+    let third = record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000003"), state: .accepted)
+    let unknown = record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000004"), state: .submitting)
+    let reports = [first, second, third, unknown].enumerated().map { LinkedReport(ordinal: $0.offset + 1, record: $0.element) }
+    let indices = [first.id: Int64(7), second.id: 7, third.id: 9]
+    let selected = WindowReportSelection.reports(reports, at: 7) { indices[$0] }
+    XCTAssertEqual(selected.map(\.record.id), [first.id, second.id])
+    XCTAssertEqual(selected.map(\.record.endpoint), [first.endpoint, second.endpoint])
+    XCTAssertEqual(ReportDetailPresentation(record: selected[0].record).receipt, "STORED")
+    XCTAssertEqual(ReportDetailPresentation(record: selected[1].record).delivery, "NOT SENT")
+    let other = WindowReportSelection.reports(reports, at: 9) { indices[$0] }
+    XCTAssertEqual(other.map(\.record.id), [third.id])
+    XCTAssertEqual(ReportDetailPresentation(record: other[0].record).receipt, "STATUS UNAVAILABLE")
+    XCTAssertTrue(WindowReportSelection.reports(reports, at: 8) { indices[$0] }.isEmpty)
   }
 
   private func record(
+    id: UUID? = nil,
+    endpoint: String = "https://example.invalid/observations",
     state: ReportSubmissionState,
     receipt: String? = nil,
     terminalError: String? = nil
   ) -> ReportSubmissionRecord {
     ReportSubmissionRecord(
-      id: UUID(uuidString: "00000000-0000-4000-8000-000000000641")!,
+      id: id ?? UUID(uuidString: "00000000-0000-4000-8000-000000000641")!,
       eventCode: "ETHTOKYO2026",
-      endpoint: "https://example.invalid/observations",
+      endpoint: endpoint,
       receiptPublicKeyHex: String(repeating: "a", count: 64),
       eventIdHex: nil,
       eventDefinitionDigestHex: nil,

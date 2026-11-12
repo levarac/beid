@@ -3,8 +3,7 @@
 
 import SwiftUI
 
-/// Screen 01. The owner chose wallet-optional onboarding on 2026-09-26:
-/// Get Started truthfully follows the existing guest-first route.
+/// Screen 01. Continue opens Bluetooth setup without a wallet step.
 struct WelcomeView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @State private var showAboutSensing = false
@@ -17,9 +16,16 @@ struct WelcomeView: View {
             .beidTextStyle(DS.Font.Library.labelMono11)
             .foregroundStyle(DS.Color.textPrimary)
           Spacer()
-          Text("V 1.0")
+          if let version = AppVersion.shortVersion() {
+            Text(String(
+              localized: "welcome.version",
+              defaultValue: "V \(version)",
+              comment: "The app's short version in the Welcome header. The value comes from app metadata."
+            ))
             .beidTextStyle(DS.Font.Library.labelMono11)
             .foregroundStyle(DS.Color.textSecondary)
+            .accessibilityIdentifier("welcome.version")
+          }
         }
 
         // Figma's fixed sample illustration, never a proof or observation.
@@ -31,13 +37,13 @@ struct WelcomeView: View {
           .frame(maxWidth: .infinity)
           .padding(.top, DS.Onboarding.welcomeHeroGap)
 
-        Text("Prove you\nwere there.")
+        Text("Record you were there.")
           .beidTextStyle(DS.Font.Library.display52)
           .foregroundStyle(DS.Color.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, DS.Onboarding.welcomeTitleGap)
 
-        Text("Proofs of presence, collected automatically while you are at an event. No codes, no taps.")
+        Text("Your phones say hello to each other, and keep a note anyone can verify.")
           .beidTextStyle(DS.Font.Library.body15)
           .foregroundStyle(DS.Color.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
@@ -54,7 +60,7 @@ struct WelcomeView: View {
         .padding(.top, DS.Space.m)
       }
     } footer: {
-      BeidPrimaryButton("Get Started") {
+      BeidPrimaryButton("Continue") {
         coordinator.beginOnboarding()
       }
     }
@@ -66,7 +72,7 @@ struct WelcomeView: View {
               if #available(iOS 26, *) {
                 Button(role: .confirm) { showAboutSensing = false }
               } else {
-                Button("Done") { showAboutSensing = false }
+                Button("Done", systemImage: "checkmark") { showAboutSensing = false }
               }
             }
           }

@@ -20,17 +20,19 @@ final class FlatScreenshotTourB: XCTestCase {
       app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETH Tokyo 2026")).firstMatch.exists,
       "The active Proof must not also appear as a PAST row"
     )
-    let stopSensing = app.buttons["collection.stop-sensing"]
-    XCTAssertTrue(stopSensing.waitForExistence(timeout: 5))
-    XCTAssertTrue(stopSensing.isHittable, "The live Stop control must clear the fixed Scan button")
+    XCTAssertFalse(app.buttons["collection.stop-sensing"].exists)
+    XCTAssertTrue(app.buttons["home.open-details"].isHittable)
     capture("04")
   }
 
   func testShot_04b_Empty() {
-    launchHome(arguments: ["-beid-home-frame-04b"])
-    XCTAssertTrue(app.staticTexts["NO EVENTS YET"].waitForExistence(timeout: 5))
+    launchHome(arguments: ["-beid-now-standby-fixture"])
+    XCTAssertTrue(app.staticTexts["home.listening"].waitForExistence(timeout: 5))
+    app.buttons["fixture.now.advance29"].tap()
+    XCTAssertFalse(app.buttons["home.enter-code"].exists)
+    app.buttons["fixture.now.advance1"].tap()
     capture("04b")
-    app.buttons["Enter event code"].tap()
+    app.buttons["home.enter-code"].tap()
     XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
     app.buttons["Cancel"].tap()
   }
@@ -44,13 +46,28 @@ final class FlatScreenshotTourB: XCTestCase {
     capture("04c")
   }
 
+  func testNowBluetoothOffShowsRecoveryTileAndSettingsAction() {
+    for extra in [[], ["-beid-home-frame-04"]] as [[String]] {
+      launchHome(arguments: ["-beid-now-bluetooth-off-fixture"] + extra)
+      app.tabButton("Now").assertHittable()
+      app.staticTexts["Turn Bluetooth back on."].scrollToHittable(in: app)
+      XCTAssertTrue(app.staticTexts[
+        "Your records are safe. Sensing resumes when Bluetooth is back."
+      ].exists)
+      app.buttons["home.bluetooth.open-settings"].scrollToHittable(in: app)
+      XCTAssertTrue(app.staticTexts["BLUETOOTH OFF · SENSING PAUSED"].exists)
+      app.terminate()
+    }
+  }
+
   func testShot_08_EventDetail() {
     launchHome(arguments: ["-beid-event-detail-frame-08"])
+    app.openRecordsByEvent()
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
     XCTAssertTrue(event.waitForExistence(timeout: 5))
     event.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "prepared")).firstMatch.exists)
+    XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "event-detail.report.")).firstMatch.exists)
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "receipt stored")).firstMatch.exists)
     capture("08")
 
@@ -63,10 +80,12 @@ final class FlatScreenshotTourB: XCTestCase {
 
   func testShot_08c_NoReports() {
     launchHome(arguments: ["-beid-event-detail-frame-08c"])
+    app.openRecordsByEvent()
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
     XCTAssertTrue(event.waitForExistence(timeout: 5))
     event.tap()
-    XCTAssertTrue(app.staticTexts["NO REPORTS YET"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["NO REPORTS YET"].exists)
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "prepared")).firstMatch.exists)
     XCTAssertTrue(app.staticTexts["Measurements unavailable"].exists)
     XCTAssertTrue(app.buttons["event-detail.proof.1"].exists)
@@ -76,13 +95,13 @@ final class FlatScreenshotTourB: XCTestCase {
   private func launchHome(arguments: [String]) {
     app.launchArguments = ["-beid-ui-test"] + arguments
     app.launch()
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.tabButton("Now").waitForExistence(timeout: 5))
   }
 
   private func capture(_ name: String) {

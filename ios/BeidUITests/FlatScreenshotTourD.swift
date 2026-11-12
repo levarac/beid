@@ -12,20 +12,47 @@ final class FlatScreenshotTourD: XCTestCase {
     continueAfterFailure = false
   }
 
+  func testAccountRemovesWalletRowsEvenWithLegacyConnectedFixture() {
+    openAccount()
+    app.buttons["Organizer tools"].assertHittable()
+    XCTAssertTrue(app.descendants(matching: .any)["account.bluetooth.status"].exists)
+    let list = app.collectionViews.firstMatch
+    let privacy = app.descendants(matching: .any)["account.privacy-policy"]
+    var sawPrivacy = false
+    for _ in 0..<5 {
+      for label in ["Copy address", "Copied address", "Disconnect wallet", "Disconnect", "Keep connected"] {
+        XCTAssertFalse(app.buttons[label].exists, label)
+      }
+      XCTAssertFalse(app.staticTexts["Disconnect wallet?"].exists)
+      XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "0x7aF3")).firstMatch.exists)
+      sawPrivacy = sawPrivacy || privacy.isHittable
+      if app.buttons["account.support.share"].isHittable { break }
+      list.swipeUp()
+    }
+    XCTAssertTrue(sawPrivacy)
+    app.buttons["account.support.share"].assertHittable()
+    app.buttons["Done"].assertHittable()
+  }
+
   func testShot_12_ReportDetail() {
     app.launchArguments = ["-beid-ui-test", "-beid-event-detail-frame-08"]
     app.launch()
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
 
+    app.openRecordsByEvent()
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
     XCTAssertTrue(event.waitForExistence(timeout: 5))
     event.tap()
-    let report = app.buttons["event-detail.report.00000000-0000-4000-8000-000000000639"]
+    let session = app.buttons["event-detail.observation.1"]
+    session.scrollToHittable(in: app)
+    session.tap()
+    app.staticTexts["observation-detail.title"].assertExists()
+    let report = app.buttons["observation-detail.unassigned-report.00000000-0000-4000-8000-000000000639"]
     for _ in 0..<5 where !report.isHittable { app.swipeUp() }
     XCTAssertTrue(report.waitForExistence(timeout: 5))
     XCTAssertTrue(report.isHittable)
@@ -35,7 +62,7 @@ final class FlatScreenshotTourD: XCTestCase {
     _ = heading.waitForExistence(timeout: 5)
     attachScreenshot("12")
     XCTAssertEqual(heading.label, "Report #1")
-    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON DEVICE"))
+    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS PHONE"))
     XCTAssertTrue(app.descendants(matching: .any)["report-detail.delivery"].label.contains("NOT SENT"))
     XCTAssertFalse(app.staticTexts.matching(
       NSPredicate(format: "label CONTAINS[c] %@", "verified")
@@ -44,55 +71,20 @@ final class FlatScreenshotTourD: XCTestCase {
 
   func testShot_10_Account() {
     openAccount()
-    let copy = app.buttons["Copy address"]
-    _ = copy.waitForExistence(timeout: 5)
+    app.buttons["Organizer tools"].assertHittable()
     attachScreenshot("10")
     assertMinimumHitTarget(app.buttons["Done"])
-    assertMinimumHitTarget(copy)
+    assertMinimumHitTarget(app.buttons["Organizer tools"])
   }
 
   func testShot_10c_BluetoothOff() {
     openAccount(extraArguments: ["-beid-account-bluetooth-off-fixture"])
     let bluetoothStatus = app.buttons["account.bluetooth.status"]
-    _ = bluetoothStatus.waitForExistence(timeout: 5)
+    bluetoothStatus.assertHittable()
     attachScreenshot("10c")
     XCTAssertEqual(bluetoothStatus.label, "Open Bluetooth Settings")
     assertMinimumHitTarget(app.buttons["Done"])
-    assertMinimumHitTarget(app.buttons["Copy address"])
-  }
-
-  func testShot_10d_DisconnectConfirm() {
-    openAccount()
-    let disconnect = app.buttons["Disconnect wallet"]
-    let list = app.collectionViews.firstMatch
-    var attempts = 0
-    while !disconnect.isHittable, attempts < 6 {
-      list.swipeUp()
-      attempts += 1
-    }
-    XCTAssertTrue(disconnect.isHittable)
-    disconnect.tap()
-    let title = app.staticTexts["Disconnect wallet?"]
-    _ = title.waitForExistence(timeout: 5)
-    attachScreenshot("10d")
-    XCTAssertTrue(title.exists)
-    let keepConnected = app.buttons["Keep connected"]
-    assertMinimumHitTarget(keepConnected)
-    assertMinimumHitTarget(app.buttons["Done"])
-    assertMinimumHitTarget(app.buttons["Copy address"])
-    assertMinimumHitTarget(app.buttons["Disconnect"])
-  }
-
-  func testShot_10e_Copied() {
-    openAccount()
-    let copy = app.buttons["Copy address"]
-    XCTAssertTrue(copy.waitForExistence(timeout: 5))
-    copy.tap()
-    let copied = app.buttons["account.copy.feedback"]
-    _ = copied.waitForExistence(timeout: 5)
-    attachScreenshot("10e")
-    assertMinimumHitTarget(app.buttons["Done"])
-    assertMinimumHitTarget(copied)
+    assertMinimumHitTarget(bluetoothStatus)
   }
 
   /// The launch uses its own empty pack file (`OrganizerToolsObjects.storeURL`),
@@ -192,12 +184,13 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_14e_InvalidLink() {
     app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture", "-beid-venue-frame", "14e"]
     app.launch()
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     getStarted.assertExists()
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
     allowBluetooth.assertExists()
     allowBluetooth.tap()
+    app.tabButton("Now").assertHittable()
     let account = app.buttons["home.account"]
     account.assertExists()
     account.tap()
@@ -298,9 +291,10 @@ final class FlatScreenshotTourD: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture"] + extraArguments
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
+    app.tabButton("Now").assertHittable()
     let account = app.buttons["home.account"]
     XCTAssertTrue(account.waitForExistence(timeout: 5))
     account.tap()

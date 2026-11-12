@@ -20,12 +20,15 @@ struct ProofDetailPresentation {
     hasBinding: Bool,
     deviceCount: Int?,
     windowCount: Int?,
-    sessionCount: Int
+    sessionCount: Int,
+    selfProofDiscardedForKeyChange: Bool = false
   ) {
     self.method = method == "Bluetooth Sensing"
       ? String(localized: "proofDetail.method.bluetooth", defaultValue: "Bluetooth sensing")
       : method
-    status = hasSelfProof
+    status = selfProofDiscardedForKeyChange
+      ? String(localized: "proofDetail.status.incomplete", defaultValue: "Recording incomplete")
+      : hasSelfProof
       ? String(localized: "Sealed")
       : String(
         localized: "proofDetail.status.recorded",
@@ -57,7 +60,7 @@ struct ProofDetailPresentation {
     } else if let deviceCount, let windowCount {
       let peers = String(
         localized: "proofDetail.with.peers",
-        defaultValue: "^[\(deviceCount) peers](inflect: true)",
+        defaultValue: "^[\(deviceCount) devices](inflect: true)",
         comment: "Number of distinct nearby devices in this Proof's session aggregate; this does not imply mutual confirmation."
       )
       let windows = String(
@@ -107,7 +110,9 @@ struct ItemDetailView: View {
       hasBinding: sensing.bindingRecord(forProofId: proof.id) != nil,
       deviceCount: aggregate.map { Int($0.deviceCount) },
       windowCount: aggregate.map { Int($0.windowCount) },
-      sessionCount: groupSessions.count
+      sessionCount: groupSessions.count,
+      selfProofDiscardedForKeyChange: coordinator.proofStore.proof(withId: proof.id)?.selfProofDiscardedForKeyChange
+        ?? proof.selfProofDiscardedForKeyChange
     )
   }
 
@@ -117,12 +122,13 @@ struct ItemDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
           RecordSigilSlot(
             input: coordinator.sensingCoordinator.sigilInput(forProofId: proof.id),
-            placement: .proofDetail
+            placement: .proofDetail,
+            isDeviceRecord: true
           )
           .frame(maxWidth: .infinity)
           .padding(.top, DS.Space.s)
 
-          Text("Attendance\nProof")
+          Text("Attendance\nRecord")
             .beidTextStyle(DS.Font.Library.display46)
             .foregroundStyle(DS.Color.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
@@ -131,7 +137,6 @@ struct ItemDetailView: View {
             .padding(.top, DS.Space.l + DS.Space.xs)
 
           VStack(spacing: 0) {
-            keyValueRow(String(localized: "METHOD"), value: presentation.method)
             keyValueRow(
               String(localized: "RECORD ID"),
               value: RecordIDDisplay.abbreviated(proof.id),
@@ -142,7 +147,7 @@ struct ItemDetailView: View {
                 comment: "VoiceOver reads the complete Proof UUID even though the visible record ID is abbreviated."
               )
             )
-            keyValueRow(String(localized: "STATUS"), value: presentation.status)
+            keyValueRow(String(localized: "METHOD"), value: presentation.method)
             keyValueRow(String(localized: "SIGNATURE"), value: presentation.signature)
             keyValueRow(String(localized: "WITH"), value: presentation.withValue)
           }
@@ -162,14 +167,16 @@ struct ItemDetailView: View {
             sensing: coordinator.sensingCoordinator
           )
 
-          // These existing destinations have no slot in frame 09. Their
-          // event and per-session routes remain reachable below its rows.
-          VStack(spacing: 0) {
-            transparencyRow
-            participationSummaryRow
-          }
+          RecordEvidenceLadder(
+            proof: proof, sensing: coordinator.sensingCoordinator,
+            submissionStore: coordinator.reportSubmissionStore,
+            proofStore: coordinator.proofStore, linkStore: coordinator.reportProofLinkStore
+          )
           .padding(.top, DS.Space.m)
-          .padding(.bottom, DS.Space.l)
+
+          sessionRoutes
+            .padding(.top, DS.Space.l)
+            .padding(.bottom, DS.Space.l)
         }
         .padding(.horizontal, DS.Space.pageMargin)
       }
@@ -204,78 +211,162 @@ struct ItemDetailView: View {
     }
   }
 
-  private func destinationRow(_ title: LocalizedStringKey) -> some View {
-    HStack {
-      Text(title)
-        .beidTextStyle(DS.Font.Library.title15)
-      Spacer(minLength: DS.Space.m)
-    }
-    .foregroundStyle(DS.Color.textPrimary)
-    .frame(minHeight: DS.Size.reportRowMinHeight)
-    .overlay(alignment: .top) {
-      Rectangle()
-        .fill(DS.Color.strokeHairline)
-        .frame(height: DS.Size.hairline)
-    }
-  }
-
-  private var transparencyRow: some View {
-    NavigationLink {
-      TransparencyView(
-        eventName: proof.eventName,
-        hasJoined: true,
-        recordedOnDeviceCount: recordedOnDeviceCount,
-        excludedWindowCount: excludedWindowCount,
-        submissionState: submissionState,
-        receiptStored: acceptanceReceiptStored
-      )
-    } label: {
-      destinationRow("Transparency")
-    }
-    .accessibilityLabel("Transparency")
-  }
-
-  private var recordedOnDeviceCount: Int? {
-    guard let eventCode = proof.eventCode else { return nil }
-    return coordinator.sensingCoordinator.recordedWindowCount(forEventCode: eventCode)
-  }
-
-  private var excludedWindowCount: Int? {
-    guard let eventCode = proof.eventCode else { return nil }
-    return coordinator.sensingCoordinator.excludedWindowCount(forEventCode: eventCode)
-  }
-
-  private var submissionState: ReportSubmissionState? {
-    guard let eventCode = proof.eventCode else { return nil }
-    return coordinator.sensingCoordinator.submissionState(forEventCode: eventCode)
-  }
-
-  private var acceptanceReceiptStored: Bool {
-    guard let eventCode = proof.eventCode else { return false }
-    return coordinator.reportSubmissionStore.records.contains {
-      $0.eventCode == eventCode && $0.submissionState == .accepted && $0.isReceiptStored
+  private var sessionRoutes: some View {
+    VStack(alignment: .leading, spacing: DS.Space.s) {
+      Text("SESSIONS").beidTextStyle(DS.Font.Library.labelMono10).foregroundStyle(DS.Color.textSecondary)
+      ForEach(Array(EventGrouping.orderedSessions(for: proof, in: coordinator.proofStore.proofs).enumerated()), id: \.element.id) { index, session in
+        NavigationLink {
+          ObservationDetailView(
+            proof: session, sessionNumber: index + 1,
+            aggregate: coordinator.sensingCoordinator.sessionAggregateSnapshot(forProofId: session.id)
+          )
+        } label: {
+          Text(verbatim: session.date.formatted(date: .abbreviated, time: .shortened))
+            .beidTextStyle(DS.Font.Library.title15)
+            .frame(maxWidth: .infinity, minHeight: DS.Size.sessionRowMinHeight, alignment: .leading)
+        }
+        .accessibilityIdentifier("record.session.\(session.id.uuidString)")
+      }
     }
   }
+}
 
-  private var participationSummaryRow: some View {
-    NavigationLink {
-      if groupSessions.count > 1 {
-        SessionParticipationListView(eventName: proof.eventName, sessions: sessionParticipationPairs)
-      } else {
-        ParticipationSummaryView(
-          eventName: proof.eventName,
-          aggregate: coordinator.sensingCoordinator.sessionAggregateSnapshot(forProofId: proof.id)
+/// Every network stage belongs to this selected session and exact report UUID.
+/// A request starting is not delivery evidence. Until a durable receipt exists,
+/// the send and acceptance rungs stay pending; partial sessions stay partial.
+struct RecordSendingLadderPresentation {
+  struct Rung: Identifiable {
+    let number: Int
+    let title: String
+    let reached: Bool
+    var id: Int { number }
+  }
+
+  let rungs: [Rung]
+
+  init(hasSelfProof: Bool, records: [ReportSubmissionRecord]?) {
+    let records = records ?? []
+    let received = records.filter { !$0.isTerminal && $0.submissionState == .accepted && $0.isReceiptStored }
+    let allReceived = !records.isEmpty && received.count == records.count
+    let origins = Set(received.compactMap { submissionOperatorOrigin($0.endpoint) })
+    let sentTitle: String
+    if allReceived, origins.count == 1, let origin = origins.first {
+      sentTitle = String(localized: "record.sentToOrganizer", defaultValue: "SENT TO \(origin)")
+    } else {
+      sentTitle = String(localized: "SENT TO ORGANIZER")
+    }
+    rungs = [
+      Rung(number: 1, title: String(localized: hasSelfProof ? "SEALED ON THIS PHONE" : "RECORDED ON THIS PHONE"), reached: hasSelfProof),
+      Rung(number: 2, title: sentTitle, reached: allReceived),
+      Rung(number: 3, title: String(localized: "ACCEPTED"), reached: allReceived),
+      Rung(number: 4, title: String(localized: "THIRD-PARTY RESULT"), reached: false)
+    ]
+  }
+}
+
+private struct RecordEvidenceLadder: View {
+  let proof: Proof
+  @ObservedObject var sensing: SensingCoordinator
+  @ObservedObject var submissionStore: ReportSubmissionStore
+  @ObservedObject var proofStore: ProofStore
+  @ObservedObject var linkStore: ReportProofLinkStore
+
+  private var reports: [LinkedReport]? {
+    try? ReportProofLinkPresentation.readReports(
+      for: proof, submissionStore: submissionStore, linkStore: linkStore, proofStore: proofStore
+    ).get()
+  }
+
+  var body: some View {
+    let reports = reports
+    let presentation = RecordSendingLadderPresentation(
+      hasSelfProof: sensing.selfProofRecord(forProofId: proof.id) != nil,
+      records: reports?.map(\.record)
+    )
+    VStack(alignment: .leading, spacing: DS.Space.m) {
+      let ordinal = EventGrouping.sessionOrdinal(of: proof, in: proofStore.proofs) ?? 1
+      Text(String(localized: "record.selectedSession", defaultValue: "SELECTED SESSION \(ordinal)"))
+        .beidTextStyle(DS.Font.Library.labelMono10)
+      ForEach(presentation.rungs) { rung in
+        HStack(alignment: .top, spacing: DS.Space.m) {
+          Text(verbatim: String(format: "%02d", rung.number))
+            .beidTextStyle(DS.Font.Library.labelMono13Value)
+            .foregroundStyle(rung.reached ? DS.Color.textPrimary : DS.Color.textSecondary)
+            .accessibilityHidden(true)
+          VStack(alignment: .leading, spacing: DS.Space.s) {
+            Text(verbatim: rung.title)
+              .beidTextStyle(DS.Font.Library.labelMono10)
+              .accessibilityIdentifier("record.ladder.\(rung.number).title")
+            rungDetails(rung.number, reports: reports)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.top, DS.Space.m)
+        .overlay(alignment: .top) {
+          Rectangle().fill(DS.Color.strokeHairline).frame(height: DS.Size.hairline)
+        }
+        .accessibilityIdentifier("record.ladder.\(rung.number)")
+      }
+      if let code = proof.eventCode {
+        Text("EVENT DATA").beidTextStyle(DS.Font.Library.labelMono10)
+        evidence("JOIN ACTION", value: String(localized: "Joined"))
+        evidence(
+          "EVENT WINDOWS ON THIS PHONE",
+          value: sensing.availableRecordedWindowCount(forEventCode: code).map { String($0) } ?? String(localized: "NOT YET AVAILABLE")
+        )
+        evidence(
+          LocalizedStringKey(ReportDetailPresentation.excludedWindowLabel),
+          value: sensing.excludedWindowCount(forEventCode: code).map { String($0) } ?? String(localized: "NOT YET AVAILABLE")
         )
       }
-    } label: {
-      destinationRow("View participation summary")
     }
-    .accessibilityLabel("View participation summary")
+    .foregroundStyle(DS.Color.textPrimary)
   }
 
-  private var sessionParticipationPairs: [(proof: Proof, aggregate: BeidSharedKit.aggregation.SessionAggregate?)] {
-    groupSessions.map { session in
-      (proof: session, aggregate: coordinator.sensingCoordinator.sessionAggregateSnapshot(forProofId: session.id))
+  @ViewBuilder private func rungDetails(_ number: Int, reports: [LinkedReport]?) -> some View {
+    if number == 1 {
+      Text("Kept on this phone").beidTextStyle(DS.Font.Library.body13)
+    } else if number == 4 {
+      Text("NOT YET AVAILABLE").beidTextStyle(DS.Font.Library.body13)
+    } else if let reports, !reports.isEmpty {
+      ForEach(reports, id: \.record.id) { report in
+        let record = report.record
+        let received = !record.isTerminal && record.submissionState == .accepted && record.isReceiptStored
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+          Text(String(localized: "eventDetail.report.title", defaultValue: "Report #\(report.ordinal)"))
+            .beidTextStyle(DS.Font.Library.title15)
+          if number == 2 {
+            evidence(
+              received ? "SENT TO" : "DESTINATION",
+              value: submissionOperatorOrigin(record.endpoint) ?? String(localized: "NOT YET AVAILABLE")
+            )
+            evidence("DELIVERY", value: ReportDetailPresentation(record: record).delivery)
+            if received {
+              evidence("DELIVERY TIME", value: String(localized: "NOT YET AVAILABLE"))
+            }
+          } else if received, let receipt = record.acceptanceReceiptHex {
+            evidence("ACCEPTANCE RECEIPT", value: receipt)
+            evidence("RECEIPT TIME", value: String(localized: "NOT YET AVAILABLE"))
+          } else {
+            Text(verbatim: ReportDetailPresentation(record: record).receipt)
+              .beidTextStyle(DS.Font.Library.body13)
+          }
+        }
+        .accessibilityIdentifier("record.ladder.\(number).report.\(record.id.uuidString)")
+      }
+    } else {
+      Text("NOT YET AVAILABLE").beidTextStyle(DS.Font.Library.body13)
+      if reports == nil {
+        Text("REPORT STATUS UNAVAILABLE").beidTextStyle(DS.Font.Library.body13)
+      }
+    }
+  }
+
+  private func evidence(_ title: LocalizedStringKey, value: String) -> some View {
+    VStack(alignment: .leading, spacing: DS.Space.xs) {
+      Text(title).beidTextStyle(DS.Font.Library.labelMono10).foregroundStyle(DS.Color.textSecondary)
+      Text(verbatim: value).beidTextStyle(DS.Font.Library.body13)
+        .fixedSize(horizontal: false, vertical: true)
     }
   }
 }
