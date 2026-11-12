@@ -277,6 +277,7 @@ final class ReportSubmissionRetryController {
 @MainActor
 protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)? { get set }
+  var onRecoveryDeviceKeyRead: (() -> Void)? { get set }
   var onSigningKeyChange: ((String, EventSigningDiscardReason) -> Void)? { get set }
   var isSigningKeyChangeAcknowledged: ((String) -> Bool)? { get set }
   var acknowledgedSigningKeyChangeEventCodes: Set<String> { get }
@@ -310,6 +311,11 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
 }
 
 extension WindowReportSubmissionRuntimeProtocol {
+  var onRecoveryDeviceKeyRead: (() -> Void)? {
+    get { nil }
+    set {}
+  }
+
   var onSigningKeyChange: ((String, EventSigningDiscardReason) -> Void)? {
     get { nil }
     set {}
@@ -340,7 +346,7 @@ extension WindowReportSubmissionRuntimeProtocol {
   }
 }
 
-/// Native composition boundary for the inactive-by-default report pipeline.
+/// Native composition boundary for the configuration-gated report pipeline.
 ///
 /// Barnard remains the only owner of the event signing key. This type maps
 /// the lossless close-window snapshot into the shared ObservationV1 decision,
@@ -348,6 +354,9 @@ extension WindowReportSubmissionRuntimeProtocol {
 /// shared HTTPS client. It does not alter the legacy WindowReport or ledger.
 @MainActor
 final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
+  /// A fresh key read ends the acknowledged outage even if later recovery
+  /// work cannot finish. Cached active-session snapshots do not end it.
+  var onRecoveryDeviceKeyRead: (() -> Void)?
   var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)? {
     didSet {
       if let eventSigningKeyFailure { onEventSigningKeyFailure?(eventSigningKeyFailure) }
@@ -552,9 +561,13 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     guard resolvingCaptures.insert(capture.id).inserted else { return }
     let signingCryptography: any SensingCryptography
     do {
-      let snapshot = try activeSessionCaptureIds.contains(capture.id)
-        ? eventSigningCryptography.signingSnapshot()
-        : eventSigningCryptography.recoverySigningSnapshot()
+      let snapshot: any SensingCryptography
+      if activeSessionCaptureIds.contains(capture.id) {
+        snapshot = try eventSigningCryptography.signingSnapshot()
+      } else {
+        snapshot = try eventSigningCryptography.recoverySigningSnapshot()
+        onRecoveryDeviceKeyRead?()
+      }
       signingCryptography = try snapshot.signingSnapshot(
         eventCode: capture.eventCode, matching: capture.eventSigningPublicKey
       )

@@ -624,6 +624,107 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertTrue(relaunchedStore.pendingCaptures.isEmpty)
   }
 
+  func testRecoveryReadClearsAcknowledgedDeviceKeyOutageBeforeAnotherDiscoveryFailure() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    let capture = try seedCapture(in: store, publicKey: publicKey)
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+    let engine = RecordingEventJoinControl()
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: cryptography, eventJoinControl: engine, reportSubmissionRuntime: runtime
+    )
+    coordinator.useDemoEventMode = false
+    keychain.readResults = Array(repeating: .failure(errSecInteractionNotAllowed), count: 8)
+
+    coordinator.startHomeStandbyDiscovery()
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    coordinator.dismissEventSigningKeyFailure()
+    coordinator.startHomeStandbyDiscovery()
+    coordinator.joinNearbyEvent(eventCodeHashHex: String(repeating: "ab", count: 16))
+    XCTAssertNil(coordinator.eventSigningKeyFailure, "Home and JOIN must not repeat the acknowledged outage")
+    XCTAssertEqual(coordinator.joinRefusal, .eventSigningKeyUnavailable)
+
+    keychain.readResults = []
+    let reads = keychain.readCount
+    coordinator.retryPendingSubmissionsOnForeground()
+    XCTAssertEqual(keychain.readCount, reads + 1, "recovery must freshly read the device secret")
+    XCTAssertNotNil(provider.completion, "the successful read must reach definition resolution")
+    XCTAssertEqual(store.pendingCaptures.map(\.id), [capture.id], "definition resolution is still pending")
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    coordinator.startHomeStandbyDiscovery()
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable, "a new outage needs a new alert")
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 0)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+  }
+
+  func testCaptureReadFailureIsAnnouncedAfterAcknowledgedDeviceKeyOutage() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(directory: directory, cryptography: cryptography, reportSubmissionRuntime: runtime)
+    coordinator.useDemoEventMode = false
+    keychain.readResults = Array(repeating: .failure(errSecInteractionNotAllowed), count: 8)
+
+    coordinator.startHomeStandbyDiscovery()
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+
+    let capture = try seedCapture(in: store, publicKey: publicKey)
+    coordinator.retryPendingSubmissionsOnForeground()
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable, "acknowledging discovery must not hide capture failures")
+    XCTAssertEqual(store.pendingCaptures.map(\.id), [capture.id])
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertTrue(store.exclusions.isEmpty)
+    XCTAssertNil(provider.completion)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+  }
+
+  func testCheckpointRecoveryReadClearsAcknowledgedDeviceKeyOutageBeforeJoinFailure() throws {
+    let directory = try makeDirectory()
+    let secret = Data(repeating: 0x31, count: 32)
+    let keychain = InMemoryDeviceSecretKeychain(storedData: secret)
+    let cryptography = makeCryptography(keychain)
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    let coordinator = makeCoordinator(directory: directory, cryptography: cryptography)
+    coordinator.useDemoEventMode = false
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+
+    keychain.readResults = [.found(secret), .failure(errSecInteractionNotAllowed)]
+    let reads = keychain.readCount
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertEqual(keychain.readCount, reads + 2, "checkpoint recovery succeeds before the next session read fails")
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertEqual(coordinator.joinRefusal, .eventSigningKeyUnavailable)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+  }
+
   func testStartingSessionRetainsPendingCaptureReadFailureUntilDismissed() throws {
     let directory = try makeDirectory()
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))

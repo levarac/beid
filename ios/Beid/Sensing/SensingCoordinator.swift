@@ -537,8 +537,8 @@ final class SensingCoordinator: ObservableObject {
   /// most-advanced report-submission state recorded for one event. Forwards
   /// to `reportSubmissionRuntime.submissionState(forEventCode:)` — a pure
   /// read of the durable `ReportSubmissionStore`, never a network call.
-  /// `nil` both when the runtime itself is `nil` (report submission is
-  /// gated off in production by `BeidReportSubmissionEnabled`) and when no
+  /// `nil` both when the runtime itself is `nil` (`BeidReportSubmissionEnabled`
+  /// controls submission and is enabled in the shipping app) and when no
   /// submission for this event code has ever been queued — both render
   /// identically on the Transparency screen as an honest "not yet
   /// available," never a false negative.
@@ -1787,6 +1787,9 @@ final class SensingCoordinator: ObservableObject {
     self.reportSubmissionRuntime?.isSigningKeyChangeAcknowledged = { [weak proofStore] eventCode in
       proofStore?.isSigningKeyChangeAcknowledged(forEventCode: eventCode) == true
     }
+    self.reportSubmissionRuntime?.onRecoveryDeviceKeyRead = { [weak self] in
+      self?.hasAcknowledgedDeviceKeyUnavailable = false
+    }
     self.reportSubmissionRuntime?.onEventSigningKeyFailure = { [weak self] failure in
       if !failure.isDiscardNotice {
         self?.hasUnacknowledgedCaptureFailure = true
@@ -2701,7 +2704,7 @@ final class SensingCoordinator: ObservableObject {
       }
       runDemoScenario(selectedScenario, stepDelayNanos: demoStepDelayNanos)
     } else {
-      guard prepareDeviceSecret() else { return }
+      guard prepareDeviceSecret(suppressAcknowledgedOutage: true) else { return }
       engine.requestJoinPermissions { [weak self] canScan, canAdvertise in
         guard let self else { return }
         Task { @MainActor in
@@ -3217,7 +3220,7 @@ final class SensingCoordinator: ObservableObject {
     recordingSurfaceReady = false
   }
 
-  private func prepareDeviceSecret(prepareEngine: Bool = true) -> Bool {
+  private func prepareDeviceSecret(prepareEngine: Bool = true, suppressAcknowledgedOutage: Bool = false) -> Bool {
     do {
       if let cryptography = sensingCryptography as? BarnardSensingCryptography {
         let storage = try cryptography.prepareSession()
@@ -3241,7 +3244,9 @@ final class SensingCoordinator: ObservableObject {
       }
       return true
     } catch {
-      recordEventSigningKeyFailure(.unavailable)
+      if !suppressAcknowledgedOutage || !hasAcknowledgedDeviceKeyUnavailable {
+        recordEventSigningKeyFailure(.unavailable)
+      }
       discoveryOnlyScanOwned = false
       engine.stopAutomaticOperation()
       refuseJoin(
@@ -3286,7 +3291,6 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func recordEventSigningKeyFailure(_ failure: EventSigningKeyFailure) {
-    guard failure != .unavailable || !hasAcknowledgedDeviceKeyUnavailable else { return }
     signingKeyAvailabilityFailure = failure
     eventSigningKeyFailure = pendingSigningKeyChangeEvents.first?.reason.failure ?? failure
   }
@@ -3348,7 +3352,7 @@ final class SensingCoordinator: ObservableObject {
       return
     }
     guard !discoveryOnlyScanOwned, !isScanning, !isAdvertising else { return }
-    guard prepareDeviceSecret() else { return }
+    guard prepareDeviceSecret(suppressAcknowledgedOutage: true) else { return }
     discoveryOnlyScanOwned = true
     engine.startDiscoveryScan()
   }
@@ -3476,7 +3480,7 @@ final class SensingCoordinator: ObservableObject {
     guard prepareForSessionAdmission(retry: { [weak self] in
       self?.joinNearbyEvent(eventCodeHashHex: eventCodeHashHex)
     }) else { return }
-    guard prepareDeviceSecret() else { return }
+    guard prepareDeviceSecret(suppressAcknowledgedOutage: true) else { return }
     resetSessionState()
     let generation = joinAttemptGeneration
     reportSubmissionRuntime?.submitPending()
@@ -5253,6 +5257,7 @@ final class SensingCoordinator: ObservableObject {
       guard let parent = proofStore.proof(withId: checkpoint.proofId) else {
         do {
           _ = try sensingCryptography.recoverySigningSnapshot()
+          hasAcknowledgedDeviceKeyUnavailable = false
         } catch {
           recordEventSigningKeyFailure(.unavailable)
           return
@@ -5286,13 +5291,15 @@ final class SensingCoordinator: ObservableObject {
     }
 
     do {
+      let signingCryptography = try sensingCryptography.recoverySigningSnapshot()
+      hasAcknowledgedDeviceKeyUnavailable = false
       guard let record = try makeSelfProofRecord(
         proofId: checkpoint.proofId,
         eventCode: checkpoint.eventCode,
         eninStart: checkpoint.eninStart,
         eninEnd: checkpoint.eninEnd,
         capturedPublicKey: checkpoint.eventSigningPublicKey,
-        signingCryptography: try sensingCryptography.recoverySigningSnapshot()
+        signingCryptography: signingCryptography
       ) else { return }
       _ = persistSelfProofRecord(record)
     } catch let error as EventSigningKeyContinuityError {
