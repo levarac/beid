@@ -191,7 +191,28 @@ final class AppCoordinator: ObservableObject {
   /// freely-settable `String?` for display only (previews/tests already
   /// assign it directly) and is never read on that path.
   @Published private(set) var liveWalletAddress: LiveWalletAddress?
-  @Published var scanPresented = false
+  @Published var scanPresented = false {
+    didSet {
+      if scanPresented, !oldValue {
+        scanRouteID = UUID()
+        stopAlertHandoffRouteID = nil
+      }
+    }
+  }
+  /// Each native destination lifetime owns its departure callback. Reopening
+  /// cancels any previous STOP handoff, including an interrupted pop.
+  private(set) var scanRouteID = UUID()
+  @Published private var stopAlertHandoffRouteID: UUID?
+
+  var canPresentRootEventSigningKeyFailure: Bool {
+    !scanPresented && stopAlertHandoffRouteID == nil
+  }
+
+  func scanRouteDidDisappear(_ routeID: UUID) {
+    guard !scanPresented, stopAlertHandoffRouteID == routeID else { return }
+    stopAlertHandoffRouteID = nil
+  }
+
   @Published var selectedHomeTab: HomeTab = .now
   @Published private(set) var homeStandby = HomeStandbyState()
   @Published private(set) var homeStandbyDiscoveryActive = false
@@ -1367,6 +1388,11 @@ final class AppCoordinator: ObservableObject {
       return
     }
     guard presentation == .sealed, let proofID else {
+      if stopResult.hasExplainingAlert, scanPresented {
+        // The desired route changes before the native destination leaves.
+        // Keep this STOP's existing explanation off the root until it does.
+        stopAlertHandoffRouteID = scanRouteID
+      }
       scanPresented = false
       return
     }

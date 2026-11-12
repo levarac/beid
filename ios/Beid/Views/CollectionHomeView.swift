@@ -116,7 +116,11 @@ private struct NowHomeView: View {
       .navigationDestination(isPresented: $showAboutSensing) { AboutSensingView() }
       .navigationDestination(isPresented: $showWhatWasSent) { WhatWeSendView() }
       .navigationDestination(isPresented: $coordinator.scanPresented) {
-        ScanFlowView(sensing: sensing).environmentObject(coordinator)
+        let routeID = coordinator.scanRouteID
+        ScanFlowView(sensing: sensing)
+          .environmentObject(coordinator)
+          .onDisappear { coordinator.scanRouteDidDisappear(routeID) }
+          .id(routeID)
       }
       .navigationDestination(item: $coordinator.selectedProof) { proof in
         HomeRecordDetail(proof: proof)

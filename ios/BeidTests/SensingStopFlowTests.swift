@@ -6,6 +6,118 @@ import XCTest
 
 @MainActor
 final class SensingStopFlowTests: XCTestCase {
+  func testOwnedStopAlertWaitsForItsScanRouteToDisappear() async throws {
+    for mode in [StopOutcomeUITestFixture.Mode.signingError, .saveFailureWithEndpoints] {
+      let fixture = StopOutcomeUITestFixture(mode: mode)
+      let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+      await fixture.prepare()
+      app.scanPresented = true
+      let routeID = app.scanRouteID
+      app.requestScanClose()
+      app.confirmStopSensing()
+
+      let failure = try XCTUnwrap(fixture.sensingCoordinator.eventSigningKeyFailure)
+      XCTAssertFalse(app.scanPresented, "Request the normal native pop")
+      XCTAssertFalse(app.canPresentRootEventSigningKeyFailure, "A requested pop is not a completed route departure")
+      XCTAssertNil(app.stopOutcome)
+      XCTAssertNil(app.sealedSnapshot)
+      XCTAssertNil(app.proofCollectedSnapshot)
+      let artifacts = try fixtureArtifacts(fixture)
+      let writes = fixture.recordWriteCount
+      let signatures = fixture.signingCallCount
+      app.confirmStopSensing()
+      app.scanRouteDidDisappear(UUID())
+      XCTAssertFalse(app.canPresentRootEventSigningKeyFailure, "Another route cannot release this explanation")
+      XCTAssertEqual(fixture.sensingCoordinator.eventSigningKeyFailure, failure)
+
+      app.scanRouteDidDisappear(routeID)
+
+      XCTAssertTrue(app.canPresentRootEventSigningKeyFailure)
+      XCTAssertEqual(fixture.sensingCoordinator.eventSigningKeyFailure, failure, "Handoff must not acknowledge the notice")
+      app.scanRouteDidDisappear(routeID)
+      fixture.sensingCoordinator.dismissEventSigningKeyFailure()
+      app.confirmStopSensing()
+      XCTAssertFalse(app.scanPresented)
+      XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+      XCTAssertNil(app.stopOutcome)
+      XCTAssertEqual(fixture.recordWriteCount, writes)
+      XCTAssertEqual(fixture.signingCallCount, signatures)
+      XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
+    }
+  }
+
+  func testReopeningScanCancelsStopAlertHandoffWithoutSuppressingLaterNotices() async throws {
+    let fixture = StopOutcomeUITestFixture(mode: .signingError)
+    let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+    await fixture.prepare()
+    app.scanPresented = true
+    let oldRouteID = app.scanRouteID
+    app.requestScanClose()
+    app.confirmStopSensing()
+    XCTAssertFalse(app.canPresentRootEventSigningKeyFailure)
+
+    app.scanPresented = true // Cancel/replace the requested pop before its lifecycle callback.
+    XCTAssertNotEqual(app.scanRouteID, oldRouteID)
+    app.scanRouteDidDisappear(oldRouteID)
+    XCTAssertTrue(app.scanPresented)
+    XCTAssertFalse(app.canPresentRootEventSigningKeyFailure, "The scan remains the normal presenter")
+    XCTAssertEqual(fixture.sensingCoordinator.eventSigningKeyFailure, .unavailable)
+    app.scanPresented = false // A later ordinary Back must not inherit the cancelled STOP wait.
+    XCTAssertTrue(app.canPresentRootEventSigningKeyFailure)
+    XCTAssertEqual(fixture.sensingCoordinator.eventSigningKeyFailure, .unavailable)
+  }
+
+  func testOldScanDepartureCannotCompleteNewerStopAlertHandoff() async throws {
+    let fixture = StopOutcomeUITestFixture(mode: .saveFailureWithEndpoints)
+    let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+    await fixture.prepare()
+    app.scanPresented = true
+    let oldRouteID = app.scanRouteID
+    app.requestScanClose()
+    app.confirmStopSensing()
+    XCTAssertFalse(app.canPresentRootEventSigningKeyFailure)
+    fixture.sensingCoordinator.dismissEventSigningKeyFailure()
+
+    await fixture.prepare()
+    app.scanPresented = true
+    let newRouteID = app.scanRouteID
+    XCTAssertNotEqual(newRouteID, oldRouteID)
+    app.confirmStopSensing()
+    XCTAssertTrue(app.scanPresented, "The consumed STOP cannot reroute the newer participation")
+    app.requestScanClose()
+    app.confirmStopSensing()
+    let artifacts = try fixtureArtifacts(fixture)
+    let writes = fixture.recordWriteCount
+    let signatures = fixture.signingCallCount
+    app.scanRouteDidDisappear(oldRouteID)
+    XCTAssertFalse(app.canPresentRootEventSigningKeyFailure)
+    XCTAssertEqual(fixture.sensingCoordinator.eventSigningKeyFailure, .discardFailed)
+    app.scanRouteDidDisappear(newRouteID)
+    XCTAssertTrue(app.canPresentRootEventSigningKeyFailure)
+    XCTAssertEqual(fixture.recordWriteCount, writes)
+    XCTAssertEqual(fixture.signingCallCount, signatures)
+    XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
+  }
+
+  func testStopWithoutCurrentExplanationDoesNotAcquireAlertHandoff() async throws {
+    for mode in [StopOutcomeUITestFixture.Mode.nilSignature, .detecting, .saveFailure] {
+      let fixture = StopOutcomeUITestFixture(mode: mode)
+      let app = makeCoordinator(sensingCoordinator: fixture.sensingCoordinator, proofStore: fixture.proofStore)
+      await fixture.prepare()
+      app.scanPresented = true
+      app.requestScanClose()
+      app.confirmStopSensing()
+      XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
+      if mode == .saveFailure {
+        XCTAssertNotNil(app.stopOutcome)
+        XCTAssertTrue(app.scanPresented)
+        app.dismissStopOutcome()
+      }
+      XCTAssertFalse(app.scanPresented)
+      XCTAssertTrue(app.canPresentRootEventSigningKeyFailure, "Only an owned STOP explanation needs the handoff")
+    }
+  }
+
   func testCurrentRealWindowSigningFailureKeepsSoleExplanationAfterDurableSelfProof() throws {
     let signer = StopWindowSigner(fails: true)
     let fixture = try makeNoticeBoundaryFixture(windowSigner: signer)
