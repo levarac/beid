@@ -44,7 +44,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))
     app.buttons["View records"].tap()
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
-    app.tabBars.buttons["Now"].tap()
+    app.tabButton("Now").tap()
     XCTAssertTrue(app.staticTexts["You’re done."].waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["home.saved.view-record"].exists)
     XCTAssertTrue(app.staticTexts["home.listening"].exists)

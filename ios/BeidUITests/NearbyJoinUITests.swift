@@ -46,12 +46,12 @@ final class NowNavigationUITests: XCTestCase {
     XCTAssertFalse(app.staticTexts["PAST"].exists)
     XCTAssertFalse(app.buttons["home.scan"].exists)
     XCTAssertTrue(app.buttons["home.account"].exists)
-    app.tabBars.buttons["Records"].tap()
+    app.tabButton("Records").tap()
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     app.buttons["records.by-event"].tap()
     XCTAssertTrue(app.collectionViews["records.events"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["home.past-event.ACTIVE-EVENT"].exists)
-    app.tabBars.buttons["Now"].tap()
+    app.tabButton("Now").tap()
     XCTAssertTrue(app.otherElements["home.active-event"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "mutual")).firstMatch.exists)
     capture("now-active")
@@ -59,7 +59,7 @@ final class NowNavigationUITests: XCTestCase {
 
   func testRecordsGridHasOneAttendancePerEventAndKeepsSessions() {
     launchHome(["-beid-home-frame-04"])
-    app.tabBars.buttons["Records"].tap()
+    app.tabButton("Records").tap()
     app.scrollViews["records.grid"].assertExists()
     let recordTiles = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record."))
     XCTAssertEqual(recordTiles.count, 4, "Two saved sessions of one event must share one Attendance tile")
@@ -116,8 +116,8 @@ final class NowNavigationUITests: XCTestCase {
     launchHome(["-beid-now-standby-fixture"])
     let fallback = app.buttons["home.enter-code"]
     app.buttons["fixture.now.advance29"].tap()
-    app.tabBars.buttons["Records"].tap()
-    app.tabBars.buttons["Now"].tap()
+    app.tabButton("Records").tap()
+    app.tabButton("Now").tap()
     XCTAssertFalse(fallback.exists)
     app.buttons["fixture.now.advance1"].tap()
     XCTAssertFalse(fallback.exists, "time from the previous visible interval is discarded")
@@ -181,8 +181,8 @@ final class NowNavigationUITests: XCTestCase {
     app.buttons["Done"].tap()
     app.buttons["View records"].assertHittable()
     app.buttons["View records"].tap()
-    app.tabBars.buttons["Records"].assertHittable()
-    app.tabBars.buttons["Records"].tap()
+    app.tabButton("Records").assertHittable()
+    app.tabButton("Records").tap()
     XCTAssertTrue(app.scrollViews["records.grid"].exists)
     XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record.")).firstMatch.exists)
     capture("records-after-demo")
@@ -195,7 +195,7 @@ final class NowNavigationUITests: XCTestCase {
     app.buttons["Continue"].tap()
     app.buttons["Allow Bluetooth"].assertHittable()
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.tabBars.buttons["Now"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.tabButton("Now").waitForExistence(timeout: 5))
   }
 
   private func capture(_ name: String) {
