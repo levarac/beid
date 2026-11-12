@@ -153,19 +153,16 @@ struct BeidSecondaryButton: View {
 
 struct BeidStatusPill: View {
   enum State {
-    case sensingAutomatically
     case sensingPaused
 
     fileprivate var label: LocalizedStringKey {
       switch self {
-      case .sensingAutomatically: "Sensing automatically"
       case .sensingPaused: "Sensing paused"
       }
     }
 
     fileprivate var dotColor: Color {
       switch self {
-      case .sensingAutomatically: DS.Color.statusOn
       case .sensingPaused: DS.Color.statusPending
       }
     }

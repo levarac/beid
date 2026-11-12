@@ -79,7 +79,7 @@ struct EventCardView<Caption: View>: View {
 
 #Preview("Detected") {
   EventCardView(event: .demoSample, badge: .detected) {
-    Text("Verification starts automatically — stay nearby")
+    Text("Keep the app open nearby to help phones observe each other and keep signed records.")
       .font(DS.Font.meta)
       .foregroundStyle(DS.Color.textSecondary)
   }
@@ -89,7 +89,7 @@ struct EventCardView<Caption: View>: View {
 
 #Preview("Recording") {
   EventCardView(event: .demoSample, badge: .recording) {
-    Text("Recording your attendance automatically · 7 devices sensed")
+    Text(verbatim: "7 DEVICES HEARD")
       .font(DS.Font.meta)
       .foregroundStyle(DS.Color.textSecondary)
   }
@@ -110,7 +110,7 @@ struct EventCardView<Caption: View>: View {
     event: EventSession(id: "X", name: "A Very Long Conference Name That Should Wrap Gracefully", venue: nil),
     badge: .recording
   ) {
-    Text("Recording your attendance automatically · 12 devices sensed")
+    Text(verbatim: "12 DEVICES HEARD")
       .font(DS.Font.meta)
       .foregroundStyle(DS.Color.textSecondary)
   }

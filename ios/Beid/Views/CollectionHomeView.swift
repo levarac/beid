@@ -254,6 +254,7 @@ private struct NowHomeView: View {
         title: "Turn Bluetooth back on.",
         body: "Your records are safe. Sensing resumes when Bluetooth is back."
       )
+      .foregroundStyle(foreground)
       BeidTextControl("OPEN SETTINGS", glyph: .trailing("→", announcing: "Open Settings"),
                       labelColor: foreground) {
         UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)

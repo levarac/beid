@@ -62,16 +62,6 @@ final class WalletHintStoreTests: XCTestCase {
     XCTAssertNil(store.load())
   }
 
-  func testTruncatedAddressShortensALongAddress() {
-    let hint = CachedWalletHint(address: "0x1234567890abcdef1234567890abcdef12345678", chainId: "eip155:1")
-    XCTAssertEqual(hint.truncatedAddress, "0x1234...5678")
-  }
-
-  func testTruncatedAddressLeavesAShortAddressAlone() {
-    let hint = CachedWalletHint(address: "0xshort", chainId: "eip155:1")
-    XCTAssertEqual(hint.truncatedAddress, "0xshort")
-  }
-
   private func makeIsolatedDefaults() -> UserDefaults {
     let suiteName = "org.levarac.beid.tests.walletHintStore.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!

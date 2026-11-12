@@ -947,9 +947,6 @@
     "Added to your collection.": {},
     "Address": {},
     "Allow Bluetooth": {},
-    "Approve the connection in MetaMask": {
-      "comment": "Instruction shown while beid waits for the user to approve the direct connection in the MetaMask app."
-    },
     "Ask the event organizer for the code. This joins the event directly, without connecting a wallet.": {},
     "Automatic": {},
     "Bluetooth": {},
@@ -977,13 +974,7 @@
       }
     },
     "Connect Wallet": {},
-    "Connect Your Wallet": {},
-    "Connect with MetaMask": {
-      "comment": "Button: starts a direct app-to-app connection with the MetaMask app."
-    },
-    "Connected": {},
     "Connecting to wallet…": {},
-    "Connection failed": {},
     "COULD NOT JOIN EVENT": {
       "comment": "Generic manual event join failure label. A failed join does not prove that the code was unrecognized."
     },
@@ -999,7 +990,6 @@
         }
       }
     },
-    "Copy URI": {},
     "Detected event": {},
     "No event is registered for that code. Check it with the event organizer.": {},
     "Some nearby events are not shown.": {},
@@ -1136,11 +1126,7 @@
     "Event code required": {
       "comment": "Error label shown when Join Event is pressed without an event code."
     },
-    "Get MetaMask": {
-      "comment": "Button: opens the App Store page for MetaMask."
-    },
     "I've turned it on": {},
-    "Install MetaMask to connect directly.": {},
     "Join event": {},
     "MetaMask is not installed": {},
     "Method": {},
@@ -1339,7 +1325,6 @@
       }
     },
     "Open Settings": {},
-    "Pairing URI": {},
     "Paste": {
       "comment": "Button that pastes clipboard text: the event code (13) or a venue link (14b)."
     },
@@ -1354,9 +1339,8 @@
     },
     "Sense Event": {},
     "Sensing": {},
-    "Sensing automatically": {},
     "Sensing paused": {
-      "comment": "Status pill label: sensing is temporarily paused. Parallels 'Sensing automatically' — keep the same grammatical form."
+      "comment": "Status pill label: sensing is temporarily paused because the event signal was lost."
     },
     "Shibuya Hikarie": {
       "comment": "Venue name shown under the demo event name on the demo event card. A real Tokyo building; translate only if the target language has a conventional rendering of it.",
@@ -1393,9 +1377,6 @@
       }
     },
     "Switch it on": {},
-    "Start Over": {
-      "comment": "Button: abandons the current wallet-connect attempt and returns to the start of the flow."
-    },
     "Tap Bluetooth": {},
     "The request timed out. Try again once your wallet is reachable.": {},
     "Try again": {
@@ -1410,10 +1391,7 @@
       }
     },
     "Verified": {},
-    "Waiting for wallet to approve…": {},
     "Wallet": {},
-    "Wallet not available": {},
-    "This wallet can't be used right now. Try again in a moment.": {},
     "You can change this anytime in Settings.": {},
     "You declined the request in your wallet.": {},
     "account.bluetooth.relayNote": {
@@ -1451,10 +1429,8 @@
     "beid": {
       "comment": "Brand name, appears as the app title on the Welcome screen. Not translated in any target locale."
     },
-    "beid couldn't connect to your wallet. Check your connection and try again.": {},
     "beid couldn't join that event. Check the code and try again.": {},
     "beid found a nearby event signal.": {},
-    "beid uses your wallet to sign proofs of event attendance.": {},
     "Collection": {
       "comment": "Noun: title of the Collection Home screen, showing the user's collected proofs."
     },
@@ -1583,7 +1559,6 @@
     "PAUSED": {
       "comment": "Status badge on the event card during BLE sensing, not audio/video recording."
     },
-    "Verification starts automatically — stay nearby": {},
     "scan.recording.diagnosticCaption": {
       "comment": "Temporary diagnostic line on the Recording screen (beid#218, DECISIONS 2026-08-20) — not permanent product UI, does not need to survive #141's rebuild, but ships to real TestFlight/production builds (not #if DEBUG) because a live multi-device field test needs to read these counters without a debugger attached. \"Identified\" is SensingCoordinator.devicesVerified: distinct nearby devices whose proximity identifier (RPID) was resolved to a display ID. \"Unidentified\" is SensingCoordinator.unidentifiedRpidCount: proximity identifiers observed but not yet resolved to a display ID — radio is arriving, but the device could not be identified. A large unidentified count with a flat identified count points at an identification failure; both flat points at nothing arriving at all — opposite fixes, which is why both numbers must be visible together. Do NOT translate this as mutual, two-way, or reciprocal confirmation of any kind — neither number says anything about whether a peer observed this device back (the protocol carries no such signal, DECISIONS 2026-08-09). Same bar as this file's `scan.recording.caption` translator comment on the line above this one.",
       "localizations": {
@@ -2029,39 +2004,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not submittable"
-          }
-        }
-      }
-    },
-    "wallet.restored.subtitle": {
-      "comment": "Subtitle shown under the restored-wallet heading when a cached wallet address exists from a previous launch. %@ is the truncated wallet address, e.g. '0x1234...5678'. This address is a reference only, not a verified signer, until the user approves again in their wallet (dispatch#26 condition 4).",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ was used last time — shown for reference. Approve in your wallet to continue."
-          }
-        }
-      }
-    },
-    "wallet.restored.continueButton": {
-      "comment": "Primary button that resumes a previously connected wallet without picking it again. %@ is the truncated wallet address, e.g. '0x1234...5678'.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Continue as %@"
-          }
-        }
-      }
-    },
-    "wallet.restored.connectDifferent": {
-      "comment": "Secondary button next to a restored-wallet suggestion, for a user who wants to pick a different wallet instead of continuing with the one shown.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect a different wallet"
           }
         }
       }

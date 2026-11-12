@@ -439,7 +439,7 @@ enum DS {
 
     /// One per screen. Large screen title. `Display/46`.
     static let screenTitle = Library.display46.font
-    /// Section and state titles (e.g. "Sensing automatically"). `Title/19`.
+    /// Section and state titles (e.g. "Sensing paused"). `Title/19`.
     static let sectionTitle = Library.title19.font
     /// Card and row titles (e.g. event name on a proof card). The Library's
     /// `Row/List` title, `Title/17`.
