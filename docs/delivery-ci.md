@@ -210,6 +210,17 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     gives actual task durations. Timeouts (45 minutes build/smoke, 35 per test
     job) are containment, not claimed speed; hosted full and smoke timing and
     artifact portability still need measurement on the final SHA.
+
+    Dependency caches are limited to `~/.gradle/caches` (excluding task build
+    caches/execution history), `~/.gradle/wrapper`, `~/.konan`, and SPM
+    checkouts/repository objects under the stable runner-temporary
+    `beid-spm/SourcePackages` path. KMP keys include Gradle catalog/wrapper,
+    Kotlin declarations/build configuration, Xcode build, SDK build, JDK and
+    runner architecture; SPM keys include `Package.resolved`, Xcode build and
+    architecture. There are no prefix restore keys. SPM resolution uses the
+    resolved file, and build-for-testing disables automatic package resolution.
+    Build products move only through the current attempt's artifact. Test
+    results, DerivedData and execution ledgers are never cached.
     With the main merge queue enabled, the merge step is to add the PR to
     the queue after its required PR checks pass. A completed full-mode pass of
     `iOS simulator` on the queue's exact merge result satisfies the full-suite

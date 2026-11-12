@@ -207,6 +207,8 @@ jobs:
         run: |
           set -euo pipefail
           printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+          # Stable dependency-only location; never cache DerivedData/results.
+          printf 'SPM_SOURCE_ROOT=%s\n' "$RUNNER_TEMP/beid-spm/SourcePackages" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -226,6 +228,7 @@ jobs:
           printf 'KMP_JAVA_HOME=%s\n' "$JAVA_HOME" >> "$GITHUB_ENV"
 
       - name: Resolve Xcode and JDK with the iOS 26.5 runtime
+        id: toolchain
         shell: bash
         run: |
           set -euo pipefail
@@ -242,6 +245,34 @@ jobs:
             echo "KMP_JAVA_HOME=$kmp_java_home"
             echo "JAVA_HOME=$kmp_java_home"
           } >> "$GITHUB_ENV"
+          {
+            printf 'xcode=%s\n' "$(xcodebuild -version | shasum -a 256 | awk '{print $1}')"
+            printf 'sdk=%s\n' "$(xcrun --sdk iphonesimulator --show-sdk-build-version)"
+            printf 'jdk=%s\n' "$("$kmp_java_home/bin/java" -version 2>&1 | shasum -a 256 | awk '{print $1}')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Cache KMP dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            !~/.gradle/caches/build-cache-*
+            !~/.gradle/caches/*/executionHistory
+            ~/.gradle/wrapper
+            ~/.konan
+          # The Kotlin version is declared in android/build.gradle.kts today.
+          # No prefix restore: a toolchain/configuration mismatch stays cold.
+          key: beid-ios-kmp-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          # Repository objects keep checkouts' Git alternates valid. Neither
+          # SwiftPM build products nor DerivedData are included.
+          path: |
+            ${{ env.SPM_SOURCE_ROOT }}/checkouts
+            ${{ env.SPM_SOURCE_ROOT }}/repositories
+          key: beid-ios-spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
       - name: Install pinned XcodeGen
         shell: bash
@@ -306,7 +337,7 @@ jobs:
           python3 -m scripts.ios_ci_timing --phase spm \
             --log "$CI_OUTPUT_ROOT/spm.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
             xcodebuild -resolvePackageDependencies -project ios/Beid.xcodeproj -scheme Beid \
-            -clonedSourcePackagesDirPath "$CI_OUTPUT_ROOT/SourcePackages"
+            -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" -onlyUsePackageVersionsFromResolvedFile
           python3 -m scripts.ios_ci_timing --phase build \
             --log "$CI_OUTPUT_ROOT/build.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
             xcodebuild -showBuildTimingSummary \
@@ -316,7 +347,7 @@ jobs:
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
-            -clonedSourcePackagesDirPath "$CI_OUTPUT_ROOT/SourcePackages" \
+            -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" \
             -disableAutomaticPackageResolution \
             SWIFT_OPTIMIZATION_LEVEL=-O \
             build-for-testing

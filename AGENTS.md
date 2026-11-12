@@ -482,7 +482,9 @@ the runtime enumeration without duplicates, and all enumerated `BeidTests` to
 pass. Only the two explicit iPhone exclusions in the checked-in skip list may
 report Skipped; their result nodes must still exist. Structured results and
 phase timings are uploaded in both modes. A successful explicit classifier skip
-is the only exception to executed evidence. A payload
+is the only exception to executed evidence. Dependency-only KMP/SPM caches use
+exact toolchain/lockfile keys without prefix restores; DerivedData and test
+results are never cached. A payload
 label `ci:full-ui` selects the full UI suite; merge groups, main pushes,
 nightly (03:23 UTC, separate concurrency group) and manual runs are full.
 The xcresult tree must prove exactly the smoke list Passed in smoke mode and

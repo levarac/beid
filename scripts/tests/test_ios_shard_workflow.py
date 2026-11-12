@@ -66,3 +66,17 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertRegex(build, r"name: Test without rebuilding\n(?:.*\n){0,3}.*mode == 'smoke'")
         self.assertIn("--lane build", build)
         self.assertNotIn("simctl erase", text)
+
+    def test_dependency_caches_have_exact_toolchain_and_lockfile_keys(self):
+        build = job_block(IOS, "build")
+        self.assertIn("name: Cache KMP dependencies", build, "missing dependency cache")
+        for token in ("~/.gradle/caches", "~/.gradle/wrapper", "~/.konan",
+                      "android/gradle/*.toml", "android/gradle/wrapper/gradle-wrapper.properties",
+                      "android/build.gradle.kts", "steps.toolchain.outputs.xcode",
+                      "steps.toolchain.outputs.sdk", "steps.toolchain.outputs.jdk",
+                      "runner.arch", "Package.resolved", "env.SPM_SOURCE_ROOT }}/checkouts",
+                      "env.SPM_SOURCE_ROOT }}/repositories", "!~/.gradle/caches/build-cache-*"):
+            self.assertIn(token, build)
+        self.assertNotIn("restore-keys:", build)
+        # Test jobs consume same-run artifacts and have no cache at all.
+        self.assertNotIn("actions/cache@", job_block(IOS, "tests"))
