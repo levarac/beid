@@ -26,12 +26,27 @@ final class ProofDetailPresentationTests: XCTestCase {
   }
 
   func testDiscardedSelfProofShowsAnIncompleteRecording() {
-    let value = ProofDetailPresentation(
-      method: "Bluetooth Sensing", hasSelfProof: false, hasBinding: false,
-      deviceCount: nil, windowCount: nil, sessionCount: 1, selfProofDiscardedForKeyChange: true
-    )
-    XCTAssertEqual(value.status, "Recording incomplete")
-    XCTAssertEqual(value.signature, "Not yet available")
+    for selfProof in [false, true] {
+      for binding in [false, true] {
+        let value = makePresentation(selfProof: selfProof, binding: binding, incomplete: true)
+        XCTAssertEqual(value.status, "Recording incomplete")
+        XCTAssertEqual(value.incompleteReason,
+                       "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
+        XCTAssertEqual(value.signature, "Not yet available")
+        XCTAssertFalse(value.isSealedOnDevice)
+        let ladder = RecordSendingLadderPresentation(hasSelfProof: value.isSealedOnDevice, records: nil)
+        XCTAssertEqual(ladder.rungs[0].title, "RECORDED ON THIS PHONE")
+        XCTAssertFalse(ladder.rungs[0].reached)
+      }
+    }
+  }
+
+  func testOrdinarySignedAndUnsignedRecordsHaveNoIncompleteWarning() {
+    for selfProof in [false, true] {
+      let value = makePresentation(selfProof: selfProof, binding: false)
+      XCTAssertNil(value.incompleteReason)
+      XCTAssertEqual(value.isSealedOnDevice, selfProof)
+    }
   }
 
   func testMissingAggregateIsUnavailableRatherThanZero() {
@@ -83,7 +98,8 @@ final class ProofDetailPresentationTests: XCTestCase {
     binding: Bool,
     devices: Int? = nil,
     windows: Int? = nil,
-    sessions: Int = 1
+    sessions: Int = 1,
+    incomplete: Bool = false
   ) -> ProofDetailPresentation {
     ProofDetailPresentation(
       method: "Bluetooth Sensing",
@@ -91,7 +107,8 @@ final class ProofDetailPresentationTests: XCTestCase {
       hasBinding: binding,
       deviceCount: devices,
       windowCount: windows,
-      sessionCount: sessions
+      sessionCount: sessions,
+      selfProofDiscardedForKeyChange: incomplete
     )
   }
 }

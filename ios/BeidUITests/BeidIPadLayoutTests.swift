@@ -247,6 +247,8 @@ final class BeidIPadLayoutTests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
+    XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
+    XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
     app.staticTexts["SEALED ON THIS PHONE"].scrollToHittable(in: app)
     XCTAssertTrue(app.staticTexts["SEALED ON THIS PHONE"].exists)
     XCTAssertTrue(app.staticTexts["Self-signed on device"].exists)

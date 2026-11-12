@@ -2231,8 +2231,19 @@
         }
       }
     },
+    "proofDetail.incompleteReason": {
+      "comment": "Reason for an incomplete stored record after signing-key continuity failed. The record and its session/report evidence are retained.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone."
+          }
+        }
+      }
+    },
     "proofDetail.status.incomplete": {
-      "comment": "Status for a recording whose unsigned session record could not be saved and was discarded.",
+      "comment": "Status for a retained recording whose self-signature could not be completed after signing-key continuity failed.",
       "localizations": {
         "en": {
           "stringUnit": {

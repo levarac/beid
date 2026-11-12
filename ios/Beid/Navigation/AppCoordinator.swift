@@ -367,7 +367,9 @@ final class AppCoordinator: ObservableObject {
       let proof = Proof(
         id: UUID(uuidString: "00000000-0000-4000-8000-00000000063\(index + 1)")!,
         eventName: "ETH Tokyo 2026", date: Date(timeIntervalSince1970: start),
-        peersVerified: 0, eventCode: eventCode
+        peersVerified: 0, eventCode: eventCode,
+        selfProofDiscardedForKeyChange: index == 0 && arguments.contains("-beid-record-incomplete-fixture"),
+        signingKeyChangeNoticeAcknowledged: true
       )
       proofStore.add(proof)
       // 08c and 11 deliberately omit one snapshot so the single unavailable

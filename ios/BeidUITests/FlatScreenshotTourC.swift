@@ -160,6 +160,8 @@ final class FlatScreenshotTourC: XCTestCase {
     record.tap()
     let title = app.staticTexts["proof.detail.title"]
     title.assertExists()
+    XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
+    XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
     XCTAssertTrue(app.staticTexts["RECORDED ON THIS PHONE"].exists)
     XCTAssertFalse(app.staticTexts["STATUS"].exists)
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
@@ -179,6 +181,42 @@ final class FlatScreenshotTourC: XCTestCase {
       NSPredicate(format: "label == %@", "NOT YET AVAILABLE")
     )
     XCTAssertGreaterThanOrEqual(unavailableResults.count, 2)
+  }
+
+  func testIncompleteRecordExplainsKeyChangeAndKeepsSessionAndReportRoutes() {
+    let app = launchEventDetailFixture(extraArguments: [
+      "-beid-report-links-701", "-beid-record-incomplete-fixture"
+    ])
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    let status = app.staticTexts["record.incomplete.title"]
+    status.scrollToHittable(in: app)
+    XCTAssertEqual(status.label, "Recording incomplete")
+    let reason = app.staticTexts["record.incomplete.reason"]
+    reason.scrollToHittable(in: app)
+    XCTAssertEqual(reason.label,
+                   "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
+    XCTAssertTrue(app.windows.firstMatch.frame.contains(reason.frame))
+    XCTAssertFalse(app.staticTexts["Self-signed on device"].exists)
+    XCTAssertFalse(app.staticTexts["SEALED ON THIS PHONE"].exists)
+    app.staticTexts["RECORDED ON THIS PHONE"].scrollToHittable(in: app)
+    attachScreenshot("09-incomplete-record")
+
+    let report = app.buttons["proof-detail.report.\(Self.linkedReportID)"]
+    // The linked report is above the ladder; return to the top before scrolling to it.
+    for _ in 0..<5 { app.swipeDown() }
+    report.scrollToHittable(in: app)
+    report.tap()
+    app.staticTexts["report-detail.heading"].assertExists()
+    app.navigationBars.buttons.firstMatch.tap()
+    let session = app.buttons["record.session.00000000-0000-4000-8000-000000000631"]
+    session.scrollToHittable(in: app)
+    session.tap()
+    app.staticTexts["observation-detail.title"].assertExists()
+    app.navigationBars.buttons.firstMatch.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
   }
 
   func testSelectingObservedWindowExposesThatSelection() {

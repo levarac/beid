@@ -13,6 +13,8 @@ struct ProofDetailPresentation {
   let status: String
   let signature: String
   let withValue: String
+  let incompleteReason: String?
+  let isSealedOnDevice: Bool
 
   init(
     method: String,
@@ -26,6 +28,14 @@ struct ProofDetailPresentation {
     self.method = method == "Bluetooth Sensing"
       ? String(localized: "proofDetail.method.bluetooth", defaultValue: "Bluetooth sensing")
       : method
+    isSealedOnDevice = hasSelfProof && !selfProofDiscardedForKeyChange
+    incompleteReason = selfProofDiscardedForKeyChange
+      ? String(
+        localized: "proofDetail.incompleteReason",
+        defaultValue: "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.",
+        comment: "Reason for an incomplete stored record after signing-key continuity failed. The record and its session/report evidence are retained."
+      )
+      : nil
     status = selfProofDiscardedForKeyChange
       ? String(localized: "proofDetail.status.incomplete", defaultValue: "Recording incomplete")
       : hasSelfProof
@@ -35,7 +45,9 @@ struct ProofDetailPresentation {
         defaultValue: "Recorded on device",
         comment: "Proof Detail status when a Proof is stored locally but no matching self-proof signature record exists. Do not imply sealing or third-party verification."
       )
-    if hasBinding {
+    if selfProofDiscardedForKeyChange {
+      signature = Self.unavailable
+    } else if hasBinding {
       signature = String(
         localized: "proofDetail.signature.bound",
         defaultValue: "Bound to wallet",
@@ -117,6 +129,7 @@ struct ItemDetailView: View {
   }
 
   var body: some View {
+    let presentation = presentation
     ScrollView {
       BeidAdaptiveContent {
         VStack(alignment: .leading, spacing: 0) {
@@ -135,6 +148,21 @@ struct ItemDetailView: View {
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("proof.detail.title")
             .padding(.top, DS.Space.l + DS.Space.xs)
+
+          if let reason = presentation.incompleteReason {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+              Text(verbatim: presentation.status)
+                .beidTextStyle(DS.Font.Library.title15)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("record.incomplete.title")
+              Text(verbatim: reason)
+                .beidTextStyle(DS.Font.Library.body13)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("record.incomplete.reason")
+            }
+            .foregroundStyle(DS.Color.textPrimary)
+            .padding(.vertical, DS.Space.m)
+          }
 
           VStack(spacing: 0) {
             keyValueRow(
@@ -168,7 +196,8 @@ struct ItemDetailView: View {
           )
 
           RecordEvidenceLadder(
-            proof: proof, sensing: coordinator.sensingCoordinator,
+            proof: proof, hasSelfProof: presentation.isSealedOnDevice,
+            sensing: coordinator.sensingCoordinator,
             submissionStore: coordinator.reportSubmissionStore,
             proofStore: coordinator.proofStore, linkStore: coordinator.reportProofLinkStore
           )
@@ -266,6 +295,7 @@ struct RecordSendingLadderPresentation {
 
 private struct RecordEvidenceLadder: View {
   let proof: Proof
+  let hasSelfProof: Bool
   @ObservedObject var sensing: SensingCoordinator
   @ObservedObject var submissionStore: ReportSubmissionStore
   @ObservedObject var proofStore: ProofStore
@@ -280,7 +310,7 @@ private struct RecordEvidenceLadder: View {
   var body: some View {
     let reports = reports
     let presentation = RecordSendingLadderPresentation(
-      hasSelfProof: sensing.selfProofRecord(forProofId: proof.id) != nil,
+      hasSelfProof: hasSelfProof,
       records: reports?.map(\.record)
     )
     VStack(alignment: .leading, spacing: DS.Space.m) {
