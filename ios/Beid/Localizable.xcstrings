@@ -1142,9 +1142,6 @@
       }
     },
     "Copy URI": {},
-    "Copy address": {
-      "comment": "Button: copies the connected wallet address to the clipboard, not a noun."
-    },
     "Detected event": {},
     "No event is registered for that code. Check it with the event organizer.": {},
     "Some nearby events are not shown.": {},
@@ -2736,24 +2733,6 @@
     },
     "Share support information": {},
     "Includes app version, recent states and failure reasons from this app session. Choose who to share it with.": {},
-    "Copied": {
-      "comment": "Feedback after the full wallet address has been copied."
-    },
-    "Copied address": {
-      "comment": "Accessibility label after copying the full wallet address."
-    },
-    "Disconnect": {
-      "comment": "Confirms disconnecting the wallet after the Account confirmation message."
-    },
-    "Disconnect wallet": {
-      "comment": "Destructive Account row that opens a confirmation before disconnecting the wallet."
-    },
-    "Disconnect wallet?": {
-      "comment": "Title of the wallet disconnection confirmation within the Account sheet."
-    },
-    "Keep connected": {
-      "comment": "Cancels wallet disconnection and returns to the Account sheet."
-    },
     "Off · Fix": {
       "comment": "Bluetooth-off status and action to open Settings in the Account sheet."
     },
@@ -2765,7 +2744,6 @@
     },
     "Sensing is paused until Bluetooth is on. Tap to open Settings.": {},
     "Venue broadcast": {},
-    "Your records stay on this phone. Nothing is deleted.": {},
     "About\nsensing": {},
     "HOW IT WORKS": {},
     "Phones exchange rotating anonymous IDs, not names or wallet addresses.": {},
@@ -2813,17 +2791,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sending is on."
-          }
-        }
-      }
-    },
-    "account.wallet.header": {
-      "comment": "Account sheet label naming the connected wallet provider.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wallet · Connected via %@"
           }
         }
       }
