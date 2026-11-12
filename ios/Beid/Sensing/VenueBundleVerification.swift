@@ -138,11 +138,14 @@ final class VenueImportedBundle {
   let publicArtifact: VenuePublicArtifact
   /// End of the complete, signature-checked chain, not the current ENIN permit.
   let broadcastUntilUnixSeconds: Int64?
+  let registrarHex: String?
 
-  init(identity: VenueArtifactIdentity, publicArtifact: VenuePublicArtifact, broadcastUntilUnixSeconds: Int64? = nil) {
+  init(identity: VenueArtifactIdentity, publicArtifact: VenuePublicArtifact,
+       broadcastUntilUnixSeconds: Int64? = nil, registrarHex: String? = nil) {
     self.identity = identity
     self.publicArtifact = publicArtifact
     self.broadcastUntilUnixSeconds = broadcastUntilUnixSeconds
+    self.registrarHex = registrarHex
   }
 }
 
@@ -610,7 +613,8 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
           bundleDigestHex: Self.hexString(Self.swiftBytes(fromKotlin: bundle.bundleDigest.toByteArray()))
         ),
         publicArtifact: VenuePublicArtifact(bundleBytes: bundleBytes, handoffBytes: handoffBytes),
-        broadcastUntilUnixSeconds: schedule.requiredEndEnin * Int64(schedule.eninSeconds)
+        broadcastUntilUnixSeconds: schedule.requiredEndEnin * Int64(schedule.eninSeconds),
+        registrarHex: identity.definition.registrarHex
       ))
     }
   }

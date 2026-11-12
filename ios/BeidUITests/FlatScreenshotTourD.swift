@@ -166,6 +166,23 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].exists)
   }
 
+  func testVenueBroadcastQRFirstShowsRegistrarAndTwoTimingRows() {
+    openVenue(frame: "14b")
+    let scan = app.buttons["Scan QR code"]
+    let paste = app.buttons["venue.showLink"]
+    XCTAssertTrue(scan.isHittable)
+    XCTAssertLessThan(scan.frame.maxY, paste.frame.minY)
+    XCTAssertFalse(app.descendants(matching: .any)["Venue link"].exists)
+    XCTAssertTrue(app.staticTexts["venue.registrar"].exists)
+    let until = app.staticTexts["venue.until"]
+    let remaining = app.staticTexts["venue.remaining"]
+    XCTAssertTrue(until.exists)
+    XCTAssertTrue(remaining.exists)
+    XCTAssertLessThan(until.frame.maxY, remaining.frame.minY)
+    paste.tap()
+    XCTAssertTrue(app.descendants(matching: .any)["Venue link"].exists)
+  }
+
   func testShot_14d_ScanQR() {
     openVenue(frame: "14d")
     app.buttons["Scan QR code"].tap()
@@ -258,12 +275,16 @@ final class FlatScreenshotTourD: XCTestCase {
   }
 
   private func assertVenueControls() {
+    let link = app.descendants(matching: .any)["Venue link"]
+    let opened = !link.exists
+    if opened { app.buttons["venue.showLink"].tap() }
     assertMinimumHitTarget(app.buttons["Paste venue link"])
     assertMinimumHitTarget(app.buttons["Use this link"])
     assertMinimumHitTarget(app.buttons["Scan QR code"])
     assertMinimumHitTarget(app.buttons["Copy event ID"])
     assertMinimumHitTarget(app.buttons["Stop broadcasting"])
     XCTAssertTrue(app.descendants(matching: .any)["Venue link"].exists)
+    if opened { app.buttons["venue.showLink"].tap() }
   }
 
   private var openSettingsControl: XCUIElement {

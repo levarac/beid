@@ -690,6 +690,7 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     XCTAssertEqual(permit.identity.eventIdHex, fixture.eventId)
     XCTAssertEqual(permit.currentEnin, 5_967_648)
     XCTAssertNotNil(imported.broadcastUntilUnixSeconds)
+    XCTAssertEqual(imported.registrarHex, "0x1111111111111111111111111111111111111111")
     XCTAssertGreaterThan(try XCTUnwrap(imported.broadcastUntilUnixSeconds), permit.stopAtUnixSeconds,
                          "the screen's end covers the verified chain, not just this ENIN")
   }

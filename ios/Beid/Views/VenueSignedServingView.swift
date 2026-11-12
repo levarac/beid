@@ -15,6 +15,7 @@ struct VenueSignedServingView: View {
   @State private var isScanning = false
   @State private var scannerStartFailure: String?
   @State private var scannerRefusal: VenueLinkScanner.Authorization?
+  @State private var showsLinkInput = false
 
   init(viewModel: @autoclosure @escaping () -> VenueSignedServingViewModel) {
     _viewModel = StateObject(wrappedValue: viewModel())
@@ -31,7 +32,7 @@ struct VenueSignedServingView: View {
           .beidTextStyle(DS.Font.Library.display52)
           .foregroundStyle(DS.Color.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
-        Text("Load the signed pack the organizer gave you. Once it checks out, this phone broadcasts it.")
+        Text("Scan the organizer's QR code, then check the event before starting this phone's broadcast.")
           .beidTextStyle(DS.Font.Library.body15)
           .foregroundStyle(DS.Color.textSecondary)
           .padding(.top, DS.Space.m)
@@ -76,6 +77,7 @@ struct VenueSignedServingView: View {
     }
     .onAppear {
       if let fixtureCode {
+        showsLinkInput = ["14e", "14e2", "14e3"].contains(fixtureCode)
         switch fixtureCode {
         case "14e": venueLinkText = "https://organizer.eth/eth-tokyo-26"
         case "14e2": venueLinkText = "https://organizer.eth/#eth-tokyo-26"
@@ -127,6 +129,24 @@ struct VenueSignedServingView: View {
   }
 
   private var linkSection: some View {
+    VStack(alignment: .leading, spacing: DS.Space.s) {
+      BeidPrimaryButton("Scan QR code") { scan() }
+        .accessibilityIdentifier("Scan QR code")
+      Button {
+        showsLinkInput.toggle()
+      } label: {
+        BeidTextControlLabel("Or paste a link", glyph: .trailing("→", announcing: "Or paste a link"))
+          .foregroundStyle(DS.Color.textSecondary)
+          .frame(maxWidth: .infinity)
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("venue.showLink")
+      if showsLinkInput { pasteSection }
+      scannerOutcome
+    }
+  }
+
+  private var pasteSection: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack {
         Text("Link")
@@ -162,24 +182,30 @@ struct VenueSignedServingView: View {
       }
       .disabled(venueLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       .padding(.top, DS.Space.s)
-      if VenueLinkScanner.isSupported || fixtureCode != nil {
-        textAction("Scan QR code", identifier: "Scan QR code") {
-          if fixtureCode != nil {
-            isScanning = true
-            return
-          }
-          scannerStartFailure = nil
-          scannerRefusal = nil
-          requestTask?.cancel()
-          requestTask = Task {
-            switch await VenueLinkScanner.authorize() {
-            case .granted: isScanning = true
-            case .denied: scannerRefusal = .denied
-            case .unavailableAnyway: scannerRefusal = .unavailableAnyway
-            }
-          }
-        }
-      } else {
+    }
+  }
+
+  private func scan() {
+    if fixtureCode != nil { isScanning = true; return }
+    guard VenueLinkScanner.isSupported else {
+      scannerRefusal = .unavailableAnyway
+      return
+    }
+    scannerStartFailure = nil
+    scannerRefusal = nil
+    requestTask?.cancel()
+    requestTask = Task {
+      switch await VenueLinkScanner.authorize() {
+      case .granted: isScanning = true
+      case .denied: scannerRefusal = .denied
+      case .unavailableAnyway: scannerRefusal = .unavailableAnyway
+      }
+    }
+  }
+
+  private var scannerOutcome: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      if !VenueLinkScanner.isSupported && fixtureCode == nil {
         Text("This device cannot scan QR codes. Paste the link instead.")
           .beidTextStyle(DS.Font.Library.body13)
           .foregroundStyle(DS.Color.textSecondary)
@@ -225,13 +251,21 @@ struct VenueSignedServingView: View {
             .beidTextStyle(DS.Font.Library.labelMono11Time)
         }
         if let eventId = effectiveEventId { keyValueRow("Event ID") { eventIdCopyControl(eventId) } }
+        keyValueRow("Registrar") {
+          Text(verbatim: fixtureCode != nil ? "0x1111…1111" : (viewModel.registrarHex ?? "NOT YET AVAILABLE"))
+            .beidTextStyle(DS.Font.Library.labelMono11Time)
+            .accessibilityIdentifier("venue.registrar")
+        }
         keyValueRow("Until") {
-          if fixtureCode != nil {
-            Text("Broadcasting until 18:00")
-              .beidTextStyle(DS.Font.Library.labelMono11)
-          } else {
-            Text(String(localized: "venue.serving.servingUntil", defaultValue: "Broadcasting until \(Self.instantText(viewModel.broadcastUntilUnixSeconds ?? stopAtUnixSeconds)).", comment: "End of the loaded, verified lease chain."))
-              .beidTextStyle(DS.Font.Library.labelMono11)
+          Text(verbatim: fixtureCode != nil ? "THU 10/15 18:00 JST" : Self.instantText(viewModel.broadcastUntilUnixSeconds ?? stopAtUnixSeconds))
+            .beidTextStyle(DS.Font.Library.labelMono11Time)
+            .accessibilityIdentifier("venue.until")
+        }
+        keyValueRow("Remaining") {
+          TimelineView(.periodic(from: .now, by: 1)) { context in
+            Text(remainingText(at: context.date, until: viewModel.broadcastUntilUnixSeconds ?? stopAtUnixSeconds))
+              .beidTextStyle(DS.Font.Library.labelMono11Time)
+              .accessibilityIdentifier("venue.remaining")
           }
         }
       case .idle:
@@ -411,7 +445,15 @@ struct VenueSignedServingView: View {
   }
 
   private static func instantText(_ unixSeconds: Int64) -> String {
-    Date(timeIntervalSince1970: TimeInterval(unixSeconds)).formatted(date: .omitted, time: .shortened)
+    Date(timeIntervalSince1970: TimeInterval(unixSeconds)).formatted(
+      .dateTime.weekday(.abbreviated).month(.twoDigits).day(.twoDigits).hour().minute().timeZone(.specificName(.short))
+    )
+  }
+
+  private func remainingText(at date: Date, until end: Int64) -> String {
+    let seconds = fixtureCode != nil ? 8_040 : max(0, end - Int64(date.timeIntervalSince1970.rounded(.up)))
+    let duration = Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
+    return String(localized: "venue.remaining", defaultValue: "\(duration) left", comment: "Time left in the loaded valid broadcast chain.")
   }
 
   private func shortEventId(_ value: String) -> String {

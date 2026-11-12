@@ -214,6 +214,8 @@ final class VenueSignedServingViewModel: ObservableObject {
     workflow?.receipt?.broadcastUntilUnixSeconds ?? currentPermitEnd
   }
 
+  var registrarHex: String? { workflow?.receipt?.registrarHex }
+
   var canonicalEventIdHexForAcquisition: String? { canonicalEventIdHex }
 
   private var eligible: Bool { sessionActive && !isBackgrounded }
