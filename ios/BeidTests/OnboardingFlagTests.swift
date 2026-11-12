@@ -99,6 +99,18 @@ final class AppVersionMetadataTests: XCTestCase {
   }
 }
 
+final class BluetoothPermissionPurposeTests: XCTestCase {
+  func testAppBluetoothPurposeDescribesDeviceSignalsAndRecords() {
+    for key in ["NSBluetoothAlwaysUsageDescription", "NSBluetoothPeripheralUsageDescription"] {
+      XCTAssertEqual(
+        Bundle.main.object(forInfoDictionaryKey: key) as? String,
+        "beid uses Bluetooth to exchange signals with nearby devices and keep a record of what it observes.",
+        "\(key) must describe nearby-device signals and recorded observations"
+      )
+    }
+  }
+}
+
 @MainActor
 final class AboutSensingPresentationTests: XCTestCase {
   func testExplicitCapabilityWinsOverTheDebugFixture() {

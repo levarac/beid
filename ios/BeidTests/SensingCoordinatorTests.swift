@@ -1713,8 +1713,15 @@ final class OwnerKeyRestorationNoticeTests: XCTestCase {
     let failure = OwnerKeyOperationFailure.unavailable
 
     XCTAssertEqual(failure.id, "owner-key-unavailable")
-    XCTAssertEqual(failure.title, "Proof key is unavailable")
-    XCTAssertTrue(failure.message.contains("operations are paused"))
+    XCTAssertEqual(
+      failure.title, "Signing key is unavailable",
+      "Unavailable-key title must name the signing key"
+    )
+    XCTAssertEqual(
+      failure.message,
+      "beid could not access the key used to sign records. Operations that need this key are paused. Try again when your device is available.",
+      "Unavailable-key message must preserve the broader operation pause"
+    )
     XCTAssertNotEqual(failure.title, OwnerKeyRestorationNotice.identityWasReset.title)
   }
 
@@ -1764,10 +1771,14 @@ final class OwnerKeyRestorationNoticeTests: XCTestCase {
     )
 
     XCTAssertEqual(notice, .identityWasReset)
-    XCTAssertEqual(notice?.title, "Proof identity was reset")
+    XCTAssertEqual(
+      notice?.title, "Signing identity was reset",
+      "Identity-reset title must name the signing identity"
+    )
     XCTAssertEqual(
       notice?.message,
-      "beid could not restore the identity this device used to sign proofs, so it created a new one. This device can no longer use the previous identity."
+      "beid could not restore the identity this device used to sign records, so it created a new one. This device can no longer use the previous identity.",
+      "Identity-reset message must retain the previous-identity limitation"
     )
   }
 
@@ -1778,10 +1789,14 @@ final class OwnerKeyRestorationNoticeTests: XCTestCase {
     )
 
     XCTAssertEqual(notice, .savedRecordsUsePreviousIdentity)
-    XCTAssertEqual(notice?.title, "Some proof records use a previous identity")
+    XCTAssertEqual(
+      notice?.title, "Some records use a previous signing identity",
+      "Saved-record mismatch title must name the previous signing identity"
+    )
     XCTAssertEqual(
       notice?.message,
-      "Some saved proof records were created with a different identity. They still exist, but this device can no longer sign as that identity."
+      "Some saved records were created with a different signing identity. They still exist, but this device can no longer sign as that identity.",
+      "Saved-record mismatch message must retain the records and signing limitation"
     )
   }
 
@@ -1792,10 +1807,14 @@ final class OwnerKeyRestorationNoticeTests: XCTestCase {
     )
 
     XCTAssertEqual(notice, .identityWasResetWithSavedRecords)
-    XCTAssertEqual(notice?.title, "Proof identity could not be restored")
+    XCTAssertEqual(
+      notice?.title, "Signing identity could not be restored",
+      "Combined-reset title must name the signing identity"
+    )
     XCTAssertEqual(
       notice?.message,
-      "beid created a new identity because the saved one could not be restored. Some saved proof records still refer to the previous identity; they still exist, but this device can no longer sign as that identity."
+      "beid created a new signing identity because the saved one could not be restored. Some saved records still refer to the previous identity; they still exist, but this device can no longer sign as that identity.",
+      "Combined-reset message must retain both replacement and saved-record consequences"
     )
   }
 

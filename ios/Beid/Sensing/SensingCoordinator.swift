@@ -153,20 +153,20 @@ enum OwnerKeyRestorationNotice: String, Identifiable, Equatable {
     case .identityWasReset:
       return String(
         localized: "ownerKeyRestoration.identityReset.title",
-        defaultValue: "Proof identity was reset",
-        comment: "Alert title shown when beid could not restore the device identity used to sign proofs and created a new one."
+        defaultValue: "Signing identity was reset",
+        comment: "Alert title shown when beid could not restore the device's signing identity and created a new one."
       )
     case .savedRecordsUsePreviousIdentity:
       return String(
         localized: "ownerKeyRestoration.savedRecordsMismatch.title",
-        defaultValue: "Some proof records use a previous identity",
-        comment: "Alert title shown when saved proof-related records refer to an owner identity different from the device's current identity."
+        defaultValue: "Some records use a previous signing identity",
+        comment: "Alert title shown when saved records refer to a signing identity different from the device's current identity."
       )
     case .identityWasResetWithSavedRecords:
       return String(
         localized: "ownerKeyRestoration.identityResetWithRecords.title",
-        defaultValue: "Proof identity could not be restored",
-        comment: "Alert title shown when beid both replaced an unreadable proof-signing identity and found saved records that use the previous identity."
+        defaultValue: "Signing identity could not be restored",
+        comment: "Alert title shown when beid replaced an unreadable signing identity and found saved records that use the previous identity."
       )
     }
   }
@@ -176,20 +176,20 @@ enum OwnerKeyRestorationNotice: String, Identifiable, Equatable {
     case .identityWasReset:
       return String(
         localized: "ownerKeyRestoration.identityReset.message",
-        defaultValue: "beid could not restore the identity this device used to sign proofs, so it created a new one. This device can no longer use the previous identity.",
-        comment: "Alert message explaining that an unreadable proof-signing identity was replaced and the previous identity is no longer usable on this device."
+        defaultValue: "beid could not restore the identity this device used to sign records, so it created a new one. This device can no longer use the previous identity.",
+        comment: "Alert message explaining that an unreadable signing identity was replaced and the previous identity is no longer usable on this device."
       )
     case .savedRecordsUsePreviousIdentity:
       return String(
         localized: "ownerKeyRestoration.savedRecordsMismatch.message",
-        defaultValue: "Some saved proof records were created with a different identity. They still exist, but this device can no longer sign as that identity.",
-        comment: "Alert message explaining that saved proof-related records remain on disk but refer to an owner identity this device no longer controls."
+        defaultValue: "Some saved records were created with a different signing identity. They still exist, but this device can no longer sign as that identity.",
+        comment: "Alert message explaining that saved records remain on disk but refer to a signing identity this device no longer controls."
       )
     case .identityWasResetWithSavedRecords:
       return String(
         localized: "ownerKeyRestoration.identityResetWithRecords.message",
-        defaultValue: "beid created a new identity because the saved one could not be restored. Some saved proof records still refer to the previous identity; they still exist, but this device can no longer sign as that identity.",
-        comment: "Alert message explaining both the replacement of an unreadable proof-signing identity and the effect on saved proof-related records."
+        defaultValue: "beid created a new signing identity because the saved one could not be restored. Some saved records still refer to the previous identity; they still exist, but this device can no longer sign as that identity.",
+        comment: "Alert message explaining both the replacement of an unreadable signing identity and the effect on saved records."
       )
     }
   }
@@ -198,8 +198,8 @@ enum OwnerKeyRestorationNotice: String, Identifiable, Equatable {
 enum OwnerKeyOperationFailure: Identifiable, Equatable {
   case unavailable
   var id: String { "owner-key-unavailable" }
-  var title: String { String(localized: "ownerKeyFailure.title", defaultValue: "Proof key is unavailable") }
-  var message: String { String(localized: "ownerKeyFailure.message", defaultValue: "beid could not access the key used for proofs. Proof-key operations are paused. Try again when your device is available.") }
+  var title: String { String(localized: "ownerKeyFailure.title", defaultValue: "Signing key is unavailable") }
+  var message: String { String(localized: "ownerKeyFailure.message", defaultValue: "beid could not access the key used to sign records. Operations that need this key are paused. Try again when your device is available.") }
 }
 
 #if DEBUG
