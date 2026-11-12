@@ -3082,14 +3082,26 @@ final class SensingCoordinator: ObservableObject {
 
   @discardableResult
   func stopSensing() -> SelfProofRecord? {
-    let selfProof = endSensing(stopEngine: true)
+    stopSensingWithResult().selfProof
+  }
+
+  /// A receipt from this synchronous finalization, not a snapshot of global
+  /// notices. Only its self-proof/checkpoint operations can mark an explaining
+  /// alert; submission callbacks keep their existing, independent delivery.
+  struct StopResult {
+    var selfProof: SelfProofRecord? = nil
+    var hasExplainingAlert = false
+  }
+
+  func stopSensingWithResult() -> StopResult {
+    let result = endSensing(stopEngine: true)
 #if DEBUG
     if ProcessInfo.processInfo.arguments.contains("-beid-continuous-sensing-fixture") {
       isScanning = false
       isAdvertising = false
     }
 #endif
-    return selfProof
+    return result
   }
 
   /// Manual trigger so the Signal Lost screen is reachable from the demo
@@ -3133,11 +3145,11 @@ final class SensingCoordinator: ObservableObject {
 
   @discardableResult
   func reset() -> SelfProofRecord? {
-    endSensing(stopEngine: false)
+    endSensing(stopEngine: false).selfProof
   }
 
-  private func endSensing(stopEngine: Bool) -> SelfProofRecord? {
-    let selfProof = finalizeSelfProofIfNeeded()
+  private func endSensing(stopEngine: Bool) -> StopResult {
+    let result = finalizeSelfProofIfNeeded()
     persistSessionAggregateSnapshotIfNeeded()
     persistSigilPresenceIfNeeded()
     closeFinalWindowIfNeeded()
@@ -3155,7 +3167,7 @@ final class SensingCoordinator: ObservableObject {
     resetSessionState()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
     reportSubmissionRuntime?.submitPending()
-    return selfProof
+    return result
   }
 
   private func resetSessionState() {
@@ -4927,13 +4939,17 @@ final class SensingCoordinator: ObservableObject {
     eninStart: UInt64,
     eninEnd: UInt64,
     capturedPublicKey: Data?,
-    signingCryptography: (any SensingCryptography)? = nil
+    signingCryptography: (any SensingCryptography)? = nil,
+    onExplainingAlert: () -> Void = {}
   ) throws -> SelfProofRecord? {
     let eventIdHash = EventIdHash.compute(eventCode: eventCode)
     let cryptography = try (signingCryptography ?? sensingCryptography)
       .signingSnapshot(eventCode: eventCode, matching: capturedPublicKey)
     guard let eventSigningPublicKey = capturedPublicKey else { return nil }
-    guard let ownerPublicKey = resolvedOwnerPublicKey() else { return nil }
+    guard let ownerPublicKey = resolvedOwnerPublicKey() else {
+      onExplainingAlert()
+      return nil
+    }
     let signature: SensingRecoverableSignature?
     do {
       signature = try cryptography.signSelfProof(
@@ -4944,6 +4960,7 @@ final class SensingCoordinator: ObservableObject {
         )
       } catch {
       ownerKeyOperationFailure = .unavailable
+      onExplainingAlert()
       return nil
     }
     guard let signature else {
@@ -4970,7 +4987,7 @@ final class SensingCoordinator: ObservableObject {
   }
 
   /// Builds, signs, and persists this session's self-proof, if one is due.
-  /// `nil` if there is no `Proof` for this session (`activeProofId` unset —
+  /// Its receipt has no self-proof if there is no `Proof` for this session (`activeProofId` unset —
   /// never reached `.recording`) or no ENIN window was ever observed
   /// (`firstWindowEnin`/`lastWindowEnin` unset). A session gated on
   /// `activeProofId` mirrors `BindingRecord.proofId`'s linkage: a session
@@ -4988,20 +5005,22 @@ final class SensingCoordinator: ObservableObject {
   /// real record now exists, so the in-progress checkpoint standing in for
   /// it is stale and must not be reconciled again on a later launch.
   @discardableResult
-  private func finalizeSelfProofIfNeeded() -> SelfProofRecord? {
-    checkpointSelfProofStateIfNeeded()
+  private func finalizeSelfProofIfNeeded() -> StopResult {
+    var result = StopResult()
+    let onExplainingAlert = { result.hasExplainingAlert = true }
+    checkpointSelfProofStateIfNeeded(onExplainingAlert: onExplainingAlert)
     guard
       let proofId = activeProofId,
       let eventCode = currentBindingEvent?.id,
       let start = firstWindowEnin,
       let end = lastWindowEnin
     else {
-      return nil
+      return result
     }
 
     if proofStore?.proof(withId: proofId)?.selfProofDiscardedForKeyChange == true {
-      discardSelfProofCheckpoint(proofId: proofId)
-      return nil
+      discardSelfProofCheckpoint(proofId: proofId, onExplainingAlert: onExplainingAlert)
+      return result
     }
     do {
       guard let record = try makeSelfProofRecord(
@@ -5009,18 +5028,22 @@ final class SensingCoordinator: ObservableObject {
         eventCode: eventCode,
         eninStart: UInt64(start),
         eninEnd: UInt64(end),
-        capturedPublicKey: activeEventSigningPublicKey
-      ) else { return nil }
-      return persistSelfProofRecord(record)
+        capturedPublicKey: activeEventSigningPublicKey,
+        onExplainingAlert: onExplainingAlert
+      ) else { return result }
+      result.selfProof = persistSelfProofRecord(record, onExplainingAlert: onExplainingAlert)
     } catch let error as EventSigningKeyContinuityError {
-      discardSelfProofCheckpoint(proofId: proofId, reason: error.discardReason)
+      discardSelfProofCheckpoint(proofId: proofId, reason: error.discardReason, onExplainingAlert: onExplainingAlert)
     } catch {
       recordEventSigningKeyFailure(.unavailable)
+      onExplainingAlert()
     }
-    return nil
+    return result
   }
 
-  private func persistSelfProofRecord(_ record: SelfProofRecord) -> SelfProofRecord? {
+  private func persistSelfProofRecord(
+    _ record: SelfProofRecord, onExplainingAlert: () -> Void = {}
+  ) -> SelfProofRecord? {
     do {
       if selfProofStore.record(forProofId: record.proofId) == nil {
         try selfProofStore.addDurably(record)
@@ -5031,11 +5054,14 @@ final class SensingCoordinator: ObservableObject {
       return record
     } catch {
       recordEventSigningKeyFailure(.discardFailed)
+      onExplainingAlert()
       return nil
     }
   }
 
-  private func discardSelfProofCheckpoint(proofId: UUID, reason: EventSigningDiscardReason = .unverifiable) {
+  private func discardSelfProofCheckpoint(
+    proofId: UUID, reason: EventSigningDiscardReason = .unverifiable, onExplainingAlert: () -> Void = {}
+  ) {
     do {
       guard let proofStore else { throw CocoaError(.fileReadNoSuchFile) }
       try proofStore.discardSelfProofForKeyChange(
@@ -5049,9 +5075,11 @@ final class SensingCoordinator: ObservableObject {
         recordSigningKeyChange(
           forEventCode: parent.eventCode ?? parent.id.uuidString, reason: parent.selfProofDiscardReason ?? .unverifiable
         )
+        onExplainingAlert()
       }
     } catch {
       recordEventSigningKeyFailure(.discardFailed)
+      onExplainingAlert()
     }
   }
 
@@ -5152,7 +5180,7 @@ final class SensingCoordinator: ObservableObject {
   /// Demo window rotation does not call this because it produces no window
   /// reports. Finalization checkpoints the final range for every session,
   /// including demo sessions, before attempting the self-proof save.
-  private func checkpointSelfProofStateIfNeeded() {
+  private func checkpointSelfProofStateIfNeeded(onExplainingAlert: () -> Void = {}) {
     guard
       let proofId = activeProofId,
       let eventCode = currentBindingEvent?.id,
@@ -5163,6 +5191,7 @@ final class SensingCoordinator: ObservableObject {
     }
     if let proofStore, !proofStore.hasPersistedProof(withId: proofId) {
       recordEventSigningKeyFailure(.discardFailed)
+      onExplainingAlert()
       return
     }
     selfProofCheckpointStore.save(

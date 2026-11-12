@@ -1355,13 +1355,12 @@ final class AppCoordinator: ObservableObject {
     let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
-    let selfProof = sensingCoordinator.stopSensing()
+    let stopResult = sensingCoordinator.stopSensingWithResult()
     let presentation = Self.stopPresentation(
       attemptedRecordID: proofID,
-      signedRecordID: selfProof?.proofId,
+      signedRecordID: stopResult.selfProof?.proofId,
       storedRecordID: proofID.flatMap { proofStore.proof(withId: $0)?.id },
-      hasExplainingAlert: sensingCoordinator.eventSigningKeyFailure != nil
-        || sensingCoordinator.ownerKeyOperationFailure != nil
+      hasExplainingAlert: stopResult.hasExplainingAlert
     )
     if presentation == .noRecordSaved {
       stopOutcome = SensingStopOutcome(sessionID: event.sessionID)

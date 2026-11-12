@@ -6,6 +6,221 @@ import XCTest
 
 @MainActor
 final class SensingStopFlowTests: XCTestCase {
+  func testSynchronousEarlierNoticeCannotHideCurrentMissingRecordOutcome() async throws {
+    let fixture = try makeNoticeBoundaryFixture()
+    let proofID = try await prepareNoticeRecording(fixture, withWindowEndpoints: false)
+    fixture.app.requestScanClose()
+    let sessionID = try XCTUnwrap(fixture.app.stopConfirmSnapshot?.event.sessionID)
+    fixture.proofStore.resetForUITesting()
+    fixture.runtime.onNextSubmit = { runtime in runtime.onEventSigningKeyFailure?(.unavailable) }
+    let submits = fixture.runtime.submits
+
+    fixture.app.confirmStopSensing()
+
+    XCTAssertEqual(fixture.runtime.submits, submits + 1, "The unrelated notice is published inside STOP")
+    XCTAssertEqual(fixture.sensing.phase, .idle)
+    XCTAssertNil(fixture.proofStore.proof(withId: proofID))
+    XCTAssertNil(fixture.selfProofStore.record(forProofId: proofID))
+    XCTAssertEqual(fixture.sensing.eventSigningKeyFailure, .unavailable)
+    let outcome = try XCTUnwrap(fixture.app.stopOutcome)
+    XCTAssertEqual(outcome.sessionID, sessionID)
+    XCTAssertTrue(fixture.app.scanPresented, "The actionable outcome must remain behind the unrelated alert")
+    XCTAssertNil(fixture.app.sealedSnapshot)
+    let stopped = try fixture.effects()
+    fixture.app.confirmStopSensing()
+    XCTAssertEqual(try fixture.effects(), stopped)
+    fixture.sensing.dismissEventSigningKeyFailure()
+    XCTAssertNil(fixture.sensing.eventSigningKeyFailure)
+    XCTAssertEqual(fixture.app.stopOutcome, outcome, "Acknowledging the root notice must expose this outcome")
+    XCTAssertTrue(fixture.app.scanPresented)
+    fixture.app.dismissStopOutcome()
+    XCTAssertFalse(fixture.app.scanPresented)
+    XCTAssertEqual(fixture.app.selectedHomeTab, .now)
+    let acknowledged = try fixture.effects()
+    fixture.app.confirmStopSensing()
+    fixture.app.dismissStopOutcome()
+    fixture.sensing.dismissEventSigningKeyFailure()
+    XCTAssertNil(fixture.app.stopOutcome)
+    XCTAssertNil(fixture.sensing.eventSigningKeyFailure)
+    XCTAssertEqual(try fixture.effects(), acknowledged, "Consumed acknowledgements must not retry or write")
+  }
+
+  func testSynchronousEarlierNoticeCannotHideCurrentSealedRecord() async throws {
+    let fixture = try makeNoticeBoundaryFixture()
+    let proofID = try await prepareNoticeRecording(fixture)
+    fixture.app.requestScanClose()
+    fixture.runtime.onNextSubmit = { runtime in runtime.onSigningKeyChange?("EARLIER-SESSION", .keyChanged) }
+    let submits = fixture.runtime.submits
+
+    fixture.app.confirmStopSensing()
+
+    XCTAssertEqual(fixture.runtime.submits, submits + 1)
+    XCTAssertEqual(fixture.sensing.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(fixture.sensing.eventSigningKeyNoticeEventCode, "EARLIER-SESSION")
+    XCTAssertEqual(fixture.app.sealedSnapshot?.recordID, proofID)
+    XCTAssertNotNil(fixture.proofStore.proof(withId: proofID))
+    XCTAssertNotNil(fixture.selfProofStore.record(forProofId: proofID))
+    XCTAssertTrue(fixture.app.scanPresented)
+    XCTAssertNil(fixture.app.stopOutcome)
+    let sealed = fixture.app.sealedSnapshot
+    let stopped = try fixture.effects()
+    fixture.app.confirmStopSensing()
+    XCTAssertEqual(try fixture.effects(), stopped)
+    fixture.sensing.dismissEventSigningKeyFailure()
+    XCTAssertNil(fixture.sensing.eventSigningKeyFailure)
+    XCTAssertEqual(fixture.runtime.acknowledgedEvents, ["EARLIER-SESSION"])
+    XCTAssertEqual(fixture.app.sealedSnapshot?.recordID, sealed?.recordID)
+    XCTAssertEqual(fixture.app.sealedSnapshot?.sealedAt, sealed?.sealedAt)
+    let acknowledged = try fixture.effects()
+    fixture.app.confirmStopSensing()
+    fixture.sensing.dismissEventSigningKeyFailure()
+    XCTAssertEqual(try fixture.effects(), acknowledged)
+    fixture.app.doneWithSealedRecord()
+    XCTAssertEqual(fixture.app.proofCollectedSnapshot?.recordID, proofID)
+  }
+
+  func testPreexistingSameEventNoticeDoesNotExplainLaterSessionAndConsumptionDoesNotLeak() async throws {
+    let fixture = try makeNoticeBoundaryFixture()
+    let proofID = try await prepareNoticeRecording(fixture, withWindowEndpoints: false)
+    // The notice belongs to an earlier session using the SAME event code.
+    // Event-code equality cannot establish finalization ownership.
+    fixture.runtime.onSigningKeyChange?(EventSession.demoSample.id, .keyChanged)
+    fixture.app.requestScanClose()
+    fixture.proofStore.resetForUITesting()
+
+    fixture.app.confirmStopSensing()
+
+    XCTAssertNil(fixture.proofStore.proof(withId: proofID))
+    let first = try XCTUnwrap(fixture.app.stopOutcome)
+    XCTAssertEqual(fixture.sensing.eventSigningKeyNoticeEventCode, EventSession.demoSample.id)
+    XCTAssertEqual(fixture.sensing.eventSigningKeyFailure, .changed)
+    fixture.sensing.dismissEventSigningKeyFailure()
+    XCTAssertEqual(fixture.app.stopOutcome, first)
+    fixture.app.dismissStopOutcome()
+    let nextProofID = try await prepareNoticeRecording(fixture)
+    fixture.app.confirmStopSensing() // No new confirmation: the old one is consumed.
+    XCTAssertEqual(fixture.sensing.currentProofID, nextProofID)
+    XCTAssertNil(fixture.app.stopOutcome)
+    fixture.app.requestScanClose()
+    XCTAssertNotEqual(fixture.app.stopConfirmSnapshot?.event.sessionID, first.sessionID)
+    fixture.app.confirmStopSensing()
+    XCTAssertEqual(fixture.app.sealedSnapshot?.recordID, nextProofID)
+    XCTAssertNil(fixture.sensing.eventSigningKeyFailure)
+    XCTAssertNil(fixture.app.stopOutcome)
+  }
+
+  func testCurrentPersistenceFailureRemainsSoleOutcomeBehindSynchronousEarlierNotice() async throws {
+    let fixture = try makeNoticeBoundaryFixture()
+    _ = try await prepareNoticeRecording(fixture)
+    fixture.app.requestScanClose()
+    fixture.proofStore.resetForUITesting()
+    fixture.runtime.onEventSigningKeyFailure?(.discardFailed)
+    fixture.runtime.onNextSubmit = { runtime in runtime.onSigningKeyChange?("EARLIER-SESSION", .keyChanged) }
+
+    fixture.app.confirmStopSensing()
+
+    XCTAssertEqual(fixture.sensing.eventSigningKeyFailure, .changed)
+    XCTAssertNil(fixture.app.stopOutcome)
+    XCTAssertNil(fixture.app.sealedSnapshot)
+    XCTAssertFalse(fixture.app.scanPresented)
+    let stopped = try fixture.effects()
+    fixture.app.confirmStopSensing()
+    XCTAssertEqual(try fixture.effects(), stopped)
+    fixture.sensing.dismissEventSigningKeyFailure()
+    XCTAssertEqual(fixture.sensing.eventSigningKeyFailure, .discardFailed,
+                   "The current finalization's existing explanation survives the earlier notice")
+    fixture.sensing.dismissEventSigningKeyFailure()
+    let acknowledged = try fixture.effects()
+    fixture.app.confirmStopSensing()
+    fixture.sensing.dismissEventSigningKeyFailure()
+    XCTAssertNil(fixture.sensing.eventSigningKeyFailure)
+    XCTAssertNil(fixture.app.stopOutcome)
+    XCTAssertEqual(try fixture.effects(), acknowledged)
+  }
+
+  func testCurrentOwnerFailureRemainsSoleOutcomeWithSynchronousEarlierNotice() async throws {
+    let fixture = try makeNoticeBoundaryFixture()
+    let proofID = try await prepareNoticeRecording(fixture)
+    fixture.crypto.selfProofError = OwnerKeyOperationError.storage(.readFailed(-42))
+    fixture.app.requestScanClose()
+    fixture.runtime.onNextSubmit = { runtime in runtime.onEventSigningKeyFailure?(.unavailable) }
+
+    fixture.app.confirmStopSensing()
+
+    XCTAssertEqual(fixture.sensing.ownerKeyOperationFailure, .unavailable)
+    XCTAssertEqual(fixture.sensing.eventSigningKeyFailure, .unavailable)
+    XCTAssertNotNil(fixture.proofStore.proof(withId: proofID))
+    XCTAssertNil(fixture.selfProofStore.record(forProofId: proofID))
+    XCTAssertNil(fixture.app.stopOutcome)
+    XCTAssertNil(fixture.app.sealedSnapshot)
+    XCTAssertFalse(fixture.app.scanPresented)
+    let stopped = try fixture.effects()
+    fixture.app.confirmStopSensing()
+    fixture.sensing.dismissEventSigningKeyFailure()
+    fixture.sensing.dismissEventSigningKeyFailure()
+    fixture.app.confirmStopSensing()
+    XCTAssertEqual(fixture.sensing.ownerKeyOperationFailure, .unavailable)
+    XCTAssertNil(fixture.sensing.eventSigningKeyFailure)
+    XCTAssertNil(fixture.app.stopOutcome)
+    XCTAssertEqual(try fixture.effects(), stopped)
+  }
+
+  func testCurrentFinalizationFailureStillExplainsStopWhenNoticeValueAlreadyMatches() async throws {
+    let fixture = try makeNoticeBoundaryFixture()
+    _ = try await prepareNoticeRecording(fixture)
+    fixture.app.requestScanClose()
+    fixture.proofStore.resetForUITesting()
+    fixture.runtime.onEventSigningKeyFailure?(.discardFailed)
+
+    fixture.app.confirmStopSensing()
+
+    XCTAssertEqual(fixture.sensing.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(fixture.app.stopOutcome, "An unchanged enum value does not mean no current failure occurred")
+    XCTAssertNil(fixture.app.sealedSnapshot)
+    XCTAssertFalse(fixture.app.scanPresented)
+    let stopped = try fixture.effects()
+    fixture.app.confirmStopSensing()
+    XCTAssertEqual(try fixture.effects(), stopped)
+  }
+
+  private func makeNoticeBoundaryFixture() throws -> StopNoticeBoundaryFixture {
+    let fixture = try StopNoticeBoundaryFixture()
+    addTeardownBlock { @MainActor in
+      fixture.runtime.onNextSubmit = nil
+      _ = fixture.sensing.reset() // Cancels any unfinished demo task, including on timeout.
+      fixture.defaults.removePersistentDomain(forName: fixture.defaultsName)
+      try FileManager.default.removeItem(at: fixture.directory)
+    }
+    return fixture
+  }
+
+  private func prepareNoticeRecording(
+    _ fixture: StopNoticeBoundaryFixture, withWindowEndpoints: Bool = true
+  ) async throws -> UUID {
+    let sample = EventSession.demoSample
+    let event = EventSession(id: sample.id, name: sample.name, venue: sample.venue)
+    let scenario = withWindowEndpoints ? DemoScenario.appReviewGolden.replacingEvent(event) : DemoScenario(
+      identifier: "stopNoticeBeforeWindow", event: event,
+      steps: DemoScenario.appReviewGolden.steps.filter { $0 != .advanceDemoWindow }
+    )
+    let settled = expectation(description: "Zero-delay STOP boundary setup settles")
+    if withWindowEndpoints {
+      fixture.sensing.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
+    } else {
+      fixture.sensing.runDemoScenario(scenario, stepDelayNanos: 0, stopWhenPhaseReaches: .recording)
+    }
+    let waiter = Task { @MainActor in
+      await fixture.sensing.waitForDemoScenarioPreviewToSettle()
+      if !Task.isCancelled { settled.fulfill() }
+    }
+    defer { waiter.cancel() }
+    await fulfillment(of: [settled], timeout: 2)
+    fixture.app.scanPresented = true
+    let proofID = try XCTUnwrap(fixture.sensing.currentProofID)
+    XCTAssertNotNil(fixture.proofStore.proof(withId: proofID))
+    return proofID
+  }
+
   func testStopPresentationRequiresADurableMatchingRecordAndGivesAlertsPriority() {
     let attemptedID = UUID()
     let otherID = UUID()
@@ -661,5 +876,108 @@ final class SensingStopFlowTests: XCTestCase {
     coordinator.sensingCoordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.sensingCoordinator.waitForDemoSequenceToFinish()
     XCTAssertNotNil(coordinator.sensingCoordinator.currentProofID)
+  }
+}
+
+/// Existing native protocol only: the tests run the real STOP boundary and
+/// publish an earlier notice synchronously from its existing submitPending call.
+@MainActor
+private final class StopNoticeRuntime: WindowReportSubmissionRuntimeProtocol {
+  var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)?
+  var onSigningKeyChange: ((String, EventSigningDiscardReason) -> Void)?
+  var onNextSubmit: ((StopNoticeRuntime) -> Void)?
+  private(set) var submits = 0
+  private(set) var captures = 0
+  private(set) var acknowledgedEvents: [String] = []
+
+  func captureAndQueueWindow(
+    id: UUID, eventCode: String, eventIdHex: String?, enin: Int, peerRpids: Set<String>,
+    reporterRpid: String?, participantCommitment: Data?, eventSigningPublicKey: Data?
+  ) { captures += 1 }
+
+  func submitPending() {
+    submits += 1
+    let callback = onNextSubmit
+    onNextSubmit = nil
+    callback?(self)
+  }
+
+  func acknowledgeSigningKeyChanges(forEventCode eventCode: String) throws { acknowledgedEvents.append(eventCode) }
+  func submissionState(forEventCode eventCode: String) -> ReportSubmissionState? { nil }
+  func excludedWindowCount(forEventCode eventCode: String) -> Int { 0 }
+}
+
+@MainActor
+private final class StopNoticeBoundaryFixture {
+  struct Effects: Equatable {
+    let files: [String: Data]
+    let cryptoCalls: [DeterministicSensingCryptography.Call]
+    let recordWrites: Int
+    let submits: Int
+    let captures: Int
+    let acknowledgements: [String]
+    let engineStops: Int
+  }
+  private final class WriteCounter { var count = 0 }
+  let directory: URL
+  let defaultsName: String
+  let defaults: UserDefaults
+  let runtime: StopNoticeRuntime
+  let crypto: DeterministicSensingCryptography
+  let engine: RecordingEventJoinControl
+  let proofStore: ProofStore
+  let selfProofStore: SelfProofStore
+  let sensing: SensingCoordinator
+  let app: AppCoordinator
+  private let writes: WriteCounter
+
+  init() throws {
+    let defaultsName = "stop-notice-\(UUID().uuidString)"
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(defaultsName, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
+    let counter = WriteCounter()
+    let runtime = StopNoticeRuntime()
+    let crypto = DeterministicSensingCryptography()
+    let engine = RecordingEventJoinControl()
+    let proofStore = ProofStore(fileURL: directory.appendingPathComponent("proofs.json"), writeData: { data, url in
+      counter.count += 1
+      try data.write(to: url, options: .atomic)
+    })
+    let selfProofStore = SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json"))
+    let sensing = SensingCoordinator(
+      windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("windows.json")),
+      selfProofStore: selfProofStore,
+      selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")),
+      bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("aggregate.json")),
+      unsentWindowLedgerRuntime: nil, sensingCryptography: crypto, reportSubmissionRuntime: runtime,
+      eventJoinControl: engine, participantRelayControl: RecordingParticipantRelayControl(), proofStore: proofStore
+    )
+    app = AppCoordinator(
+      proofStore: proofStore, sensingCoordinator: sensing,
+      reportSubmissionStore: ReportSubmissionStore(fileURL: directory.appendingPathComponent("reports.json")),
+      reportProofLinkStore: ReportProofLinkStore(fileURL: directory.appendingPathComponent("links.json")),
+      registryClient: nil, userDefaults: defaults
+    )
+    self.directory = directory
+    self.defaultsName = defaultsName
+    self.defaults = defaults
+    self.runtime = runtime
+    self.crypto = crypto
+    self.engine = engine
+    self.proofStore = proofStore
+    self.selfProofStore = selfProofStore
+    self.sensing = sensing
+    self.writes = counter
+  }
+
+  func effects() throws -> Effects {
+    let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+    return Effects(
+      files: try Dictionary(uniqueKeysWithValues: files.map { ($0.lastPathComponent, try Data(contentsOf: $0)) }),
+      cryptoCalls: crypto.calls, recordWrites: writes.count, submits: runtime.submits, captures: runtime.captures,
+      acknowledgements: runtime.acknowledgedEvents, engineStops: engine.stopAutomaticOperationCallCount
+    )
   }
 }
