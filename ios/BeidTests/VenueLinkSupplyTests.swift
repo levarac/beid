@@ -43,6 +43,34 @@ final class VenueLinkSupplyTests: XCTestCase {
 
   // MARK: - Fragment decode
 
+  func testLinkLeaseRefetchUsesSameURLAndPinnedHandoffWithoutInventingADigest() async throws {
+    let handoff = Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: Self.bundleUrl)
+    let artifact = VenuePublicArtifact(bundleBytes: fixture.artifact.bundleBytes, handoffBytes: handoff)
+    let imported = VenueImportedBundle(identity: fixture.identity, publicArtifact: artifact,
+                                       broadcastUntilUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
+    let renewal = FakeVenueExpiryScheduler()
+    let viewModel = VenueSignedServingViewModel(
+      verifier: ports, broadcasting: ports, acquisition: acquisition, store: store,
+      clock: { .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds) },
+      expiry: FakeVenueExpiryScheduler(), renewal: renewal)
+    ports.importReplies = [.immediate(.imported(imported)), .immediate(.rejected(.handoffMismatch))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    acquisition.replies = [.artifact(artifact), .artifact(artifact)]
+    await viewModel.supply(link: Self.link(base: Self.bundleUrl, handoff: handoff))
+    await viewModel.startBroadcasting()
+    await renewal.fireAndWait()
+    XCTAssertEqual(acquisition.requestedSources.count, 2)
+    XCTAssertEqual(acquisition.requestedSources.last?.bundle.absoluteString, Self.bundleUrl)
+    XCTAssertNil(acquisition.requestedSources.last?.handoff)
+    XCTAssertEqual(viewModel.refreshFailure, .rejected(.handoffMismatch))
+    let imports = ports.calls.compactMap { call -> Data? in
+      if case .importing(_, _, let bytes) = call { return bytes }
+      return nil
+    }
+    XCTAssertEqual(imports, [handoff, handoff])
+    XCTAssertNotNil(ports.installedPermit)
+  }
+
   func testLinkFragmentSuppliesTheHandoffBytesItCarriesAndFetchesTheBundleItNames() async throws {
     let handoffBytes = Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: Self.bundleUrl)
     let link = Self.link(base: Self.bundleUrl, handoff: handoffBytes)

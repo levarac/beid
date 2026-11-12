@@ -112,9 +112,32 @@ RF success needs separate receiver evidence or an explicit future SDK signal.
 
 The consumer owns request generations. A delayed result may install only if
 it belongs to the current request. Clock discontinuity, scene departure,
-expiry, replaced input or failed refresh requires clearing. A receipt or
+expiry or replaced input requires clearing. A failed early re-fetch retains
+the currently valid envelope and its existing exclusive deadline, with a visible
+failure. It grants no extension. At the deadline, clear before awaiting renewal.
+A receipt or
 permit restored from storage is never authority to resume. A timer handles
 an exclusive stop instant; the consumer does not recompute ENIN boundaries.
+
+For iOS 1.1.1 screen 14b, a valid load settles at `ready`, showing the
+SDK-checked event name, registrar from the verified definition and loaded pack
+digest. Only the explicit Start action installs the checked permit; starting
+within its interval requires no acquisition or registry request. Foregrounding
+or loading a replacement cannot supply that first confirmation.
+
+The imported complete schedule supplies the chain's end for UNTIL/REMAINING;
+the current permit still supplies the radio's shorter, exclusive stop instant.
+Re-fetch the exact recorded source 60 seconds before the chain ends and again
+at its end. A candidate must pass identity, signatures and current-lease checks
+before it replaces the loaded chain. A link's fragment remains pinned to its
+handoff digest: a republished bundle with another digest needs a matching
+handoff, and a fragment link cannot discover that new handoff by itself.
+The paired-URL acquisition path re-fetches both public artifacts. No path
+synthesizes a handoff or weakens digest agreement to make renewal succeed.
+
+Android is intentionally untouched in this iOS Figma seat. Its existing
+`VenueController` owns its platform lifecycle and renewal effects; attendee
+reception and the removed unsigned venue-device/key routes are out of scope.
 
 ## One fake, including failures
 

@@ -207,6 +207,34 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertTrue(app.staticTexts["venue.bluetooth"].label.uppercased().contains("ASKED TO BROADCAST"))
   }
 
+  func testVenueInvalidSignatureAnotherEventAndExpiredPackCannotStart() {
+    for (frame, reason) in [
+      ("14e-signature", "This pack's signature or event details did not check out."),
+      ("14e-event", "The pack is not for the event this link named."),
+      ("14e-expired", "The lease ended. Broadcasting stopped. Load a current pack."),
+      ("14e-empty", "No valid announcements remain. Broadcasting stopped. Load a current pack.")
+    ] {
+      openVenue(frame: frame)
+      XCTAssertTrue(app.staticTexts[reason].exists, frame)
+      XCTAssertFalse(app.buttons["Start broadcasting"].exists, frame)
+      XCTAssertFalse(app.buttons["Stop broadcasting"].exists, frame)
+      XCTAssertEqual(app.staticTexts["venue.bluetooth"].label.uppercased(), "STOPPED.")
+      app.terminate()
+    }
+  }
+
+  func testVenueRefreshFailureShowsValidEndOrExplicitStoppedState() {
+    openVenue(frame: "14b-refresh-failed")
+    XCTAssertTrue(app.staticTexts["PACK REFRESH FAILED"].exists)
+    XCTAssertTrue(app.staticTexts["venue.until"].exists)
+    XCTAssertTrue(app.staticTexts["The pack could not be refreshed. Broadcasting can continue only until the time shown."].exists)
+    app.terminate()
+    openVenue(frame: "14e-refresh-ended")
+    XCTAssertTrue(app.staticTexts["The lease ended and the pack could not be refreshed. Broadcasting stopped. Load a current pack."].exists)
+    XCTAssertFalse(app.buttons["Start broadcasting"].exists)
+    XCTAssertEqual(app.staticTexts["venue.bluetooth"].label.uppercased(), "STOPPED.")
+  }
+
   func testShot_14d_ScanQR() {
     openVenue(frame: "14d")
     app.buttons["Scan QR code"].tap()

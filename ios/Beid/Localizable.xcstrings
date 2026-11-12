@@ -2375,17 +2375,6 @@
         }
       }
     },
-    "venue.serving.servingUntil": {
-      "comment": "The value is a time of day. This instant is fixed by the permit and is exclusive - broadcasting stops at it, it does not continue through it. \"Broadcasting\" is the word the venue screen uses throughout; it is not a claim that the radio is confirmed on air, which the radio section states separately.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Broadcasting until %@."
-          }
-        }
-      }
-    },
     "Share support information": {},
     "Includes app version, recent states and failure reasons from this app session. Choose who to share it with.": {},
     "Off · Fix": {
@@ -2456,7 +2445,6 @@
     "Asked to broadcast. The system has not confirmed it is on air.": {},
     "beid does not have camera access, so it cannot scan. Turn it on in Settings, or paste the link instead.": {},
     "Broadcasting could not start.": {},
-    "Broadcasting until 18:00": {},
     "Camera access is on, but scanning is unavailable on this device — a Screen Time restriction can do this. Paste the link instead.": {},
     "Camera could not start": {},
     "Camera ready": {},
@@ -2477,7 +2465,6 @@
     "Link": {},
     "Link names no source": {},
     "Load a signed pack, check it, then broadcast it.": {},
-    "Load the signed pack the organizer gave you. Once it checks out, this phone broadcasts it.": {},
     "No camera access": {},
     "No pack yet. Paste the link the organizer gave you, or scan its QR code.": {},
     "Not a venue link": {},
@@ -2520,22 +2507,18 @@
     "The link carries the event's details itself. Use one the event's organizer gave you.": {},
     "The pack could not be fetched.": {},
     "The pack is not for the event this link named.": {},
-    "The part of this pack covering right now did not check out.": {},
     "The radio refused this pack and nothing is going out.": {},
     "This device cannot scan QR codes. Paste the link instead.": {},
     "This device's clock is unavailable, so broadcasting cannot be scheduled.": {},
     "This event has been updated. Ask the organizer for a current link.": {},
     "This event isn't in the event registration list.": {},
     "This event needs an entry code. Broadcasting those is not supported yet.": {},
-    "This event's details were rejected.": {},
     "This link names an event but does not say where to get its pack.": {},
     "This link points somewhere this app cannot fetch from.": {},
     "This pack came from a different event record than the one this app is set up for.": {},
     "This pack could not be read.": {},
     "This pack could not be saved. It stays on this device only until the app closes.": {},
-    "This pack covers no part of right now.": {},
     "This pack is for a network this app does not support.": {},
-    "This pack's current period has ended. Refresh it.": {},
     "Tools for the venue side. Attendees never need these.": {},
     "Until": {},
     "Use this link": {},
@@ -3938,7 +3921,6 @@
     "Events find you": {},
     "Get Started": {},
     "Join Event": {},
-    "Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.": {},
     "No pack yet. Paste the link the organiser gave you, or scan its QR code.": {},
     "Not submittable (count-only record)": {
       "comment": "Sub-state row under \"Participation record\": windows recorded with only a device count and no reporter RPID can never be submitted to a report server. This row makes that exclusion explicit instead of silently dropping those windows (levarac/dispatch#3).",
@@ -4174,6 +4156,127 @@
           "stringUnit": {
             "state": "translated",
             "value": "Relayed · hop %lld"
+          }
+        }
+      }
+    },
+    "The pack could not be refreshed. Load a current pack before restarting.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The pack could not be refreshed. Load a current pack before restarting."
+          }
+        }
+      }
+    },
+    "Refreshing the pack. The current valid announcement stays in use until its end.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refreshing the pack. The current valid announcement stays in use until its end."
+          }
+        }
+      }
+    },
+    "The refreshed pack is for another event. The loaded pack was kept.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The refreshed pack is for another event. The loaded pack was kept."
+          }
+        }
+      }
+    },
+    "The refreshed pack has no valid announcement for right now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The refreshed pack has no valid announcement for right now."
+          }
+        }
+      }
+    },
+    "Lease ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lease ended"
+          }
+        }
+      }
+    },
+    "No valid announcements": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No valid announcements"
+          }
+        }
+      }
+    },
+    "Announcement rejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Announcement rejected"
+          }
+        }
+      }
+    },
+    "This pack's signature or event details did not check out.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This pack's signature or event details did not check out."
+          }
+        }
+      }
+    },
+    "The lease ended. Broadcasting stopped. Load a current pack.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The lease ended. Broadcasting stopped. Load a current pack."
+          }
+        }
+      }
+    },
+    "No valid announcements remain. Broadcasting stopped. Load a current pack.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No valid announcements remain. Broadcasting stopped. Load a current pack."
+          }
+        }
+      }
+    },
+    "This announcement's signature or event details did not check out. Broadcasting stopped.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This announcement's signature or event details did not check out. Broadcasting stopped."
           }
         }
       }

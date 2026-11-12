@@ -13,13 +13,14 @@ enum VenueRefreshSource: Codable, Equatable {
 /// The two public byte sequences a venue device was last given, plus where
 /// they came from, so a restart can offer the same source again.
 ///
-/// This record holds PUBLIC SOURCE BYTES ONLY, and that is a rule rather than
+/// This record holds PUBLIC SOURCE INPUTS ONLY, and that is a rule rather than
 /// an omission. There is deliberately no field for an import receipt, a
 /// permit, a display name, a digest verdict or a deadline: restoring any of
 /// those would let a device resume serving on last run's verification, and a
 /// stored verdict cannot notice that the lease it was granted under has since
 /// expired. Everything in this file must be re-imported and re-evaluated
-/// before it can authorize anything.
+/// before it can authorize anything. Optional refresh URLs and a link's pinned
+/// handoff bytes are acquisition inputs, never verification authority.
 struct VenuePublicArtifactRecord: Codable, Equatable {
   let bundleBytes: Data
   let handoffBytes: Data

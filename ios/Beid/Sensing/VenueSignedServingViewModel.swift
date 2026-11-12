@@ -117,6 +117,7 @@ enum VenueRefreshFailure: Equatable {
   case acquisition(VenueAcquisitionFailure)
   case rejected(VenueImportFailure)
   case anotherEvent
+  case blocked(VenueServingBlock)
 }
 
 /// Drives the signed venue-serving screen (beid#432).
@@ -300,9 +301,8 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// the serving state, because the screen is the only thing telling the
   /// operator whether this device is actually serving.
   ///
-  /// beid#531 was decided to ship without an operator confirmation gate, on
-  /// the basis that the operator can see what is being broadcast once
-  /// advertising starts. That makes this display a safety control. Leaving
+  /// The operator checks the event identity before pressing Start (14b).
+  /// The status display remains a safety control after that action. Leaving
   /// `status` on `.serving` after the radio died would make the control lie in
   /// the direction hardest to notice: the operator believes they are serving,
   /// attendees cannot join, and nothing on screen disagrees.
@@ -597,6 +597,21 @@ final class VenueSignedServingViewModel: ObservableObject {
     await runOperation(owner: owner) { [self] operation in
       await resumeSelected(owner: owner, operation: operation)
     }
+    // An operator may republish the definition before the old chain ends.
+    // Recover once from that stale selection rather than waiting out its old
+    // deadline. Acquisition failures never turn into an immediate retry loop.
+    guard workflow?.id == owner, eligible, wantsBroadcasting, activeOperation == nil,
+      workflow?.receipt?.broadcastUntilUnixSeconds != nil,
+      case .blocked(let rejection) = status else { return }
+    switch rejection.reason {
+    case .staleDefinition, .expired, .noCurrentEnvelope:
+      guard await refetch(owner: owner), workflow?.id == owner, eligible, activeOperation == nil else { return }
+      invalidate()
+      await runOperation(owner: owner) { [self] operation in
+        await resumeSelected(owner: owner, operation: operation)
+      }
+    case .clockUnavailable, .notStarted, .envelopeRejected, .registryUnavailable: break
+    }
   }
 
   /// A freshly checked permit can start offline. If time moved outside that
@@ -838,8 +853,9 @@ final class VenueSignedServingViewModel: ObservableObject {
     if let end, case .available(let now) = clock(), now >= end, let owner {
       // The old bytes are already stopped, including while a network read waits.
       cancelRenewal()
-      await refetch(owner: owner)
+      let refreshed = await refetch(owner: owner)
       guard workflow?.id == owner, eligible else { return }
+      guard refreshed else { return }
     }
     await refresh()
   }
@@ -860,13 +876,14 @@ final class VenueSignedServingViewModel: ObservableObject {
     scheduledRenewalEnd = end
     // Give the bounded network fetch a minute before the last loaded lease ends.
     renewal.schedule(stopAtUnixSeconds: max(now, end - 60), now: now) { [weak self] in
-      await self?.refetch(owner: owner)
+      _ = await self?.refetch(owner: owner)
     }
   }
 
-  private func refetch(owner: UUID) async {
+  private func refetch(owner: UUID) async -> Bool {
     guard eligible, workflow?.id == owner, let source = workflow?.refreshSource,
-      let expected = workflow?.receipt?.identity.eventIdHex else { return }
+      let expected = workflow?.receipt?.identity.eventIdHex else { return false }
+    renewalTask?.cancel()
     let request = UUID()
     renewalID = request
     isRefreshing = true
@@ -895,6 +912,22 @@ final class VenueSignedServingViewModel: ObservableObject {
           refreshFailure = .anotherEvent
           return
         }
+        // A later end alone does not establish continuity. The new pack must
+        // have a freshly verified envelope covering now before replacing the
+        // loaded chain; otherwise retain the still-valid current pack.
+        let decision = await verifier.evaluate(receipt, clock: clock())
+        guard acceptsRenewal(owner: owner, request: request) else { return }
+        switch decision {
+        case .blocked(let rejection):
+          refreshFailure = .blocked(rejection.reason)
+          return
+        case .permitted(let permit):
+          guard case .available(let now) = clock(),
+            now >= permit.startAtUnixSeconds, now < permit.stopAtUnixSeconds else {
+            refreshFailure = .blocked(.expired)
+            return
+          }
+        }
         workflow?.artifact = artifact
         workflow?.receipt = receipt
         refreshFailure = nil
@@ -906,9 +939,10 @@ final class VenueSignedServingViewModel: ObservableObject {
     }
     renewalTask = task
     await task.value
-    guard renewalID == request else { return }
+    guard renewalID == request else { return false }
     renewalTask = nil
     isRefreshing = false
+    return refreshFailure == nil
   }
 
   private func acceptsRenewal(owner: UUID, request: UUID) -> Bool {

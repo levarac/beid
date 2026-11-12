@@ -276,9 +276,15 @@ struct VenueSignedServingView: View {
         }
         if let eventId = effectiveEventId { keyValueRow("Event ID") { eventIdCopyControl(eventId) } }
         keyValueRow("Registrar") {
-          Text(verbatim: fixtureCode != nil ? "0x1111…1111" : (viewModel.registrarHex ?? "NOT YET AVAILABLE"))
-            .beidTextStyle(DS.Font.Library.labelMono11Time)
-            .accessibilityIdentifier("venue.registrar")
+          Group {
+            if let registrar = effectiveRegistrar {
+              Text(verbatim: registrar)
+            } else {
+              Text("Not yet available")
+            }
+          }
+          .beidTextStyle(DS.Font.Library.labelMono11Time)
+          .accessibilityIdentifier("venue.registrar")
         }
         if let digest = effectiveDigest {
           keyValueRow("Pack digest") {
@@ -332,13 +338,30 @@ struct VenueSignedServingView: View {
         }
         statusMessage("Checked. Deciding whether it can broadcast now.")
       case .blocked(let rejection):
-        statusMessage(message(for: rejection.reason))
+        outcome(title: rejectionTitle(rejection.reason), message: message(for: rejection.reason))
+          .padding(.vertical, DS.Space.s)
       case .importRejected(let failure):
-        statusMessage(message(for: failure))
+        outcome(title: "Pack rejected", message: message(for: failure))
+          .padding(.vertical, DS.Space.s)
       case .acquisitionFailed(let failure):
-        statusMessage(message(for: failure))
+        outcome(title: "Pack unavailable", message: message(for: failure))
+          .padding(.vertical, DS.Space.s)
       case .radioRefused(let failure):
         statusMessage(message(for: failure))
+      }
+      if !isReady && !isBroadcasting, let identity = viewModel.loadedIdentity {
+        keyValueRow("Pack digest") {
+          Text(verbatim: shortEventId(identity.bundleDigestHex))
+            .beidTextStyle(DS.Font.Library.labelMono11Time)
+            .accessibilityIdentifier("venue.digest")
+        }
+        if let end = viewModel.broadcastUntilUnixSeconds {
+          keyValueRow("Until") {
+            Text(verbatim: Self.instantText(end))
+              .beidTextStyle(DS.Font.Library.labelMono11Time)
+              .accessibilityIdentifier("venue.until")
+          }
+        }
       }
       keyValueRow("Battery") {
         if let batteryPercent {
@@ -366,14 +389,17 @@ struct VenueSignedServingView: View {
       if let failure = effectiveRadio.failure {
         statusMessage(message(for: failure))
       }
-      if viewModel.refreshFailure != nil {
+      if let failure = effectiveRefreshFailure {
         outcome(
           title: "Pack refresh failed",
           message: isBroadcasting
             ? "The pack could not be refreshed. Broadcasting can continue only until the time shown."
-            : "The lease ended and the pack could not be refreshed. Broadcasting stopped. Load a current pack."
+            : refreshStoppedMessage
         )
         .padding(.top, DS.Space.m)
+        statusMessage(refreshFailureMessage(failure))
+      } else if viewModel.isRefreshing {
+        statusMessage("Refreshing the pack. The current valid announcement stays in use until its end.")
       }
       if viewModel.storedSourceDescription != nil, fixtureCode == nil, !isReady {
         textAction(isBroadcasting ? "Refresh pack" : "Load saved pack", identifier: "Refresh pack") {
@@ -526,7 +552,7 @@ struct VenueSignedServingView: View {
     case .imported, .evaluating: return "Checking permission"
     case .ready: return "Ready to broadcast"
     case .serving: return "Asked to broadcast"
-    case .blocked: return "Cannot broadcast"
+    case .blocked(let rejection): return rejectionTitle(rejection.reason)
     case .importRejected: return "Pack rejected"
     case .acquisitionFailed: return "Pack unavailable"
     case .radioRefused: return "Radio stopped"
@@ -558,13 +584,20 @@ struct VenueSignedServingView: View {
       let index = arguments.firstIndex(of: "-beid-venue-frame"),
       arguments.indices.contains(index + 1) else { return nil }
     let code = arguments[index + 1]
-    return ["14b", "14b-ready", "14d", "14e", "14e2", "14e3", "14f", "14f2", "14f3", "14g"].contains(code) ? code : nil
+    return ["14b", "14b-ready", "14b-refresh-failed", "14d", "14e", "14e2", "14e3", "14e-signature", "14e-event", "14e-expired", "14e-empty", "14e-refresh-ended", "14f", "14f2", "14f3", "14g"].contains(code) ? code : nil
     #else
     return nil
     #endif
   }
 
   private var effectiveStatus: VenueServingStatus {
+    switch fixtureCode {
+    case "14e-signature": return .importRejected(.definitionRejected)
+    case "14e-event": return .acquisitionFailed(.eventIdentityMismatch)
+    case "14e-expired", "14e-refresh-ended": return .blocked(VenueServingRejection(reason: .expired)!)
+    case "14e-empty": return .blocked(VenueServingRejection(reason: .noCurrentEnvelope)!)
+    default: break
+    }
     if fixtureCode == "14b-ready", !fixtureStarted { return .ready(displayName: "ETH Tokyo 2026", stopAtUnixSeconds: 0) }
     if fixtureCode != nil { return .serving(displayName: "ETH Tokyo 2026", stopAtUnixSeconds: 0) }
     return viewModel.status
@@ -584,12 +617,53 @@ struct VenueSignedServingView: View {
     fixtureCode != nil ? 0 : viewModel.relayHopCount
   }
 
+  private var effectiveRegistrar: String? {
+    fixtureCode != nil ? "0x1111…1111" : viewModel.registrarHex
+  }
+
+  private var effectiveRefreshFailure: VenueRefreshFailure? {
+    if ["14b-refresh-failed", "14e-refresh-ended"].contains(fixtureCode ?? "") { return .acquisition(.transportFailure) }
+    return viewModel.refreshFailure
+  }
+
+  private var refreshStoppedMessage: LocalizedStringKey {
+    if case .blocked(let rejection) = effectiveStatus,
+      rejection.reason == .expired || rejection.reason == .noCurrentEnvelope {
+      return "The lease ended and the pack could not be refreshed. Broadcasting stopped. Load a current pack."
+    }
+    return "The pack could not be refreshed. Load a current pack before restarting."
+  }
+
+  private func refreshFailureMessage(_ failure: VenueRefreshFailure) -> LocalizedStringKey {
+    switch failure {
+    case .acquisition(let reason): return message(for: reason)
+    case .rejected(let reason): return message(for: reason)
+    case .anotherEvent: return "The refreshed pack is for another event. The loaded pack was kept."
+    case .blocked: return "The refreshed pack has no valid announcement for right now."
+    }
+  }
+
+  private func rejectionTitle(_ reason: VenueServingBlock) -> LocalizedStringKey {
+    switch reason {
+    case .expired: return "Lease ended"
+    case .noCurrentEnvelope: return "No valid announcements"
+    case .envelopeRejected: return "Announcement rejected"
+    case .clockUnavailable, .notStarted, .staleDefinition, .registryUnavailable: return "Cannot broadcast"
+    }
+  }
+
   static func batteryPercent(for level: Float) -> Int? {
     guard level.isFinite, (0...1).contains(level) else { return nil }
     return Int((level * 100).rounded())
   }
 
   private var effectiveRadio: VenueRadioUpdate {
+    if fixtureCode != nil {
+      switch effectiveStatus {
+      case .blocked, .importRejected, .acquisitionFailed: return VenueRadioUpdate(state: .stopped)!
+      default: break
+      }
+    }
     if fixtureCode == "14b-ready", !fixtureStarted { return VenueRadioUpdate(state: .stopped)! }
     if fixtureCode != nil { return VenueRadioUpdate(state: .advertisingRequested)! }
     return viewModel.radio
@@ -662,7 +736,7 @@ struct VenueSignedServingView: View {
     case .anchoredRecordMissing:
       return "This event isn't in the event registration list."
     case .definitionRejected:
-      return "This event's details were rejected."
+      return "This pack's signature or event details did not check out."
     case .gatedEventUnsupported:
       return "This event needs an entry code. Broadcasting those is not supported yet."
     }
@@ -675,11 +749,11 @@ struct VenueSignedServingView: View {
     case .notStarted:
       return "This event has not started yet."
     case .expired:
-      return "This pack's current period has ended. Refresh it."
+      return "The lease ended. Broadcasting stopped. Load a current pack."
     case .noCurrentEnvelope:
-      return "This pack covers no part of right now."
+      return "No valid announcements remain. Broadcasting stopped. Load a current pack."
     case .envelopeRejected:
-      return "The part of this pack covering right now did not check out."
+      return "This announcement's signature or event details did not check out. Broadcasting stopped."
     case .staleDefinition:
       return "This event has been updated. Ask the organizer for a current link."
     case .registryUnavailable:
