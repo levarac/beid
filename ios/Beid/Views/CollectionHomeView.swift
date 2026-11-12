@@ -145,6 +145,10 @@ private struct NowHomeView: View {
     .onChange(of: sensing.isAdvertising) { _, _ in refreshStandby() }
     .onChange(of: sensing.phase) { _, _ in refreshStandby() }
     .onChange(of: sensing.nearbyEventCandidates.candidateCount) { _, _ in refreshStandby() }
+    // Joinability can change with the count unchanged (registry resolution
+    // completes, a definition's validity expires), and the code-entry timer
+    // follows joinability.
+    .onChange(of: nearby.cards.compactMap(\.joinActionEventCodeHashHex)) { _, _ in refreshStandby() }
     .onChange(of: sensing.homeDemoEventAvailable) { _, _ in refreshStandby() }
     #if DEBUG
     .onChange(of: coordinator.homeStandbyFixtureHasCandidate) { _, _ in refreshStandby() }

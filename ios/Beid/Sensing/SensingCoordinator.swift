@@ -1005,6 +1005,23 @@ final class SensingCoordinator: ObservableObject {
   /// Epoch-milliseconds source, injected so tests drive expiry deterministically.
   private let nearbyDiscoveryClock: () -> Int64
 
+  /// False while a join or event session is in progress. A joined code
+  /// outlives STOP (`reset` and `stopSensing` do not clear it), so "something
+  /// is joined" cannot gate selecting an event; an idle coordinator can always
+  /// select one, and selecting replaces the previous code.
+  var canSelectEventToJoin: Bool {
+    if case .idle = phase { return true }
+    return false
+  }
+
+  /// The live session's event code for display, excluding a code retained after STOP.
+  var currentEventCode: String? {
+    canSelectEventToJoin ? nil : joinedEventCode
+  }
+
+  /// The clock nearby-join eligibility is judged against, in epoch seconds.
+  var nearbyDiscoveryNowEpochSeconds: Int64 { nearbyDiscoveryClock() / 1_000 }
+
   /// At most one in-flight expiry wake-up, rescheduled on every publish.
   private var nearbyDiscoveryExpiryTask: Task<Void, Never>?
   /// Retains Home's request while a prior scan awaits its stopped callback.
@@ -3269,6 +3286,21 @@ final class SensingCoordinator: ObservableObject {
     resolveNearbyCandidates(update.snapshot)
   }
 
+  /// What a nearby card's tap does (beid#464). Order is load-bearing and
+  /// matches Android's `EventJoinViewModel.joinNearbyEvent`: refuse a card
+  /// shared did not make joinable, then re-read the clock, then join. Not
+  /// `private`, so `BeidTests` can run the tap path directly.
+  func joinNearbyEvent(card: NearbyEventCard, clockPreflight: ClockPreflightController?) {
+    guard let eventCodeHashHex = card.joinActionEventCodeHashHex else { return }
+    // Re-read the clock preflight at the moment of joining, as Android does:
+    // shared re-measures an expired cache and catches a clock changed since
+    // the scan opened.
+    if let clockPreflight {
+      Task { await clockPreflight.check() }
+    }
+    joinNearbyEvent(eventCodeHashHex: eventCodeHashHex)
+  }
+
   /// One-tap nearby join (beid#141). The action carries only the stable B005
   /// hash. After the permission wait resumes, this method re-reads the
   /// coordinator's current snapshot and asks the shared issuer for a fresh
@@ -4033,7 +4065,7 @@ final class SensingCoordinator: ObservableObject {
   // conformance sub-slice C, `docs/specs/barnard-binding-conformance.md`
   // §2.3/§2.4)
   //
-  // The interstitial (`EventBindingSheetView`) drives these; this type owns
+  // The interstitial (the removed binding sheet) drives these; this type owns
   // the message/signing/persistence side so the view only ever handles the
   // wallet connector's `connect()`/`requestPersonalSign(messageHex:)` calls.
 

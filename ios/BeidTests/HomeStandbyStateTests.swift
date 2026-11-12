@@ -8,44 +8,79 @@ import XCTest
 final class HomeStandbyStateTests: XCTestCase {
   func testFallbackUsesTheThirtySecondBoundary() {
     var state = HomeStandbyState()
-    state.update(isEnabled: true, hasCandidates: false, now: 100)
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 100)
     XCTAssertFalse(state.offersCodeEntry(at: 129))
     XCTAssertTrue(state.offersCodeEntry(at: 130))
   }
 
   func testCandidateArrivalCancelsAndRemovalRestartsTheInterval() {
     var state = HomeStandbyState()
-    state.update(isEnabled: true, hasCandidates: false, now: 100)
-    state.update(isEnabled: true, hasCandidates: true, now: 129)
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 100)
+    state.update(isEnabled: true, hasJoinableCandidates: true, now: 129)
     XCTAssertFalse(state.offersCodeEntry(at: 200))
-    state.update(isEnabled: true, hasCandidates: false, now: 300)
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 300)
     XCTAssertFalse(state.offersCodeEntry(at: 329))
     XCTAssertTrue(state.offersCodeEntry(at: 330))
   }
 
   func testLeavingHomeOrPausingDiscoveryDiscardsTheInterval() {
     var state = HomeStandbyState()
-    state.update(isEnabled: true, hasCandidates: false, now: 100)
-    state.update(isEnabled: false, hasCandidates: false, now: 129)
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 100)
+    state.update(isEnabled: false, hasJoinableCandidates: false, now: 129)
     XCTAssertFalse(state.offersCodeEntry(at: 500))
-    state.update(isEnabled: true, hasCandidates: false, now: 600)
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 600)
     XCTAssertFalse(state.offersCodeEntry(at: 629))
     XCTAssertTrue(state.offersCodeEntry(at: 630))
   }
 
   func testRepeatedUpdatesDoNotRestartAnUninterruptedInterval() {
     var state = HomeStandbyState()
-    state.update(isEnabled: true, hasCandidates: false, now: 100)
-    state.update(isEnabled: true, hasCandidates: false, now: 115)
-    state.update(isEnabled: true, hasCandidates: false, now: 129)
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 100)
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 115)
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 129)
     XCTAssertTrue(state.offersCodeEntry(at: 130))
     XCTAssertEqual(state.elapsed(at: 130), 30)
+  }
+
+  func testOnlyUnjoinableCandidatesStillOfferCodeEntryAtThirtySeconds() {
+    var state = HomeStandbyState()
+    // A nearby event is visible but its JOIN control is disabled, so the
+    // caller reports no joinable candidate and the timer keeps running.
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 100)
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 115)
+    XCTAssertFalse(state.offersCodeEntry(at: 129))
+    XCTAssertTrue(state.offersCodeEntry(at: 130))
+  }
+
+  func testNoCandidatesOffersCodeEntryAtThirtySeconds() {
+    var state = HomeStandbyState()
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 0)
+    XCTAssertFalse(state.offersCodeEntry(at: 29))
+    XCTAssertTrue(state.offersCodeEntry(at: 30))
+  }
+
+  func testJoinableCandidateKeepsCodeEntryHidden() {
+    var state = HomeStandbyState()
+    state.update(isEnabled: true, hasJoinableCandidates: true, now: 0)
+    XCTAssertFalse(state.offersCodeEntry(at: 30))
+    XCTAssertFalse(state.offersCodeEntry(at: 300))
+  }
+
+  func testUnjoinableCandidateBecomingJoinableResetsTheTimer() {
+    var state = HomeStandbyState()
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 100)
+    state.update(isEnabled: true, hasJoinableCandidates: true, now: 125)
+    XCTAssertFalse(state.offersCodeEntry(at: 200))
+    XCTAssertNil(state.listeningStartedAt)
+    state.update(isEnabled: true, hasJoinableCandidates: false, now: 210)
+    XCTAssertFalse(state.offersCodeEntry(at: 239))
+    XCTAssertTrue(state.offersCodeEntry(at: 240))
   }
 
   func testNoFallbackBeforeDiscoveryBeginsOrWhileCandidatesExist() {
     var state = HomeStandbyState()
     XCTAssertFalse(state.offersCodeEntry(at: 300))
-    state.update(isEnabled: true, hasCandidates: true, now: 100)
+    state.update(isEnabled: true, hasJoinableCandidates: true, now: 100)
     XCTAssertFalse(state.offersCodeEntry(at: 300))
     XCTAssertEqual(state.elapsed(at: 300), 0)
   }
@@ -198,6 +233,16 @@ final class HomeStandbyLifecycleTests: XCTestCase {
     _ = sensing.reset()
   }
 
+  func testSensingScreenShowsListeningStateOnlyAfterJoining() {
+    let sensing = makeIsolatedSensingCoordinator(for: self)
+    sensing.useDemoEventMode = true
+    XCTAssertFalse(SensingView(sensing: sensing).isListeningAfterJoin, "before JOIN the screen still asks for it")
+    sensing.startSensing()
+    XCTAssertEqual(sensing.phase, .sensing)
+    XCTAssertTrue(SensingView(sensing: sensing).isListeningAfterJoin)
+    _ = sensing.reset()
+  }
+
   private func deliverScanState(
     _ isScanning: Bool,
     through engine: RecordingEventJoinControl,
@@ -216,5 +261,32 @@ final class HomeStandbyLifecycleTests: XCTestCase {
     let app = AppCoordinator(sensingCoordinator: sensing, registryClient: nil, userDefaults: defaults)
     app.screen = .home
     return app
+  }
+}
+
+@MainActor
+final class ActiveSessionControlsTests: XCTestCase {
+  private let event = EventSession(id: "TEST-CONTROLS", name: "Test Controls Event", venue: nil)
+
+  func testBluetoothSettingsResetsOnlyWhenNoEventSessionIsActive() {
+    typealias App = AppCoordinator
+    XCTAssertTrue(App.shouldResetSensing(beforeOpeningBluetoothSettingsIn: .idle, joinedEventCode: nil))
+    XCTAssertTrue(App.shouldResetSensing(beforeOpeningBluetoothSettingsIn: .sensing, joinedEventCode: nil))
+    XCTAssertFalse(App.shouldResetSensing(beforeOpeningBluetoothSettingsIn: .sensing, joinedEventCode: "code"))
+    XCTAssertFalse(App.shouldResetSensing(beforeOpeningBluetoothSettingsIn: .eventFound(event), joinedEventCode: "code"))
+    XCTAssertFalse(App.shouldResetSensing(
+      beforeOpeningBluetoothSettingsIn: .recording(event: event, peersVerified: 1), joinedEventCode: "code"))
+    XCTAssertFalse(App.shouldResetSensing(
+      beforeOpeningBluetoothSettingsIn: .signalLost(event: event, peersVerified: 1), joinedEventCode: "code"))
+  }
+
+  func testStopControlShowsWhenJoinedEvenBeforeTheFirstPhoneIsHeard() {
+    XCTAssertFalse(ScanFlowView.showsStopControl(phase: .idle, joinedEventCode: nil))
+    XCTAssertFalse(ScanFlowView.showsStopControl(phase: .idle, joinedEventCode: "code"))
+    XCTAssertFalse(ScanFlowView.showsStopControl(phase: .sensing, joinedEventCode: nil))
+    XCTAssertTrue(ScanFlowView.showsStopControl(phase: .sensing, joinedEventCode: "code"))
+    XCTAssertTrue(ScanFlowView.showsStopControl(phase: .eventFound(event), joinedEventCode: nil))
+    XCTAssertTrue(ScanFlowView.showsStopControl(phase: .recording(event: event, peersVerified: 1), joinedEventCode: nil))
+    XCTAssertTrue(ScanFlowView.showsStopControl(phase: .signalLost(event: event, peersVerified: 1), joinedEventCode: nil))
   }
 }

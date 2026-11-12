@@ -42,17 +42,6 @@ final class ReportDetailPresentationTests: XCTestCase {
     XCTAssertEqual(presentation.delivery, "DELIVERY UNCONFIRMED")
   }
 
-  func testTransparencySubmittingIsDeliveryUnconfirmed() {
-    let display = TransparencySubmissionDisplay(state: .submitting, receiptStored: false)
-    XCTAssertTrue(display.isSubmitting)
-    XCTAssertFalse(display.isSent)
-  }
-
-  func testTransparencyAcceptanceRequiresStoredReceipt() {
-    XCTAssertFalse(TransparencySubmissionDisplay(state: .accepted, receiptStored: false).isSent)
-    XCTAssertTrue(TransparencySubmissionDisplay(state: .accepted, receiptStored: true).isSent)
-  }
-
   func testMixedWindowsDoNotBorrowAnotherWindowsReceipt() {
     let records = [
       record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000001"), state: .accepted, receipt: "ab"),

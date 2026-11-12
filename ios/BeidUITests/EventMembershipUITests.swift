@@ -3,9 +3,8 @@
 
 import XCTest
 
-/// Regression coverage for Account's Join event re-render (gh#101).
-/// AppCoordinator does not republish the joined code, so the row must observe
-/// SensingCoordinator and disable while the same Account sheet stays open.
+/// Coverage for Account's Join event row (gh#101). Joining from the Account
+/// sheet starts sensing and presents the sensing screen (v1.1).
 final class EventMembershipUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -13,7 +12,7 @@ final class EventMembershipUITests: XCTestCase {
     continueAfterFailure = false
   }
 
-  func testJoinEventRowDisablesImmediatelyAfterJoining() {
+  func testAccountSheetJoinDismissesCodeEntryAndShowsSensing() {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
@@ -46,20 +45,15 @@ final class EventMembershipUITests: XCTestCase {
     // collision with the Account-sheet row while both could be in the tree.
     codeField.typeText("ETHTOKYO2026\n")
 
-    // Wait for the asynchronous join to dismiss its nested sheet, leaving
-    // this same Account sheet open. Only EventMembershipSections observes
-    // the joined code directly, so disabling here protects its re-render.
+    // A successful join from the Account sheet closes the code sheet and the
+    // Account sheet, selects the Now tab and presents the sensing screen,
+    // which carries STOP SENSING once an event is joined.
     let codeSheetGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: codeField)
     wait(for: [codeSheetGone], timeout: 15)
-    let joinDisabled = expectation(for: NSPredicate(format: "isEnabled == false"), evaluatedWith: joinEventRow)
-    wait(for: [joinDisabled], timeout: 5)
-    XCTAssertFalse(app.buttons["Leave Event"].exists)
-    XCTAssertFalse(
-      joinEventRow.isEnabled,
-      "Join event should disable immediately when the current session joins"
+    XCTAssertTrue(
+      app.buttons["scan.stop-sensing"].waitForExistence(timeout: 10),
+      "joining from the Account sheet must start sensing and show the sensing screen"
     )
-    app.buttons["Done"].tap()
-    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
   }
 
   /// An offscreen List row may already `exist`, so require its full frame to

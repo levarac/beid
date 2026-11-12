@@ -70,7 +70,7 @@ struct EventDetailView: View {
           Button("Rejoin", systemImage: "arrow.clockwise") {
             Task { await coordinator.rejoinPastEventResolvingCanonicalId(code: eventCode) }
           }
-          .disabled(sensing.joinedEventCode != nil)
+          .disabled(!sensing.canSelectEventToJoin)
           .accessibilityLabel(String(
             localized: "eventDetail.rejoin.accessibilityLabel",
             defaultValue: "Rejoin \(representative.eventName)",
