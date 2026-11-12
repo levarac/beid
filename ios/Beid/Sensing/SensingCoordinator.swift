@@ -717,6 +717,10 @@ final class SensingCoordinator: ObservableObject {
 #endif
   }
 
+  static func defaultJoinRefusalLog(_ message: String) {
+    log.error("\(message, privacy: .public)")
+  }
+
   /// The Barnard participation operations this coordinator drives (beid#410).
   ///
   /// Deliberately `any EventJoinControlling` rather than a `BarnardEngine`.
@@ -1220,6 +1224,9 @@ final class SensingCoordinator: ObservableObject {
   /// Test-replaceable sink for the Debug-only join path diagnostics.
   private let joinDiagnosticLog: (String) -> Void
 
+  /// Test-replaceable effect for the existing public refusal error log.
+  private let joinRefusalLog: (String) -> Void
+
   /// Why the last join attempt was refused, as
   /// `BeidSharedKit.event.eventJoinFailureReasonKey`'s value or a native
   /// storage/loading key. Nil means no refusal or storage wait is active.
@@ -1628,6 +1635,7 @@ final class SensingCoordinator: ObservableObject {
       Int64((Date().timeIntervalSince1970 * 1_000).rounded())
     },
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
+    joinRefusalLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinRefusalLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds,
     deviceSecretStore: DeviceSecretKeychainStore = .shared,
@@ -1657,6 +1665,7 @@ final class SensingCoordinator: ObservableObject {
       eventJoinRegistry: eventJoinRegistry,
       nearbyDiscoveryStore: nearbyDiscoveryStore,
       joinDiagnosticLog: joinDiagnosticLog,
+      joinRefusalLog: joinRefusalLog,
       participantRelayControl: participantRelayControl,
       relayCadenceNanoseconds: relayCadenceNanoseconds,
       deviceSecretStore: deviceSecretStore,
@@ -1689,6 +1698,7 @@ final class SensingCoordinator: ObservableObject {
     nearbyDiscoveryStore injectedNearbyDiscoveryStore:
       ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore? = nil,
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
+    joinRefusalLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinRefusalLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds,
     deviceSecretStore: DeviceSecretKeychainStore = .shared,
@@ -1740,6 +1750,7 @@ final class SensingCoordinator: ObservableObject {
     self.nearbyDiscoveryClock = nearbyDiscoveryClock
     self.nearbyRegistryClient = nearbyRegistryClient
     self.joinDiagnosticLog = joinDiagnosticLog
+    self.joinRefusalLog = joinRefusalLog
     self.eventJoinRegistry = eventJoinRegistry
       ?? nearbyRegistryClient.map { RegistryEventJoinRegistry(client: $0) }
     let nearbyDiscoveryStore = injectedNearbyDiscoveryStore
@@ -2696,6 +2707,12 @@ final class SensingCoordinator: ObservableObject {
           // joins with `phase` already `.idle`.
           guard self.isCurrentJoinAttempt(joinGeneration) else { return }
           guard canScan, canAdvertise else {
+            emitJoinStageDiagnostic(
+              self.joinDiagnosticLog,
+              eventIdHex: canonicalEventIdHex,
+              stage: "admission",
+              outcome: "rejected_permission_denied"
+            )
             self.stopParticipantRelay()
             // Undo the optimistic `.sensing` set above. Without this the
             // screen keeps saying it is sensing over a radio that never
@@ -2871,7 +2888,7 @@ final class SensingCoordinator: ObservableObject {
         )
       return .refuse(
         .registryReadFailed,
-        "Registry read produced no definition (\(readFailureErrorCode ?? "no error code")); starting nothing.",
+        "Registry read produced no definition; starting nothing.",
         BeidSharedKit.event.eventJoinFailureReasonKey(reason: reason)
       )
     }
@@ -2889,10 +2906,9 @@ final class SensingCoordinator: ObservableObject {
         nowEpochSeconds: nowEpochSeconds
       )
     else {
-      // Ask the shared decision *why*, so the refusal is diagnosable rather
-      // than merely a refusal. The verdict is logged rather than mapped to a
-      // case: its generated Swift surface has no name, description or
-      // equality — see `EventJoinRefusal`.
+      // Ask the shared decision why and map its verdict to the stable reason
+      // key before categorical logging. Swift Export exposes no enum name or
+      // equality here — see `EventJoinRefusal`.
       let verdict = ExportedKotlinPackages.org.levarac.parallax.discovery
         .operatorLookupJoinEligibility(
           joinCode: joinCode,
@@ -2986,14 +3002,10 @@ final class SensingCoordinator: ObservableObject {
   /// Only `definitionNotEligible` has a verdict of its own; the rest are
   /// classified from what was available when the read was attempted.
   ///
-  /// `registryReadFailed` is `UNKNOWN` rather than `NETWORK_REQUIRED`, which
-  /// is the tempting answer: the definition read only runs once the
-  /// code-to-id lookup already succeeded, so a device that cannot reach the
-  /// network fails earlier and arrives here as `noCanonicalEventId` carrying
-  /// the lookup's own error code. Reaching this branch means an answer came
-  /// back carrying no definition. Carrying the *definition* read's error code
-  /// through as well would let it say more; the adapter currently collapses a
-  /// failed read to nil, and changing that is its own change.
+  /// These are fallbacks for callers without a classified reason key.
+  /// Registry-read failures normally carry the definition read's shared
+  /// error-code classification; eligibility refusals carry the verdict's
+  /// shared reason key. A read failure without that key falls back to UNKNOWN.
   private static func sharedReason(
     for refusal: EventJoinRefusal,
     lookupErrorCode: String?
@@ -3032,7 +3044,6 @@ final class SensingCoordinator: ObservableObject {
     _ message: String,
     reasonKey: String? = nil
   ) {
-    Self.log.error("\(message, privacy: .public)")
     let outcome: String
     switch refusal {
     case .noRegistryConfigured:
@@ -3052,10 +3063,12 @@ final class SensingCoordinator: ObservableObject {
       stage: "admission",
       outcome: "rejected_\(outcome)"
     )
-    joinRefusal = refusal
-    joinRefusalReasonKey = reasonKey ?? BeidSharedKit.event.eventJoinFailureReasonKey(
+    let refusalReasonKey = reasonKey ?? BeidSharedKit.event.eventJoinFailureReasonKey(
       reason: Self.sharedReason(for: refusal, lookupErrorCode: joinedLookupErrorCode)
     )
+    joinRefusalLog("join_refused outcome=rejected_\(outcome) reason=\(refusalReasonKey)")
+    joinRefusal = refusal
+    joinRefusalReasonKey = refusalReasonKey
     joinRegistryRequest = nil
     stopParticipantRelay()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
@@ -3462,6 +3475,12 @@ final class SensingCoordinator: ObservableObject {
       Task { @MainActor in
         guard self.isCurrentJoinAttempt(generation) else { return }
         guard canScan, canAdvertise else {
+          emitJoinStageDiagnostic(
+            self.joinDiagnosticLog,
+            eventIdHex: nil,
+            stage: "admission",
+            outcome: "rejected_permission_denied"
+          )
           self.stopParticipantRelay()
           self.phase = Self.payloadlessNativePhase(
             BeidSharedKit.sensing.scanPhaseAfterStopSensing()
@@ -3488,7 +3507,12 @@ final class SensingCoordinator: ObservableObject {
             )
           self.refuseJoin(
             .definitionNotEligible,
-            "Current nearby candidate is not eligible (\(String(describing: verdict))); starting nothing."
+            "Current nearby candidate is not eligible (\(String(describing: verdict))); starting nothing.",
+            reasonKey: BeidSharedKit.event.eventJoinFailureReasonKey(
+              reason: BeidSharedKit.event.eventJoinFailureReasonForJoinEligibility(
+                eligibility: verdict
+              )
+            )
           )
           return
         }
