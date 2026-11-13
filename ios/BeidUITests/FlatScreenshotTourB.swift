@@ -114,6 +114,70 @@ final class FlatScreenshotTourB: XCTestCase {
     XCTAssertEqual(Set(tiles.allElementsBoundByIndex.map(\.identifier)), gridRecordIDs)
   }
 
+  func testEmptyRecordsByEventShowsExplanationAndReturnsToGrid() {
+    launchHome(arguments: [])
+    XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "Records")).count, 1)
+    app.tabButton("Records").tap()
+
+    let explanation = "Saved records appear here after sensing."
+    let grid = app.scrollViews.matching(identifier: "records.grid")
+    let gridExplanation = grid.element.staticTexts.matching(NSPredicate(format: "label == %@", explanation))
+    let gridCounts = grid.element.staticTexts.matching(NSPredicate(format: "label == %@", "0 records · 0 events"))
+    let recordTiles = grid.element.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record."))
+    let byEvent = grid.element.buttons.matching(identifier: "records.by-event")
+    let events = app.collectionViews.matching(identifier: "records.events")
+    let eventBar = app.navigationBars.matching(identifier: "By event")
+    let eventHeading = eventBar.element.staticTexts.matching(NSPredicate(format: "label == %@", "By event"))
+    let allRecords = events.element.buttons.matching(identifier: "records.all-records")
+    let eventRows = events.element.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.past-event."))
+    let nativeBack = eventBar.element.buttons.matching(NSPredicate(format: "label == %@", "Back"))
+    let eventExplanation = events.element.staticTexts.matching(NSPredicate(format: "label == %@", explanation))
+
+    let assertEmptyGrid = {
+      XCTAssertEqual(grid.count, 1)
+      XCTAssertTrue(grid.element.isHittable)
+      XCTAssertEqual(gridCounts.count, 1)
+      XCTAssertTrue(gridCounts.element.isHittable)
+      XCTAssertEqual(recordTiles.count, 0)
+      XCTAssertEqual(gridExplanation.count, 1)
+      XCTAssertTrue(gridExplanation.element.isHittable)
+      XCTAssertEqual(byEvent.count, 1)
+      XCTAssertEqual(byEvent.element.label, "Records by event")
+      XCTAssertTrue(byEvent.element.isHittable)
+      XCTAssertFalse(events.element.exists && events.element.isHittable)
+    }
+    let assertEmptyEventList = {
+      XCTAssertEqual(events.count, 1)
+      XCTAssertTrue(events.element.isHittable)
+      XCTAssertEqual(eventBar.count, 1)
+      XCTAssertEqual(eventHeading.count, 1)
+      XCTAssertTrue(eventHeading.element.isHittable)
+      XCTAssertEqual(allRecords.count, 1)
+      XCTAssertEqual(allRecords.element.label, "All records")
+      XCTAssertTrue(allRecords.element.isHittable)
+      XCTAssertEqual(nativeBack.count, 1)
+      XCTAssertTrue(nativeBack.element.isHittable)
+      XCTAssertEqual(eventRows.count, 0)
+      XCTAssertFalse(grid.element.exists && grid.element.isHittable)
+      // Only text inside the visible By event list can satisfy this assertion.
+      XCTAssertEqual(
+        eventExplanation.count, 1,
+        "Empty By event must show the saved-records explanation inside records.events"
+      )
+      XCTAssertTrue(eventExplanation.element.isHittable)
+    }
+
+    assertEmptyGrid()
+    byEvent.element.tap()
+    assertEmptyEventList()
+    allRecords.element.tap()
+    assertEmptyGrid()
+    byEvent.element.tap()
+    assertEmptyEventList()
+    nativeBack.element.tap()
+    assertEmptyGrid()
+  }
+
   func testShot_08c_NoReports() {
     launchHome(arguments: ["-beid-event-detail-frame-08c"])
     app.openRecordsByEvent()
