@@ -31,8 +31,10 @@ final class FlatScreenshotTourB: XCTestCase {
     app.buttons["fixture.now.advance29"].tap()
     XCTAssertFalse(app.buttons["home.enter-code"].exists)
     app.buttons["fixture.now.advance1"].tap()
+    let enterCode = app.buttons["home.enter-code"]
+    enterCode.assertHittable()
     capture("04b")
-    app.buttons["home.enter-code"].tap()
+    enterCode.tap()
     XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
     app.buttons["Cancel"].tap()
   }
