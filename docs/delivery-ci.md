@@ -176,8 +176,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     absolute DerivedData/checkout references in `.xctestrun` are relocated.
     The matrix starts only after build finishes, has `fail-fast: false` and
     `max-parallel: 4`, and all macOS jobs use the free standard `macos-26` label.
-    Change only workflow `env.IOS_UI_SHARDS` from `3` to `2` to reduce the matrix
-    from four macOS jobs to three. Values outside 2/3 fail planning.
+    Workflow `env.IOS_UI_SHARDS` defaults to `4`; `2` and `3` are also supported.
+    Values outside 2/3/4 fail planning. Four UI shards plus one unit job produce
+    five test jobs with at most four running together, requiring a second
+    scheduling wave. The extra shard repeats setup and evidence collection,
+    increasing aggregate runner time; no overall wall-time improvement is implied.
 
     `scripts/ios_ui_smoke.py shards` balances methods longest-first using
     `scripts/ios-ui-durations.json`. The table replaces the local iPad seed with

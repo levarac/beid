@@ -1,13 +1,17 @@
 """Pin the hosted graph, bounded concurrency, and artifact-only test jobs."""
 
+import json
 import re
+import subprocess
+import sys
+import textwrap
 import unittest
 
 from scripts.tests.test_pr_ci_lane_skip import IOS, job_block
 
 
 class ShardWorkflowTest(unittest.TestCase):
-    def test_full_build_precedes_at_most_four_test_jobs(self):
+    def test_full_build_precedes_five_test_jobs_with_four_concurrent(self):
         text = IOS.read_text()
         self.assertIn("  tests:\n", text, "missing full-mode matrix")
         build, tests = job_block(IOS, "build"), job_block(IOS, "tests")
@@ -17,9 +21,32 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertIn("fail-fast: false", tests)
         self.assertIn("fromJSON(needs.plan.outputs.matrix)", tests)
         self.assertEqual(text.count("    runs-on: macos-26\n"), 2)
-        self.assertIn("IOS_UI_SHARDS: '3'", text)
+        self.assertIn("IOS_UI_SHARDS: '4'", text)
         self.assertIn("build-for-testing", build)
         self.assertNotIn("build-for-testing", tests)
+
+    def test_planner_accepts_only_two_three_or_four_ui_shards(self):
+        plan = job_block(IOS, "plan")
+        snippet = plan.split("          python3 - <<'PY' >> \"$GITHUB_OUTPUT\"\n", 1)[1].split("          PY\n", 1)[0]
+        code = textwrap.dedent(snippet)
+        expected_lanes = {
+            "2": ["unit", "ui-1", "ui-2"],
+            "3": ["unit", "ui-1", "ui-2", "ui-3"],
+            "4": ["unit", "ui-1", "ui-2", "ui-3", "ui-4"],
+        }
+        for count in ("2", "3", "4", "0", "1", "5", "6", "true", "false", "", "4.0"):
+            with self.subTest(count=count):
+                result = subprocess.run([sys.executable, "-B", "-c", code], cwd=IOS.parents[2],
+                    env={"IOS_UI_SHARDS": count, "EVENT_NAME": "merge_group", "CHANGES_JSON": "{}"},
+                    capture_output=True, text=True)
+                if count in expected_lanes:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    outputs = dict(line.split("=", 1) for line in result.stdout.splitlines())
+                    self.assertEqual(outputs["run"], "true")
+                    self.assertEqual(json.loads(outputs["matrix"]), {"lane": expected_lanes[count]})
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertNotIn("matrix=", result.stdout)
 
     def test_aggregate_is_always_created_with_exact_required_name(self):
         text = IOS.read_text()
