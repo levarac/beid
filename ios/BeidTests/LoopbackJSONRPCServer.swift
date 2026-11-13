@@ -2,7 +2,57 @@ import Foundation
 import Network
 
 final class LoopbackJSONRPCServer {
-  enum Error: Swift.Error { case timedOut }
+  enum Error: Swift.Error, Equatable { case timedOut, readyWithoutPort, alreadyStarted }
+
+  /// One terminal result owns startup, including events arriving before the
+  /// continuation is registered. Callbacks run outside the lock.
+  final class StartupWaiter {
+    typealias Outcome = Result<URL, Swift.Error>
+    private let lock = NSLock()
+    private var outcome: Outcome?
+    private var completion: ((Outcome) -> Void)?
+
+    func wait(_ completion: @escaping (Outcome) -> Void) {
+      lock.lock()
+      if let outcome {
+        lock.unlock()
+        completion(outcome)
+      } else {
+        precondition(self.completion == nil, "listener startup has only one waiter")
+        self.completion = completion
+        lock.unlock()
+      }
+    }
+
+    func receive(_ state: NWListener.State, port: NWEndpoint.Port?) {
+      switch state {
+      case .ready:
+        guard let port, port.rawValue != 0 else {
+          complete(.failure(Error.readyWithoutPort))
+          return
+        }
+        complete(.success(URL(string: "http://127.0.0.1:\(port.rawValue)")!))
+      case .failed(let error): complete(.failure(error))
+      case .cancelled: cancel()
+      default: break
+      }
+    }
+
+    func timeOut() { complete(.failure(Error.timedOut)) }
+    func cancel() { complete(.failure(CancellationError())) }
+
+    private func complete(_ outcome: Outcome) {
+      lock.lock()
+      guard self.outcome == nil else { lock.unlock(); return }
+      self.outcome = outcome
+      let completion = self.completion
+      self.completion = nil
+      lock.unlock()
+      completion?(outcome)
+    }
+  }
+
+  private let startup = StartupWaiter()
   private let listener: NWListener
   private let queue = DispatchQueue(label: "beid.tests.loopback-rpc")
   private let response: (Data) -> Data
@@ -16,7 +66,8 @@ final class LoopbackJSONRPCServer {
   private var requestBytes = 0
   private var responseBytes = 0
   private var active: [ObjectIdentifier: NWConnection] = [:]
-  private var failed: Swift.Error?
+  private var didStart = false
+  private var isStopped = false
 
   init(responseDelayNanoseconds: UInt64 = 0, onRequest: (() -> Void)? = nil, response: @escaping (Data) -> Data) throws {
     self.response = response
@@ -36,27 +87,49 @@ final class LoopbackJSONRPCServer {
   }
 
   func start() async throws -> URL {
+    try lock.withLock {
+      guard !didStart else { throw Error.alreadyStarted }
+      guard !isStopped else { throw CancellationError() }
+      didStart = true
+    }
     listener.stateUpdateHandler = { [weak self] state in
-      if case .failed(let error) = state { self?.lock.lock(); self?.failed = error; self?.lock.unlock() }
+      guard let self else { return }
+      self.startup.receive(state, port: self.listener.port)
     }
-    listener.newConnectionHandler = { [weak self] connection in self?.accept(connection) }
+    listener.newConnectionHandler = { [weak self] connection in
+      guard let self else { connection.cancel(); return }
+      self.accept(connection)
+    }
     listener.start(queue: queue)
-    for _ in 0..<100 {
-      lock.lock(); let error = failed; lock.unlock()
-      if let error {
-        listener.cancel()
-        throw error
+
+    // A finite safety bound, independent of the listener's callback queue.
+    // Readiness itself is event-driven; there is no port polling or retry.
+    let timeout = DispatchWorkItem { [startup] in startup.timeOut() }
+    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 30, execute: timeout)
+    defer { timeout.cancel() }
+    do {
+      return try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { continuation in
+          startup.wait { continuation.resume(with: $0) }
+        }
+      } onCancel: {
+        self.startup.cancel()
       }
-      if let port = listener.port, port.rawValue != 0 { return URL(string: "http://127.0.0.1:\(port.rawValue)")! }
-      try await Task.sleep(nanoseconds: 10_000_000)
+    } catch {
+      stop()
+      throw error
     }
-    listener.cancel()
-    throw Error.timedOut
   }
 
   func stop() {
+    startup.cancel()
+    let connections = lock.withLock {
+      isStopped = true
+      let connections = Array(active.values)
+      active.removeAll()
+      return connections
+    }
     listener.cancel()
-    lock.lock(); let connections = Array(active.values); active.removeAll(); lock.unlock()
     connections.forEach { $0.cancel() }
   }
 
@@ -66,7 +139,12 @@ final class LoopbackJSONRPCServer {
   }
 
   private func accept(_ connection: NWConnection) {
-    lock.lock(); active[ObjectIdentifier(connection)] = connection; lock.unlock()
+    let accepted = lock.withLock {
+      guard !isStopped else { return false }
+      active[ObjectIdentifier(connection)] = connection
+      return true
+    }
+    guard accepted else { connection.cancel(); return }
     connection.start(queue: queue)
     receive(connection, buffer: Data())
   }
