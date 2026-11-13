@@ -41,6 +41,16 @@ struct ScanFlowView: View {
           if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
             ToolbarItem(placement: .confirmationAction) { doneButton }
           }
+          #if DEBUG
+          if sensing.isDemoAdvanceEnabled, let token = sensing.demoAdvanceToken,
+             coordinator.stopConfirmSnapshot == nil, coordinator.sealedSnapshot == nil {
+            ToolbarItem(placement: .topBarTrailing) {
+              Button("Advance demo") { sensing.advanceDemo(token: token) }
+                .accessibilityIdentifier("demo.advance.\(token.uuidString)")
+                .accessibilityValue(String(describing: ScanFlowContent.route(for: sensing.phase)))
+            }
+          }
+          #endif
         }
       }
       .safeAreaInset(edge: .bottom) {

@@ -101,8 +101,7 @@ final class BeidBackNavigationUITests: XCTestCase {
 
   /// Joins the demonstration event and waits for live recording controls.
   private func reachRecordingScreen() {
-    app.launchArguments = ["-beid-ui-test"]
-    app.launch()
+    app.launchControlledDemo()
 
     app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
@@ -111,9 +110,12 @@ final class BeidBackNavigationUITests: XCTestCase {
     let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
+    app.advanceDemo(to: .sensing)
     XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
+    app.advanceDemo(to: .eventFound)
     XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
 
+    app.advanceDemo(to: .recording)
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
     dismissBindingSheetToReachLiveRecording()
   }
