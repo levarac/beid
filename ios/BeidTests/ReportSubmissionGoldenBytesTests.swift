@@ -175,7 +175,7 @@ enum ReportSubmissionGoldenScenario {
     )
   }
 
-  private static func waitForAcceptedRecord(at fileURL: URL, server: StubOperatorServer) async throws {
+  static func waitForAcceptedRecord(at fileURL: URL, server: StubOperatorServer) async throws {
     for _ in 0..<1_000 {
       if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == .accepted {
         return
@@ -291,5 +291,98 @@ final class ReportSubmissionGoldenBytesTests: XCTestCase {
       "the POST body must be exactly the persisted signed Observation"
     )
     ReportSubmissionGoldenScenario.assertMatchesGolden(actual)
+  }
+
+  func testAcceptanceWaitReportsTerminalSubmissionError() async throws {
+    let fixture = try makeAcceptanceWaitFixture()
+    defer { fixture.server.stop() }
+
+    do {
+      try await ReportSubmissionGoldenScenario.waitForAcceptedRecord(at: fixture.fileURL, server: fixture.server)
+      XCTFail("a terminal submission must not satisfy acceptance")
+    } catch {
+      XCTAssertTrue(
+        String(describing: error).contains("protocol_error"),
+        "acceptance failure must identify the target terminal error"
+      )
+    }
+
+    let target = try XCTUnwrap(ReportSubmissionStore(fileURL: fixture.fileURL)
+      .record(id: ReportSubmissionGoldenScenario.captureId))
+    XCTAssertEqual(target.submissionState, .submitting)
+    XCTAssertEqual(target.terminalErrorCode, "protocol_error")
+    XCTAssertNil(target.acceptanceReceiptHex)
+  }
+
+  func testAcceptanceWaitDoesNotAcceptUnrelatedRecord() async throws {
+    let fixture = try makeAcceptanceWaitFixture(unrelatedAcceptedFirst: true)
+    defer { fixture.server.stop() }
+
+    do {
+      try await ReportSubmissionGoldenScenario.waitForAcceptedRecord(at: fixture.fileURL, server: fixture.server)
+      XCTFail("an unrelated accepted record must not satisfy the target capture")
+    } catch {
+      XCTAssertTrue(
+        String(describing: error).contains("protocol_error"),
+        "acceptance failure must identify the target terminal error"
+      )
+    }
+
+    let target = try XCTUnwrap(ReportSubmissionStore(fileURL: fixture.fileURL)
+      .record(id: ReportSubmissionGoldenScenario.captureId))
+    XCTAssertEqual(target.submissionState, .submitting)
+    XCTAssertEqual(target.terminalErrorCode, "protocol_error")
+    XCTAssertNil(target.acceptanceReceiptHex)
+  }
+
+  private func makeAcceptanceWaitFixture(
+    unrelatedAcceptedFirst: Bool = false
+  ) throws -> (fileURL: URL, server: StubOperatorServer) {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-acceptance-wait-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let receiptKeyHex = "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+    let server = try StubOperatorServer(
+      eventId: try XCTUnwrap(goldenData(fromHex: ReportSubmissionGoldenScenario.eventIdHex)),
+      signingPrivateKey: [UInt8](repeating: 0, count: 31) + [2],
+      signingPublicKey: try XCTUnwrap(goldenData(fromHex: receiptKeyHex))
+    )
+    // Store-only fixtures exercise waiter selection, not cryptographic verification.
+    // The server supplies diagnostics only; no listener or submission is started.
+    func record(id: UUID) -> ReportSubmissionRecord {
+      ReportSubmissionRecord(
+        id: id,
+        eventCode: ReportSubmissionGoldenScenario.eventCode,
+        endpoint: "http://127.0.0.1:1",
+        receiptPublicKeyHex: receiptKeyHex,
+        eventIdHex: ReportSubmissionGoldenScenario.eventIdHex,
+        eventDefinitionDigestHex: ReportSubmissionGoldenScenario.definitionDigestHex,
+        validFrom: nil,
+        validUntil: nil,
+        signedObservationHex: "aabbcc",
+        observationDigestHex: String(repeating: "33", count: 32),
+        createdAt: ReportSubmissionGoldenScenario.createdAt
+      )
+    }
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let targetId = ReportSubmissionGoldenScenario.captureId
+    let unrelatedId = try XCTUnwrap(UUID(uuidString: "70100000-0000-4000-8000-000000000702"))
+    if unrelatedAcceptedFirst {
+      try store.add(record(id: unrelatedId))
+      try store.markSubmitting(for: unrelatedId)
+      try store.storeReceipt(for: unrelatedId, signedReceiptHex: "aabb")
+    }
+    try store.add(record(id: targetId))
+    try store.markSubmitting(for: targetId)
+    try store.markTerminalFailure(for: targetId, code: "protocol_error")
+    let reloaded = ReportSubmissionStore(fileURL: fileURL)
+    XCTAssertEqual(reloaded.records.map(\.id), unrelatedAcceptedFirst ? [unrelatedId, targetId] : [targetId])
+    if unrelatedAcceptedFirst {
+      XCTAssertEqual(reloaded.records.first?.submissionState, .accepted)
+      XCTAssertEqual(reloaded.records.first?.acceptanceReceiptHex, "aabb")
+    }
+    return (fileURL, server)
   }
 }
