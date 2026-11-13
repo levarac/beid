@@ -105,6 +105,7 @@ final class AppCoordinator: ObservableObject {
   let clockPreflight: ClockPreflightController
   private let userDefaults: UserDefaults
   private let permissionEvaluation: (() async -> BluetoothAuthorizationState)?
+  private var bluetoothStateObservation: AnyCancellable?
 
   private static let hasCompletedOnboardingKey = "beid.hasCompletedOnboarding"
 
@@ -138,9 +139,10 @@ final class AppCoordinator: ObservableObject {
       RegistryDependencies.createClient(),
     userDefaults: UserDefaults = .standard,
     permissionEvaluation: (() async -> BluetoothAuthorizationState)? = nil,
+    bluetoothMonitor injectedBluetoothMonitor: BluetoothMonitor? = nil,
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
-    let bluetoothMonitor = BluetoothMonitor()
+    let bluetoothMonitor = injectedBluetoothMonitor ?? BluetoothMonitor()
     let reportStore: ReportSubmissionStore
     #if DEBUG
     let reportArguments = ProcessInfo.processInfo.arguments
@@ -310,6 +312,12 @@ final class AppCoordinator: ObservableObject {
     }
     self.sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
+    }
+    bluetoothStateObservation = bluetoothMonitor.$state.sink { [weak self] state in
+      guard let self, self.screen == .bluetoothDenied,
+        state == .granted || state == .poweredOff else { return }
+      // @Published emits in willSet; use the delivered value, not the cached state.
+      self.applyBluetoothState(state)
     }
     if hasCompletedOnboardingPersisted {
       restoreAfterOnboarding()
