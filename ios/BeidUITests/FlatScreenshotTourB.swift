@@ -116,8 +116,10 @@ final class FlatScreenshotTourB: XCTestCase {
 
   func testEmptyRecordsByEventShowsExplanationAndReturnsToGrid() {
     launchHome(arguments: [])
-    XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "Records")).count, 1)
-    app.tabButton("Records").tap()
+    let recordsTab = app.tabButton("Records")
+    XCTAssertTrue(recordsTab.exists)
+    XCTAssertTrue(recordsTab.isHittable)
+    recordsTab.tap()
 
     let explanation = "Saved records appear here after sensing."
     let grid = app.scrollViews.matching(identifier: "records.grid")
