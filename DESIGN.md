@@ -2409,7 +2409,7 @@ result VERIFIED. Missing historical duration, ending time and delivery/receipt
 times remain unavailable; creation or signing times are not substitutes.
 Selected-window artwork uses the same saved session's observed-window ranks.
 Unknown report-window links keep a report-only detail route rather than being
-attached to a guessed window. Existing wallet-bound records keep Bound to wallet;
+attached to a guessed window. Show matching, non-discarded SelfProofRecord evidence, or NOT AVAILABLE;
 these screens offer no new wallet connection.
 
 > **Platform scope:** mixed, annotated per bullet. The voice/vocabulary/
