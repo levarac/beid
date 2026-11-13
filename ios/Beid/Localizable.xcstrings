@@ -3872,6 +3872,17 @@
         }
       }
     },
+    "eventCode.lookup.pending": {
+      "comment": "Visible status and VoiceOver announcement while an explicit event-code lookup is pending. Does not mean the event has been joined.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looking up event code…"
+          }
+        }
+      }
+    },
     "eventCode.input.placeholder": {
       "comment": "Placeholder for the organizer-supplied event code. The user can paste it without typing a long identifier.",
       "localizations": {
