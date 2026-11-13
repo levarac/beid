@@ -22,6 +22,24 @@ final class BeidBackNavigationUITests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
+    let detailHeading = app.staticTexts["proof.detail.title"]
+    let backButton = app.navigationBars["ETHGlobal Tokyo"].buttons.firstMatch
+    let collection = app.collectionViews["records.events"]
+    // Hittability is a UI-readiness proxy, not UIKit transition completion.
+    let detailReady = XCTNSPredicateExpectation(
+      predicate: NSPredicate { _, _ in
+        detailHeading.exists && detailHeading.isHittable
+          && backButton.exists && backButton.isHittable
+          && (!collection.exists || !collection.isHittable)
+      },
+      object: nil
+    )
+    XCTAssertEqual(
+      XCTWaiter.wait(for: [detailReady], timeout: 5), .completed,
+      "Record detail heading and native Back must be hittable, " +
+        "and the underlying event collection must not be hittable before the first edge swipe"
+    )
+
     swipeFromLeadingEdge()
 
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
@@ -83,8 +101,7 @@ final class BeidBackNavigationUITests: XCTestCase {
 
   /// Joins the demonstration event and waits for live recording controls.
   private func reachRecordingScreen() {
-    app.launchArguments = ["-beid-ui-test"]
-    app.launch()
+    app.launchControlledDemo()
 
     app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
@@ -93,9 +110,12 @@ final class BeidBackNavigationUITests: XCTestCase {
     let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
+    app.advanceDemo(to: .sensing)
     XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
+    app.advanceDemo(to: .eventFound)
     XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
 
+    app.advanceDemo(to: .recording)
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
     dismissBindingSheetToReachLiveRecording()
   }

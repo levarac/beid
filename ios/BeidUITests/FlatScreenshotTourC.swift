@@ -16,33 +16,72 @@ final class FlatScreenshotTourC: XCTestCase {
   func testShot_05a_Detecting() { capture("05a") }
   func testShot_05a2_Detecting20s() { capture("05a2") }
   func testShot_05a3_DetectingFirstTime() { capture("05a3") }
-  func testShot_05d_CantJoin() { capture("05d") }
 
-  /// Not a Figma frame. An unchecked device clock is a notice above the
-  /// nearby list on the pre-join screen; it never becomes 05d.
-  func testShot_05_ClockUncheckedNotice() {
+  func testDetectingCaptionOnlyAppearsAfterJoinBeforeAnyPhoneIsHeard() {
     let app = XCUIApplication()
-    app.launchArguments = ["-beid-ui-test", "-beid-clock-preflight-fixture"]
+    app.launchArguments = ["-beid-ui-test", "-beid-nearby-join-fixture"]
     app.launch()
-    let getStarted = app.buttons["Continue"]
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
-    getStarted.tap()
-    let allowBluetooth = app.buttons["Allow Bluetooth"]
-    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
-    allowBluetooth.tap()
-    let senseEvent = app.buttons["home.demo.join"]
-    XCTAssertTrue(senseEvent.waitForExistence(timeout: 10))
-    senseEvent.tap()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
+    app.buttons["Allow Bluetooth"].assertHittable()
+    app.buttons["Allow Bluetooth"].tap()
+    app.tabButton("Now").assertExists()
+    XCTAssertFalse(app.staticTexts["scan.detecting.caption"].exists)
 
-    XCTAssertTrue(app.staticTexts["Couldn't check this device's clock"].waitForExistence(timeout: 10))
-    XCTAssertTrue(app.buttons["scan.clock-preflight.retry"].exists)
-    XCTAssertFalse(app.descendants(matching: .any)["scan.cant-join"].exists)
+    let join = app.buttons["home.nearby.join.9adc61d60dda843e"]
+    join.assertHittable()
+    join.tap()
+    let caption = app.staticTexts["scan.detecting.caption"]
+    caption.scrollToHittable(in: app)
+    XCTAssertEqual(caption.label, "LOOKING FOR PEERS · STAY NEARBY")
+    XCTAssertFalse(app.staticTexts["MUTUAL"].exists)
+    XCTAssertFalse(app.staticTexts["DETECTED"].exists)
+    app.buttons["scan.stop-sensing"].assertHittable()
+    app.terminate()
 
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    attachment.name = "05-clock-unchecked-notice"
-    attachment.lifetime = .keepAlways
-    add(attachment)
+    // 05a's sample already contains five heard devices. Its presentation
+    // name must not override the actual sensing state and claim zero peers.
+    let heard = launchSensingFixture("05a")
+    XCTAssertFalse(heard.staticTexts["scan.detecting.caption"].exists)
+    XCTAssertTrue(heard.staticTexts["DEVICES HEARD"].exists)
+    XCTAssertTrue(heard.staticTexts["ELAPSED"].exists)
   }
+
+  func testSensingHeaderAndFirstTimeExplanationMatchTheApprovedFrames() {
+    for code in ["05", "05a3"] {
+      let app = launchSensingFixture(code)
+      let status = app.navigationBars.staticTexts.matching(
+        NSPredicate(format: "label ==[c] %@", "Sensing")
+      ).firstMatch
+      status.assertExists()
+      XCTAssertFalse(app.staticTexts["MUTUAL"].exists)
+      XCTAssertFalse(app.staticTexts["DETECTED"].exists)
+      XCTAssertTrue(app.staticTexts["DEVICES HEARD"].exists)
+      XCTAssertTrue(app.staticTexts["ELAPSED"].exists)
+      app.buttons["scan.stop-sensing"].assertHittable()
+
+      if code == "05a3" {
+        let hint = app.buttons["scan.first-time.about"]
+        hint.scrollToHittable(in: app)
+        XCTAssertEqual(hint.label, "How sensing works")
+        XCTAssertEqual(hint.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 1)
+        hint.tap()
+        app.staticTexts["HOW IT WORKS"].assertExists()
+        app.navigationBars.buttons.firstMatch.tap()
+        hint.scrollToHittable(in: app)
+      }
+
+      // Native Back must still leave the live session available in Now.
+      app.navigationBars.buttons.firstMatch.assertHittable()
+      app.navigationBars.buttons.firstMatch.tap()
+      app.buttons["home.open-details"].assertHittable()
+      app.buttons["home.open-details"].tap()
+      app.descendants(matching: .any)["scan.sensing-session"].assertExists()
+      XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
+      app.terminate()
+    }
+  }
+
   func testShot_05e_StopConfirm() { capture("05e") }
   func testShot_06_Sealed() { capture("06") }
   func testSensingGuidanceRemainsReachableAfterScrolling() {
@@ -160,6 +199,9 @@ final class FlatScreenshotTourC: XCTestCase {
     record.tap()
     let title = app.staticTexts["proof.detail.title"]
     title.assertExists()
+    XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
+    XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
+    assertSignatureUnavailable(app)
     XCTAssertTrue(app.staticTexts["RECORDED ON THIS PHONE"].exists)
     XCTAssertFalse(app.staticTexts["STATUS"].exists)
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
@@ -179,6 +221,109 @@ final class FlatScreenshotTourC: XCTestCase {
       NSPredicate(format: "label == %@", "NOT YET AVAILABLE")
     )
     XCTAssertGreaterThanOrEqual(unavailableResults.count, 2)
+  }
+
+  func testIncompleteRecordExplainsKeyChangeAndKeepsSessionAndReportRoutes() {
+    assertIncompleteRecordKeepsSessionAndReportRoutes(legacyBinding: false)
+  }
+
+  func testIncompleteRecordWithLegacyBindingDoesNotInventSignatureEvidence() {
+    assertIncompleteRecordKeepsSessionAndReportRoutes(legacyBinding: true)
+  }
+
+  private func assertIncompleteRecordKeepsSessionAndReportRoutes(legacyBinding: Bool) {
+    var arguments = ["-beid-report-links-701", "-beid-record-incomplete-fixture"]
+    if legacyBinding { arguments.append("-beid-record-legacy-binding-fixture") }
+    let app = launchEventDetailFixture(extraArguments: arguments)
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    let status = app.staticTexts["record.incomplete.title"]
+    status.scrollToHittable(in: app)
+    XCTAssertEqual(status.label, "Recording incomplete")
+    let reason = app.staticTexts["record.incomplete.reason"]
+    reason.scrollToHittable(in: app)
+    XCTAssertEqual(reason.label,
+                   "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
+    XCTAssertTrue(app.windows.firstMatch.frame.contains(reason.frame))
+    assertSignatureUnavailable(app)
+    app.staticTexts["RECORDED ON THIS PHONE"].scrollToHittable(in: app)
+    attachScreenshot(legacyBinding ? "09-incomplete-legacy-binding" : "09-incomplete-record")
+    assertRecordKeepsSessionAndReportRoutes(app)
+    XCTAssertEqual(reason.label,
+                   "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
+  }
+
+  func testLegacyBindingWithoutSelfProofDoesNotInventSignatureEvidence() {
+    // The fixture loads a matching BindingRecord from an isolated store,
+    // without creating a SelfProofRecord or overriding presentation values.
+    // Placeholder signature bytes establish stored shape, not cryptographic validity.
+    let app = launchEventDetailFixture(extraArguments: [
+      "-beid-report-links-701", "-beid-record-legacy-binding-fixture"
+    ])
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    assertSignatureUnavailable(app)
+    XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
+    XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
+    app.staticTexts["RECORDED ON THIS PHONE"].scrollToHittable(in: app)
+    attachScreenshot("09-legacy-binding")
+    assertRecordKeepsSessionAndReportRoutes(app)
+    XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
+    XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
+  }
+
+  private func assertSignatureUnavailable(_ app: XCUIApplication) {
+    app.staticTexts["SIGNATURE"].scrollToHittable(in: app)
+    app.staticTexts["NOT AVAILABLE"].scrollToHittable(in: app)
+    XCTAssertEqual(app.staticTexts["NOT AVAILABLE"].label, "NOT AVAILABLE")
+    XCTAssertFalse(app.staticTexts["Self-signed on device"].exists)
+    XCTAssertFalse(app.staticTexts["SEALED ON THIS PHONE"].exists)
+    assertNoWalletOrBindingPresentation(app)
+  }
+
+  private func assertNoWalletOrBindingPresentation(_ app: XCUIApplication) {
+    let elements = app.descendants(matching: .any).allElementsBoundByIndex
+    for element in elements {
+      let text = element.label + " " + (element.value as? String ?? "")
+      for word in ["wallet", "bind", "bound"] {
+        XCTAssertFalse(text.localizedCaseInsensitiveContains(word), text)
+      }
+    }
+  }
+
+  private func assertRecordKeepsSessionAndReportRoutes(_ app: XCUIApplication) {
+    let recordID = app.staticTexts["Record ID 00000000-0000-4000-8000-000000000631"]
+    XCTAssertTrue(recordID.exists)
+    XCTAssertTrue(app.staticTexts["See each session"].exists)
+    let report = app.buttons["proof-detail.report.\(Self.linkedReportID)"]
+    // The linked report is above the ladder; return to the top before scrolling to it.
+    for _ in 0..<5 { app.swipeDown() }
+    report.scrollToHittable(in: app)
+    let reportLabel = report.label
+    report.tap()
+    app.staticTexts["report-detail.heading"].assertExists()
+    XCTAssertTrue(app.descendants(matching: .any)["report-detail.record-id"].label.contains(Self.linkedReportID))
+    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS PHONE"))
+    XCTAssertTrue(app.descendants(matching: .any)["report-detail.delivery"].label.contains("NOT SENT"))
+    app.navigationBars.buttons.firstMatch.tap()
+    for number in 1...3 {
+      XCTAssertTrue(app.buttons["record.session.00000000-0000-4000-8000-00000000063\(number)"].exists)
+    }
+    let session = app.buttons["record.session.00000000-0000-4000-8000-000000000631"]
+    session.scrollToHittable(in: app)
+    session.tap()
+    app.staticTexts["observation-detail.title"].assertExists()
+    XCTAssertFalse(app.staticTexts["observation-detail.unavailable"].exists)
+    app.navigationBars.buttons.firstMatch.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    for _ in 0..<5 { app.swipeDown() }
+    XCTAssertTrue(recordID.exists)
+    assertSignatureUnavailable(app)
+    XCTAssertEqual(report.label, reportLabel)
   }
 
   func testSelectingObservedWindowExposesThatSelection() {
@@ -552,7 +697,9 @@ final class FlatScreenshotTourC: XCTestCase {
       XCTAssertEqual(app.staticTexts["proof-collected.status"].label, "SEALED", file: file, line: line)
     } else if code == "09" {
       XCTAssertTrue(app.staticTexts["proof.detail.title"].exists, file: file, line: line)
-      XCTAssertTrue(app.staticTexts["Bound to wallet"].exists, file: file, line: line)
+      XCTAssertTrue(app.staticTexts["Self-signed on device"].exists, file: file, line: line)
+      assertNoWalletOrBindingPresentation(app)
+      XCTAssertFalse(app.staticTexts["Bound to wallet"].exists, file: file, line: line)
       XCTAssertFalse(app.buttons["Transparency"].exists, file: file, line: line)
       XCTAssertFalse(app.buttons["View participation summary"].exists, file: file, line: line)
       let externalResult = app.staticTexts["THIRD-PARTY RESULT"]

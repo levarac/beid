@@ -15,6 +15,9 @@ final class FlatScreenshotTourD: XCTestCase {
   func testAccountRemovesWalletRowsEvenWithLegacyConnectedFixture() {
     openAccount()
     app.buttons["Organizer tools"].assertHittable()
+    attachScreenshot("10")
+    assertMinimumHitTarget(app.buttons["Done"])
+    assertMinimumHitTarget(app.buttons["Organizer tools"])
     XCTAssertTrue(app.descendants(matching: .any)["account.bluetooth.status"].exists)
     let list = app.collectionViews.firstMatch
     let privacy = app.descendants(matching: .any)["account.privacy-policy"]
@@ -67,14 +70,6 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertFalse(app.staticTexts.matching(
       NSPredicate(format: "label CONTAINS[c] %@", "verified")
     ).firstMatch.exists)
-  }
-
-  func testShot_10_Account() {
-    openAccount()
-    app.buttons["Organizer tools"].assertHittable()
-    attachScreenshot("10")
-    assertMinimumHitTarget(app.buttons["Done"])
-    assertMinimumHitTarget(app.buttons["Organizer tools"])
   }
 
   func testShot_10c_BluetoothOff() {
@@ -159,11 +154,78 @@ final class FlatScreenshotTourD: XCTestCase {
     }
   }
 
-  func testShot_14b_VenueBroadcast() {
+  func testVenueBroadcastQRFirstShowsRegistrarAndTwoTimingRows() {
     openVenue(frame: "14b")
+    let scan = app.buttons["Scan QR code"]
+    let paste = app.buttons["venue.showLink"]
+    XCTAssertTrue(scan.isHittable)
+    XCTAssertLessThan(scan.frame.maxY, paste.frame.minY)
+    XCTAssertFalse(app.descendants(matching: .any)["Venue link"].exists)
+    XCTAssertTrue(app.staticTexts["venue.registrar"].exists)
+    let until = app.staticTexts["venue.until"]
+    let remaining = app.staticTexts["venue.remaining"]
+    XCTAssertTrue(until.exists)
+    XCTAssertTrue(remaining.exists)
+    XCTAssertLessThan(until.frame.maxY, remaining.frame.minY)
+    paste.tap()
+    XCTAssertTrue(app.descendants(matching: .any)["Venue link"].exists)
+  }
+
+  func testVenuePackRequiresStartBeforeBroadcasting() {
+    openVenue(frame: "14b-ready")
+    XCTAssertTrue(app.staticTexts["READY TO BROADCAST"].exists)
+    XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].exists)
+    XCTAssertTrue(app.staticTexts["venue.registrar"].exists)
+    XCTAssertTrue(app.staticTexts["venue.digest"].exists)
+    XCTAssertTrue(app.staticTexts["venue.until"].exists)
+    let start = app.buttons["Start broadcasting"]
+    XCTAssertTrue(start.isHittable)
+    XCTAssertFalse(app.buttons["Stop broadcasting"].exists)
+    start.tap()
+    XCTAssertTrue(app.buttons["Stop broadcasting"].exists)
+    XCTAssertFalse(app.buttons["Start broadcasting"].exists)
+  }
+
+  func testVenueOrganizerStatusRowsShowOnlyAvailableDeviceFacts() {
+    openVenue(frame: "14b")
+    for identifier in ["venue.digest", "venue.delivery", "venue.until", "venue.battery", "venue.bluetooth"] {
+      XCTAssertTrue(app.staticTexts[identifier].exists, identifier)
+    }
+    // Label/Mono uppercases the visual text, while accessibility keeps the
+    // localized sentence and the checked permit's actual hop count.
+    XCTAssertEqual(app.staticTexts["venue.delivery"].label, "Direct · hop 0")
+    XCTAssertTrue(app.staticTexts["venue.bluetooth"].label.uppercased().contains("ASKED TO BROADCAST"))
     attachScreenshot("14b")
     assertVenueControls()
     XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].exists)
+  }
+
+  func testVenueInvalidSignatureAnotherEventAndExpiredPackCannotStart() {
+    for (frame, reason) in [
+      ("14e-signature", "This pack's signature or event details did not check out."),
+      ("14e-event", "The pack is not for the event this link named."),
+      ("14e-expired", "The lease ended. Broadcasting stopped. Load a current pack."),
+      ("14e-empty", "No valid announcements remain. Broadcasting stopped. Load a current pack.")
+    ] {
+      openVenue(frame: frame)
+      XCTAssertTrue(app.staticTexts[reason].exists, frame)
+      XCTAssertFalse(app.buttons["Start broadcasting"].exists, frame)
+      XCTAssertFalse(app.buttons["Stop broadcasting"].exists, frame)
+      XCTAssertEqual(app.staticTexts["venue.bluetooth"].label.uppercased(), "STOPPED.")
+      app.terminate()
+    }
+  }
+
+  func testVenueRefreshFailureShowsValidEndOrExplicitStoppedState() {
+    openVenue(frame: "14b-refresh-failed")
+    XCTAssertTrue(app.staticTexts["PACK REFRESH FAILED"].exists)
+    XCTAssertTrue(app.staticTexts["venue.until"].exists)
+    XCTAssertTrue(app.staticTexts["The pack could not be refreshed. Broadcasting can continue only until the time shown."].exists)
+    app.terminate()
+    openVenue(frame: "14e-refresh-ended")
+    XCTAssertTrue(app.staticTexts["The lease ended and the pack could not be refreshed. Broadcasting stopped. Load a current pack."].exists)
+    XCTAssertFalse(app.buttons["Start broadcasting"].exists)
+    XCTAssertEqual(app.staticTexts["venue.bluetooth"].label.uppercased(), "STOPPED.")
   }
 
   func testShot_14d_ScanQR() {
@@ -258,12 +320,16 @@ final class FlatScreenshotTourD: XCTestCase {
   }
 
   private func assertVenueControls() {
+    let link = app.descendants(matching: .any)["Venue link"]
+    let opened = !link.exists
+    if opened { app.buttons["venue.showLink"].tap() }
     assertMinimumHitTarget(app.buttons["Paste venue link"])
     assertMinimumHitTarget(app.buttons["Use this link"])
     assertMinimumHitTarget(app.buttons["Scan QR code"])
     assertMinimumHitTarget(app.buttons["Copy event ID"])
     assertMinimumHitTarget(app.buttons["Stop broadcasting"])
     XCTAssertTrue(app.descendants(matching: .any)["Venue link"].exists)
+    if opened { app.buttons["venue.showLink"].tap() }
   }
 
   private var openSettingsControl: XCUIElement {

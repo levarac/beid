@@ -137,6 +137,14 @@ struct SensingView: View {
 
             radar
 
+            if isListeningAfterJoin {
+              Text("LOOKING FOR PEERS · STAY NEARBY")
+                .beidTextStyle(DS.Font.Library.labelMono10)
+                .foregroundStyle(DS.Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("scan.detecting.caption")
+            }
+
             Group {
               if isListeningAfterJoin {
                 Text("Keep the app open. Sensing starts when beid hears another phone at this event.")
@@ -167,6 +175,7 @@ struct SensingView: View {
           .padding(.vertical, DS.Space.l)
         }
       }
+      .accessibilityIdentifier("scan.sensing")
     }
     // Sensing screen: actionPrimary tint — Flat 2b has one ink and no
     // per-screen motif accents (DESIGN.md §5). The radar rings use this
@@ -176,9 +185,7 @@ struct SensingView: View {
     .safeAreaInset(edge: .bottom) {
       if isPreJoin {
         BeidAdaptiveContent {
-          NavigationLink {
-            EventCodeEntryView(mode: .scanFlow)
-          } label: {
+          ScanFlowEventCodeEntryLink {
             Text(manualEntryTitle)
               .font(DS.Font.cardTitle)
               .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
@@ -187,12 +194,10 @@ struct SensingView: View {
           .buttonBorderShape(.roundedRectangle(radius: DS.Radius.control))
           .padding(.horizontal, DS.Space.pageMargin)
           .padding(.vertical, DS.Space.s)
-          .accessibilityIdentifier("scan.manual-entry")
         }
         .beidBottomBar()
       }
     }
-    .accessibilityIdentifier("scan.sensing")
   }
 
   /// True once JOIN was tapped (or an event code accepted) and no other
@@ -700,6 +705,7 @@ struct SensingSessionSurface: View {
           )
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .accessibilityIdentifier(showsFirstSensingHint || presentation == .detectingFirstTime ? "scan.first-time.about" : "scan.about")
         .onAppear {
           if showsFirstSensingHint { hasShownFirstTimeHint = true }
@@ -927,22 +933,19 @@ struct SensingCantJoinView: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("scan.storage-retry")
           } else if !reason.isStorageLoading {
-            NavigationLink {
-              EventCodeEntryView(mode: .scanFlow)
-            } label: {
+            ScanFlowEventCodeEntryLink {
               BeidTextControlLabel("Enter event code instead", labelColor: DS.Color.labelOnActionPrimary)
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("scan.manual-entry")
           }
         }
         .frame(minHeight: geometry.size.height, alignment: .top)
         .padding(.horizontal, DS.Space.pageMargin)
       }
+      .accessibilityIdentifier("scan.cant-join")
     }
     .background(DS.Color.textPrimary.ignoresSafeArea())
-    .accessibilityIdentifier("scan.cant-join")
   }
 
   private var eventIdentity: some View {
