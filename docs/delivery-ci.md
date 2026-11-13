@@ -183,12 +183,21 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     increasing aggregate runner time; no overall wall-time improvement is implied.
 
     `scripts/ios_ui_smoke.py shards` balances methods longest-first using
-    `scripts/ios-ui-durations.json`. The table replaces the local iPad seed with
-    all 95 positive per-case `durationInSeconds` values from hosted iPhone
-    [run 43322476619, attempt 1](https://github.com/levarac/beid/actions/runs/43322476619/attempts/1)
-    at head `018174fe5323d433d7e089d1ceee053d67ca440b`, without rounding.
-    That run had 92 Passed, 1 Failed and 2 Skipped UI cases: its timings supply
-    scheduling costs, not passing acceptance. The two Skipped values measure
+    `scripts/ios-ui-durations.json`. Its 122 weights explicitly cover both the
+    95-method inventory at `a2f847dd` and the 112-method inventory at `3285056e`;
+    ten methods removed from the latter retain their weights for the former.
+    Of these weights, 68 retain unrounded Test Case `durationInSeconds` values
+    (66 Passed, 2 Skipped) from successful hosted iPhone
+    [run 43371488513](https://github.com/levarac/beid/actions/runs/43371488513)
+    at head `841b6145eacb44f0f917ce82d8bd2a3cd2b01c85`. The other 54 are estimates:
+    26 edited methods, 27 new methods and one forward landscape skip reserve.
+    The projections use native iPhone timings at `3285056e`; later readiness-wait
+    changes have no fresh hosted measurements. In the 112-method context,
+    `BeidUITests/BeidIPadLayoutTests/testPrimaryFlowInLandscape` has a 12-second
+    estimated iPhone skip reserve, not a measured skip duration. In the 95-method
+    context it executes, with a historical hosted cost of `111.55848896503448`
+    seconds. These weights supply scheduling costs, not passing acceptance.
+    The two Skipped values measure
     elapsed case overhead, not executed test bodies. Suite totals and unit rows
     are excluded. Missing/new methods get a 20-second weight;
     identifier ordering and the lowest shard index break ties, so every new
