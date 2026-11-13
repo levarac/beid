@@ -176,13 +176,30 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     absolute DerivedData/checkout references in `.xctestrun` are relocated.
     The matrix starts only after build finishes, has `fail-fast: false` and
     `max-parallel: 4`, and all macOS jobs use the free standard `macos-26` label.
-    Change only workflow `env.IOS_UI_SHARDS` from `3` to `2` to reduce the matrix
-    from four macOS jobs to three. Values outside 2/3 fail planning.
+    Workflow `env.IOS_UI_SHARDS` defaults to `4`; `2` and `3` are also supported.
+    Values outside 2/3/4 fail planning. Four UI shards plus one unit job produce
+    five test jobs with at most four running together, requiring a second
+    scheduling wave. The extra shard repeats setup and evidence collection,
+    increasing aggregate runner time; no overall wall-time improvement is implied.
 
     `scripts/ios_ui_smoke.py shards` balances methods longest-first using
-    `scripts/ios-ui-durations.json`. Its initial measured values are from a
-    local iPad run; replace them with hosted iPhone `test-tree.json` case
-    durations after the first runs. Missing/new methods get a 20-second weight;
+    `scripts/ios-ui-durations.json`. Its 122 weights explicitly cover both the
+    95-method inventory at `a2f847dd` and the 112-method inventory at `3285056e`;
+    ten methods removed from the latter retain their weights for the former.
+    Of these weights, 68 retain unrounded Test Case `durationInSeconds` values
+    (66 Passed, 2 Skipped) from successful hosted iPhone
+    [run 43371488513](https://github.com/levarac/beid/actions/runs/43371488513)
+    at head `841b6145eacb44f0f917ce82d8bd2a3cd2b01c85`. The other 54 are estimates:
+    26 edited methods, 27 new methods and one forward landscape skip reserve.
+    The projections use native iPhone timings at `3285056e`; later readiness-wait
+    changes have no fresh hosted measurements. In the 112-method context,
+    `BeidUITests/BeidIPadLayoutTests/testPrimaryFlowInLandscape` has a 12-second
+    estimated iPhone skip reserve, not a measured skip duration. In the 95-method
+    context it executes, with a historical hosted cost of `111.55848896503448`
+    seconds. These weights supply scheduling costs, not passing acceptance.
+    The two Skipped values measure
+    elapsed case overhead, not executed test bodies. Suite totals and unit rows
+    are excluded. Missing/new methods get a 20-second weight;
     identifier ordering and the lowest shard index break ties, so every new
     test is assigned exactly once. Runtime UI enumeration must also equal the
     current Swift source inventory. The two tablet-only methods in
@@ -214,8 +231,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     KMP script start/end, and the observed Swift compile window. That window
     includes overlapping/link work; `-showBuildTimingSummary` in `build.log`
     gives actual task durations. Job timeouts are 45 minutes for build/smoke and
-    35 per test lane. Step timeouts are 25 minutes for build, 10 for smoke tests,
-    and 25 for each full-mode test lane, leaving time for evidence and cleanup.
+    45 per full-mode test lane. Step timeouts are 25 minutes for build, 10 for smoke tests,
+    and 35 for each full-mode test lane, leaving time for evidence and cleanup.
     These are containment, not claimed speed; hosted full and smoke timing and
     artifact portability still need measurement on the final SHA.
 

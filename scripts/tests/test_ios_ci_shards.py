@@ -32,11 +32,28 @@ class ShardContractTest(unittest.TestCase):
         self.assertEqual(shards, self.tool.shard_tests(list(reversed(tests)), durations, 3))
         self.assertEqual(sorted(sum(shards, [])), sorted(tests))
         self.assertLessEqual(max(map(len, shards)) - min(map(len, shards)), 1)
-        for count in (0, 1, 4):
+        for count in (0, 1, 5, 6, True, False, "4", None):
             with self.assertRaises(ValueError):
                 self.tool.shard_tests(tests, durations, count)
         with self.assertRaises(ValueError):
             self.tool.shard_tests([ONE, ONE], {}, 2)
+
+    def test_four_shards_preserve_lpt_ties_and_twenty_second_default(self):
+        tests = [f"BeidUITests/FlowTests/test{letter}" for letter in "ABCDEFGHI"]
+        durations = dict(zip(tests, (40, 40, 30, 30, 20, 20, 10, 10)))
+        try:
+            shards = self.tool.shard_tests(list(reversed(tests)), durations, 4)
+        except ValueError as error:
+            self.fail(f"four-shard configuration rejected: {error}")
+        self.assertEqual(shards, [[tests[0], tests[8]], [tests[1], tests[6], tests[7]],
+                                  [tests[2], tests[4]], [tests[3], tests[5]]])
+        self.assertEqual(sorted(sum(shards, [])), tests)
+
+    def test_four_shards_reject_empty_duplicate_and_malformed_inventory(self):
+        for tests in ([ONE, TWO], [ONE, TWO, ONE, TWO], [], None,
+                      [ONE, TWO, "bad", "BeidUITests/FlowTests/testFour"]):
+            with self.subTest(tests=tests), self.assertRaises(ValueError):
+                self.tool.shard_tests(tests, {}, 4)
 
     def test_runtime_enumeration_requires_both_bundles_and_no_duplicates(self):
         self.assertTrue(hasattr(self.tool, "parse_enumeration"), "runtime enumeration is missing")
@@ -73,7 +90,7 @@ class ShardContractTest(unittest.TestCase):
             root = Path(temporary)
             enum, manifest = root / "enumerated.json", root / "manifest.json"
             enum.write_text(json.dumps(payload))
-            for count in (2, 3):
+            for count in (2, 3, 4):
                 result = subprocess.run([sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
                     "--enumeration", str(enum), "--output", str(manifest), "--count", str(count),
                     "--mode", "full", "--sha", "a" * 40], cwd=ROOT, capture_output=True, text=True)
@@ -127,6 +144,72 @@ class AggregateContractTest(unittest.TestCase):
 
     def test_happy_path(self):
         self.verify()
+
+    def test_four_shard_aggregate_requires_complete_unique_coverage(self):
+        ui = [f"BeidUITests/FlowTests/test{name}" for name in ("One", "Two", "Three", "Four")]
+        self.manifest["ui"] = ui
+        self.manifest["shards"] = [[test] for test in ui]
+        self.evidence = {"unit": self.evidence["unit"]}
+        for index, test in enumerate(ui, 1):
+            self.evidence[f"ui-{index}"] = tree([{
+                "nodeType": "Test Case", "nodeIdentifier": test,
+                "result": "Passed", "durationInSeconds": 1.25,
+            }], unit=False)
+        try:
+            message = self.verify()
+        except ValueError as error:
+            self.fail(f"four-shard execution ledger rejected: {error}")
+        self.assertIn("all 5 cases accounted for", message)
+        good_manifest, good_evidence = copy.deepcopy(self.manifest), copy.deepcopy(self.evidence)
+        for problem in ("missing artifact", "duplicate assignment", "unassigned case", "empty shard", "fifth shard"):
+            self.manifest, self.evidence = copy.deepcopy(good_manifest), copy.deepcopy(good_evidence)
+            if problem == "missing artifact":
+                del self.evidence["ui-4"]
+            elif problem == "duplicate assignment":
+                self.manifest["shards"][3] = [ui[0]]
+            elif problem == "unassigned case":
+                self.manifest["ui"].append("BeidUITests/FlowTests/testNew")
+            elif problem == "empty shard":
+                self.manifest["shards"][3] = []
+            else:
+                self.manifest["shards"].append(["BeidUITests/FlowTests/testFifth"])
+                self.manifest["ui"].append("BeidUITests/FlowTests/testFifth")
+            with self.subTest(problem=problem), self.assertRaises(ValueError):
+                self.verify()
+
+    def test_ui_four_selector_and_verification_cli(self):
+        self.manifest["shards"] = [[ONE], [TWO], ["BeidUITests/FlowTests/testThree"],
+                                   ["BeidUITests/FlowTests/testFour"]]
+        self.manifest["ui"] = sum(self.manifest["shards"], [])
+        selected = self.manifest["shards"][3][0]
+        payload = tree([{"nodeType": "Test Case", "nodeIdentifier": selected,
+                         "result": "Passed", "durationInSeconds": 1.25}], unit=False)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest, tests, summary = (root / name for name in ("manifest.json", "tests.json", "summary.json"))
+            manifest.write_text(json.dumps(self.manifest))
+            tests.write_text(json.dumps(payload))
+            summary.write_text(json.dumps({"result": "Passed", "totalTestCount": 1,
+                "passedTests": 1, "failedTests": 0, "skippedTests": 0}))
+            command = [sys.executable, "-B", "-m", "scripts.ios_ui_smoke"]
+            arguments = subprocess.run(command + ["lane-arguments", "--manifest", str(manifest),
+                "--lane", "ui-4"], cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(arguments.returncode, 0, arguments.stderr)
+            self.assertEqual(arguments.stdout.splitlines(), [f"-only-testing:{selected}"])
+            verify = command + ["verify-lane", "--manifest", str(manifest), "--lane", "ui-4",
+                "--tests-json", str(tests), "--summary-json", str(summary),
+                "--summary", str(root / "summary.md")]
+            result = subprocess.run(verify, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("ui-4 execution evidence", (root / "summary.md").read_text())
+            payload["testNodes"][0]["children"][0]["children"][0]["children"][0]["result"] = "Failed"
+            tests.write_text(json.dumps(payload))
+            self.assertNotEqual(subprocess.run(verify, cwd=ROOT, capture_output=True).returncode, 0)
+            for lane in ("ui-0", "ui-5", "ui-6", "ui-04", "ui-true"):
+                with self.subTest(lane=lane):
+                    result = subprocess.run(command + ["lane-arguments", "--manifest", str(manifest),
+                        "--lane", lane], cwd=ROOT, capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0)
 
     def test_cancelled_failed_or_skipped_shard_job_fails(self):
         for result in ("cancelled", "failure", "skipped", ""):
