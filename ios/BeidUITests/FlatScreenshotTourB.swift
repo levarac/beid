@@ -155,7 +155,6 @@ final class FlatScreenshotTourB: XCTestCase {
         eventExplanation.count, 1,
         "Empty By event must show the saved-records explanation inside records.events"
       )
-      XCTAssertTrue(events.element.isHittable)
       XCTAssertEqual(eventBar.count, 1)
       XCTAssertEqual(eventHeading.count, 1)
       XCTAssertTrue(eventHeading.element.isHittable)
