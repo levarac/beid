@@ -3628,6 +3628,39 @@
         }
       }
     },
+    "ALL RECORDS": {
+      "comment": "Returns from the event list to the saved record grid.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ALL RECORDS"
+          }
+        }
+      }
+    },
+    "LOOKING FOR PEERS · STAY NEARBY": {
+      "comment": "State caption after joining an event while no other phone has been heard yet.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LOOKING FOR PEERS · STAY NEARBY"
+          }
+        }
+      }
+    },
+    "All records": {
+      "comment": "VoiceOver label for the arrow control returning to the saved record grid.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All records"
+          }
+        }
+      }
+    },
     "By event": {
       "comment": "Title of the saved event list.",
       "localizations": {
@@ -3703,8 +3736,8 @@
         }
       }
     },
-    "records.event.sessionAction": {
-      "comment": "Count of saved recording sessions for an event; the arrow opens event details.",
+    "records.event.recordAction": {
+      "comment": "Count of participation records for an event, independent of its stored sessions; opens event details.",
       "localizations": {
         "en": {
           "variations": {
@@ -3712,13 +3745,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld session →"
+                  "value": "%lld record →"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld sessions →"
+                  "value": "%lld records →"
                 }
               }
             }

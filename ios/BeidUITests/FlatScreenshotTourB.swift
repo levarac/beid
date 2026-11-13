@@ -78,6 +78,42 @@ final class FlatScreenshotTourB: XCTestCase {
     XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
   }
 
+  func testRecordsByEventSeparatesRecordsFromSessionsAndReturnsToGrid() {
+    launchHome(arguments: ["-beid-home-frame-04"])
+    app.tabButton("Records").assertHittable()
+    app.tabButton("Records").tap()
+    let tiles = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record."))
+    let gridRecordIDs = Set(tiles.allElementsBoundByIndex.map(\.identifier))
+    XCTAssertEqual(gridRecordIDs.count, 4)
+
+    app.openRecordsByEvent()
+    let multiSession = app.buttons["home.past-event.DEVCON-BANGKOK"]
+    multiSession.assertExists()
+    let multiDate = Date(timeIntervalSince1970: 1_763_467_200)
+      .formatted(.dateTime.month(.abbreviated).day()).uppercased()
+    XCTAssertTrue(multiSession.label.uppercased().contains("\(multiDate) · 2 SESSIONS"), multiSession.label)
+    XCTAssertTrue(multiSession.label.contains("1 record →"), multiSession.label)
+    XCTAssertFalse(multiSession.label.contains("2 records"), multiSession.label)
+
+    let singleSession = app.buttons["home.past-event.ACTIVE-EVENT"]
+    singleSession.assertExists()
+    let singleDate = Date(timeIntervalSince1970: 1_774_526_400)
+      .formatted(.dateTime.month(.abbreviated).day()).uppercased()
+    XCTAssertTrue(singleSession.label.uppercased().contains("\(singleDate) · 1 SESSION"), singleSession.label)
+    XCTAssertTrue(singleSession.label.contains("1 record →"), singleSession.label)
+
+    multiSession.assertHittable()
+    multiSession.tap()
+    app.staticTexts["event-detail.heading"].assertExists()
+    app.navigationBars.buttons.firstMatch.tap()
+    let allRecords = app.buttons["records.all-records"]
+    allRecords.assertHittable()
+    XCTAssertEqual(allRecords.label, "All records")
+    allRecords.tap()
+    app.scrollViews["records.grid"].assertExists()
+    XCTAssertEqual(Set(tiles.allElementsBoundByIndex.map(\.identifier)), gridRecordIDs)
+  }
+
   func testShot_08c_NoReports() {
     launchHome(arguments: ["-beid-event-detail-frame-08c"])
     app.openRecordsByEvent()
