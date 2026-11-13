@@ -2,3 +2,5 @@
 # Keep these in the shards and require an xcresult node, including its skip result.
 BeidUITests/BeidIPadLayoutTests/testRecordCardsNavigateIndependentlyInPortrait
 BeidUITests/BeidIPadLayoutTests/testRecordCardsNavigateIndependentlyInLandscape
+# The app supports portrait only on iPhone; the independent landscape flow is iPad-only.
+BeidUITests/BeidIPadLayoutTests/testPrimaryFlowInLandscape

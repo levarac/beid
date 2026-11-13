@@ -12,6 +12,22 @@ final class EventMembershipUITests: XCTestCase {
     continueAfterFailure = false
   }
 
+  override func record(_ issue: XCTIssue) {
+    if issue.type == .assertionFailure {
+      // Capture the failing screen before continueAfterFailure stops the test.
+      let hierarchy = XCTAttachment(string: app.debugDescription)
+      hierarchy.name = "Code-entry failure accessibility tree"
+      hierarchy.lifetime = .keepAlways
+      add(hierarchy)
+
+      let screenshot = XCTAttachment(screenshot: app.screenshot())
+      screenshot.name = "Code-entry failure screenshot"
+      screenshot.lifetime = .keepAlways
+      add(screenshot)
+    }
+    super.record(issue)
+  }
+
   func testAccountSheetJoinDismissesCodeEntryAndShowsSensing() {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
@@ -54,6 +70,285 @@ final class EventMembershipUITests: XCTestCase {
       app.buttons["scan.stop-sensing"].waitForExistence(timeout: 10),
       "joining from the Account sheet must start sensing and show the sensing screen"
     )
+  }
+
+  func testCodeLookupPendingLocksInputAndDuplicateButtonSubmits() {
+    launchCodeProgressFixture()
+    openAccountCodeEntry()
+    let field = app.textFields["Event code"]
+    field.typeText("ETHTOKYO2026")
+    let join = app.buttons["eventCode.join"]
+    join.doubleTap()
+
+    assertCodeLookupPending()
+    // A coordinate tap still reaches the disabled control's location.
+    join.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    app.buttons["eventCode.paste"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    app.buttons["fixture.code.resubmit"].tap()
+    XCTAssertEqual(field.value as? String, "ETHTOKYO2026")
+    assertCodeReceipt("submissions=1 resumed=0")
+    app.buttons["fixture.code.fail"].tap()
+    assertCodeReceipt("submissions=1 resumed=1")
+  }
+
+  func testCodeLookupKeyboardSubmitFailureRestoresEditingAndRetry() {
+    launchCodeProgressFixture()
+    openAccountCodeEntry()
+    let field = app.textFields["Event code"]
+    field.typeText("FIRST-CODE\n")
+    assertCodeLookupPending()
+    app.buttons["eventCode.join"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    // Exercise the same handler as a queued second keyboard action. A
+    // disabled field cannot receive another physical Return key event.
+    app.buttons["fixture.code.resubmit"].tap()
+    assertCodeReceipt("submissions=1 resumed=0")
+
+    app.buttons["fixture.code.fail"].tap()
+    app.staticTexts["eventCode.pending"].assertDisappears()
+    XCTAssertTrue(field.isEnabled)
+    XCTAssertTrue(app.buttons["eventCode.paste"].isEnabled)
+    XCTAssertTrue(app.buttons["eventCode.join"].isEnabled)
+    app.staticTexts["beid couldn't join that event. Check the code and try again."].assertExists()
+
+    field.tap()
+    field.typeText("-RETRY\n")
+    assertCodeLookupPending()
+    XCTAssertEqual(field.value as? String, "FIRST-CODE-RETRY")
+    XCTAssertFalse(app.staticTexts["beid couldn't join that event. Check the code and try again."].exists)
+    assertCodeReceipt("submissions=2 resumed=1")
+    app.buttons["fixture.code.fail"].tap()
+    assertCodeReceipt("submissions=2 resumed=2")
+  }
+
+  func testCodeLookupSuccessUsesTheExistingAccountRouteOnce() {
+    launchCodeProgressFixture()
+    openAccountCodeEntry()
+    app.textFields["Event code"].typeText("ETHTOKYO2026\n")
+    assertCodeLookupPending()
+    assertCodeReceipt("submissions=1 resumed=0")
+    app.buttons["fixture.code.succeed"].tap()
+
+    app.textFields["Event code"].assertDisappears()
+    app.buttons["scan.stop-sensing"].assertHittable()
+    // One lookup fed the existing success method; one native Back returns
+    // to the root, rather than exposing a second pushed sensing screen.
+    app.navigationBars.buttons.firstMatch.tap()
+    app.tabButton("Records").assertHittable()
+    app.tabButton("Records").tap()
+    app.tabButton("Now").tap()
+    XCTAssertFalse(app.staticTexts["eventCode.pending"].exists)
+    XCTAssertFalse(app.buttons["scan.stop-sensing"].exists)
+  }
+
+  func testClosingPendingCodeEntryIgnoresLateSuccessAndFailure() {
+    launchCodeProgressFixture()
+    for completion in ["fixture.code.succeed", "fixture.code.fail"] {
+      openAccountCodeEntry()
+      app.textFields["Event code"].typeText("ABANDONED\n")
+      assertCodeLookupPending()
+      app.buttons["Cancel"].tap()
+      app.textFields["Event code"].assertDisappears()
+
+      openAccountCodeEntryFromAccount()
+      app.buttons[completion].tap()
+      assertCodeReceipt(completion == "fixture.code.succeed"
+        ? "submissions=1 resumed=1" : "submissions=2 resumed=2")
+      assertFreshCodeEntry()
+      app.buttons["Cancel"].tap()
+      app.buttons["Done"].tap()
+    }
+  }
+
+  func testAbandonedCodeLookupCannotUnlockOrWriteErrorsIntoANewAttempt() {
+    launchCodeProgressFixture()
+    openAccountCodeEntry()
+    app.textFields["Event code"].typeText("ABANDONED\n")
+    assertCodeReceipt("submissions=1 resumed=0")
+    app.buttons["Cancel"].tap()
+    app.textFields["Event code"].assertDisappears()
+    openAccountCodeEntryFromAccount()
+    app.textFields["Event code"].typeText("CURRENT\n")
+    assertCodeReceipt("submissions=2 resumed=0")
+
+    app.buttons["fixture.code.fail"].tap()
+    assertCodeReceipt("submissions=2 resumed=1")
+    assertCodeLookupPending()
+    XCTAssertEqual(app.textFields["Event code"].value as? String, "CURRENT")
+    XCTAssertFalse(app.staticTexts["beid couldn't join that event. Check the code and try again."].exists)
+
+    app.buttons["fixture.code.fail"].tap()
+    assertCodeReceipt("submissions=2 resumed=2")
+    app.staticTexts["eventCode.pending"].assertDisappears()
+    XCTAssertTrue(app.textFields["Event code"].isEnabled)
+    app.staticTexts["beid couldn't join that event. Check the code and try again."].assertExists()
+  }
+
+  func testNativeBackDuringPendingCodeEntryIgnoresLateCompletion() {
+    launchCodeProgressFixture(extraArguments: ["-beid-clock-preflight-fixture"])
+    for (index, completion) in ["fixture.code.succeed", "fixture.code.fail"].enumerated() {
+      app.buttons["home.demo.join"].assertHittable()
+      app.buttons["home.demo.join"].tap()
+      app.buttons["scan.manual-entry"].assertHittable()
+      app.buttons["scan.manual-entry"].tap()
+      app.textFields["Event code"].assertHittable()
+      app.textFields["Event code"].tap()
+      app.textFields["Event code"].typeText("ABANDONED\n")
+      assertCodeLookupPending()
+      assertCodeReceipt("submissions=\(index + 1) resumed=\(index)")
+      app.navigationBars.buttons.firstMatch.tap()
+      app.textFields["Event code"].assertDisappears()
+
+      app.scrollViews["scan.sensing"].assertHittable()
+      // Finish the fresh route's field-focus handshake before resolving the
+      // completion control's position; the iPad keyboard moves the footer.
+      openScanCodeEntryFromScan()
+      assertFreshCodeEntry()
+      let complete = app.buttons[completion]
+      complete.assertHittable()
+      complete.tap()
+      assertCodeReceipt("submissions=\(index + 1) resumed=\(index + 1)")
+      assertFreshCodeEntry()
+      app.navigationBars.buttons.firstMatch.tap()
+      app.navigationBars.buttons.firstMatch.tap()
+      app.tabButton("Now").assertHittable()
+    }
+  }
+
+  func testEmptyCodeValidationDoesNotStartPendingLookup() {
+    launchCodeProgressFixture()
+    openAccountCodeEntry()
+    app.textFields["Event code"].typeText("   \n")
+
+    app.staticTexts["Enter an event code to continue. Ask the event organizer for it."].assertExists()
+    XCTAssertFalse(app.staticTexts["eventCode.pending"].exists)
+    XCTAssertTrue(app.textFields["Event code"].isEnabled)
+    XCTAssertTrue(app.buttons["eventCode.paste"].isEnabled)
+    XCTAssertTrue(app.buttons["eventCode.join"].isEnabled)
+    assertCodeReceipt("submissions=0 resumed=0")
+  }
+
+  func testNativeBackLeavesBothScanCodeEntryRoutesUsable() {
+    assertScanCodeEntryCanPopAndReopen(usingGesture: false)
+  }
+
+  func testLeadingEdgeSwipeLeavesBothScanCodeEntryRoutesUsable() {
+    assertScanCodeEntryCanPopAndReopen(usingGesture: true)
+  }
+
+  func testCodeLookupSuccessUsesTheExistingScanFlowRouteOnce() {
+    launchCodeProgressFixture(extraArguments: ["-beid-clock-preflight-fixture"])
+    openScanCodeEntry()
+    app.textFields["Event code"].typeText("ETHTOKYO2026\n")
+    assertCodeLookupPending()
+    assertCodeReceipt("submissions=1 resumed=0")
+    app.buttons["fixture.code.succeed"].tap()
+
+    app.textFields["Event code"].assertDisappears()
+    app.buttons["scan.stop-sensing"].assertHittable()
+    app.navigationBars.buttons.firstMatch.tap()
+    app.tabButton("Records").assertHittable()
+    app.tabButton("Records").tap()
+    app.tabButton("Now").tap()
+    XCTAssertFalse(app.staticTexts["eventCode.pending"].exists)
+    XCTAssertFalse(app.buttons["scan.stop-sensing"].exists)
+  }
+
+  private func assertScanCodeEntryCanPopAndReopen(usingGesture: Bool) {
+    for fixture in ["-beid-clock-preflight-fixture", "-beid-join-refusal-fixture"] {
+      launchCodeProgressFixture(extraArguments: [fixture])
+      openScanCodeEntry()
+      app.textFields["Event code"].typeText("ABANDONED\n")
+      assertCodeLookupPending()
+      if usingGesture {
+        app.swipeFromLeadingEdge()
+      } else {
+        app.navigationBars.buttons.firstMatch.tap()
+      }
+      app.textFields["Event code"].assertDisappears()
+
+      // Both native navigation controls must return to their own source.
+      let source = fixture == "-beid-clock-preflight-fixture" ? "scan.sensing" : "scan.cant-join"
+      app.scrollViews[source].assertHittable()
+      openScanCodeEntryFromScan()
+      app.buttons["fixture.code.fail"].tap()
+      assertCodeReceipt("submissions=1 resumed=1")
+      assertFreshCodeEntry()
+      // A new route is editable and can submit after the old route's pop.
+      app.textFields["Event code"].tap()
+      app.textFields["Event code"].typeText("RETRY\n")
+      assertCodeLookupPending()
+      assertCodeReceipt("submissions=2 resumed=1")
+      app.buttons["fixture.code.fail"].tap()
+      assertCodeReceipt("submissions=2 resumed=2")
+      app.staticTexts["eventCode.pending"].assertDisappears()
+      XCTAssertTrue(app.textFields["Event code"].isEnabled)
+      app.terminate()
+    }
+  }
+
+  private func openScanCodeEntry() {
+    app.buttons["home.demo.join"].assertHittable()
+    app.buttons["home.demo.join"].tap()
+    openScanCodeEntryFromScan()
+  }
+
+  private func openScanCodeEntryFromScan() {
+    let entry = app.buttons["scan.manual-entry"]
+    entry.scrollToHittable(in: app)
+    entry.tap()
+    app.textFields["Event code"].assertHittable()
+    app.textFields["Event code"].tap()
+  }
+
+  private func launchCodeProgressFixture(extraArguments: [String] = []) {
+    app.launchArguments = ["-beid-ui-test", "-beid-code-entry-progress-fixture"] + extraArguments
+    app.launch()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
+    app.buttons["Allow Bluetooth"].assertHittable()
+    app.buttons["Allow Bluetooth"].tap()
+    app.tabButton("Records").assertHittable()
+    app.tabButton("Records").tap()
+    app.tabButton("Now").tap()
+  }
+
+  private func openAccountCodeEntry() {
+    app.buttons["home.account"].assertHittable()
+    app.buttons["home.account"].tap()
+    openAccountCodeEntryFromAccount()
+  }
+
+  private func openAccountCodeEntryFromAccount() {
+    let row = app.buttons["Join event"]
+    scrollUntilTappable(row, in: app.collectionViews.firstMatch)
+    row.assertHittable()
+    row.tap()
+    app.textFields["Event code"].assertHittable()
+    app.textFields["Event code"].tap()
+  }
+
+  private func assertCodeLookupPending() {
+    let pending = app.staticTexts["eventCode.pending"]
+    pending.assertHittable()
+    XCTAssertEqual(pending.label, "Looking up event code…")
+    XCTAssertFalse(app.textFields["Event code"].isEnabled)
+    XCTAssertFalse(app.buttons["eventCode.paste"].isEnabled)
+    XCTAssertFalse(app.buttons["eventCode.join"].isEnabled)
+  }
+
+  private func assertCodeReceipt(_ value: String) {
+    let receipt = app.staticTexts["fixture.code.receipt"]
+    let updated = expectation(for: NSPredicate(format: "label == %@", value), evaluatedWith: receipt)
+    wait(for: [updated], timeout: UITestWait.timeout)
+  }
+
+  private func assertFreshCodeEntry() {
+    app.textFields["Event code"].assertHittable()
+    XCTAssertTrue(app.textFields["Event code"].isEnabled)
+    XCTAssertEqual(app.textFields["Event code"].value as? String, "Paste event code")
+    XCTAssertFalse(app.staticTexts["eventCode.pending"].exists)
+    XCTAssertFalse(app.staticTexts["beid couldn't join that event. Check the code and try again."].exists)
+    XCTAssertFalse(app.buttons["scan.stop-sensing"].exists)
   }
 
   /// An offscreen List row may already `exist`, so require its full frame to

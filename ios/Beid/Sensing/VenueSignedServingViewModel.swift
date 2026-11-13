@@ -100,6 +100,7 @@ enum VenueServingStatus: Equatable {
   /// scheduled — nothing may be installed from this state.
   case imported(VenueArtifactIdentity)
   case evaluating(VenueArtifactIdentity)
+  case ready(displayName: String, stopAtUnixSeconds: Int64)
   /// The only state that means bytes were handed to the radio. Its facts are
   /// copied from the permit and never recomputed.
   case serving(displayName: String, stopAtUnixSeconds: Int64)
@@ -110,6 +111,13 @@ enum VenueServingStatus: Equatable {
   /// failure is never displayed as a verification verdict the verifier never
   /// issued.
   case radioRefused(VenueRadioFailure)
+}
+
+enum VenueRefreshFailure: Equatable {
+  case acquisition(VenueAcquisitionFailure)
+  case rejected(VenueImportFailure)
+  case anotherEvent
+  case blocked(VenueServingBlock)
 }
 
 /// Drives the signed venue-serving screen (beid#432).
@@ -130,6 +138,8 @@ final class VenueSignedServingViewModel: ObservableObject {
   @Published private(set) var status: VenueServingStatus = .idle
   @Published private(set) var radio: VenueRadioUpdate
   @Published private(set) var storedSourceDescription: String?
+  @Published private(set) var refreshFailure: VenueRefreshFailure?
+  @Published private(set) var isRefreshing = false
 
   /// The event id the pasted link's own fragment named, published the moment the
   /// fragment decodes and before anything is fetched.
@@ -158,8 +168,15 @@ final class VenueSignedServingViewModel: ObservableObject {
   private let store: VenuePublicArtifactStore
   private let clock: () -> VenueClockReading
   private let expiry: any VenueExpiryScheduling
+  private let renewal: any VenueExpiryScheduling
+  private var renewalTask: Task<Void, Never>?
+  private var renewalID = UUID()
+  private var scheduledRenewalEnd: Int64?
   private let canonicalEventIdHex: String?
   private let bundleURLTemplate: String?
+  private let requiresStartConfirmation: Bool
+  private var wantsBroadcasting: Bool
+  private var preparedPermit: VenueServePermit?
 
   /// The effect lease and selected workflow have different lifetimes.
   /// Background revokes a lease but retains the selected public artifact.
@@ -172,6 +189,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     var receipt: VenueImportedBundle?
     var expectedCanonicalEventIdHex: String?
     var stage: Stage
+    var refreshSource: VenueRefreshSource?
   }
   private var workflow: Workflow?
   private var activeOperation: UUID?
@@ -195,6 +213,16 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// through `servingEventIdHex`'s `.serving` guard, so a value left from an
   /// earlier permit is never exposed once serving ends.
   private var servingPermitIdentity: VenueArtifactIdentity?
+  private var currentPermitEnd: Int64?
+  private var installedRelayHopCount: Int?
+
+  var broadcastUntilUnixSeconds: Int64? {
+    workflow?.receipt?.broadcastUntilUnixSeconds ?? currentPermitEnd
+  }
+
+  var registrarHex: String? { workflow?.receipt?.registrarHex }
+  var loadedIdentity: VenueArtifactIdentity? { workflow?.receipt?.identity }
+  var relayHopCount: Int? { preparedPermit?.relayHopCount ?? installedRelayHopCount }
 
   var canonicalEventIdHexForAcquisition: String? { canonicalEventIdHex }
 
@@ -207,6 +235,8 @@ final class VenueSignedServingViewModel: ObservableObject {
     store: VenuePublicArtifactStore,
     clock: @escaping () -> VenueClockReading,
     expiry: (any VenueExpiryScheduling)? = nil,
+    renewal: (any VenueExpiryScheduling)? = nil,
+    requiresStartConfirmation: Bool = true,
     canonicalEventIdHex: String? = nil,
     bundleURLTemplate: String? = nil
   ) {
@@ -217,12 +247,17 @@ final class VenueSignedServingViewModel: ObservableObject {
     self.clock = clock
     self.canonicalEventIdHex = canonicalEventIdHex
     self.bundleURLTemplate = bundleURLTemplate
+    self.requiresStartConfirmation = requiresStartConfirmation
+    // The contract harness can enter with an already-confirmed operator intent.
+    // Production always uses the default and requires the visible Start action.
+    wantsBroadcasting = !requiresStartConfirmation
     // `VenueExpiryTimer` is `@MainActor`; a default-argument expression is not
     // evaluated in the initializer's own isolation, so the default is
     // constructed here in the (main-actor) init body instead of as a parameter
     // default. Same trap `VenueDeviceOrganizerViewModel` documents for
     // `VenueDeviceAssignmentStore`.
     self.expiry = expiry ?? VenueExpiryTimer()
+    self.renewal = renewal ?? VenueExpiryTimer()
     // A view model starts stopped; nothing is on the air until a permit is.
     radio = VenueRadioUpdate(state: .stopped)!
     storedSourceDescription = store.record?.sourceDescription
@@ -266,9 +301,8 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// the serving state, because the screen is the only thing telling the
   /// operator whether this device is actually serving.
   ///
-  /// beid#531 was decided to ship without an operator confirmation gate, on
-  /// the basis that the operator can see what is being broadcast once
-  /// advertising starts. That makes this display a safety control. Leaving
+  /// The operator checks the event identity before pressing Start (14b).
+  /// The status display remains a safety control after that action. Leaving
   /// `status` on `.serving` after the radio died would make the control lie in
   /// the direction hardest to notice: the operator believes they are serving,
   /// attendees cannot join, and nothing on screen disagrees.
@@ -337,6 +371,10 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// Superseding an operation revokes its local authority without waiting for
   /// its network callback. Cancellation of cooperative ports releases resources.
   private func select(_ artifact: VenuePublicArtifact?, stage: Stage, expectedCanonicalEventIdHex: String? = nil) -> UUID {
+    cancelRenewal()
+    refreshFailure = nil
+    currentPermitEnd = nil
+    wantsBroadcasting = !requiresStartConfirmation
     invalidate()
     operationTask?.cancel()
     operationTask = nil
@@ -390,6 +428,7 @@ final class VenueSignedServingViewModel: ObservableObject {
   func supply(bundleSource: URL, handoffSource: URL, sourceDescription: String, expectedCanonicalEventIdHex: String? = nil) async {
     guard sessionActive else { return }
     let owner = select(nil, stage: .acquiring, expectedCanonicalEventIdHex: expectedCanonicalEventIdHex)
+    workflow?.refreshSource = .paired(bundle: bundleSource, handoff: handoffSource)
     status = eligible ? .acquiring : .idle
     await runOperation(owner: owner) { [self] operation in
       let artifact: VenuePublicArtifact
@@ -415,7 +454,7 @@ final class VenueSignedServingViewModel: ObservableObject {
       }
       store.store(VenuePublicArtifactRecord(
         bundleBytes: artifact.bundleBytes, handoffBytes: artifact.handoffBytes,
-        sourceDescription: sourceDescription, storedAt: Date()))
+        sourceDescription: sourceDescription, storedAt: Date(), refreshSource: workflow?.refreshSource))
       hasUnsavedArtifact = store.persistenceWriteFailure != nil || store.isPersistenceSuspended
       storedSourceDescription = sourceDescription
     }
@@ -472,6 +511,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     }
 
     let owner = select(nil, stage: .acquiring)
+    workflow?.refreshSource = .link(bundle: bundleSource, handoff: Data(VenueKotlinBytes.swiftBytes(handoffBytes)))
     status = eligible ? .acquiring : .idle
     await runOperation(owner: owner) { [self] operation in
       let bundleBytes: Data
@@ -497,7 +537,7 @@ final class VenueSignedServingViewModel: ObservableObject {
       let description = "link, bundle from \(bundleSource.host ?? bundleUrlText)"
       store.store(VenuePublicArtifactRecord(
         bundleBytes: artifact.bundleBytes, handoffBytes: artifact.handoffBytes,
-        sourceDescription: description, storedAt: Date()))
+        sourceDescription: description, storedAt: Date(), refreshSource: workflow?.refreshSource))
       hasUnsavedArtifact = store.persistenceWriteFailure != nil || store.isPersistenceSuspended
       storedSourceDescription = description
     }
@@ -545,6 +585,7 @@ final class VenueSignedServingViewModel: ObservableObject {
       return
     }
     storedSourceDescription = record.sourceDescription
+    workflow?.refreshSource = record.refreshSource
     await runOperation(owner: owner) { [self] operation in
       await resumeSelected(owner: owner, operation: operation)
     }
@@ -556,9 +597,42 @@ final class VenueSignedServingViewModel: ObservableObject {
     await runOperation(owner: owner) { [self] operation in
       await resumeSelected(owner: owner, operation: operation)
     }
+    // An operator may republish the definition before the old chain ends.
+    // Recover once from that stale selection rather than waiting out its old
+    // deadline. Acquisition failures never turn into an immediate retry loop.
+    guard workflow?.id == owner, eligible, wantsBroadcasting, activeOperation == nil,
+      workflow?.receipt?.broadcastUntilUnixSeconds != nil,
+      case .blocked(let rejection) = status else { return }
+    switch rejection.reason {
+    case .staleDefinition, .expired, .noCurrentEnvelope:
+      guard await refetch(owner: owner), workflow?.id == owner, eligible, activeOperation == nil else { return }
+      invalidate()
+      await runOperation(owner: owner) { [self] operation in
+        await resumeSelected(owner: owner, operation: operation)
+      }
+    case .clockUnavailable, .notStarted, .envelopeRejected, .registryUnavailable: break
+    }
+  }
+
+  /// A freshly checked permit can start offline. If time moved outside that
+  /// permit, request a fresh decision; never extend cached install authority.
+  func startBroadcasting() async {
+    guard eligible, activeOperation == nil, let permit = preparedPermit else { return }
+    guard case .ready = status else { return }
+    wantsBroadcasting = true
+    guard case .available(let now) = clock(), now >= permit.startAtUnixSeconds, now < permit.stopAtUnixSeconds else {
+      await refresh()
+      return
+    }
+    preparedPermit = nil
+    install(permit, generation: generation, now: now)
   }
 
   func stop() {
+    cancelRenewal()
+    refreshFailure = nil
+    currentPermitEnd = nil
+    wantsBroadcasting = false
     invalidate()
     operationTask?.cancel()
     operationTask = nil
@@ -585,6 +659,7 @@ final class VenueSignedServingViewModel: ObservableObject {
 
   func sceneDidEnterBackground() {
     isBackgrounded = true
+    cancelRenewal()
     invalidate()
     status = .idle
   }
@@ -672,7 +747,16 @@ final class VenueSignedServingViewModel: ObservableObject {
           if attempt == 0 { continue }
           break
         }
-        install(permit, generation: lease, now: now)
+        if wantsBroadcasting {
+          install(permit, generation: lease, now: now)
+        } else {
+          preparedPermit = permit
+          currentPermitEnd = permit.stopAtUnixSeconds
+          status = .ready(displayName: permit.displayName, stopAtUnixSeconds: permit.stopAtUnixSeconds)
+          expiry.schedule(stopAtUnixSeconds: permit.stopAtUnixSeconds, now: now) { [weak self] in
+            await self?.handleExpiry(generation: lease)
+          }
+        }
         workflow?.stage = .settled
         return
       }
@@ -748,7 +832,10 @@ final class VenueSignedServingViewModel: ObservableObject {
     }
 
     servingPermitIdentity = permit.identity
+    installedRelayHopCount = permit.relayHopCount
+    currentPermitEnd = permit.stopAtUnixSeconds
     status = .serving(displayName: permit.displayName, stopAtUnixSeconds: permit.stopAtUnixSeconds)
+    scheduleRenewal(now: installedAt)
 
     // Run a timer against the exclusive instant the permit fixed.
     expiry.schedule(stopAtUnixSeconds: permit.stopAtUnixSeconds, now: installedAt) { [weak self] in
@@ -758,10 +845,108 @@ final class VenueSignedServingViewModel: ObservableObject {
 
   private func handleExpiry(generation: UUID) async {
     guard generation == self.generation else { return }
+    let owner = workflow?.id
+    let end = workflow?.receipt?.broadcastUntilUnixSeconds
     // Expiry clears first, irrespective of outstanding obsolete work.
     invalidate()
     status = .blocked(VenueServingRejection(reason: .expired)!)
+    if let end, case .available(let now) = clock(), now >= end, let owner {
+      // The old bytes are already stopped, including while a network read waits.
+      cancelRenewal()
+      let refreshed = await refetch(owner: owner)
+      guard workflow?.id == owner, eligible else { return }
+      guard refreshed else { return }
+    }
     await refresh()
+  }
+
+  private func cancelRenewal() {
+    renewal.cancel()
+    renewalTask?.cancel()
+    renewalTask = nil
+    renewalID = UUID()
+    scheduledRenewalEnd = nil
+    isRefreshing = false
+  }
+
+  private func scheduleRenewal(now: Int64) {
+    guard let owner = workflow?.id, workflow?.refreshSource != nil,
+      let end = workflow?.receipt?.broadcastUntilUnixSeconds,
+      end > now, scheduledRenewalEnd != end else { return }
+    scheduledRenewalEnd = end
+    // Give the bounded network fetch a minute before the last loaded lease ends.
+    renewal.schedule(stopAtUnixSeconds: max(now, end - 60), now: now) { [weak self] in
+      _ = await self?.refetch(owner: owner)
+    }
+  }
+
+  private func refetch(owner: UUID) async -> Bool {
+    guard eligible, workflow?.id == owner, let source = workflow?.refreshSource,
+      let expected = workflow?.receipt?.identity.eventIdHex else { return false }
+    renewalTask?.cancel()
+    let request = UUID()
+    renewalID = request
+    isRefreshing = true
+    let task = Task { [self] in
+      let artifact: VenuePublicArtifact
+      do {
+        switch source {
+        case .paired(let bundle, let handoff):
+          artifact = try await acquisition.acquire(bundleSource: bundle, handoffSource: handoff)
+        case .link(let bundle, let handoff):
+          artifact = VenuePublicArtifact(bundleBytes: try await acquisition.acquireBundle(bundleSource: bundle), handoffBytes: handoff)
+        }
+      } catch {
+        guard acceptsRenewal(owner: owner, request: request) else { return }
+        refreshFailure = .acquisition((error as? VenueAcquisitionFailure) ?? .transportFailure)
+        return
+      }
+      guard acceptsRenewal(owner: owner, request: request) else { return }
+      let result = await verifier.importBundle(bundleBytes: artifact.bundleBytes, handoffBytes: artifact.handoffBytes)
+      guard acceptsRenewal(owner: owner, request: request) else { return }
+      switch result {
+      case .rejected(let reason): refreshFailure = .rejected(reason)
+      case .imported(let receipt):
+        guard VenueBundleURLTemplate.normalizedEventId(receipt.identity.eventIdHex)
+          == VenueBundleURLTemplate.normalizedEventId(expected) else {
+          refreshFailure = .anotherEvent
+          return
+        }
+        // A later end alone does not establish continuity. The new pack must
+        // have a freshly verified envelope covering now before replacing the
+        // loaded chain; otherwise retain the still-valid current pack.
+        let decision = await verifier.evaluate(receipt, clock: clock())
+        guard acceptsRenewal(owner: owner, request: request) else { return }
+        switch decision {
+        case .blocked(let rejection):
+          refreshFailure = .blocked(rejection.reason)
+          return
+        case .permitted(let permit):
+          guard case .available(let now) = clock(),
+            now >= permit.startAtUnixSeconds, now < permit.stopAtUnixSeconds else {
+            refreshFailure = .blocked(.expired)
+            return
+          }
+        }
+        workflow?.artifact = artifact
+        workflow?.receipt = receipt
+        refreshFailure = nil
+        store.store(VenuePublicArtifactRecord(
+          bundleBytes: artifact.bundleBytes, handoffBytes: artifact.handoffBytes,
+          sourceDescription: storedSourceDescription ?? "Venue pack", storedAt: Date(), refreshSource: source))
+        hasUnsavedArtifact = store.persistenceWriteFailure != nil || store.isPersistenceSuspended
+      }
+    }
+    renewalTask = task
+    await task.value
+    guard renewalID == request else { return false }
+    renewalTask = nil
+    isRefreshing = false
+    return refreshFailure == nil
+  }
+
+  private func acceptsRenewal(owner: UUID, request: UUID) -> Bool {
+    eligible && workflow?.id == owner && renewalID == request && !Task.isCancelled
   }
 
   /// Clears the radio FIRST, then invalidates every in-flight request.
@@ -772,6 +957,8 @@ final class VenueSignedServingViewModel: ObservableObject {
   @discardableResult
   private func invalidate() -> UUID {
     clearRadio()
+    preparedPermit = nil
+    installedRelayHopCount = nil
     expiry.cancel()
     generation = UUID()
     return generation

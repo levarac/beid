@@ -185,7 +185,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     durations after the first runs. Missing/new methods get a 20-second weight;
     identifier ordering and the lowest shard index break ties, so every new
     test is assigned exactly once. Runtime UI enumeration must also equal the
-    current Swift source inventory. The two tablet-only methods in
+    current Swift source inventory. The three tablet-only methods (portrait and
+    landscape Records navigation, plus the landscape primary flow) in
     `scripts/ios-ui-iphone-skips.txt` remain selected and must have result nodes;
     they must report their deliberate iPhone Skipped status. An unexecuted
     excluded case may omit duration (counted as zero); passed cases require it.
