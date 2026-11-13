@@ -22,17 +22,37 @@ final class BeidBackNavigationUITests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
-    swipeFromLeadingEdge()
+    let detailHeading = app.staticTexts["proof.detail.title"]
+    let backButton = app.navigationBars["ETHGlobal Tokyo"].buttons.firstMatch
+    let collection = app.collectionViews["records.events"]
+    swipeFromLeadingEdge {
+      detailHeading.exists && detailHeading.isHittable
+        && backButton.exists && backButton.isHittable
+        && (!collection.exists || !collection.isHittable)
+    }
 
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
-    swipeFromLeadingEdge()
+    let eventHeading = app.staticTexts["event-detail.heading"]
+    let eventBack = app.navigationBars.buttons["By event"]
+    swipeFromLeadingEdge {
+      eventHeading.exists && eventHeading.isHittable
+        && eventBack.exists && eventBack.isHittable
+        && (!collection.exists || !collection.isHittable)
+    }
 
     XCTAssertTrue(
       app.collectionViews["records.events"].waitForExistence(timeout: 5),
       "the second leading-edge swipe did not return to the event list"
     )
-    swipeFromLeadingEdge()
+    let byEventNavigation = app.navigationBars["By event"]
+    let byEventHeading = byEventNavigation.staticTexts["By event"]
+    let byEventBack = byEventNavigation.buttons["Back"]
+    swipeFromLeadingEdge {
+      byEventHeading.exists && byEventHeading.isHittable
+        && byEventBack.exists && byEventBack.isHittable
+        && (!eventHeading.exists || !eventHeading.isHittable)
+    }
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
   }
@@ -42,7 +62,10 @@ final class BeidBackNavigationUITests: XCTestCase {
   func testLeadingEdgeSwipeOnTheRootScreenIsHarmless() {
     navigateToCollectionWithProof()
 
-    swipeFromLeadingEdge()
+    let grid = app.scrollViews["records.grid"]
+    swipeFromLeadingEdge {
+      grid.exists
+    }
 
     XCTAssertEqual(app.state, .runningForeground, "the app did not survive a swipe on the root screen")
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
@@ -60,9 +83,18 @@ final class BeidBackNavigationUITests: XCTestCase {
   /// development language — with a near-zero press duration and a fast
   /// velocity, because a long press before the drag lets the recognizer fail
   /// before the pan begins.
-  private func swipeFromLeadingEdge() {
+  private func swipeFromLeadingEdge(when isReady: @escaping () -> Bool) {
     let window = app.windows.firstMatch
     XCTAssertTrue(window.waitForExistence(timeout: 5))
+
+    // Hittability is a UI-readiness proxy, not UIKit transition completion.
+    let ready = XCTNSPredicateExpectation(
+      predicate: NSPredicate { _, _ in isReady() }, object: nil
+    )
+    XCTAssertEqual(
+      XCTWaiter.wait(for: [ready], timeout: 5), .completed,
+      "The current screen must be ready before each leading-edge swipe"
+    )
 
     let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
     let finish = window.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
