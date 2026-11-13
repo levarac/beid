@@ -95,6 +95,10 @@ private struct NowHomeView: View {
               }
               #if DEBUG
               if coordinator.isHomeStandbyFixture { standbyFixtureControls }
+              if coordinator.stopOutcomeUITestFixture != nil {
+                Button("Repeat STOP confirmation") { coordinator.confirmStopSensing() }
+                  .accessibilityIdentifier("stop.fixture.repeat-confirmation")
+              }
               #endif
             }
             .padding(.horizontal, DS.Space.pageMargin)
@@ -112,7 +116,11 @@ private struct NowHomeView: View {
       .navigationDestination(isPresented: $showAboutSensing) { AboutSensingView() }
       .navigationDestination(isPresented: $showWhatWasSent) { WhatWeSendView() }
       .navigationDestination(isPresented: $coordinator.scanPresented) {
-        ScanFlowView(sensing: sensing).environmentObject(coordinator)
+        let routeID = coordinator.scanRouteID
+        ScanFlowView(sensing: sensing)
+          .environmentObject(coordinator)
+          .onDisappear { coordinator.scanRouteDidDisappear(routeID) }
+          .id(routeID)
       }
       .navigationDestination(item: $coordinator.selectedProof) { proof in
         HomeRecordDetail(proof: proof)

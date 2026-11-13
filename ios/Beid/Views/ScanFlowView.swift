@@ -68,6 +68,12 @@ struct ScanFlowView: View {
       .safeAreaInset(edge: .top) {
         if NearbyJoinUITestFixture.isEnabled { NearbyJoinUITestReceipt() }
       }
+      .safeAreaInset(edge: .bottom) {
+        if coordinator.stopOutcomeUITestFixture != nil {
+          Button("Repeat STOP confirmation") { coordinator.confirmStopSensing() }
+            .accessibilityIdentifier("stop.fixture.repeat-confirmation")
+        }
+      }
       #endif
       .modifier(EventSigningKeyFailurePresenter(
         sensingCoordinator: sensing,
@@ -97,7 +103,7 @@ struct ScanFlowView: View {
 
   private var showsStopControl: Bool {
     guard coordinator.sealedSnapshot == nil, coordinator.stopConfirmSnapshot == nil,
-      proofCollectedForDisplay == nil else { return false }
+      coordinator.stopOutcome == nil, proofCollectedForDisplay == nil else { return false }
     #if DEBUG
     if let fixture = sensing.sensingScreenshotFixture {
       switch fixture {
@@ -134,6 +140,7 @@ struct ScanFlowView: View {
   }
 
   private var statusTitle: String {
+    if coordinator.stopOutcome != nil { return String(localized: "stop.outcome.title") }
     if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture { return "Record saved" }
     if sensing.joinRefusalReasonKey != nil { return "Can't join" }
     #if DEBUG
@@ -159,7 +166,9 @@ struct ScanFlowView: View {
   }
 
   @ViewBuilder private var content: some View {
-    if let collected = proofCollectedForDisplay {
+    if coordinator.stopOutcome != nil {
+      stopOutcomeView
+    } else if let collected = proofCollectedForDisplay {
       ProofCollectedView(snapshot: collected, sigilInput: sensing.sigilInput(forProofId: collected.recordID)) {
         if coordinator.proofCollectedSnapshot != nil {
           coordinator.viewCollectionAfterProofCollected()
@@ -179,6 +188,26 @@ struct ScanFlowView: View {
     } else {
       ScanFlowContent.view(phase: sensing.phase, sensing: sensing, clockPreflight: coordinator.clockPreflight)
     }
+  }
+
+  private var stopOutcomeView: some View {
+    ScrollView {
+      BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
+        VStack(spacing: DS.Space.l) {
+          BeidEmptyBlock {
+            Text("stop.outcome.message")
+              .beidTextStyle(DS.Font.Library.body15)
+              .foregroundStyle(DS.Color.textPrimary)
+              .fixedSize(horizontal: false, vertical: true)
+              .accessibilityIdentifier("stop.outcome.message")
+          }
+          BeidPrimaryButton("stop.outcome.action") { coordinator.dismissStopOutcome() }
+            .accessibilityIdentifier("stop.outcome.action")
+        }
+        .padding(DS.Space.pageMargin)
+      }
+    }
+    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
   }
 }
 
