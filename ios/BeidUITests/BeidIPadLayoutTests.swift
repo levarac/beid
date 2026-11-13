@@ -16,7 +16,10 @@ final class BeidIPadLayoutTests: XCTestCase {
     capturePrimaryFlow(orientation: "portrait")
   }
 
-  func testPrimaryFlowInLandscape() {
+  func testPrimaryFlowInLandscape() throws {
+    guard UIDevice.current.userInterfaceIdiom == .pad else {
+      throw XCTSkip("Requires an iPad to exercise the landscape primary flow")
+    }
     XCUIDevice.shared.orientation = .landscapeLeft
     capturePrimaryFlow(orientation: "landscape")
   }

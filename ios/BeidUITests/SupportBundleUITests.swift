@@ -15,6 +15,10 @@ final class SupportBundleUITests: XCTestCase {
     XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
     app.buttons["home.account"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Organizer tools"].waitForExistence(timeout: 5), "the Account sheet must be open")
+    XCTAssertFalse(app.buttons["Connect Wallet"].exists)
+    XCTAssertFalse(app.buttons["Connect with MetaMask"].exists)
+    XCTAssertFalse(app.buttons["Disconnect wallet"].exists)
 
     // Flat 2b: the share row is the Account sheet's last list row, and the
     // version footer can cover it while XCTest still reports it hittable.

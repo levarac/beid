@@ -15,6 +15,9 @@ final class FlatScreenshotTourD: XCTestCase {
   func testAccountRemovesWalletRowsEvenWithLegacyConnectedFixture() {
     openAccount()
     app.buttons["Organizer tools"].assertHittable()
+    attachScreenshot("10")
+    assertMinimumHitTarget(app.buttons["Done"])
+    assertMinimumHitTarget(app.buttons["Organizer tools"])
     XCTAssertTrue(app.descendants(matching: .any)["account.bluetooth.status"].exists)
     let list = app.collectionViews.firstMatch
     let privacy = app.descendants(matching: .any)["account.privacy-policy"]
@@ -67,14 +70,6 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertFalse(app.staticTexts.matching(
       NSPredicate(format: "label CONTAINS[c] %@", "verified")
     ).firstMatch.exists)
-  }
-
-  func testShot_10_Account() {
-    openAccount()
-    app.buttons["Organizer tools"].assertHittable()
-    attachScreenshot("10")
-    assertMinimumHitTarget(app.buttons["Done"])
-    assertMinimumHitTarget(app.buttons["Organizer tools"])
   }
 
   func testShot_10c_BluetoothOff() {
@@ -159,13 +154,6 @@ final class FlatScreenshotTourD: XCTestCase {
     }
   }
 
-  func testShot_14b_VenueBroadcast() {
-    openVenue(frame: "14b")
-    attachScreenshot("14b")
-    assertVenueControls()
-    XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].exists)
-  }
-
   func testVenueBroadcastQRFirstShowsRegistrarAndTwoTimingRows() {
     openVenue(frame: "14b")
     let scan = app.buttons["Scan QR code"]
@@ -207,6 +195,9 @@ final class FlatScreenshotTourD: XCTestCase {
     // localized sentence and the checked permit's actual hop count.
     XCTAssertEqual(app.staticTexts["venue.delivery"].label, "Direct · hop 0")
     XCTAssertTrue(app.staticTexts["venue.bluetooth"].label.uppercased().contains("ASKED TO BROADCAST"))
+    attachScreenshot("14b")
+    assertVenueControls()
+    XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].exists)
   }
 
   func testVenueInvalidSignatureAnotherEventAndExpiredPackCannotStart() {

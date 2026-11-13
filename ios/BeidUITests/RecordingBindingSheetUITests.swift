@@ -11,7 +11,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
 
   override func setUpWithError() throws { continueAfterFailure = false }
 
-  func testFirstRecordingDoesNotPresentWalletSheet() {
+  func testKeepSensingReturnsToLiveRecordingWithoutWalletSheet() {
     reachRecording()
     XCTAssertFalse(app.buttons["Cancel"].exists)
     XCTAssertFalse(app.buttons["Connect wallet"].exists)
@@ -20,10 +20,6 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["DEVICES HEARD"].exists)
     XCTAssertTrue(app.staticTexts["ELAPSED"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
-  }
-
-  func testKeepSensingReturnsToLiveRecordingWithoutWalletSheet() {
-    reachRecording()
     app.buttons["scan.stop-sensing"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     app.buttons["Keep sensing"].tap()
@@ -40,6 +36,8 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["Your record is saved on this phone. You'll find it in Records."].exists)
+    XCTAssertTrue(app.staticTexts[SensingVisualOracle.savedCaption].waitForExistence(timeout: 5))
+    SensingVisualOracle.assertSavedCaption(in: app, test: self, name: "saved-live")
     app.buttons["Done"].tap()
     XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))
     app.buttons["View records"].tap()
@@ -231,19 +229,6 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testRecordingMetricsAreFullyVisibleBeforeScrolling() {
     reachRecording()
     SensingVisualOracle.assertInitialMetrics(in: app, test: self, name: "recording-live")
-  }
-
-  func testConfirmedStopCaptionHasReadableOnInkForeground() {
-    reachRecording()
-    app.buttons["scan.stop-sensing"].tap()
-    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
-    app.buttons["Stop and keep record"].tap()
-    XCTAssertTrue(app.staticTexts[SensingVisualOracle.savedCaption].waitForExistence(timeout: 5))
-    SensingVisualOracle.assertSavedCaption(in: app, test: self, name: "saved-live")
-  }
-
-  func testRecordingGuidanceRemainsReachableAfterScrolling() {
-    reachRecording()
     SensingVisualOracle.assertPostScrollGuidance(in: app, test: self, name: "recording-live")
   }
 
