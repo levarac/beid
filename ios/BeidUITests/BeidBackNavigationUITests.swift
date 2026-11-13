@@ -22,6 +22,24 @@ final class BeidBackNavigationUITests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
+    let detailHeading = app.staticTexts["proof.detail.title"]
+    let backButton = app.navigationBars["ETHGlobal Tokyo"].buttons.firstMatch
+    let collection = app.collectionViews["records.events"]
+    // Hittability is a UI-readiness proxy, not UIKit transition completion.
+    let detailReady = XCTNSPredicateExpectation(
+      predicate: NSPredicate { _, _ in
+        detailHeading.exists && detailHeading.isHittable
+          && backButton.exists && backButton.isHittable
+          && !collection.isHittable
+      },
+      object: nil
+    )
+    XCTAssertEqual(
+      XCTWaiter.wait(for: [detailReady], timeout: 5), .completed,
+      "Record detail heading and native Back must be hittable, " +
+        "and the underlying event collection must not be hittable before the first edge swipe"
+    )
+
     swipeFromLeadingEdge()
 
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
