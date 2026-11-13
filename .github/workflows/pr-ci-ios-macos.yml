@@ -199,8 +199,10 @@ jobs:
     runs-on: macos-26
     # The former serial full job hit 60 minutes. Full mode now builds once
     # and fans out to <=4 macOS test jobs. Smoke retains its single job.
-    # 45 minutes is containment for build/smoke, not a performance target.
-    timeout-minutes: 45
+    # 55 minutes fits 25 build + 25 smoke + 5 for evidence/cleanup.
+    # Cancellation containment only: execution time is unchanged and the
+    # CI-time target remains exceeded.
+    timeout-minutes: 55
     steps:
       - name: Initialize CI output path
         shell: bash
@@ -396,7 +398,10 @@ jobs:
 
       - name: Test without rebuilding
         if: ${{ needs.plan.outputs.mode == 'smoke' }}
-        timeout-minutes: 10
+        # All units and smoke UI share this step; 10 minutes clipped hosted Debug.
+        # Match the 25-minute full-mode budget for cancellation containment;
+        # execution time is unchanged and the CI-time target remains exceeded.
+        timeout-minutes: 25
         shell: bash
         env:
           TEST_MODE: ${{ needs.plan.outputs.mode }}
