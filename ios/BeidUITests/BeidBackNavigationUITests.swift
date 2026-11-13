@@ -30,7 +30,7 @@ final class BeidBackNavigationUITests: XCTestCase {
       predicate: NSPredicate { _, _ in
         detailHeading.exists && detailHeading.isHittable
           && backButton.exists && backButton.isHittable
-          && !collection.isHittable
+          && (!collection.exists || !collection.isHittable)
       },
       object: nil
     )
