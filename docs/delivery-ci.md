@@ -180,9 +180,14 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     from four macOS jobs to three. Values outside 2/3 fail planning.
 
     `scripts/ios_ui_smoke.py shards` balances methods longest-first using
-    `scripts/ios-ui-durations.json`. Its initial measured values are from a
-    local iPad run; replace them with hosted iPhone `test-tree.json` case
-    durations after the first runs. Missing/new methods get a 20-second weight;
+    `scripts/ios-ui-durations.json`. The table replaces the local iPad seed with
+    all 95 positive per-case `durationInSeconds` values from hosted iPhone
+    [run 43322476619, attempt 1](https://github.com/levarac/beid/actions/runs/43322476619/attempts/1)
+    at head `018174fe5323d433d7e089d1ceee053d67ca440b`, without rounding.
+    That run had 92 Passed, 1 Failed and 2 Skipped UI cases: its timings supply
+    scheduling costs, not passing acceptance. The two Skipped values measure
+    elapsed case overhead, not executed test bodies. Suite totals and unit rows
+    are excluded. Missing/new methods get a 20-second weight;
     identifier ordering and the lowest shard index break ties, so every new
     test is assigned exactly once. Runtime UI enumeration must also equal the
     current Swift source inventory. The two tablet-only methods in
@@ -214,8 +219,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     KMP script start/end, and the observed Swift compile window. That window
     includes overlapping/link work; `-showBuildTimingSummary` in `build.log`
     gives actual task durations. Job timeouts are 45 minutes for build/smoke and
-    35 per test lane. Step timeouts are 25 minutes for build, 10 for smoke tests,
-    and 25 for each full-mode test lane, leaving time for evidence and cleanup.
+    45 per full-mode test lane. Step timeouts are 25 minutes for build, 10 for smoke tests,
+    and 35 for each full-mode test lane, leaving time for evidence and cleanup.
     These are containment, not claimed speed; hosted full and smoke timing and
     artifact portability still need measurement on the final SHA.
 

@@ -564,7 +564,7 @@ jobs:
     needs: [plan, build]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.plan.outputs.mode == 'full' }}
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       # One unit job + <=3 UI shards; build has finished before these start.
@@ -626,7 +626,7 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: Execute full-mode test lane
-        timeout-minutes: 25
+        timeout-minutes: 35
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
