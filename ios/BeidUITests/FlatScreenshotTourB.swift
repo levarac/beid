@@ -150,6 +150,11 @@ final class FlatScreenshotTourB: XCTestCase {
     }
     let assertEmptyEventList = {
       XCTAssertEqual(events.count, 1)
+      // Only text inside the visible By event list can satisfy this assertion.
+      XCTAssertEqual(
+        eventExplanation.count, 1,
+        "Empty By event must show the saved-records explanation inside records.events"
+      )
       XCTAssertTrue(events.element.isHittable)
       XCTAssertEqual(eventBar.count, 1)
       XCTAssertEqual(eventHeading.count, 1)
@@ -161,11 +166,6 @@ final class FlatScreenshotTourB: XCTestCase {
       XCTAssertTrue(nativeBack.element.isHittable)
       XCTAssertEqual(eventRows.count, 0)
       XCTAssertFalse(grid.element.exists && grid.element.isHittable)
-      // Only text inside the visible By event list can satisfy this assertion.
-      XCTAssertEqual(
-        eventExplanation.count, 1,
-        "Empty By event must show the saved-records explanation inside records.events"
-      )
       XCTAssertTrue(eventExplanation.element.isHittable)
     }
 
