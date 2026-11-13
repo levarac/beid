@@ -222,7 +222,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
     record.tap()
     app.staticTexts["proof.detail.title"].assertExists()
     app.staticTexts["SIGNATURE"].assertExists()
-    app.staticTexts.matching(identifier: "NOT YET AVAILABLE").firstMatch.assertExists()
+    app.staticTexts.matching(identifier: "NOT AVAILABLE").firstMatch.assertExists()
     XCTAssertFalse(app.staticTexts["Sealed"].exists)
     XCTAssertFalse(app.staticTexts["Self-signed on device"].exists)
     XCTAssertEqual(app.alerts.count, 0)
