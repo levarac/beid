@@ -26,9 +26,9 @@ final class BeidBackNavigationUITests: XCTestCase {
     let backButton = app.navigationBars["ETHGlobal Tokyo"].buttons.firstMatch
     let collection = app.collectionViews["records.events"]
     let eventHeading = app.staticTexts["event-detail.heading"]
-    // The screen this push covered is Event Detail, not the event list. The
-    // push has finished only once Event Detail has left the hierarchy, and
-    // the edge recognizer does not begin while a transition is running.
+    // The screen this push covered is Event Detail, not the event list.
+    // Event Detail stays in the hierarchy while the push runs, and the edge
+    // recognizer does not begin during a transition, so wait for it to leave.
     swipeFromLeadingEdge {
       detailHeading.exists && detailHeading.isHittable
         && backButton.exists && backButton.isHittable
@@ -38,10 +38,13 @@ final class BeidBackNavigationUITests: XCTestCase {
     XCTAssertTrue(eventHeading.waitForExistence(timeout: 5))
     XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
     let eventBack = app.navigationBars.buttons["By event"]
+    // Proof Detail stays in the hierarchy while the first pop runs, so wait
+    // for it to leave too.
     swipeFromLeadingEdge {
       eventHeading.exists && eventHeading.isHittable
         && eventBack.exists && eventBack.isHittable
         && (!collection.exists || !collection.isHittable)
+        && !detailHeading.exists
     }
 
     XCTAssertTrue(
@@ -54,7 +57,9 @@ final class BeidBackNavigationUITests: XCTestCase {
     swipeFromLeadingEdge {
       byEventHeading.exists && byEventHeading.isHittable
         && byEventBack.exists && byEventBack.isHittable
-        && (!eventHeading.exists || !eventHeading.isHittable)
+        // Event Detail can be unhittable while the second pop still runs, so
+        // wait for it to leave the hierarchy.
+        && !eventHeading.exists
     }
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
