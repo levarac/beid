@@ -116,8 +116,7 @@ enum ReportSubmissionGoldenScenario {
     let endpoint = try await server.start(timeout: hostedWaits ? SubmissionTestWait.timeout : nil)
     let fileURL = directory.appendingPathComponent("report-submissions.json")
 
-    let store = ReportSubmissionStore(fileURL: fileURL)
-    try store.addPendingCapture(
+    try ReportSubmissionStore(fileURL: fileURL).addPendingCapture(
       ReportSubmissionCapture(
         id: captureId,
         eventCode: eventCode,
@@ -144,6 +143,10 @@ enum ReportSubmissionGoldenScenario {
           allowInsecureLoopbackForTests: true
         )
     )
+    // Reopen the queue from disk: the runtime must sign the pending capture as
+    // it was persisted and decoded, not the instance that seeded it.
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    XCTAssertEqual(store.pendingCaptures.map(\.id), [captureId])
     let cryptography = SignatureInputRecordingCryptography(wrapping: TestSensingCryptography())
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
       bundle: try makeSubmissionEnabledBundle(in: directory),
