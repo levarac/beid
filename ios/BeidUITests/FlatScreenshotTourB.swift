@@ -26,7 +26,12 @@ final class FlatScreenshotTourB: XCTestCase {
   }
 
   func testShot_04b_Empty() {
-    launchHome(arguments: ["-beid-now-standby-fixture"])
+    // The 04b frame flag keeps Home from starting its live clock check. With
+    // only the standby fixture, a slow or failed check inserts the clock
+    // notice above the list while the test is tapping, and every control
+    // below it moves down: a tap aimed at "Advance one second" then lands on
+    // "How sensing works".
+    launchHome(arguments: ["-beid-now-standby-fixture", "-beid-home-frame-04b"])
     XCTAssertTrue(app.staticTexts["home.listening"].waitForExistence(timeout: 5))
     app.buttons["fixture.now.advance29"].tap()
     XCTAssertFalse(app.buttons["home.enter-code"].exists)
