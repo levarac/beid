@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import BeidSharedKit
+import Combine
 import Foundation
 import XCTest
 @testable import Beid
@@ -142,27 +143,21 @@ enum ReportSubmissionGoldenScenario {
           allowInsecureLoopbackForTests: true
         )
     )
+    // Reopen the queue from disk: the runtime must sign the pending capture as
+    // it was persisted and decoded, not the instance that seeded it.
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    XCTAssertEqual(store.pendingCaptures.map(\.id), [captureId])
     let cryptography = SignatureInputRecordingCryptography(wrapping: TestSensingCryptography())
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
       bundle: try makeSubmissionEnabledBundle(in: directory),
       eventSigningCryptography: cryptography,
       definitionProvider: StaticEventDefinitionContextProvider(configuration: configuration),
+      store: store,
       fileURL: fileURL,
       allowInsecureLoopbackForTests: true
     ))
 
-    runtime.submitPending()
-    try await server.waitFor(postCount: 1, timeout: hostedWaits ? SubmissionTestWait.timeout : nil)
-    if hostedWaits {
-      try await waitForStoredSubmissionState(.accepted, at: fileURL, server: server)
-    } else {
-      try await waitForAcceptedRecord(at: fileURL, server: server)
-    }
-    // The runtime's own callbacks hold it weakly; keep it alive until its
-    // receipt write has landed.
-    withExtendedLifetime(runtime) {}
-
-    let record = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
+    let record = try await waitForAcceptedRecord(at: fileURL, server: server, store: store, runtime: runtime)
     XCTAssertEqual(record.id, captureId)
     XCTAssertEqual(cryptography.signatureInputs.count, 1, "exactly one Observation must be signed")
     XCTAssertEqual(server.postBodies.count, 1, "exactly one POST must be sent")
@@ -175,18 +170,115 @@ enum ReportSubmissionGoldenScenario {
     )
   }
 
-  private static func waitForAcceptedRecord(at fileURL: URL, server: StubOperatorServer) async throws {
-    for _ in 0..<1_000 {
-      if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == .accepted {
-        return
-      }
-      try await Task.sleep(nanoseconds: 10_000_000)
+  @discardableResult
+  static func waitForAcceptedRecord(
+    at fileURL: URL,
+    server: StubOperatorServer,
+    store: ReportSubmissionStore? = nil,
+    runtime: ReportSubmissionRuntime? = nil
+  ) async throws -> ReportSubmissionRecord {
+    let store = store ?? ReportSubmissionStore(fileURL: fileURL)
+    let observation = AcceptanceObservation(store: store)
+    defer {
+      observation.cancel()
+      // Runtime callbacks hold it weakly. Retain both owners on every exit,
+      // including terminal failures and timeout unwinding.
+      withExtendedLifetime((store, runtime)) {}
     }
-    let actual = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState.rawValue
-    throw StubOperatorError.submissionStateTimedOut(
-      expected: ReportSubmissionState.accepted.rawValue,
-      diagnostics: "last state \(actual ?? "nil"); \(server.timeoutDiagnostics)"
-    )
+    #if DEBUG
+    runtime?.receiptPersistenceGate = {
+      observation.verifiedCallbackEntered = true
+      return true
+    }
+    defer { runtime?.receiptPersistenceGate = nil }
+    #endif
+
+    // The subscription is installed before submission can publish anything.
+    runtime?.submitPending()
+    // Two store signals, each bounded by the shared budget: the record is
+    // durably SUBMITTING once it is prepared and signed (written just before
+    // the POST starts), then it is accepted or terminal once the response is
+    // verified. Both halves are real cryptography, so one budget must not
+    // have to cover both.
+    var phase = "prepare-and-sign"
+    var result = await XCTWaiter.fulfillment(of: [observation.submitting], timeout: SubmissionTestWait.timeout)
+    if result == .completed {
+      phase = "post-and-verify"
+      result = await XCTWaiter.fulfillment(of: [observation.finished], timeout: SubmissionTestWait.timeout)
+    }
+    let persisted = ReportSubmissionStore(fileURL: fileURL).record(id: captureId)
+
+    func describe(_ record: ReportSubmissionRecord?) -> String {
+      "state=\(record?.submissionState.rawValue ?? "missing"), " +
+        "terminalErrorCode=\(record?.terminalErrorCode ?? "nil"), " +
+        "receiptHexCount=\(record?.acceptanceReceiptHex?.count ?? 0)"
+    }
+    #if DEBUG
+    let callbackDiagnostics = "verifiedCallbackEntered=\(observation.verifiedCallbackEntered); " +
+      "activeSubmissions=\(runtime?.activeSubmissionCountForTesting.description ?? "unavailable")"
+    #else
+    let callbackDiagnostics = "verifiedCallbackEntered=unavailable; activeSubmissions=unavailable"
+    #endif
+    let transportDiagnostics = result == .timedOut ? server.timeoutDiagnostics : server.diagnostics
+    let diagnostics = "captureId=\(captureId); published {\(describe(observation.record))}; " +
+      "disk {\(describe(persisted))}; \(callbackDiagnostics); \(transportDiagnostics)"
+    if let code = observation.record?.terminalErrorCode {
+      throw AcceptanceWaitError(description: "terminal submission: \(code); \(diagnostics)")
+    }
+    guard result == .completed else {
+      throw AcceptanceWaitError(
+        description: "acceptance wait ended with \(result) in phase \(phase), " +
+          "budget=\(SubmissionTestWait.timeout)s per phase; \(diagnostics)"
+      )
+    }
+    // A verified callback is only a pre-write marker. Require the published
+    // acceptance and the same nonempty receipt from a freshly opened store.
+    guard let published = observation.record,
+          published.submissionState == .accepted,
+          let receipt = published.acceptanceReceiptHex, !receipt.isEmpty,
+          let persisted, persisted.submissionState == .accepted,
+          persisted.terminalErrorCode == nil, persisted.acceptanceReceiptHex == receipt else {
+      throw AcceptanceWaitError(description: "persisted acceptance mismatch; \(diagnostics)")
+    }
+    return persisted
+  }
+
+  @MainActor
+  private final class AcceptanceObservation {
+    let submitting = XCTestExpectation(description: "target capture left PREPARED")
+    let finished = XCTestExpectation(description: "target capture accepted or terminal")
+    private(set) var record: ReportSubmissionRecord?
+    var verifiedCallbackEntered = false
+    private var didSubmit = false
+    private var didFinish = false
+    private var subscription: AnyCancellable?
+
+    init(store: ReportSubmissionStore) {
+      subscription = store.$records.sink { [weak self] records in
+        // The store is MainActor-isolated and this subscription has no
+        // scheduler hop. Published emits in willSet: inspect its argument.
+        MainActor.assumeIsolated {
+          guard let self, !self.didFinish else { return }
+          self.record = records.first { $0.id == ReportSubmissionGoldenScenario.captureId }
+          guard let record = self.record else { return }
+          let isTerminal = record.terminalErrorCode != nil
+          if !self.didSubmit, isTerminal || record.submissionState != .prepared {
+            self.didSubmit = true
+            self.submitting.fulfill()
+          }
+          guard isTerminal ||
+            (record.submissionState == .accepted && record.acceptanceReceiptHex?.isEmpty == false) else { return }
+          self.didFinish = true
+          self.finished.fulfill()
+        }
+      }
+    }
+
+    func cancel() { subscription?.cancel() }
+  }
+
+  private struct AcceptanceWaitError: Error, CustomStringConvertible {
+    let description: String
   }
 
   private static func makeSubmissionEnabledBundle(in directory: URL) throws -> Bundle {
@@ -291,5 +383,98 @@ final class ReportSubmissionGoldenBytesTests: XCTestCase {
       "the POST body must be exactly the persisted signed Observation"
     )
     ReportSubmissionGoldenScenario.assertMatchesGolden(actual)
+  }
+
+  func testAcceptanceWaitReportsTerminalSubmissionError() async throws {
+    let fixture = try makeAcceptanceWaitFixture()
+    defer { fixture.server.stop() }
+
+    do {
+      try await ReportSubmissionGoldenScenario.waitForAcceptedRecord(at: fixture.fileURL, server: fixture.server)
+      XCTFail("a terminal submission must not satisfy acceptance")
+    } catch {
+      XCTAssertTrue(
+        String(describing: error).contains("protocol_error"),
+        "acceptance failure must identify the target terminal error"
+      )
+    }
+
+    let target = try XCTUnwrap(ReportSubmissionStore(fileURL: fixture.fileURL)
+      .record(id: ReportSubmissionGoldenScenario.captureId))
+    XCTAssertEqual(target.submissionState, .submitting)
+    XCTAssertEqual(target.terminalErrorCode, "protocol_error")
+    XCTAssertNil(target.acceptanceReceiptHex)
+  }
+
+  func testAcceptanceWaitDoesNotAcceptUnrelatedRecord() async throws {
+    let fixture = try makeAcceptanceWaitFixture(unrelatedAcceptedFirst: true)
+    defer { fixture.server.stop() }
+
+    do {
+      try await ReportSubmissionGoldenScenario.waitForAcceptedRecord(at: fixture.fileURL, server: fixture.server)
+      XCTFail("an unrelated accepted record must not satisfy the target capture")
+    } catch {
+      XCTAssertTrue(
+        String(describing: error).contains("protocol_error"),
+        "acceptance failure must identify the target terminal error"
+      )
+    }
+
+    let target = try XCTUnwrap(ReportSubmissionStore(fileURL: fixture.fileURL)
+      .record(id: ReportSubmissionGoldenScenario.captureId))
+    XCTAssertEqual(target.submissionState, .submitting)
+    XCTAssertEqual(target.terminalErrorCode, "protocol_error")
+    XCTAssertNil(target.acceptanceReceiptHex)
+  }
+
+  private func makeAcceptanceWaitFixture(
+    unrelatedAcceptedFirst: Bool = false
+  ) throws -> (fileURL: URL, server: StubOperatorServer) {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-acceptance-wait-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let receiptKeyHex = "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+    let server = try StubOperatorServer(
+      eventId: try XCTUnwrap(goldenData(fromHex: ReportSubmissionGoldenScenario.eventIdHex)),
+      signingPrivateKey: [UInt8](repeating: 0, count: 31) + [2],
+      signingPublicKey: try XCTUnwrap(goldenData(fromHex: receiptKeyHex))
+    )
+    // Store-only fixtures exercise waiter selection, not cryptographic verification.
+    // The server supplies diagnostics only; no listener or submission is started.
+    func record(id: UUID) -> ReportSubmissionRecord {
+      ReportSubmissionRecord(
+        id: id,
+        eventCode: ReportSubmissionGoldenScenario.eventCode,
+        endpoint: "http://127.0.0.1:1",
+        receiptPublicKeyHex: receiptKeyHex,
+        eventIdHex: ReportSubmissionGoldenScenario.eventIdHex,
+        eventDefinitionDigestHex: ReportSubmissionGoldenScenario.definitionDigestHex,
+        validFrom: nil,
+        validUntil: nil,
+        signedObservationHex: "aabbcc",
+        observationDigestHex: String(repeating: "33", count: 32),
+        createdAt: ReportSubmissionGoldenScenario.createdAt
+      )
+    }
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let targetId = ReportSubmissionGoldenScenario.captureId
+    let unrelatedId = try XCTUnwrap(UUID(uuidString: "70100000-0000-4000-8000-000000000702"))
+    if unrelatedAcceptedFirst {
+      try store.add(record(id: unrelatedId))
+      try store.markSubmitting(for: unrelatedId)
+      try store.storeReceipt(for: unrelatedId, signedReceiptHex: "aabb")
+    }
+    try store.add(record(id: targetId))
+    try store.markSubmitting(for: targetId)
+    try store.markTerminalFailure(for: targetId, code: "protocol_error")
+    let reloaded = ReportSubmissionStore(fileURL: fileURL)
+    XCTAssertEqual(reloaded.records.map(\.id), unrelatedAcceptedFirst ? [unrelatedId, targetId] : [targetId])
+    if unrelatedAcceptedFirst {
+      XCTAssertEqual(reloaded.records.first?.submissionState, .accepted)
+      XCTAssertEqual(reloaded.records.first?.acceptanceReceiptHex, "aabb")
+    }
+    return (fileURL, server)
   }
 }
