@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import BeidSharedKit
+import Combine
 import Foundation
 import XCTest
 @testable import Beid
@@ -115,7 +116,8 @@ enum ReportSubmissionGoldenScenario {
     let endpoint = try await server.start(timeout: hostedWaits ? SubmissionTestWait.timeout : nil)
     let fileURL = directory.appendingPathComponent("report-submissions.json")
 
-    try ReportSubmissionStore(fileURL: fileURL).addPendingCapture(
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    try store.addPendingCapture(
       ReportSubmissionCapture(
         id: captureId,
         eventCode: eventCode,
@@ -147,22 +149,12 @@ enum ReportSubmissionGoldenScenario {
       bundle: try makeSubmissionEnabledBundle(in: directory),
       eventSigningCryptography: cryptography,
       definitionProvider: StaticEventDefinitionContextProvider(configuration: configuration),
+      store: store,
       fileURL: fileURL,
       allowInsecureLoopbackForTests: true
     ))
 
-    runtime.submitPending()
-    try await server.waitFor(postCount: 1, timeout: hostedWaits ? SubmissionTestWait.timeout : nil)
-    if hostedWaits {
-      try await waitForStoredSubmissionState(.accepted, at: fileURL, server: server)
-    } else {
-      try await waitForAcceptedRecord(at: fileURL, server: server)
-    }
-    // The runtime's own callbacks hold it weakly; keep it alive until its
-    // receipt write has landed.
-    withExtendedLifetime(runtime) {}
-
-    let record = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
+    let record = try await waitForAcceptedRecord(at: fileURL, server: server, store: store, runtime: runtime)
     XCTAssertEqual(record.id, captureId)
     XCTAssertEqual(cryptography.signatureInputs.count, 1, "exactly one Observation must be signed")
     XCTAssertEqual(server.postBodies.count, 1, "exactly one POST must be sent")
@@ -175,18 +167,115 @@ enum ReportSubmissionGoldenScenario {
     )
   }
 
-  static func waitForAcceptedRecord(at fileURL: URL, server: StubOperatorServer) async throws {
-    for _ in 0..<1_000 {
-      if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == .accepted {
-        return
-      }
-      try await Task.sleep(nanoseconds: 10_000_000)
+  @discardableResult
+  static func waitForAcceptedRecord(
+    at fileURL: URL,
+    server: StubOperatorServer,
+    store: ReportSubmissionStore? = nil,
+    runtime: ReportSubmissionRuntime? = nil
+  ) async throws -> ReportSubmissionRecord {
+    let store = store ?? ReportSubmissionStore(fileURL: fileURL)
+    let observation = AcceptanceObservation(store: store)
+    defer {
+      observation.cancel()
+      // Runtime callbacks hold it weakly. Retain both owners on every exit,
+      // including terminal failures and timeout unwinding.
+      withExtendedLifetime((store, runtime)) {}
     }
-    let actual = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState.rawValue
-    throw StubOperatorError.submissionStateTimedOut(
-      expected: ReportSubmissionState.accepted.rawValue,
-      diagnostics: "last state \(actual ?? "nil"); \(server.timeoutDiagnostics)"
-    )
+    #if DEBUG
+    runtime?.receiptPersistenceGate = {
+      observation.verifiedCallbackEntered = true
+      return true
+    }
+    defer { runtime?.receiptPersistenceGate = nil }
+    #endif
+
+    // The subscription is installed before submission can publish anything.
+    runtime?.submitPending()
+    // Two store signals, each bounded by the shared budget: the record is
+    // durably SUBMITTING once it is prepared and signed (written just before
+    // the POST starts), then it is accepted or terminal once the response is
+    // verified. Both halves are real cryptography, so one budget must not
+    // have to cover both.
+    var phase = "prepare-and-sign"
+    var result = await XCTWaiter.fulfillment(of: [observation.submitting], timeout: SubmissionTestWait.timeout)
+    if result == .completed {
+      phase = "post-and-verify"
+      result = await XCTWaiter.fulfillment(of: [observation.finished], timeout: SubmissionTestWait.timeout)
+    }
+    let persisted = ReportSubmissionStore(fileURL: fileURL).record(id: captureId)
+
+    func describe(_ record: ReportSubmissionRecord?) -> String {
+      "state=\(record?.submissionState.rawValue ?? "missing"), " +
+        "terminalErrorCode=\(record?.terminalErrorCode ?? "nil"), " +
+        "receiptHexCount=\(record?.acceptanceReceiptHex?.count ?? 0)"
+    }
+    #if DEBUG
+    let callbackDiagnostics = "verifiedCallbackEntered=\(observation.verifiedCallbackEntered); " +
+      "activeSubmissions=\(runtime?.activeSubmissionCountForTesting.description ?? "unavailable")"
+    #else
+    let callbackDiagnostics = "verifiedCallbackEntered=unavailable; activeSubmissions=unavailable"
+    #endif
+    let transportDiagnostics = result == .timedOut ? server.timeoutDiagnostics : server.diagnostics
+    let diagnostics = "captureId=\(captureId); published {\(describe(observation.record))}; " +
+      "disk {\(describe(persisted))}; \(callbackDiagnostics); \(transportDiagnostics)"
+    if let code = observation.record?.terminalErrorCode {
+      throw AcceptanceWaitError(description: "terminal submission: \(code); \(diagnostics)")
+    }
+    guard result == .completed else {
+      throw AcceptanceWaitError(
+        description: "acceptance wait ended with \(result) in phase \(phase), " +
+          "budget=\(SubmissionTestWait.timeout)s per phase; \(diagnostics)"
+      )
+    }
+    // A verified callback is only a pre-write marker. Require the published
+    // acceptance and the same nonempty receipt from a freshly opened store.
+    guard let published = observation.record,
+          published.submissionState == .accepted,
+          let receipt = published.acceptanceReceiptHex, !receipt.isEmpty,
+          let persisted, persisted.submissionState == .accepted,
+          persisted.terminalErrorCode == nil, persisted.acceptanceReceiptHex == receipt else {
+      throw AcceptanceWaitError(description: "persisted acceptance mismatch; \(diagnostics)")
+    }
+    return persisted
+  }
+
+  @MainActor
+  private final class AcceptanceObservation {
+    let submitting = XCTestExpectation(description: "target capture left PREPARED")
+    let finished = XCTestExpectation(description: "target capture accepted or terminal")
+    private(set) var record: ReportSubmissionRecord?
+    var verifiedCallbackEntered = false
+    private var didSubmit = false
+    private var didFinish = false
+    private var subscription: AnyCancellable?
+
+    init(store: ReportSubmissionStore) {
+      subscription = store.$records.sink { [weak self] records in
+        // The store is MainActor-isolated and this subscription has no
+        // scheduler hop. Published emits in willSet: inspect its argument.
+        MainActor.assumeIsolated {
+          guard let self, !self.didFinish else { return }
+          self.record = records.first { $0.id == ReportSubmissionGoldenScenario.captureId }
+          guard let record = self.record else { return }
+          let isTerminal = record.terminalErrorCode != nil
+          if !self.didSubmit, isTerminal || record.submissionState != .prepared {
+            self.didSubmit = true
+            self.submitting.fulfill()
+          }
+          guard isTerminal ||
+            (record.submissionState == .accepted && record.acceptanceReceiptHex?.isEmpty == false) else { return }
+          self.didFinish = true
+          self.finished.fulfill()
+        }
+      }
+    }
+
+    func cancel() { subscription?.cancel() }
+  }
+
+  private struct AcceptanceWaitError: Error, CustomStringConvertible {
+    let description: String
   }
 
   private static func makeSubmissionEnabledBundle(in directory: URL) throws -> Bundle {
