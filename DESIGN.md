@@ -26,7 +26,10 @@ Android's coverage gets stated here.]**
 motifs, and the locale set (see §C decision log). Remaining `PROPOSAL` tags
 mark the values still genuinely undecided (type ramp choice, exact secondary
 hex values, CTA sentence-case grandfathering). Structural and enforcement
-rules carry no tag and are not pending.
+rules carry no tag and are not pending. From 2026-11-18, new tags in this
+public repository read `PROPOSAL — maintainer ratification pending` (no
+personal names); existing tags keep their wording. The two accent value
+pairs in §5 carry this tag until they are ratified from device screenshots.
 
 > **Annotation 2026-09-22 (owner decision, beid#627).** Flat 2b was
 > adopted ([decision record](docs/decisions/issue-627-flat-2b.md)). The
@@ -36,12 +39,21 @@ rules carry no tag and are not pending.
 > motifs and the Japanese term decision were not overturned, although the
 > locale set has since narrowed to `en` only (§15).
 
+> **Annotation 2026-11-18 (maintainer decision, [D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).** One
+> interaction accent whose only meaning is "you can tap this, now"; three
+> button tiers in one capsule family plus row cues; pressed, disabled and
+> busy states; grounds declared in the environment; static look-alikes
+> de-buttonized. The Figma Library is a reference, not an absolute
+> authority.
+
 **Flat 2b (2026-09-22).** Where this document says "Superseded
 2026-09-22", the old rule is quoted verbatim with its provenance and the
 new rule follows. Every such block cites
 [`docs/decisions/issue-627-flat-2b.md`](docs/decisions/issue-627-flat-2b.md)
 (below: "D-627"), which also holds the numbered **Open items** referenced
-throughout.
+throughout. Likewise, where this document says "Superseded 2026-11-18", the
+old rule is quoted verbatim with its provenance and the new rule follows;
+every such block cites the record (below: "D-tap-accent").
 
 **Platform scope — open decision (beid#339).** Whether this contract binds
 Android as written, or iOS is source-of-truth and Android follows/adapts,
@@ -101,7 +113,7 @@ beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
 | Figma "Flat 2b — Library" (`189-2`) | Design values: colors, text styles, components |
 | The 1.1 screen specification, Fixed v2 plus v3–v5 deltas | Screen layouts and behavior |
 | `ios/Beid/DesignSystem/Tokens.swift` | The `DS` namespace: all color/space/radius/size/font/motion tokens and artwork generators — what ships, and the only place code reads values |
-| `ios/Beid/DesignSystem/Colors.xcassets` | Color values: the 13 Library variables, each a single-appearance colorset named after its Library variable (since #628, §4/§5). The app does not follow the OS appearance: the app target's Info.plist sets `UIUserInterfaceStyle` to `Light` (#632, §14) |
+| `ios/Beid/DesignSystem/Colors.xcassets` | Color values: the 13 Library variables plus two code-first variables (`accent`, `onInkAccent`; D-tap-accent), each a single-appearance colorset named after its variable (since #628, §4/§5); the two accent colorsets also carry an Increase Contrast appearance (§14). The app does not follow the OS appearance: the app target's Info.plist sets `UIUserInterfaceStyle` to `Light` (#632, §14) |
 | `.swiftlint.yml` (repo root) | Enforcement rules for banned raw values |
 | DESIGN.md (this file) | Semantics, usage rules, tone, review criteria |
 | Figma "Minimal v4" board | Historical visual input only (superseded by Flat 2b, 2026-09-22) |
@@ -115,7 +127,9 @@ verbatim.
 | --- | --- | --- |
 | Color collection `Flat 2b / Color` (13 variables, §5) | `DS.Color` + `Colors.xcassets`; also the fate of the 8 old color tokens with no Flat 2b counterpart | #628 (names and fates: §5) |
 | Text styles (Display / Title / Body / Label Mono, §6) | `DS.Font` + bundled font files | #629 |
-| `Button/Primary` | SwiftUI primary-button component (replaces the §10 CTA pattern) | not assigned to an issue yet (none of #628–#644 names it) |
+| `Button/Primary` | `BeidPrimaryButton` + `BeidPrimaryButtonStyle` (`ios/Beid/DesignSystem.swift`) | D-tap-accent (2026-11-18); the component existed earlier, this row used to say "not assigned to an issue yet" |
+| `Button/Secondary` (outline; large / regular / compact) | `BeidSecondaryButton` + `BeidSecondaryButtonStyle` (`ios/Beid/DesignSystem.swift`) | D-tap-accent (code-first; not yet in the Library) |
+| Row cue | `BeidRowCue` + `.beidRow` (`ios/Beid/DesignSystem.swift`) | D-tap-accent (code-first; not yet in the Library) |
 | `Row/List`, `Row/KeyValue`, `Label/Section` | SwiftUI row / key-value / section-label components | not assigned to an issue yet (none of #628–#644 names it) |
 | `Block/Empty` | `BeidEmptyBlock` (`ios/Beid/DesignSystem.swift`), the dashed empty-state frame (§8) | #630 (2026-09-23) |
 | `Bar/Nav` | Text-only navigation row — **not built** since Flat 2b v2 (2026-10-15): the navigation bar is the OS's (§12) | #631, #732 |
@@ -252,6 +266,23 @@ ever shown as red text on `bg`, it fails AA (3.41:1, §5).
   not something resolved automatically in either direction. This document
   holds no values of its own, so a mismatch between this document and
   `Tokens.swift` is still fixed in the document.
+
+> **Superseded 2026-11-18 (maintainer decision, [D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).** Previously
+> (`6b963317`, #627, 2026-09-22; §C 2026-09-22 row), the first three sentences
+> of the MUST above read: "The Flat 2b Library is the design authority for
+> values. `Tokens.swift` is canonical for what ships and is the only place
+> code reads values. A mismatch between the Library and `Tokens.swift` after
+> the migration is a defect to file as an issue, not something resolved
+> automatically in either direction."
+>
+> - MUST (2026-11-18): `Tokens.swift` and `Colors.xcassets` are what ships and
+>   the only place code reads values. The Flat 2b Library is the reference
+>   design, not an absolute authority: implementation may deviate when it finds
+>   a better value. Each deviation is recorded here (a Superseded block or an
+>   annotation, plus a §C row) and in the PR's `DesignException:` line.
+>   Syncing the Library is a follow-up, not a defect to file. The last sentence
+>   of the old rule stays: this document holds no values of its own, so a
+>   mismatch between this document and `Tokens.swift` is fixed in the document.
 - MUST: Token excerpts in this document are illustrative; never copy values
   from prose into code. **[Platform-neutral as a principle; applies
   identically once Android values are cited in this document.]**
@@ -493,6 +524,12 @@ share this grandfathered string; see #24's treatment in
 > The four motifs themselves are unchanged. **Open item 6:** the Flat 2b
 > sensing graph's concentric rings sit next to Encounter Field's "avoid
 > radar/sonar clichés"; that is open, not settled (#634).
+>
+> **Annotation 2026-11-18 (D-tap-accent).** The interaction accent
+> (`accent` / `on-ink/accent`, §5) is a named, brand-derived token (Levarac
+> hue 263°), not the platform's implicit system blue. This DON'T still
+> forbids `.tint(.blue)`, falling back to the system default tint, and
+> #007AFF.
 
 Voice registers by moment:
 
@@ -605,6 +642,14 @@ Rules:
 - **Black, white and grays only**, plus **three semantic colors, each with
   one meaning**: red = destructive / off, amber = verifying / pending,
   green = active / on.
+
+  > **Superseded 2026-11-18 (maintainer decision, [D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).**
+  > Previously (`6b963317`, #627), the bullet above. Now: **black, white and
+  > grays; three semantic colors, each with one meaning; and one interaction
+  > accent** (`actionAccent` on `bg` and `tile`, `actionAccentOnInk` on
+  > `ink`) whose only meaning is "you can tap this, now". The bullets
+  > 'Black is "what is happening now"' (above) and 'No per-event colors'
+  > (below) stay.
 - **No per-event colors.** An event's identity is its Sigil's shape (§12,
   #633), never a hue.
 
@@ -615,24 +660,31 @@ are named by role (§4), so one variable may back several tokens (#628).
 
 | Library variable | Hex | Role | Allowed use | Forbidden use | DS token |
 | --- | --- | --- | --- | --- | --- |
-| `ink` | `#0B0B0F` | Ink; the "now" ground | Text, primary button fill, black-screen ground, Sigil | Decorative fills unrelated to "now" | `textPrimary` (text and marks on the page ground); `actionPrimary` (`Button/Primary` Tone=Primary fill, app-level tint); `labelOnActionInverse` (label on an `actionInverse` fill) |
+| `ink` | `#0B0B0F` | Ink; the "now" ground | Text, primary button fill, black-screen ground, Sigil | Decorative fills unrelated to "now" | `textPrimary` (text and marks on the page ground); `actionPrimary` (`Button/Primary` Tone=Primary fill); `surfaceNow` (the "now" surface: screen grounds, ink cards, ink bar backgrounds, sheet rows and footer, radar canvas); `labelOnActionInverse` (label on an `actionInverse` fill) |
 | `bg` | `#FFFFFF` | Page ground | Screen ground; text and Sigil on `ink` | — | `surfaceCanvas` (page ground); `labelOnActionPrimary` (label on an `actionPrimary` fill); `actionInverse` (`Button/Primary` Tone=Inverse fill, on black screens and the black sheet) |
-| `sub` | `#6E6E78` | Secondary text on `bg` | Secondary text, section labels | Primary CTAs | `textSecondary` |
+| `sub` | `#6E6E78` | Secondary text on `bg` | Secondary text, section labels | Primary CTAs, except the label of a disabled primary | `textSecondary`; `labelOnActionDisabled` (label on an `actionDisabled` fill) |
 | `line` | `#ECECF1` | Hairline | 1px row and list dividers | Text | `strokeHairline` |
 | `line-dashed` | `#C9C9CF` | Empty-state frame | Dashed 1px empty-block frame | Text | `strokeEmptyState` |
-| `tile` | `#F2F2F4` | Gray tile | Timeline track, gray tiles | Text | `surfaceTile` |
+| `tile` | `#F2F2F4` | Gray tile | Timeline track, gray tiles | Text | `surfaceTile`; `actionDisabled` (fill of a disabled `Button/Primary` Tone=Primary) |
 | `chart-muted` | `#D9D9DE` | Chart "detected" | "Detected" bars in charts | Text | `chartDetected` |
-| `on-ink/sub` | `#8E8E96` | Secondary text on `ink` | Secondary text on black | Text on `bg` | `textSecondaryOnInk` |
-| `on-ink/line` | `#2A2A31` | Hairline on `ink` | Dividers, graph rings, future-window bars on black | Text | `strokeHairlineOnInk` |
-| `on-ink/idle` | `#5C5C66` | Idle node on `ink` | Detected-only nodes on black | Text | `graphNodeIdle` |
+| `on-ink/sub` | `#8E8E96` | Secondary text on `ink` | Secondary text on black | Text on `bg`, except disabled control labels (3.25:1; inactive components, §13) | `textSecondaryOnInk`; `labelDisabled`; `labelOnActionDisabledOnInk` |
+| `on-ink/line` | `#2A2A31` | Hairline on `ink` | Dividers, graph rings, future-window bars on black | Text | `strokeHairlineOnInk`; `actionDisabledOnInk` (fill of a disabled `Button/Primary` Tone=Inverse) |
+| `on-ink/idle` | `#5C5C66` | Idle node on `ink` | Detected-only nodes on black | Text, except disabled control labels on `ink` (2.97:1) | `graphNodeIdle`; `labelDisabledOnInk` |
 | `semantic/red` | `#FF453A` | Destructive / off | Disconnect wallet; Bluetooth OFF dot | Any other meaning; text on `bg` | `statusOff` |
 | `semantic/amber` | `#FF9F0A` | Verifying / pending | Report VERIFYING dot | Any other meaning; text on `bg` | `statusPending` |
 | `semantic/green` | `#30D158` | Active / on | Bluetooth ACTIVE dot | Any other meaning; text on `bg` | `statusOn` |
+| `accent` — code-first, `PROPOSAL — maintainer ratification pending` | `#3765C6` (Increase Contrast `#2A53AB`) | Interaction on `bg`, `tile` and white surfaces | Text controls, row and card cues, secondary outline and label, focus caret and rule, selection mark of a tappable set, app tint, alert tint and global accent | Status, headings, data, artwork, decoration, primary fills, static text; any use on `ink` (3.59:1) | `actionAccent` |
+| `on-ink/accent` — code-first, `PROPOSAL — maintainer ratification pending` | `#5F87D7` (Increase Contrast `#7294D9`) | Interaction on `ink` | The same list, except alerts | The same, plus any use on `bg` or an OS alert surface (3.54:1) and text on `on-ink/line` | `actionAccentOnInk` |
 
 That is 17 `DS.Color` tokens over 13 primitives. `surfaceCanvas`,
 `textPrimary`, `textSecondary`, `strokeHairline` and `actionPrimary` kept
 their names; `statusOn` and `statusOff` kept their names and took the
 green and red values; the other ten are new.
+
+2026-11-18 ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)): 26 `DS.Color` tokens over 15
+primitives — `actionAccent` and `actionAccentOnInk` on two new code-first
+primitives, `surfaceNow` on `ink`, and six disabled roles on existing
+primitives.
 
 **Removed by #628 (2026-09-23)** — old tokens with no Flat 2b counterpart,
 and where their uses went:
@@ -676,10 +728,38 @@ two stated figures are wrong — see D-627):
 | `ink` on `tile` | 17.57:1 | | `semantic/amber` on `bg` | 2.06:1 |
 | | | | `semantic/green` on `bg` | 2.02:1 |
 
+Added 2026-11-18 (measured, WCAG 2.x, [D-tap-accent](docs/decisions/issue-pending-tap-accent.md)):
+
+| Pair | Ratio |
+| --- | --- |
+| `accent` on `bg` / on `tile` / vs `ink` text | 5.47:1 / 4.89:1 / 3.59:1 |
+| `on-ink/accent` on `ink` / vs `bg` text on ink / on `on-ink/line` | 5.55:1 / 3.54:1 / 4.03:1 |
+| `bg` glyph on `accent` / on `on-ink/accent` | 5.47:1 / 3.54:1 |
+| Increase Contrast `accent` on `bg` / on `tile` / vs `ink` text | 7.18:1 / 6.42:1 / 2.74:1 (below 3:1, hence the Increase Contrast underline, §13) |
+| Increase Contrast `on-ink/accent` on `ink` / vs `bg` text / `bg` glyph on it | 6.50:1 / 3.02:1 / 3.02:1 |
+| `on-ink/sub` on `bg` (disabled labels) / `on-ink/idle` on `ink` (disabled labels) / `on-ink/sub` on `on-ink/line` | 3.25:1 / 2.97:1 / 4.38:1 |
+| Pressed ink capsule `#3C3C3F` with `bg` label / pressed white capsule `#CECECF` with `ink` label | 10.99:1 / 12.49:1 |
+
 Rules:
 
 - MUST: Only the Library colors above, through the `DS.Color.*` tokens
   named in the table. No per-event or per-proof hue.
+
+  > **Superseded 2026-11-18 (maintainer decision, [D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).**
+  > Previously (`6b963317`, #627; token wording `978ca8f5`, #628,
+  > 2026-09-23), the MUST above. Now: **MUST:** Only the colors in the table
+  > above — the 13 Library variables and the two code-first accent
+  > variables — through the `DS.Color.*` tokens named there. No per-event or
+  > per-proof hue.
+- MUST: The accent means only "you can tap this, now"; it never marks
+  status, headings, data, artwork or decoration, never fills a button, and a
+  disabled control never shows it.
+- MUST: `actionAccent` only on `bg`, `tile`, white surfaces and OS alerts;
+  `actionAccentOnInk` only on `ink`.
+- MUST: Disabled controls use the disabled roles (`labelDisabled` /
+  `labelDisabledOnInk` for text, outlines and cues; `actionDisabled` +
+  `labelOnActionDisabled` and `actionDisabledOnInk` +
+  `labelOnActionDisabledOnInk` for filled capsules).
 - MUST: A semantic color is used only for its one meaning.
 - MUST (forced by §13's AA MUST, which is unchanged): semantic colors are
   **indicators**. A semantic color may be **text only on `ink`**, where it
@@ -741,7 +821,8 @@ Rules:
   the OS dark-mode setting. The colorsets have had no dark variants since
   #628; the app target's Info.plist sets `UIUserInterfaceStyle` to
   `Light`, and the illustrations and previews have no dark variants (#632,
-  §14).
+  §14). The accent colorsets have no dark variant; they carry an Increase
+  Contrast appearance (§14).
 
 > **Superseded 2026-09-22 (owner decision, beid#627,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** Previously (initial
@@ -757,6 +838,11 @@ Rules:
 
 - Flat 2b has no motif accents: there is one ink, and the three semantic
   colors each carry one meaning (above).
+
+  > **Superseded 2026-11-18 (maintainer decision, [D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).**
+  > Previously (`6b963317`), the bullet above. Now: there are still no
+  > motif or per-screen accents: one ink, three semantic colors, and the
+  > interaction accent, which means the same on every screen.
 
 > **Superseded 2026-09-22 (owner decision, beid#627,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** Previously (revision
@@ -787,6 +873,18 @@ they cite are the current ones, since #628):
   implicit fallback; `BeidAppTheme`'s `lightColorScheme`/`darkColorScheme`
   already wire `primary = beidColors.actionPrimary` explicitly
   (`Theme.kt`), consistent with this rule as verified today — not a gap.]**
+
+  > **Update 2026-11-18 ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).** The clause "and the app-level
+  > accent is `actionPrimary`" (`79cd005`, 2026-07-10; reworded `b65d5c9`,
+  > #153, 2026-08-08) is replaced: the app-level accent is `actionAccent`
+  > (`actionAccentOnInk` under an ink ground, through `.beidGround`), and
+  > the app target's global accent color is meant to name the `accent`
+  > colorset (`ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`; not yet set,
+  > see the record's open items), so OS-drawn alerts and sheets do not fall
+  > back to system blue. OS alert and confirmation-dialog surfaces are white,
+  > so an alert attached inside a subtree whose tint can be the on-ink
+  > accent is followed by `.beidAlertTint()`. The MUST NOT and FORBIDDEN
+  > `.tint(.blue)` stay.
 - MAY: System semantic colors (`.primary`, `.secondary`, `Color(.systemRed)`)
   inside `DesignSystem/` as implementation details of a token — never
   directly in Views. **[Android counterpart, as a principle: Material3
@@ -797,8 +895,11 @@ they cite are the current ones, since #628):
   white. Label pairing per fill (see `BeidPrimaryButton`, whose default
   label color is `labelOnActionPrimary`): `actionPrimary` →
   `labelOnActionPrimary` (`Button/Primary` Tone=Primary), `actionInverse`
-  → `labelOnActionInverse` (Tone=Inverse). A new fill MUST add its on-fill
-  label token first. Any fill value change MUST re-check ≥4.5:1
+  → `labelOnActionInverse` (Tone=Inverse); disabled: `actionDisabled` →
+  `labelOnActionDisabled` (4.51:1) and `actionDisabledOnInk` →
+  `labelOnActionDisabledOnInk` (4.38:1). Pressed filled capsules are drawn
+  at `DS.Opacity.pressedFill` (0.8); labels stay at 10.99:1 or more. A new
+  fill MUST add its on-fill label token first. Any fill value change MUST re-check ≥4.5:1
   label-on-fill contrast in the single appearance (§14).
   **[Android already has a component of the same name: `BeidPrimaryButton`
   (`ui/designsystem/BeidButtons.kt`) requires `containerColor`/
@@ -1219,6 +1320,32 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   on the iOS 26 SDK (#631 owns the navigation bar; hiding it would need
   an iOS 26-only API), `EventCardView`'s `.tint.opacity` badge, and
   `DS.Artwork.proofCardGradient` (#633).
+> **Superseded 2026-11-18 (maintainer decision, [D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).**
+> Previously (`9dcc560f`, #630, 2026-09-23; verbatim, in the Surfaces
+> bullet above): "`BeidPrimaryButton` is `.borderedProminent` at
+> `.controlSize(.large)` and `BeidSecondaryButton` `.bordered`, both a
+> `DS.Radius.control` rounded rectangle; Home's icon Scan button is a
+> `.borderedProminent` circle." and "Two gaps are left open deliberately:
+> the primary button is not yet a pill (building `Button/Primary` is not
+> assigned, §0), and `.bordered` is a system tint fill, not `bg` + `line`."
+>
+> This also fixes the document against the code: the code was already
+> `.plain` with a `Capsule`, and no Scan button or `.borderedProminent`
+> exists in `ios/Beid`. Now: `BeidPrimaryButton` is a Capsule filled
+> `actionPrimary` (Tone=Inverse: `actionInverse`), drawn by
+> `BeidPrimaryButtonStyle` with min height `DS.Size.primaryButtonMinHeight`.
+> `BeidSecondaryButton` is a transparent capsule with a 1pt `actionAccent`
+> outline — the Library's `bg` + `line` intent with a line that reaches 3:1
+> (`line` itself is 1.18:1).
+>
+> - MUST: Capsules are reserved for buttons; status is a dot plus text.
+> - MUST: Gray filled tiles are information only and never act or hold the
+>   accent.
+>
+> `EventCardView`'s `.tint.opacity` badge, named in the "Left as is" list
+> above, is still left as is until the card is migrated to the dot-plus-text
+> badge (D-tap-accent).
+
 - Navigation and sheet glass (2026-10-15, beid#730 A2): the glass the OS
   draws for the navigation bar, toolbar items and sheets is the OS's and
   stays. The app does not suppress it — the 2026-09-25 decision that hid
@@ -1238,10 +1365,12 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   (the 04b copy is #635's, the glyph #631's).
 
 Radii in `DS.Radius`: `control 12 / card 16 / seal 28 / pill 999 /
-glyph 24 / emptyBlock 16 / nowCard 20`. All rounded rectangles use
-`style: .continuous`. `glyph` is the `BeidGlyph` icon roundel's radius,
-folded from `BeidDesign.Radius.glyph` by #628; #631 removes it with the
-icons. The same fold moved `BeidDesign.Radius.card` (18) to
+emptyBlock 16 / nowCard 20`. All rounded rectangles use
+`style: .continuous` (2026-11-18 doc/code fix: `Tokens.swift` has six radii
+and no `glyph`, which #631 removed with the icons; the code omits
+`.continuous` at a few places the 2026-11-18 screen work fixes).
+`glyph` was the `BeidGlyph` icon roundel's radius,
+folded from `BeidDesign.Radius.glyph` by #628. The same fold moved `BeidDesign.Radius.card` (18) to
 `DS.Radius.card` (16) and `BeidDesign.Radius.control` (14) to
 `DS.Radius.control` (12), so the components that used them lost 2pt of
 radius (§7's token-fold note).
@@ -1421,7 +1550,7 @@ damping and response (`DS.Motion`), not fixed-duration curves.
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `DS.Motion.fast` | spring, response 0.25, damping 1.0 | Press feedback, small state flips |
+| `DS.Motion.fast` | spring, response 0.25, damping 1.0 | Press feedback, small state flips. Since 2026-11-18 ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)) it drives the pressed state of the four Beid button styles: opacity `DS.Opacity.pressedFill` (0.8) on filled capsules and `DS.Opacity.pressedLabel` (0.5) on everything else, with no scale, and no animation under Reduce Motion |
 | `DS.Motion.standard` | spring, response 0.35, damping 1.0 | Default transitions |
 | `DS.Motion.entrance` | spring, response 0.5, damping 0.85 | Content entering (event card in `EventFoundView`) |
 | `DS.Motion.proofResolve` | spring, response 0.6, damping 0.8 | Proof seal ceremony |
@@ -1470,6 +1599,11 @@ Rules:
   restraint rule. No haptic call exists anywhere in the current Android
   codebase — not yet exercised, so the FORBIDDEN clause has no current
   violation to point at either.]**
+
+  > **Update 2026-11-18 ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).** Copying the venue event ID
+  > (`VenueSignedServingView`, Copy event ID) is a commit and gets a light
+  > haptic. No other haptic is added. `BeidPrimaryButton` still fires a
+  > light haptic on every tap, against this SHOULD; it is not changed here.
 - FORBIDDEN: `repeatForever` animations on screens other than `SensingView`
   (ambient motion is the Encounter Field motif's privilege, nobody else's).
   **[iOS-only as written for now: no Android screen has an ambient/looping
@@ -1508,6 +1642,9 @@ Real components in this codebase. Each entry is the contract for reuse.
 > flat surface, no longer migration debt.
 
 ### Component: ProofCardView
+
+> **Removed — not in `ios/Beid` (2026-11-18 doc/code fix).** No such type
+> exists in the iOS target; the entry below is historical.
 
 > **Platform scope:** iOS-only as written — no Android counterpart exists.
 > There is no Android `CollectionHomeView` (§11), so there is no Android
@@ -1596,6 +1733,12 @@ Real components in this codebase. Each entry is the contract for reuse.
 
 ### Component: BeidStatusPill
 
+> **Update 2026-11-18 ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).** It is a dot and a text
+> label with no capsule: capsules are reserved for buttons (§8). Only
+> `.sensingPaused` exists (the `.sensingAutomatically` state is gone; doc/code
+> fix). The `DS.Space.m`, `DS.Space.s` (vertical) and `DS.Radius.pill`
+> requirements below no longer apply; the dot-label gap is `DS.Space.s`.
+
 > **Platform scope:** iOS-specific mechanism — Android counterpart named,
 > with a deliberately different API shape (not just a port). Android's
 > `BeidStatusPill` (`ui/designsystem/BeidStatusPill.kt`) is real and in
@@ -1652,6 +1795,9 @@ Real components in this codebase. Each entry is the contract for reuse.
 
 ### Component: BeidBulletRow
 
+> **Removed — not in `ios/Beid` (2026-11-18 doc/code fix).** No such type
+> exists in the iOS target; the entry below is historical.
+
 > **Platform scope:** iOS-specific mechanism — Android counterpart named,
 > component exists (`ui/designsystem/BeidBulletRow.kt`) but **has no
 > current production caller**. `BluetoothPermissionScreen` reproduces its
@@ -1692,6 +1838,9 @@ Real components in this codebase. Each entry is the contract for reuse.
   02 Enable Bluetooth uses numbered text promises instead.*
 
 ### Component: BeidNumberedStepList
+
+> **Removed — not in `ios/Beid` (2026-11-18 doc/code fix).** No such type
+> exists in the iOS target; the entry below is historical.
 
 > **Platform scope:** iOS-specific mechanism — Android counterpart named
 > and, unlike `BeidBulletRow`, **actually called** in production
@@ -1843,25 +1992,35 @@ Real components in this codebase. Each entry is the contract for reuse.
   > **Update (#630, 2026-09-23):** the `beidSurface` part is done (a flat
   > `surfaceCanvas` fill and hairline, §8).
 
-### Pattern: Primary CTA button
+### Component: BeidPrimaryButton
 
 > **Platform scope:** iOS-specific mechanism — Android counterpart named
 > and in production use (`BeidPrimaryButton`, verified across
 > `WelcomeScreen`/`EventJoinScreen`/`ManualEventCodeScreen`).
 
 - Purpose: The one main action per screen ("Continue", "Sense Event",
-  "Try Again", "Done"). A convention, not a reusable component (yet).
+  "Try Again", "Done"). A reusable component (`BeidPrimaryButton`, 11 call
+  sites; 2026-11-18 doc/code fix: this entry used to say "A convention, not
+  a reusable component (yet)").
   **[Android's actual CTA strings for this same role are "Get Started"
   (`welcome_get_started`) and "Join event" (`event_join_button`) — not
   "Sense Event"; see #24's discussion in
   `docs/decisions/issue-339-design-md-android-scope.md`.]**
-- Rules: `.borderedProminent`, label `DS.Font.cta`, full width inside
-  `DS.Space.pageMargin` (compact-width state screens, §7). Tint is
-  `DS.Color.actionPrimary` on every screen (§5 has no motif accents). There
-  is no "default" tint — an unspecified tint is a §5 violation, not a
-  fallback. Label color follows §5's CTA-label pairing rule (never the
-  style default white; `labelOnActionPrimary` on `actionPrimary`). Max one
-  per screen. **[Android
+- Rules (2026-11-18, [D-tap-accent](docs/decisions/issue-pending-tap-accent.md); the code was already `.plain` with a
+  Capsule, so the earlier `.borderedProminent` wording was wrong): drawn by
+  `BeidPrimaryButtonStyle` (`.buttonStyle(.beidPrimary(tone:labelColor:isBusy:))`),
+  a `Capsule` fill with label `DS.Font.cta`, full width inside
+  `DS.Space.pageMargin` (compact-width state screens, §7), min height
+  `DS.Size.primaryButtonMinHeight`. Tone is `.primary` (default,
+  `actionPrimary` fill) or `.inverse` (`actionInverse`), and is passed
+  explicitly at every ink call site. Pressed: `DS.Opacity.pressedFill` (0.8).
+  Disabled (only through `.disabled`): `actionDisabled` with
+  `labelOnActionDisabled`, or `actionDisabledOnInk` with
+  `labelOnActionDisabledOnInk`; a `labelColor` override applies only while
+  enabled. `isBusy` shows a small activity indicator in the capsule for an
+  action that does not finish instantly; pair it with `.disabled`. Label
+  color follows §5's CTA-label pairing rule (never the style default white).
+  Max one per screen. **[Android
   counterpart, verified `BeidButtons.kt`: `BeidPrimaryButton` is a
   Material3 `Button` (the Compose equivalent of `.borderedProminent`),
   label `MaterialTheme.typography.labelLarge`, `fillMaxWidth()` inside
@@ -1888,6 +2047,80 @@ Real components in this codebase. Each entry is the contract for reuse.
   > §5 accent map exactly: `signalActive` on sensing screens, `proofSeal` at
   > ceremony, `signalWarning` on recovery screens, `DS.Color.actionPrimary`
   > everywhere else.
+
+### Component: BeidSecondaryButton
+
+> **Platform scope:** iOS-specific mechanism (D-tap-accent, 2026-11-18).
+> Android counterpart: Material3 `OutlinedButton`; not yet applied.
+
+- Purpose: The second tier of the capsule family: a transparent capsule with
+  a 1 pt `actionAccent` outline (`actionAccentOnInk` on ink) and the same
+  color as its label.
+- Use when: A screen-level action that is not the one primary (`.large`:
+  full width, at least 56 pt, `DS.Font.cta`); a height-constrained strip
+  (`.regular`, at least 44 pt); an in-place action next to its object
+  (`.compact`: hugs its label, 32 pt visible inside a hit region of at least
+  44 x 44 pt, Label/Mono 11 uppercase; PASTE, CHECK AGAIN, registry retry).
+- Don't use when: It is a screen's only way forward (use
+  `BeidPrimaryButton`), or for navigation (use a row with a `BeidRowCue`).
+- API: `BeidSecondaryButton(title:size:accessibilityLabel:haptic:action:)`
+  and `.buttonStyle(.beidSecondary(size:))` for custom labels. The component
+  applies `.accessibilityLabel` as written, so the compact tier's uppercase
+  rendering never reaches VoiceOver or UI queries. `haptic` defaults to
+  `.soft` (the previous behavior of the component); pass `nil` for none.
+- Required tokens: `actionAccent` / `actionAccentOnInk`, `labelDisabled` /
+  `labelDisabledOnInk`, `DS.Size.hairline`, `DS.Size.primaryButtonMinHeight`,
+  `DS.Size.minHitTarget`, `DS.Size.compactControlMinHeight`,
+  `DS.Opacity.pressedLabel`.
+- States: rest (accent); pressed (0.5 opacity); disabled (disabled color,
+  never underlined). Never filled, never red.
+
+### Component: BeidTextControl / BeidTextControlLabel
+
+- Purpose: The third tier: accent DM Mono 11 uppercase text with an optional
+  typed glyph. `BeidTextControlLabel` is the label for hosts that own their
+  action (`NavigationLink`, `Link`, toolbar items); `BeidTextControl` wraps it
+  in a `Button` with `.buttonStyle(.beidText)`.
+- Rules: `labelColor` is optional; `nil` resolves the ground's accent or its
+  disabled color. Glyphs have one meaning each (§12). Enabled controls are
+  underlined when Button Shapes, Differentiate Without Color or Increase
+  Contrast is on (§13). The 44 x 44 pt hit region and the single-element
+  accessibility label are unchanged.
+
+### Component: BeidRowCue, `.beidRow` and the accent helpers
+
+- Purpose: A row or card that acts as one button carries a trailing accent
+  cue. `BeidRowCue(.forward)` draws →, `BeidRowCue(.external)` draws ↗
+  (both hidden from VoiceOver, because the row label carries the meaning),
+  and `BeidRowCue(word:)` draws an existing action word (JOIN, Rejoin).
+  `.buttonStyle(.beidRow)` adds only the pressed state.
+  `beidAccentForeground(underlinesWhenNeeded:)` colors existing arrow and
+  action texts; `beidActionRowTitle()` colors a row title that is the
+  action's own label.
+- Rules: a row or card without a cue is never tappable, and a static row never
+  gains one. In a native `List`, the OS disclosure indicator is the cue.
+
+### Component: BeidGround, `.beidGround`, `.beidScreenGround`, `.beidAlertTint`
+
+- Purpose: Declare the ground (`.canvas` or `.ink`) a subtree sits on. The
+  ground picks the accent and the disabled colors, so call sites do not pass
+  label colors. `.beidGround(_:)` sets the environment value and the tint;
+  `.beidScreenGround(_:)` also paints `surfaceCanvas` or `surfaceNow` behind
+  the view; `BeidPanel` resets its content to `.canvas`; `.beidAlertTint()`
+  follows an `.alert` or `.confirmationDialog` attached inside an
+  ink-capable subtree.
+- Rules: apply the ground modifiers outside (after) `.toolbar` and
+  `.safeAreaInset`. Every white destination and sheet declares
+  `.beidGround(.canvas)` where it is presented. A forgotten declaration
+  degrades to the canvas accent, which is still 3.54:1 on ink, so a control
+  never turns invisible.
+
+### Component: BeidControlPalette
+
+- Purpose: The one place that maps (ground, enabled state, tone) to `DS.Color`
+  tokens for the Beid styles and helpers, plus the underline decision
+  (`underlinesTextControl`). Its resolutions, WCAG ratios and truth table are
+  pinned by `DesignTokensTests`.
 
 ## 11. Screen Patterns
 
@@ -2063,6 +2296,20 @@ Records tab bar are OS-standard controls (the 1.1 screen specification).**
 - MUST: The app draws no icons in content. Controls inside a screen are
   monospaced uppercase text in DM Mono (§6): `COPY`, `PASTE`, `OPEN →`,
   `ENTER EVENT CODE →`.
+
+  > **Superseded 2026-11-18 (maintainer decision, [D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).**
+  > Previously (`31550dc6`, #731, 2026-10-15), the MUST above. Now: **MUST:**
+  > The app draws no icons in content. In-content controls use the three
+  > tiers in §10 (filled capsule, accent-outline capsule, accent text
+  > control); text controls stay monospaced uppercase DM Mono. A row or card
+  > that acts as one button carries a trailing accent cue. Typed glyphs have
+  > one meaning each: → opens another screen in the app, ← returns to the
+  > parent, ↗ leaves the app, ↓/↑ expand or collapse in place; in-place
+  > actions carry none. In a native `List`, the OS-drawn disclosure indicator
+  > is OS chrome and serves as the row cue.
+  >
+  > Note: DM Mono Medium has no U+2190–21FF glyphs (cmap read 2026-11-18), so
+  > arrows render from a fallback face; DM Sans Bold has U+2190–2199.
 - MUST: The Now / Records tab bar uses `TabView` with system symbols and
   titles. Its labels use the system font and its appearance belongs to the OS.
 - MUST: Navigation-bar and toolbar items are OS-standard items, not
@@ -2243,6 +2490,25 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 > - Open item 4 (D-627): non-text contrast under WCAG 1.4.11 is not
 >   covered by this section today, which covers text; recorded, no new
 >   rule.
+>
+> **Update 2026-11-18 ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)) for controls**, replacing that
+> recorded-only item (`6b963317`):
+>
+> - MUST: An interactive element shows the accent plus a non-color cue (a
+>   capsule, a typed glyph or a row cue); its identifying mark is at least
+>   3:1 against its ground.
+> - MUST: Accent text differs from adjacent body text by at least 3:1 in
+>   lightness, or carries a non-color cue. Under Increase Contrast `accent` is
+>   2.74:1 against `ink` text, so enabled text controls and the glyphless COPY
+>   are underlined then.
+> - MUST: Disabled controls are exempt from the AA text MUST (WCAG 1.4.3
+>   inactive components) but keep at least 2.5:1 and differ from enabled in
+>   lightness, not hue only.
+> - MUST: Every control has a pressed state from a DS ButtonStyle.
+> - MUST: Enabled text controls are underlined when Button Shapes,
+>   Differentiate Without Color or Increase Contrast is on.
+>
+> Charts and graphs remain Open item 4 (#634, #640).
 
 - MUST: Contrast ≥ WCAG AA for text against its actual background in the
   single appearance (verify against `surfaceCanvas`, `surfaceTile` *and*
@@ -2352,6 +2618,12 @@ Kept unchanged:
   fallback principle against `BeidPalette`; no high-contrast variant
   mechanism exists in `BeidColorScheme` today, matching iOS's own
   not-yet-added state — not a platform gap, a shared one.]**
+
+> **Update 2026-11-18 ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).** The first Increase Contrast
+> appearances exist: `accent` `#2A53AB` (7.18:1 on `bg`; 2.74:1 against `ink`
+> text, covered by the §13 underline) and `onInkAccent` `#7294D9` (6.50:1 on
+> `ink`; a white glyph on it stays at least 3:1). Other colorsets are
+> unchanged.
 
 > **Superseded 2026-09-22 (owner decision, beid#627,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** The dark-variant MUST,
@@ -2600,7 +2872,11 @@ Copy-paste this into every UI PR description and check each item:
 
 - [ ] No hardcoded colors, fonts, spacing, radii, or durations in Views (DS.* only).
 - [ ] `scripts/lint.sh` passes. ("Passes" = zero violations beyond the checked-in baseline template `lint/baseline.template.json`. I did NOT regenerate the template to absorb new violations; if I migrated a scaffold file I regenerated it to shrink and said so in the PR.)
-- [ ] No icons: controls are monospaced text; the OS status bar is the only exception (§12).
+- [ ] No icons in content; in-content controls use the three tiers (§10); the OS status, navigation, toolbar and tab bars are the exceptions (§12).
+- [ ] Every tappable element shows the accent plus a capsule, typed glyph or row cue, or is an OS-standard control; nothing static uses the accent, a capsule or a cue.
+- [ ] Disabled controls use .disabled() and render from isEnabled.
+- [ ] Screens paint grounds with .beidScreenGround; white destinations declare .beidGround(.canvas) where presented; ink fills use surfaceNow, never textPrimary.
+- [ ] An .alert or .confirmationDialog attached inside an ink-capable subtree is followed by .beidAlertTint().
 - [ ] Text controls whose visible text reads badly aloud (e.g. "←") have accessibility labels.
 - [ ] All interactive targets, including text controls, are ≥ 44×44 pt.
 - [ ] No glass, material, blur, shadow, or gradient (§8).
@@ -2617,10 +2893,11 @@ Copy-paste this into every UI PR description and check each item:
 
 Enforcement layers:
 
-1. **Lint-level**: `.swiftlint.yml` encodes six custom rules —
+1. **Lint-level**: `.swiftlint.yml` encodes seven custom rules (2026-11-18
+   doc/code fix; it said six) —
    `no_hardcoded_swiftui_color`, `no_hardcoded_swiftui_font`,
    `no_hardcoded_spacing`, `no_hardcoded_radius`, `no_hardcoded_animation`,
-   `no_glass_or_material` — activated via `only_rules: [custom_rules]`,
+   `no_glass_or_material`, `no_appearance_override` — activated via `only_rules: [custom_rules]`,
    with `match_kinds` excluding comments/strings. Known scaffold debt is
    recorded in the checked-in, violation-level baseline **template**
    `lint/baseline.template.json` (SwiftLint 0.65 baselines store absolute
@@ -2750,7 +3027,20 @@ to.]**
 | `color.stroke.emptyState` | `DS.Color.strokeEmptyState` | `line-dashed` `#C9C9CF` | Dashed 1pt `Block/Empty` frame |
 | `color.chart.detected` | `DS.Color.chartDetected` | `chart-muted` `#D9D9DE` | "Detected" bars in charts |
 | `color.graph.node.idle` | `DS.Color.graphNodeIdle` | `on-ink/idle` `#5C5C66` | Detected-only (idle) graph nodes on `ink` |
-| `color.action.primary` | `DS.Color.actionPrimary` | `ink` `#0B0B0F` | `Button/Primary` Tone=Primary fill; app-level tint |
+| `color.action.primary` | `DS.Color.actionPrimary` | `ink` `#0B0B0F` | `Button/Primary` Tone=Primary fill (no longer the app tint, 2026-11-18) |
+| `color.action.accent` | `DS.Color.actionAccent` | `accent` `#3765C6` (Increase Contrast `#2A53AB`) | The interaction accent on `bg`, `tile` and white surfaces. PROPOSAL — maintainer ratification pending |
+| `color.action.accent.onInk` | `DS.Color.actionAccentOnInk` | `on-ink/accent` `#5F87D7` (Increase Contrast `#7294D9`) | The interaction accent on `ink`. PROPOSAL — maintainer ratification pending |
+| `color.surface.now` | `DS.Color.surfaceNow` | `ink` `#0B0B0F` | The "now" surface: grounds, ink cards, ink bar backgrounds, sheet rows, radar canvas |
+| `color.label.disabled` | `DS.Color.labelDisabled` | `on-ink/sub` `#8E8E96` | Label, outline and cue of a disabled control on the page ground |
+| `color.label.disabled.onInk` | `DS.Color.labelDisabledOnInk` | `on-ink/idle` `#5C5C66` | Label, outline and cue of a disabled control on `ink` |
+| `color.action.disabled` | `DS.Color.actionDisabled` | `tile` `#F2F2F4` | Fill of a disabled `Button/Primary` Tone=Primary |
+| `color.label.onActionDisabled` | `DS.Color.labelOnActionDisabled` | `sub` `#6E6E78` | Label on an `actionDisabled` fill |
+| `color.action.disabled.onInk` | `DS.Color.actionDisabledOnInk` | `on-ink/line` `#2A2A31` | Fill of a disabled `Button/Primary` Tone=Inverse |
+| `color.label.onActionDisabled.onInk` | `DS.Color.labelOnActionDisabledOnInk` | `on-ink/sub` `#8E8E96` | Label on an `actionDisabledOnInk` fill |
+| `opacity.pressed.fill` | `DS.Opacity.pressedFill` | 0.8 | Pressed filled capsule |
+| `opacity.pressed.label` | `DS.Opacity.pressedLabel` | 0.5 | Pressed everything else |
+| `size.control.compact` | `DS.Size.compactControlMinHeight` | 32 pt | Visible height of a compact secondary capsule (hit region stays 44 x 44) |
+| `size.selectionIndicator` | `DS.Size.selectionIndicator` | 2 pt | The accent rule under the selected observed-window bar |
 | `color.label.onActionPrimary` | `DS.Color.labelOnActionPrimary` | `bg` `#FFFFFF` | Label on an `actionPrimary` fill |
 | `color.action.inverse` | `DS.Color.actionInverse` | `bg` `#FFFFFF` | `Button/Primary` Tone=Inverse fill (black screens, black sheet) |
 | `color.label.onActionInverse` | `DS.Color.labelOnActionInverse` | `ink` `#0B0B0F` | Label on an `actionInverse` fill |
@@ -2917,6 +3207,7 @@ inventory evidence. Naming remains governed by §12.
 | 2026-09-23 | **Flat 2b tokens landed** (beid#628): `DS.Color` is 17 tokens named by role over 13 single-appearance primitive colorsets named after the Library variables (§4, §5); several roles may share a primitive. Of the 8 old tokens with no Flat 2b counterpart, `signalActive`, `signalWarning`, `proofSeal`, `statusCaution`, `labelOnWarning` and `labelOnSeal` were removed (tints → `actionPrimary`; text and icons → `textPrimary`; dots → `statusOn`/`statusPending`/`statusOff`), and `statusOn`/`statusOff` were mapped to `semantic/green`/`semantic/red`; `surfaceRaised` was also removed (→ `surfaceCanvas`). `Button/Primary` tone pairs: `actionPrimary`/`labelOnActionPrimary` (Tone=Primary) and `actionInverse`/`labelOnActionInverse` (Tone=Inverse). `DS.Space.pageMargin` 32 → 24, new `emptyBlockVertical`, `DS.Radius.glyph`/`emptyBlock`/`nowCard`, new row/button minimum sizes and `DS.Motion.screenTransition`. `BeidDesign`'s duplicate scales folded into `DS` (content spacing 14 → 16, card radius 18 → 16, control radius 14 → 12); only `haptic(_:)` remains in `BeidDesign` | Adopted — token naming delegated to #628 by D-627 |
 | 2026-09-23 | **Flat 2b surfaces landed** (beid#630): `beidSurface` is a `surfaceCanvas` fill plus a 1px `strokeHairline` border (glass path, `Material` fallback and its `interactive:`/`fallback:` parameters removed); `BeidGlassGroup` and its 7 wrappers deleted; the glass button styles replaced (`BeidPrimaryButton` `.borderedProminent`, `BeidSecondaryButton` `.bordered`, both a `DS.Radius.control` rounded rectangle; Home's icon Scan button a `.borderedProminent` circle); all 5 `#available(iOS 26, *)` branches removed (deployment target still iOS 17); the scan-flow cover's `.regularMaterial` and the Home/Sensing insets' `.background(.bar)` → opaque `surfaceCanvas` (insets with a top `strokeHairline` rule); new `BeidEmptyBlock` (`Block/Empty`, `DS.Size.emptyBlockDash` 4 from the 2026-09-23 Figma read) replaces `BeidPanel` at the 04b and empty-day states; new lint rule `no_glass_or_material` (six custom rules). Open gaps named, not fixed: the primary button is not yet a pill (`Button/Primary` unassigned), and `.bordered` is a system tint fill, not `bg` + `line`. The Account sheet's background is `surfaceCanvas` as an interim value replacing the OS-default sheet glass; #642 takes it to `ink`. Left as is: the OS-drawn toolbar/navigation-bar glass (#631), `EventCardView`'s `.tint.opacity` badge, `DS.Artwork.proofCardGradient` (#633) | Adopted — implements the 2026-09-22 §8/§8a decision |
 | 2026-09-23 | **Flat 2b type ramp landed** (beid#629): the three OFL families (Bricolage Grotesque ExtraBold, DM Sans Bold/Regular, DM Mono Medium) are bundled, and `DS.Font` becomes two tiers — `DS.Font.Library`, the 17 Library text styles as `DS.Font.Style` values, and the 8 role tokens Views use, re-pointed onto them with no call site changed (§6). `ceremonyTitle` removed (no Swift call site). Text styles: nearest-default-size per style, `.largeTitle` for all five Display styles — `UIFontMetrics` applies one constant multiplier per (text style, content size category), quantised to 1/3 pt, and that multiplier is not the style's own size ratio; measured at AX3 on iOS 26.5, `.largeTitle` is about 1.49 against `.body`'s 2.18 and `.caption2`'s 2.69, so Display/60 reaches 89.33 pt at AX3 and 102.33 pt at AX5, versus 131.0 pt and 169.0 pt on `.body`'s curve. Uppercase: the three mono *label* styles only — the mono *value* styles stay mixed-case because EIP-55 addresses carry their checksum in letter case. Tabular figures: `Display/Number 40` only. `beidTextStyle(_:)` in `Tokens.swift` applies a whole style (tracking and line height scaled with Dynamic Type, case); plain `.font(DS.Font.x)` call sites still get family/size/Dynamic Type only — a named transitional gap. Display's 100% line height is **not** applied: `lineSpacing` is additive and nonnegative and `View.lineHeight(_:)` is iOS 26+, above the iOS 17 deployment target — also a named gap. #24 (button capitalization) untouched: #629 uppercases no existing string | Adopted — text-style, uppercase-scope and tabular-figure choices delegated to #629 by §6/D-627 |
+| 2026-11-18 | One interaction accent (`accent` #3765C6 / `on-ink/accent` #5F87D7; Increase Contrast #2A53AB / #7294D9) meaning only "you can tap this, now"; three button tiers in one capsule family plus row cues and typed-glyph meanings; pressed, disabled and busy states; grounds in the environment; status chips, badges and look-alike fills de-buttonized; app tint, alert tint → `accent` (the target's global accent color is a follow-up); Increase Contrast underline on text controls; copy-event-ID haptic; §0 Library authority relaxed to "reference; deviations recorded" ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)) | Structural rules adopted — maintainer decision 2026-11-18; accent hex values PROPOSAL — maintainer ratification pending |
 | 2026-10-15 | **Flat 2b v2 navigation** (Figma `333:73`, beid#730 / #731): §12's no-icons rule is narrowed to content. Navigation-bar and toolbar items are OS-standard — the `NavigationStack` back button, the system `.close` / `.done` items, and SF Symbol + title for screen-specific actions (Rejoin `arrow.clockwise`, Copy `doc.on.doc`, Account `person.crop.circle`) — rendered by the OS, Liquid Glass on iOS 26. The 2026-09-25 suppression of that glass (#631) is withdrawn (§8). `Bar/Nav` is not built. Content keeps no icons and no app-drawn glass, materials, blur, shadows or gradients | Adopted — owner decision 2026-10-15 (A2) |
 
 ### D. Deprecated patterns
@@ -2939,6 +3230,14 @@ gradient (§8), per-event hues (§5), or a forced dark variant (§14). The
 extended.* *Flat 2b v2 (2026-10-15, beid#730): the SF Symbol prohibition
 excludes navigation-bar and toolbar items, which use the OS-standard items
 and the symbols §12 names; new code must not suppress the OS's bar glass.*
+
+*Update 2026-11-18 ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)): new code also must not introduce
+`.buttonStyle(.plain)`, `.bordered` or `.borderless` for in-content controls
+(use the Beid styles); `labelColor:` overrides passed to make a control
+visible on a ground (declare the ground); `textPrimary` or `actionPrimary`
+used as any ink surface fill — screen ground, card, sheet row, bar
+background, radar canvas (use `.beidScreenGround` or `DS.Color.surfaceNow`);
+static capsules or badges; and the → glyph on an in-place action.*
 
 **[Android counterpart: a default Material3 blue as brand accent (verified
 not present — `Theme.kt` wires `actionPrimary` explicitly, §5); oversized
