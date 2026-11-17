@@ -510,10 +510,10 @@ struct BeidPrimaryButtonStyle: ButtonStyle {
   var isBusy = false
 
   func makeBody(configuration: Configuration) -> some View {
-    Body(configuration: configuration, tone: tone, labelColor: labelColor, isBusy: isBusy)
+    StyledBody(configuration: configuration, tone: tone, labelColor: labelColor, isBusy: isBusy)
   }
 
-  private struct Body: View {
+  private struct StyledBody: View {
     let configuration: ButtonStyleConfiguration
     let tone: BeidPrimaryButton.Tone
     let labelColor: Color?
@@ -552,10 +552,10 @@ struct BeidSecondaryButtonStyle: ButtonStyle {
   var size: BeidButtonSize = .large
 
   func makeBody(configuration: Configuration) -> some View {
-    Body(configuration: configuration, size: size)
+    StyledBody(configuration: configuration, size: size)
   }
 
-  private struct Body: View {
+  private struct StyledBody: View {
     let configuration: ButtonStyleConfiguration
     let size: BeidButtonSize
     @Environment(\.isEnabled) private var isEnabled
