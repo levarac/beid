@@ -216,7 +216,11 @@ struct BeidPanel<Content: View>: View {
 
   var body: some View {
     content
-      .beidGround(.canvas)
+      // Ground only, no tint: the new styles and text controls resolve their
+      // accent from the ground, while tint-driven legacy content inside a panel
+      // (the event card's PAUSED badge) keeps the tint of its screen. The panel
+      // tint follows once that badge moves off `.tint`.
+      .environment(\.beidGround, .canvas)
       .padding(18)
       .frame(maxWidth: .infinity, alignment: .leading)
       .beidSurface(cornerRadius: DS.Radius.card)
@@ -453,6 +457,14 @@ enum BeidControlPalette {
     }
   }
 
+  /// The foreground of a text control. An explicit `labelColor` applies only
+  /// while the control is enabled; a disabled control always drops to the
+  /// ground's disabled color, so it never looks enabled.
+  static func textControl(labelColor: Color?, ground: BeidGround, isEnabled: Bool) -> Color {
+    if isEnabled, let labelColor { return labelColor }
+    return interactive(ground: ground, isEnabled: isEnabled)
+  }
+
   /// The title of a row that is the action's own label (Account "Join event").
   static func actionTitle(ground: BeidGround, isEnabled: Bool) -> Color {
     switch (ground, isEnabled) {
@@ -498,6 +510,9 @@ private struct BeidPressFeedback: ViewModifier {
   func body(content: Content) -> some View {
     let pressed = isPressed && isEnabled
     content
+      // Fade the control as one layer, so the label does not show through the
+      // fill while pressed.
+      .compositingGroup()
       .opacity(pressed ? pressedOpacity : 1)
       .animation(reduceMotion ? nil : DS.Motion.fast, value: pressed)
   }
@@ -581,8 +596,9 @@ struct BeidSecondaryButtonStyle: ButtonStyle {
           .multilineTextAlignment(.center)
           .foregroundStyle(color)
           .padding(.horizontal, DS.Space.m)
+          .padding(.vertical, DS.Space.xs)
           .frame(minHeight: DS.Size.compactControlMinHeight)
-          .overlay { Capsule().strokeBorder(color, lineWidth: DS.Size.hairline) }
+          .overlay { outline(color: color, minHeight: DS.Size.compactControlMinHeight) }
           // The visible capsule is 32 pt; the hit region is at least 44 x 44.
           .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget)
           .contentShape(Rectangle())
@@ -595,9 +611,19 @@ struct BeidSecondaryButtonStyle: ButtonStyle {
         .multilineTextAlignment(.center)
         .foregroundStyle(color)
         .padding(.horizontal, DS.Space.l)
+        .padding(.vertical, DS.Space.xs)
         .frame(maxWidth: .infinity, minHeight: minHeight)
-        .overlay { Capsule().strokeBorder(color, lineWidth: DS.Size.hairline) }
+        .overlay { outline(color: color, minHeight: minHeight) }
         .contentShape(Capsule())
+    }
+
+    /// A continuous rounded rectangle whose radius is half the control's
+    /// minimum height: identical to a capsule on one line, but a label that
+    /// wraps at accessibility sizes stays inside the outline instead of being
+    /// cut by a capsule whose radius grew with the wrapped height.
+    private func outline(color: Color, minHeight: CGFloat) -> some View {
+      RoundedRectangle(cornerRadius: minHeight / 2, style: .continuous)
+        .strokeBorder(color, lineWidth: DS.Size.hairline)
     }
   }
 }

@@ -160,16 +160,17 @@ struct BeidTextControlLabel: View {
   }
 }
 
-/// An explicit color wins; otherwise the ground's accent (or its disabled color).
+/// The ground's accent, or an explicit color while the control is enabled. A
+/// disabled control always uses the ground's disabled color.
 private struct LabelForeground: ViewModifier {
   let labelColor: Color?
+  @Environment(\.isEnabled) private var isEnabled
+  @Environment(\.beidGround) private var ground
 
   func body(content: Content) -> some View {
-    if let labelColor {
-      content.foregroundStyle(labelColor)
-    } else {
-      content.beidAccentForeground()
-    }
+    content.foregroundStyle(
+      BeidControlPalette.textControl(labelColor: labelColor, ground: ground, isEnabled: isEnabled)
+    )
   }
 }
 
