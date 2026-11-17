@@ -72,6 +72,8 @@ struct EventIdentityVerificationRow: View {
   let status: EventIdentityVerification
   let onRetry: () -> Void
 
+  @Environment(\.beidGround) private var ground
+
   init(
     status: EventIdentityVerification,
     onRetry: @escaping () -> Void = {}
@@ -87,21 +89,15 @@ struct EventIdentityVerificationRow: View {
         statusView(presentation)
 
         if presentation.showsRetry {
-          Button {
-            BeidDesign.haptic()
+          // A compact outline capsule. Its spoken label is the title as written
+          // ("Retry event registry verification"), not the uppercased rendering.
+          BeidSecondaryButton(
+            title: LocalizedStringKey(EventIdentityVerificationPresentation.retryButtonKey),
+            size: .compact,
+            haptic: .light
+          ) {
             onRetry()
-          } label: {
-            Text(LocalizedStringKey(EventIdentityVerificationPresentation.retryButtonKey))
-              .font(DS.Font.meta.weight(.semibold))
-              .frame(
-                minWidth: DS.Size.minHitTarget,
-                minHeight: DS.Size.minHitTarget,
-                alignment: .leading
-              )
-              .contentShape(Rectangle())
           }
-          .buttonStyle(.borderless)
-          .tint(DS.Color.actionPrimary)
           .accessibilityIdentifier(
             EventIdentityVerificationPresentation.retryAccessibilityIdentifier
           )
@@ -135,7 +131,12 @@ struct EventIdentityVerificationRow: View {
   private func statusColor(
     for presentation: EventIdentityVerificationPresentation
   ) -> Color {
-    presentation.isVerified ? DS.Color.textPrimary : DS.Color.textSecondary
+    switch (ground, presentation.isVerified) {
+    case (.canvas, true): DS.Color.textPrimary
+    case (.canvas, false): DS.Color.textSecondary
+    case (.ink, true): DS.Color.labelOnActionPrimary
+    case (.ink, false): DS.Color.textSecondaryOnInk
+    }
   }
 }
 

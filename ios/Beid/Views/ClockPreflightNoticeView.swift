@@ -71,8 +71,13 @@ struct ClockPreflightNotice: View {
             .font(DS.Font.supporting)
             .foregroundStyle(DS.Color.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
-          // #631: a Flat 2b text control, not an accent-tinted button.
-          BeidTextControl("Check again", accessibilityLabel: "Check again") {
+          // 2026-11-18: an in-place action is a compact outline capsule (DESIGN.md §10).
+          BeidSecondaryButton(
+            title: "Check again",
+            size: .compact,
+            accessibilityLabel: "Check again",
+            haptic: nil
+          ) {
             onRetry()
           }
           .accessibilityIdentifier(ClockPreflightPresentation.retryAccessibilityIdentifier)

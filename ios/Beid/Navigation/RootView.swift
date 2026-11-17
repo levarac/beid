@@ -32,7 +32,7 @@ struct RootView: View {
       sensingCoordinator: coordinator.sensingCoordinator,
       isActive: coordinator.canPresentRootEventSigningKeyFailure
     ))
-    .tint(DS.Color.actionPrimary)
+    .beidGround(.canvas)
     .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: coordinator.screen)
 
   }
