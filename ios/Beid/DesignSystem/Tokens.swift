@@ -19,7 +19,9 @@ enum DS {
   // Two tiers (DESIGN.md §4). Tier 1 is the Flat 2b Library palette: one
   // colorset per Library variable in Colors.xcassets, each a single
   // appearance (one sRGB value, no dark variant) — DESIGN.md §5 allows
-  // only the Library colors. Tier 2 is `DS.Color`: tokens named by role,
+  // only the Library colors, plus the two code-first accent primitives
+  // `accent` and `onInkAccent` (2026-11-18; they also carry an Increase
+  // Contrast appearance, and still no dark variant). Tier 2 is `DS.Color`: tokens named by role,
   // each mapped onto one primitive; several roles may share a primitive.
   // Views use tier 2 only. Roles and allowed uses are in DESIGN.md §5.
   enum Color {
@@ -47,8 +49,9 @@ enum DS {
     /// Detected-only (idle) graph nodes on an ink ground. Library
     /// `on-ink/idle`.
     static let graphNodeIdle = SwiftUI.Color(.onInkIdle)
-    /// `Button/Primary` Tone=Primary fill; also the app-level tint.
-    /// Library `ink`.
+    /// `Button/Primary` Tone=Primary fill only. It is no longer the
+    /// app-level tint: that is `actionAccent` (`actionAccentOnInk` under an
+    /// ink ground). Library `ink`.
     static let actionPrimary = SwiftUI.Color(.ink)
     /// Label on an `actionPrimary` fill. Library `bg`.
     static let labelOnActionPrimary = SwiftUI.Color(.bg)
@@ -67,6 +70,55 @@ enum DS {
     /// Destructive / off. Same restriction as `statusOn`. Library
     /// `semantic/red`.
     static let statusOff = SwiftUI.Color(.semanticRed)
+
+    // MARK: Interaction accent and control states (2026-11-18)
+    //
+    // Code-first additions recorded in docs/decisions/issue-pending-tap-accent.md.
+    // The two accent values are a PROPOSAL awaiting the maintainer's choice
+    // from side-by-side screenshots; only the two colorsets change if another
+    // hue is picked. The Figma library follows the code later.
+
+    /// The one interaction color on `bg`, `tile` and white surfaces: text
+    /// controls, row cues, secondary outlines, focus, the app and alert tint.
+    /// It means only "you can tap this, now" and never marks status, data or
+    /// decoration, never fills a button, and never appears on ink. Code-first
+    /// primitive `accent` (Increase Contrast appearance included).
+    /// PROPOSAL, maintainer ratification pending.
+    static let actionAccent = SwiftUI.Color(.accent)
+    /// `actionAccent` on an ink ground. Never on `bg` or an OS alert surface.
+    /// Code-first primitive `on-ink/accent` (Increase Contrast appearance
+    /// included). PROPOSAL, maintainer ratification pending.
+    static let actionAccentOnInk = SwiftUI.Color(.onInkAccent)
+    /// The black "what is happening now" surface: screen grounds, ink cards,
+    /// ink bar backgrounds, sheet rows and footers, the radar canvas. Use it
+    /// instead of `textPrimary` for any ink fill. Library `ink`.
+    static let surfaceNow = SwiftUI.Color(.ink)
+    /// Label, outline and cue of a disabled control on the page ground.
+    /// Library `on-ink/sub`.
+    static let labelDisabled = SwiftUI.Color(.onInkSub)
+    /// Label, outline and cue of a disabled control on an ink ground.
+    /// Library `on-ink/idle`.
+    static let labelDisabledOnInk = SwiftUI.Color(.onInkIdle)
+    /// Fill of a disabled `Button/Primary` Tone=Primary capsule. Library
+    /// `tile`.
+    static let actionDisabled = SwiftUI.Color(.tile)
+    /// Label on an `actionDisabled` fill. Library `sub`.
+    static let labelOnActionDisabled = SwiftUI.Color(.sub)
+    /// Fill of a disabled `Button/Primary` Tone=Inverse capsule on ink.
+    /// Library `on-ink/line`.
+    static let actionDisabledOnInk = SwiftUI.Color(.onInkLine)
+    /// Label on an `actionDisabledOnInk` fill. Library `on-ink/sub`.
+    static let labelOnActionDisabledOnInk = SwiftUI.Color(.onInkSub)
+  }
+
+  // MARK: - Opacity
+  //
+  // Pressed-state opacities of the Beid button styles (DESIGN.md §9, §13).
+  enum Opacity {
+    /// Pressed filled capsule (`Button/Primary`).
+    static let pressedFill: Double = 0.8
+    /// Pressed everything else: secondary capsules, text controls, rows.
+    static let pressedLabel: Double = 0.5
   }
 
   // MARK: - Space
@@ -117,6 +169,11 @@ enum DS {
   enum Size {
     /// HIG minimum hit region for interactive elements.
     static let minHitTarget: CGFloat = 44
+    /// Visible minimum height of a compact secondary capsule (PASTE, CHECK
+    /// AGAIN, registry retry). Its hit region stays at `minHitTarget`.
+    static let compactControlMinHeight: CGFloat = 32
+    /// The `actionAccent` rule under the selected observed-window bar.
+    static let selectionIndicator: CGFloat = 2
     /// `BeidStatusPill` indicator dot diameter.
     static let statusDot: CGFloat = 8
     /// Flat 2b 05 Sensing radar field, 362 pt in the Figma frame.
