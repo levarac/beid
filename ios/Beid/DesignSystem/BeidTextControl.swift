@@ -7,9 +7,14 @@ import SwiftUI
 /// it — one value, so the two cannot be written apart (DESIGN.md §12's third
 /// MUST, §13).
 ///
-/// The glyph is not an icon: it is a literal character in the control's own
+/// The glyph is not an icon: it is a literal character beside the control's
 /// monospaced text, which is exactly why it needs a spoken label. `←` announces
-/// as a symbol name, not as a destination.
+/// as a symbol name, not as a destination. DM Mono Medium has no arrow glyphs,
+/// so the character renders from a fallback face.
+///
+/// Each glyph has one meaning (DESIGN.md §12): `→` opens another screen in the
+/// app, `←` returns to the parent, `↗` leaves the app, `↓` and `↑` expand or
+/// collapse a section in place. Actions that work in place carry no glyph.
 ///
 /// The typed glyph initializers always require the spoken label; a call site
 /// cannot use this glyph API without providing one. As with any text API,
@@ -74,14 +79,20 @@ struct BeidTextControlGlyph {
 struct BeidTextControlLabel: View {
   let title: LocalizedStringKey
   let glyph: BeidTextControlGlyph?
-  let labelColor: Color
+  /// `nil` takes the ground's accent (or its disabled color).
+  let labelColor: Color?
   let accessibilityLabel: LocalizedStringKey?
+
+  @Environment(\.isEnabled) private var isEnabled
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
+  @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiatesWithoutColor
+  @Environment(\.colorSchemeContrast) private var contrast
 
   /// A plain text control, with no glyph. `accessibilityLabel` is an override
   /// for copy that reads badly aloud; omit it and the visible text is used.
   init(
     _ title: LocalizedStringKey,
-    labelColor: Color = DS.Color.textPrimary,
+    labelColor: Color? = nil,
     accessibilityLabel: LocalizedStringKey? = nil
   ) {
     self.title = title
@@ -95,7 +106,7 @@ struct BeidTextControlLabel: View {
   init(
     _ title: LocalizedStringKey,
     glyph: BeidTextControlGlyph,
-    labelColor: Color = DS.Color.textPrimary
+    labelColor: Color? = nil
   ) {
     self.title = title
     self.glyph = glyph
@@ -123,7 +134,18 @@ struct BeidTextControlLabel: View {
     // tracking and Dynamic Type scaling. Keep the source strings in their
     // original case so String Catalog keys remain intact (DESIGN.md §15).
     .beidTextStyle(DS.Font.Library.labelMono11)
-    .foregroundStyle(labelColor)
+    .modifier(LabelForeground(labelColor: labelColor))
+    // Enabled text controls are underlined when Button Shapes or Differentiate
+    // Without Color is on, and under Increase Contrast, where the accent is only
+    // 2.74:1 against adjacent ink text (DESIGN.md §13).
+    .underline(
+      BeidControlPalette.underlinesTextControl(
+        isEnabled: isEnabled,
+        showsButtonShapes: showsButtonShapes,
+        differentiatesWithoutColor: differentiatesWithoutColor,
+        contrast: contrast
+      )
+    )
     // `minHeight`, never `height`: DESIGN.md §6 forbids fixed-height
     // containers around text, which would clip at accessibility Dynamic Type
     // sizes. The minimum is the §2 rule 5 hit region, which an 11pt label
@@ -135,6 +157,19 @@ struct BeidTextControlLabel: View {
     // single modifier is the difference between meeting §2 rule 5 and only
     // appearing to.
     .contentShape(Rectangle())
+  }
+}
+
+/// An explicit color wins; otherwise the ground's accent (or its disabled color).
+private struct LabelForeground: ViewModifier {
+  let labelColor: Color?
+
+  func body(content: Content) -> some View {
+    if let labelColor {
+      content.foregroundStyle(labelColor)
+    } else {
+      content.beidAccentForeground()
+    }
   }
 }
 
@@ -164,18 +199,20 @@ private extension View {
 /// A Flat 2b text control: `BeidTextControlLabel` in a `Button`
 /// (DESIGN.md §12). Use it for `CLOSE`, `DONE`, `COPY`, `OPEN →`.
 ///
-/// `.buttonStyle(.plain)` so no system chrome reappears around the text, and
-/// an opt-in haptic (`haptic: true`) fires before the action, as `BeidPrimaryButton` always does.
+/// `.beidText` so no system chrome reappears around the text and the control
+/// has a pressed state, and an opt-in haptic (`haptic: true`) fires before the
+/// action, as `BeidPrimaryButton` always does.
 ///
-/// **On `labelColor` and destructive roles.** `role: .destructive` changes the
+/// **On `labelColor` and destructive roles.** The default (`nil`) is the
+/// ground's accent, or its disabled color. `role: .destructive` changes the
 /// semantics, not the color. DESIGN.md §5 permits `DS.Color.statusOff` as text
-/// only on an ink ground; on the page ground a destructive control stays
-/// `textPrimary` and carries its weight in the copy. Pass `labelColor`
-/// explicitly only where §5 allows it.
+/// only on an ink ground, for a destructive control; pass `labelColor`
+/// explicitly only there. A call site never passes a color to make a control
+/// visible: declare the ground instead (`beidGround`, `beidScreenGround`).
 struct BeidTextControl: View {
   let title: LocalizedStringKey
   let glyph: BeidTextControlGlyph?
-  let labelColor: Color
+  let labelColor: Color?
   let accessibilityLabel: LocalizedStringKey?
   let role: ButtonRole?
   /// DESIGN.md §9: haptics only at meaningful commits. Off by default; turn it
@@ -188,7 +225,7 @@ struct BeidTextControl: View {
   /// matching initializer for what `accessibilityLabel` does and does not do.
   init(
     _ title: LocalizedStringKey,
-    labelColor: Color = DS.Color.textPrimary,
+    labelColor: Color? = nil,
     accessibilityLabel: LocalizedStringKey? = nil,
     role: ButtonRole? = nil,
     haptic: Bool = false,
@@ -208,7 +245,7 @@ struct BeidTextControl: View {
   init(
     _ title: LocalizedStringKey,
     glyph: BeidTextControlGlyph,
-    labelColor: Color = DS.Color.textPrimary,
+    labelColor: Color? = nil,
     role: ButtonRole? = nil,
     haptic: Bool = false,
     action: @escaping () -> Void
@@ -226,7 +263,7 @@ struct BeidTextControl: View {
     Button(role: role, action: performAction) {
       label
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.beidText)
   }
 
   @ViewBuilder
