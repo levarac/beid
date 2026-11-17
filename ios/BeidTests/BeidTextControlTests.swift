@@ -85,9 +85,10 @@ final class BeidTextControlTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(size.height, minimumHitRegion, "height at accessibility5")
   }
 
-  /// The text control's color is optional: `nil` resolves through the ground's
-  /// accent (checked in `DesignTokensTests`), and an explicit color still wins.
-  /// Both forms keep the 44pt hit region.
+  /// The text control's color is optional. This checks only that both forms
+  /// keep the 44pt hit region; how the color resolves per ground and enabled
+  /// state is pinned in `DesignTokensTests` through `BeidControlPalette`, which
+  /// the label uses, not through the rendered label.
   func testExplicitAndDefaultLabelColorsKeepTheHitRegion() {
     for control in [
       AnyView(BeidTextControl("X") {}),
@@ -116,6 +117,29 @@ final class BeidTextControlTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(size.width, minimumHitRegion, "\(entry.name) width at \(dynamicTypeSize)")
         XCTAssertGreaterThanOrEqual(size.height, minimumHitRegion, "\(entry.name) height at \(dynamicTypeSize)")
       }
+    }
+  }
+
+  /// A long title at the largest accessibility size wraps. The outline must
+  /// grow with it: the control stays at least as tall as its wrapped text plus
+  /// the vertical padding, and never narrower than the hit region. A fixed
+  /// 32pt visible height (the old bare capsule) would measure 44 here.
+  func testSecondaryButtonsWithALongTitleGrowAtAccessibility5() {
+    let title: LocalizedStringKey = "RETRY EVENT REGISTRY VERIFICATION"
+    let proposal = CGSize(width: 320, height: 2000)
+    let sizes: [(name: String, button: AnyView)] = [
+      ("compact", AnyView(BeidSecondaryButton(title: title, size: .compact) {})),
+      ("regular", AnyView(BeidSecondaryButton(title: title, size: .regular) {})),
+      ("large", AnyView(BeidSecondaryButton(title: title, size: .large) {})),
+    ]
+    for entry in sizes {
+      let size = measuredSize(entry.button, proposal: proposal, dynamicTypeSize: .accessibility5)
+      XCTAssertGreaterThanOrEqual(size.width, minimumHitRegion, "\(entry.name) width, long title at accessibility5")
+      XCTAssertGreaterThan(
+        size.height,
+        minimumHitRegion,
+        "\(entry.name): a wrapped long title at accessibility5 must grow past the 44pt hit region, not clip"
+      )
     }
   }
 

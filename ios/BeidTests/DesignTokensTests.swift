@@ -10,10 +10,11 @@ import XCTest
 /// Pins the Flat 2b token values (beid#628, DESIGN.md §4/§5/§7/§8). Every
 /// expected value is a literal from the Flat 2b Library, never read back
 /// from `Tokens.swift` or `Colors.xcassets`: a test that compares a token
-/// with itself cannot fail. The exceptions are the 2026-11-18 accent, ground
-/// and disabled roles, whose literals come from the decision record in
-/// docs/decisions/ (the two accent pairs are a proposal until the maintainer
-/// ratifies them; if another hue is chosen, only these literals change).
+/// with itself cannot fail. The exception is the 2026-11-18 interaction accent:
+/// its two pairs (#3765C6 / #2A53AB and #5F87D7 / #7294D9) are values from the
+/// decision record in docs/decisions/, a proposal until the maintainer ratifies
+/// them; if another hue is chosen, only those literals change. The disabled
+/// roles are Library primitives (#8E8E96, #5C5C66, #F2F2F4, #6E6E78, #2A2A31).
 final class DesignTokensTests: XCTestCase {
   /// Every `DS.Color` token and the Library hex it must resolve to. Library
   /// primitives are single-appearance, so light and dark expect the same hex.
@@ -76,14 +77,14 @@ final class DesignTokensTests: XCTestCase {
     ]
     for style in [UIUserInterfaceStyle.light, .dark] {
       for token in cases {
-        let normal = UITraitCollection(traitsFrom: [
-          UITraitCollection(userInterfaceStyle: style),
-          UITraitCollection(accessibilityContrast: .normal),
-        ])
-        let increased = UITraitCollection(traitsFrom: [
-          UITraitCollection(userInterfaceStyle: style),
-          UITraitCollection(accessibilityContrast: .high),
-        ])
+        let normal = UITraitCollection {
+          $0.userInterfaceStyle = style
+          $0.accessibilityContrast = .normal
+        }
+        let increased = UITraitCollection {
+          $0.userInterfaceStyle = style
+          $0.accessibilityContrast = .high
+        }
         XCTAssertEqual(
           Self.srgbHex(UIColor(token.color).resolvedColor(with: normal)),
           token.normal,
@@ -120,6 +121,32 @@ final class DesignTokensTests: XCTestCase {
         Self.srgbHex(UIColor(BeidControlPalette.interactive(ground: ground, isEnabled: enabled))),
         hex,
         "interactive(\(ground), enabled: \(enabled))"
+      )
+    }
+  }
+
+  /// A text control's explicit label color applies only while it is enabled;
+  /// a disabled one always takes the ground's disabled color. This pins the
+  /// resolution `BeidTextControlLabel` uses; the rendered color itself cannot
+  /// be read in a unit-test process (no accessibility tree, and no color probe
+  /// short of pixel sampling).
+  func testTextControlForegroundDropsAnExplicitColorWhileDisabled() {
+    let explicit = DS.Color.statusOff
+    let table: [(BeidGround, Bool, Color?, String)] = [
+      (.canvas, true, nil, "#3765C6"),
+      (.ink, true, nil, "#5F87D7"),
+      (.canvas, true, explicit, "#FF453A"),
+      (.ink, true, explicit, "#FF453A"),
+      (.canvas, false, nil, "#8E8E96"),
+      (.ink, false, nil, "#5C5C66"),
+      (.canvas, false, explicit, "#8E8E96"),
+      (.ink, false, explicit, "#5C5C66"),
+    ]
+    for (ground, enabled, labelColor, hex) in table {
+      XCTAssertEqual(
+        Self.srgbHex(UIColor(BeidControlPalette.textControl(labelColor: labelColor, ground: ground, isEnabled: enabled))),
+        hex,
+        "textControl(\(ground), enabled: \(enabled), explicit: \(labelColor != nil))"
       )
     }
   }
@@ -181,9 +208,12 @@ final class DesignTokensTests: XCTestCase {
       XCTAssertGreaterThanOrEqual(try Self.contrast(accent, tile), 4.5, "accent on tile \(accent)")
       XCTAssertGreaterThanOrEqual(try Self.contrast(onInk, ink), 4.5, "on-ink accent on ink \(onInk)")
     }
-    // Outlines that identify a control: at least 3:1.
-    XCTAssertGreaterThanOrEqual(try Self.contrast(hex(DS.Color.actionAccent, normal), white), 3)
-    XCTAssertGreaterThanOrEqual(try Self.contrast(hex(DS.Color.actionAccentOnInk, normal), ink), 3)
+    // A disabled outline or label differs in lightness from the accent it
+    // replaces, so "disabled" never reads as "enabled" by hue alone.
+    XCTAssertGreaterThanOrEqual(
+      try Self.contrast(hex(DS.Color.labelDisabled, normal), hex(DS.Color.actionAccent, normal)), 1.5)
+    XCTAssertGreaterThanOrEqual(
+      try Self.contrast(hex(DS.Color.labelDisabledOnInk, normal), hex(DS.Color.actionAccentOnInk, normal)), 1.5)
     // An OS-drawn white glyph on the on-ink accent keeps at least 3:1, also under Increase Contrast.
     XCTAssertGreaterThanOrEqual(try Self.contrast(white, hex(DS.Color.actionAccentOnInk, normal)), 3)
     XCTAssertGreaterThanOrEqual(try Self.contrast(white, hex(DS.Color.actionAccentOnInk, increased)), 3)
@@ -608,7 +638,6 @@ final class DesignTokensTests: XCTestCase {
     }
   }
 
-  /// `#RRGGBB` of `color` in 8-bit sRGB.
   /// WCAG 2.x contrast ratio between two `#RRGGBB` literals.
   private static func contrast(_ first: String, _ second: String) throws -> Double {
     func luminance(_ hex: String) throws -> Double {
@@ -631,6 +660,7 @@ final class DesignTokensTests: XCTestCase {
     case notAHexLiteral(String)
   }
 
+  /// `#RRGGBB` of `color` in 8-bit sRGB.
   private static func srgbHex(_ color: UIColor) -> String? {
     guard
       let srgb = CGColorSpace(name: CGColorSpace.sRGB),
