@@ -120,10 +120,10 @@ final class BeidTextControlTests: XCTestCase {
     }
   }
 
-  /// A long title at the largest accessibility size wraps. The outline must
-  /// grow with it: the control stays at least as tall as its wrapped text plus
-  /// the vertical padding, and never narrower than the hit region. A fixed
-  /// 32pt visible height (the old bare capsule) would measure 44 here.
+  /// A long title at the largest accessibility size wraps, and the control
+  /// grows with it instead of clipping at the 44pt hit region; it is never
+  /// narrower than the hit region either. This pins growth only: it does not
+  /// check the outline's shape or its vertical padding.
   func testSecondaryButtonsWithALongTitleGrowAtAccessibility5() {
     let title: LocalizedStringKey = "RETRY EVENT REGISTRY VERIFICATION"
     let proposal = CGSize(width: 320, height: 2000)

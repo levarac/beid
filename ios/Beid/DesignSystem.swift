@@ -614,15 +614,21 @@ struct BeidSecondaryButtonStyle: ButtonStyle {
         .padding(.vertical, DS.Space.xs)
         .frame(maxWidth: .infinity, minHeight: minHeight)
         .overlay { outline(color: color, minHeight: minHeight) }
-        .contentShape(Capsule())
+        .contentShape(outlineShape(minHeight: minHeight))
     }
 
     /// A continuous rounded rectangle whose radius is half the control's
     /// minimum height: identical to a capsule on one line, but a label that
     /// wraps at accessibility sizes stays inside the outline instead of being
-    /// cut by a capsule whose radius grew with the wrapped height.
-    private func outline(color: Color, minHeight: CGFloat) -> some View {
+    /// cut by a capsule whose radius grew with the wrapped height. The hit
+    /// shape uses the same rectangle, so a wrapped control's corners stay
+    /// tappable.
+    private func outlineShape(minHeight: CGFloat) -> RoundedRectangle {
       RoundedRectangle(cornerRadius: minHeight / 2, style: .continuous)
+    }
+
+    private func outline(color: Color, minHeight: CGFloat) -> some View {
+      outlineShape(minHeight: minHeight)
         .strokeBorder(color, lineWidth: DS.Size.hairline)
     }
   }
