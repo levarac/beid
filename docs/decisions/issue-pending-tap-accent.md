@@ -1,6 +1,6 @@
 # What can be tapped: one interaction accent, three button tiers, and the Flat 2b rules they change
 
-**Status:** decided 2026-11-18 (maintainer decision). Binding for iOS once the implementing PRs merge; Android follows later (see "Platform scope"). Every "Superseded 2026-11-18" block and every 2026-11-18 annotation in `DESIGN.md` points here (below: "D-tap-accent"). The tracking issue for this change is still to be filed; this file is named `issue-pending-tap-accent.md` until it is, and is renamed to carry the issue number then. The two accent value pairs stay `PROPOSAL — maintainer ratification pending` until the maintainer chooses them from side-by-side simulator screenshots. The structural rules carry no tag.
+**Status:** proposed 2026-11-18, awaiting the maintainer's choice of accent from side-by-side screenshots. The structural rules take effect for iOS when the maintainer accepts this record and the implementing PRs merge; Android follows later (see "Platform scope"). Every "Superseded 2026-11-18" block and every 2026-11-18 annotation in `DESIGN.md` points here (below: "D-tap-accent"). The tracking issue for this change is still to be filed; this file is named `issue-pending-tap-accent.md` until it is, and is renamed to carry the issue number then. The two accent value pairs carry `PROPOSAL — maintainer ratification pending` until then; the structural rules carry no tag but are part of what is proposed.
 
 **Authority.** The maintainer, after using the iOS 1.1.1 build in the simulator on 2026-11-18:
 
@@ -60,7 +60,7 @@
 
 7. **The ground is declared, not remembered.** `BeidGround` (`.canvas` / `.ink`) is an environment value.
    - Screens paint their ground with `.beidScreenGround(_:)`.
-   - Ink cards declare `.beidGround(.ink)`, and `BeidPanel` resets its content to canvas.
+   - Ink cards declare `.beidGround(.ink)`, and `BeidPanel` resets its content's ground to canvas. `BeidPanel` sets the environment value only and leaves the tint alone: the styles and text controls resolve their colors from the ground, while tint-driven content inside a panel (the `EventCardView` badge) keeps the tint of its screen. The panel's tint follows once that badge moves off `.tint`.
    - White destinations and sheets declare canvas where they are presented.
    - An OS alert attached inside an ink-capable subtree is followed by `.beidAlertTint()`.
    Components resolve their accent and disabled colors from the ground, so call sites no longer pass label colors.
@@ -117,8 +117,8 @@ Commits come from `git log -S` on `DESIGN.md`. Authors are omitted because this 
 | `labelDisabledOnInk` on `ink`; vs `actionAccentOnInk` | 2.97 / 1.87 |
 | `labelOnActionDisabled` on `actionDisabled` | 4.51 |
 | `labelOnActionDisabledOnInk` on `actionDisabledOnInk` | 4.38 |
-| Pressed ink capsule (`#3C3C3F`) with `bg` label | 10.99 |
-| Pressed white capsule (`#CECECF`) with `ink` label | 12.49 |
+| Pressed ink capsule (`#3C3C3F`) with `bg` label, the control faded as one composited layer over `bg` | 10.99 |
+| Pressed white capsule (`#CECECF`) with `ink` label, over `ink` | 12.49 |
 | Selected chart bar (`ink`) vs unselected (`#92929A`); selection rule on `bg` | 6.36 / 5.47 |
 
 ## Open items
@@ -138,14 +138,26 @@ Commits come from `git log -S` on `DESIGN.md`. Authors are omitted because this 
 9. Android: no follow-up is scheduled (see "Platform scope").
 10. Figma follows the code later (maintainer decision 2026-11-18: Figma is not absolute; adjust in code and record it here). The Library sync in item 4 is that follow-up.
 11. The target-wide global accent color (`ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: accent` in `ios/project.yml`, Beid target only) is not set by the first implementing change, because it needs the project to be regenerated with the pinned XcodeGen. Do it with the next regeneration. Until then, UIKit-drawn alerts and the share sheet can still show the implicit system blue.
-12. `BeidSecondaryButton` keeps its soft haptic by default (`haptic: .soft`) so its two existing call sites stay unchanged; the spec called for opt-in. Flip the default to none once those call sites pass `.soft` explicitly.
-13. The tracking issue is to be filed (English, levarac/beid, milestone "v1.1 画面を整えて一般イベントを開ける"); then rename this file and replace "pending" in the `DESIGN.md` links.
+12. `BeidSecondaryButton` keeps its soft haptic by default (`haptic: .soft`) so its two existing call sites stay unchanged, even though §9 prefers haptics only at meaningful commits. Flip the default to none once those call sites pass `.soft` explicitly.
+13. Add this assertion to `ClockPreflightUITests.swift` when that file can change: `XCTAssertEqual(app.buttons["scan.clock-preflight.retry"].label, "Check again")`. The button is reachable in the UI fixtures and goes through the same `.accessibilityLabel(Text(accessibilityLabel ?? title))` path as the registry retry, so it pins the spoken label as written and answers whether the uppercase rendering leaks into the XCUITest label (open item 6).
+14. BeidLab is built with the change that sets the global accent in `ios/project.yml` (open item 11); its sources include all of `ios/Beid`, including the colorsets, and it must still build.
+15. The tracking issue is to be filed (English, levarac/beid, milestone "v1.1 画面を整えて一般イベントを開ける"); then rename this file and replace "pending" in the `DESIGN.md` links.
+
+## Risks and temporary states
+
+The styles and shared controls land before the screens that use them. Until those screens migrate, these states are visible. This package does not ship ahead of the screen packages that migrate the Now page (package 1), the pre-join inset (package 2) and the event card badge (the screen change that replaces it).
+
+- On the ink Now page, default-colored text controls draw the canvas accent `#3765C6` on ink at 3.59:1, below 4.5:1 for 11 pt text; before, they were ink on ink. This covers FIX → and VIEW RECORD → / WHAT WAS SENT → (`CollectionHomeView.swift`). Package 1 declares the ink ground there.
+- The pre-join "Enter event code" `.bordered` inset (`SensingView.swift`) sits outside the screen's own tint and picks up the root accent. Package 2 replaces it.
+- The `EventCardView` badge keeps `.foregroundStyle(.tint)` and `.tint.opacity`. Because `BeidPanel` leaves the tint alone, it keeps the tint of its screen (the ink-colored `actionPrimary` on Signal lost). It becomes dot plus text with the screen change that replaces it.
+- The Account toolbar item and the selected tab on the ink Now bar are drawn in the canvas accent (`#3765C6`) on ink until package 1 declares the ink ground there.
+- Until the global accent in `ios/project.yml` is set (open item 11), UIKit-drawn alerts, the share sheet and any sheet the tint does not reach stay system blue.
 
 ## Implementing work
 
 | Package | Files | Scope |
 | --- | --- | --- |
-| 0 | `Tokens.swift`; `Colors.xcassets` (`accent`, `onInkAccent`); `DesignSystem.swift` (grounds, control palette, the four button styles, row cue; `BeidPrimaryButton`, `BeidSecondaryButton`, `BeidStatusPill`, `BeidPanel`); `BeidTextControl.swift`; `EventIdentityVerificationRow.swift`; `ClockPreflightNoticeView.swift`; `RootView.swift`; `DesignTokensTests.swift`; `BeidTextControlTests.swift`; `DESIGN.md`; this record | Tokens, styles, ground, shared components, tint. Not in this package: the `EventCardView` badge (another branch is rewriting that file), the global accent in `project.yml` (open item 11), a separate styles source file and test file (the Xcode project lists files explicitly and is regenerated separately), and a UI assertion for the registry retry label (the UI fixtures never reach that state) |
+| 0 | `Tokens.swift`; `Colors.xcassets` (`accent`, `onInkAccent`); `DesignSystem.swift` (grounds, control palette, the four button styles, row cue; `BeidPrimaryButton`, `BeidSecondaryButton`, `BeidStatusPill`, `BeidPanel`); `BeidTextControl.swift`; `EventIdentityVerificationRow.swift`; `ClockPreflightNoticeView.swift`; `RootView.swift`; `DesignTokensTests.swift`; `BeidTextControlTests.swift`; `DESIGN.md`; this record | Tokens, styles, ground, shared components, tint. Not in this package: the `EventCardView` badge (moves with the screen packages, see "Risks and temporary states"), the global accent in `project.yml` (open item 11), a separate styles source file and test file (the Xcode project lists files explicitly and is regenerated separately), and a UI assertion for the retry label (open item 13) |
 | 1 | `CollectionHomeView.swift` | Now and Records |
 | 2 | `SensingView.swift`, `SensingRadarView.swift`, `EventFoundView.swift`, `RecordingView.swift`, `SignalLostView.swift` | Sensing surfaces |
 | 3 | `ScanFlowView.swift`, `SensingStopConfirmView.swift`, `ProofCollectedView.swift` | Scan-flow chrome, stop confirmation, Record collected |

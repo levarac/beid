@@ -738,7 +738,7 @@ Added 2026-11-18 (measured, WCAG 2.x, [D-tap-accent](docs/decisions/issue-pendin
 | Increase Contrast `accent` on `bg` / on `tile` / vs `ink` text | 7.18:1 / 6.42:1 / 2.74:1 (below 3:1, hence the Increase Contrast underline, §13) |
 | Increase Contrast `on-ink/accent` on `ink` / vs `bg` text / `bg` glyph on it | 6.50:1 / 3.02:1 / 3.02:1 |
 | `on-ink/sub` on `bg` (disabled labels) / `on-ink/idle` on `ink` (disabled labels) / `on-ink/sub` on `on-ink/line` | 3.25:1 / 2.97:1 / 4.38:1 |
-| Pressed ink capsule `#3C3C3F` with `bg` label / pressed white capsule `#CECECF` with `ink` label | 10.99:1 / 12.49:1 |
+| Pressed ink capsule `#3C3C3F` with `bg` label / pressed white capsule `#CECECF` with `ink` label (the control fades as one layer, composited over its ground) | 10.99:1 / 12.49:1 |
 
 Rules:
 
@@ -898,7 +898,8 @@ they cite are the current ones, since #628):
   → `labelOnActionInverse` (Tone=Inverse); disabled: `actionDisabled` →
   `labelOnActionDisabled` (4.51:1) and `actionDisabledOnInk` →
   `labelOnActionDisabledOnInk` (4.38:1). Pressed filled capsules are drawn
-  at `DS.Opacity.pressedFill` (0.8); labels stay at 10.99:1 or more. A new
+  at `DS.Opacity.pressedFill` (0.8), as one composited layer so the label does
+  not show through the fill; labels stay at 10.99:1 or more. A new
   fill MUST add its on-fill label token first. Any fill value change MUST re-check ≥4.5:1
   label-on-fill contrast in the single appearance (§14).
   **[Android already has a component of the same name: `BeidPrimaryButton`
@@ -2106,14 +2107,23 @@ Real components in this codebase. Each entry is the contract for reuse.
   ground picks the accent and the disabled colors, so call sites do not pass
   label colors. `.beidGround(_:)` sets the environment value and the tint;
   `.beidScreenGround(_:)` also paints `surfaceCanvas` or `surfaceNow` behind
-  the view; `BeidPanel` resets its content to `.canvas`; `.beidAlertTint()`
-  follows an `.alert` or `.confirmationDialog` attached inside an
-  ink-capable subtree.
+  the view; `BeidPanel` resets the ground, not the tint, to `.canvas`;
+  `.beidAlertTint()` follows an `.alert` or `.confirmationDialog` attached
+  inside an ink-capable subtree.
 - Rules: apply the ground modifiers outside (after) `.toolbar` and
   `.safeAreaInset`. Every white destination and sheet declares
   `.beidGround(.canvas)` where it is presented. A forgotten declaration
   degrades to the canvas accent, which is still 3.54:1 on ink, so a control
-  never turns invisible.
+  never turns invisible. `BeidPanel` sets only the environment value: the
+  button styles and text controls resolve their colors from the ground, while
+  tint-driven legacy content inside a panel (the `EventCardView` badge) keeps
+  the tint of its screen. The panel's tint follows once that badge moves off
+  `.tint`.
+- Interim states: until the screens that migrate the Now page, the pre-join
+  inset and the event card badge land, a few controls are drawn in the new
+  accent where they were ink or the platform tint (listed in the record's
+  "Risks and temporary states"). The styles and shared controls do not ship
+  ahead of those screens.
 
 ### Component: BeidControlPalette
 
