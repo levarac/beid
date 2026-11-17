@@ -85,6 +85,48 @@ final class BeidTextControlTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(size.height, minimumHitRegion, "height at accessibility5")
   }
 
+  /// The text control's color is optional: `nil` resolves through the ground's
+  /// accent (checked in `DesignTokensTests`), and an explicit color still wins.
+  /// Both forms keep the 44pt hit region.
+  func testExplicitAndDefaultLabelColorsKeepTheHitRegion() {
+    for control in [
+      AnyView(BeidTextControl("X") {}),
+      AnyView(BeidTextControl("X", labelColor: DS.Color.statusOff) {}),
+    ] {
+      let size = measuredSize(control)
+      XCTAssertGreaterThanOrEqual(size.width, minimumHitRegion)
+      XCTAssertGreaterThanOrEqual(size.height, minimumHitRegion)
+    }
+  }
+
+  // MARK: - Capsule buttons keep a 44 x 44pt hit region (2026-11-18)
+
+  /// The compact secondary capsule is 32pt tall on screen but its hit region is
+  /// at least 44 x 44pt, at the default size and at the largest accessibility
+  /// size. Measured through `UIHostingController`, as above.
+  func testSecondaryButtonsMeetTheHitRegionAtDefaultAndAccessibilitySizes() {
+    let sizes: [(name: String, button: AnyView)] = [
+      ("compact", AnyView(BeidSecondaryButton(title: "X", size: .compact) {})),
+      ("regular", AnyView(BeidSecondaryButton(title: "X", size: .regular) {})),
+      ("large", AnyView(BeidSecondaryButton(title: "X", size: .large) {})),
+    ]
+    for dynamicTypeSize in [DynamicTypeSize.large, .accessibility5] {
+      for entry in sizes {
+        let size = measuredSize(entry.button, dynamicTypeSize: dynamicTypeSize)
+        XCTAssertGreaterThanOrEqual(size.width, minimumHitRegion, "\(entry.name) width at \(dynamicTypeSize)")
+        XCTAssertGreaterThanOrEqual(size.height, minimumHitRegion, "\(entry.name) height at \(dynamicTypeSize)")
+      }
+    }
+  }
+
+  func testPrimaryButtonWithBusyIndicatorMeetsTheHitRegionAtDefaultAndAccessibilitySizes() {
+    for dynamicTypeSize in [DynamicTypeSize.large, .accessibility5] {
+      let size = measuredSize(BeidPrimaryButton("X", isBusy: true) {}, dynamicTypeSize: dynamicTypeSize)
+      XCTAssertGreaterThanOrEqual(size.width, minimumHitRegion, "busy primary width at \(dynamicTypeSize)")
+      XCTAssertGreaterThanOrEqual(size.height, minimumHitRegion, "busy primary height at \(dynamicTypeSize)")
+    }
+  }
+
   // MARK: - Acceptance criterion 3 — VoiceOver labels
 
   // Deliberately absent, and this block is the reason. Do not rebuild them here.

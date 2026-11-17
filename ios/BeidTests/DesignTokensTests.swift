@@ -10,7 +10,10 @@ import XCTest
 /// Pins the Flat 2b token values (beid#628, DESIGN.md §4/§5/§7/§8). Every
 /// expected value is a literal from the Flat 2b Library, never read back
 /// from `Tokens.swift` or `Colors.xcassets`: a test that compares a token
-/// with itself cannot fail.
+/// with itself cannot fail. The exceptions are the 2026-11-18 accent, ground
+/// and disabled roles, whose literals come from the decision record in
+/// docs/decisions/ (the two accent pairs are a proposal until the maintainer
+/// ratifies them; if another hue is chosen, only these literals change).
 final class DesignTokensTests: XCTestCase {
   /// Every `DS.Color` token and the Library hex it must resolve to. Library
   /// primitives are single-appearance, so light and dark expect the same hex.
@@ -32,6 +35,15 @@ final class DesignTokensTests: XCTestCase {
     ("statusOn", DS.Color.statusOn, "#30D158"),
     ("statusPending", DS.Color.statusPending, "#FF9F0A"),
     ("statusOff", DS.Color.statusOff, "#FF453A"),
+    ("actionAccent", DS.Color.actionAccent, "#3765C6"),
+    ("actionAccentOnInk", DS.Color.actionAccentOnInk, "#5F87D7"),
+    ("surfaceNow", DS.Color.surfaceNow, "#0B0B0F"),
+    ("labelDisabled", DS.Color.labelDisabled, "#8E8E96"),
+    ("labelDisabledOnInk", DS.Color.labelDisabledOnInk, "#5C5C66"),
+    ("actionDisabled", DS.Color.actionDisabled, "#F2F2F4"),
+    ("labelOnActionDisabled", DS.Color.labelOnActionDisabled, "#6E6E78"),
+    ("actionDisabledOnInk", DS.Color.actionDisabledOnInk, "#2A2A31"),
+    ("labelOnActionDisabledOnInk", DS.Color.labelOnActionDisabledOnInk, "#8E8E96"),
   ]
 
   func testColorTokensResolveToFlat2bLibraryHexInLightAndDark() {
@@ -48,9 +60,181 @@ final class DesignTokensTests: XCTestCase {
     }
   }
 
-  func testColorTokenListCoversAllSeventeenRoles() {
-    XCTAssertEqual(expectedColorHex.count, 17)
-    XCTAssertEqual(Set(expectedColorHex.map { $0.name }).count, 17)
+  func testColorTokenListCoversAllTwentySixRoles() {
+    XCTAssertEqual(expectedColorHex.count, 26)
+    XCTAssertEqual(Set(expectedColorHex.map { $0.name }).count, 26)
+  }
+
+  // MARK: - Interaction accent (2026-11-18)
+
+  /// The two accent colorsets carry an Increase Contrast appearance and no
+  /// dark variant (the app has one appearance, DESIGN.md §14).
+  func testAccentTokensSwitchOnlyWithTheIncreaseContrastTrait() {
+    let cases: [(name: String, color: Color, normal: String, increased: String)] = [
+      ("actionAccent", DS.Color.actionAccent, "#3765C6", "#2A53AB"),
+      ("actionAccentOnInk", DS.Color.actionAccentOnInk, "#5F87D7", "#7294D9"),
+    ]
+    for style in [UIUserInterfaceStyle.light, .dark] {
+      for token in cases {
+        let normal = UITraitCollection(traitsFrom: [
+          UITraitCollection(userInterfaceStyle: style),
+          UITraitCollection(accessibilityContrast: .normal),
+        ])
+        let increased = UITraitCollection(traitsFrom: [
+          UITraitCollection(userInterfaceStyle: style),
+          UITraitCollection(accessibilityContrast: .high),
+        ])
+        XCTAssertEqual(
+          Self.srgbHex(UIColor(token.color).resolvedColor(with: normal)),
+          token.normal,
+          "DS.Color.\(token.name) at normal contrast"
+        )
+        XCTAssertEqual(
+          Self.srgbHex(UIColor(token.color).resolvedColor(with: increased)),
+          token.increased,
+          "DS.Color.\(token.name) at Increase Contrast"
+        )
+      }
+    }
+  }
+
+  func testPressedOpacitiesAndNewControlSizes() {
+    XCTAssertEqual(DS.Opacity.pressedFill, 0.8)
+    XCTAssertEqual(DS.Opacity.pressedLabel, 0.5)
+    XCTAssertEqual(DS.Size.compactControlMinHeight, 32)
+    XCTAssertEqual(DS.Size.selectionIndicator, 2)
+  }
+
+  // MARK: - Control palette (2026-11-18)
+
+  /// (ground, enabled) -> the interaction color, as hex literals.
+  func testInteractivePaletteResolvesPerGroundAndState() {
+    let table: [(BeidGround, Bool, String)] = [
+      (.canvas, true, "#3765C6"),
+      (.ink, true, "#5F87D7"),
+      (.canvas, false, "#8E8E96"),
+      (.ink, false, "#5C5C66"),
+    ]
+    for (ground, enabled, hex) in table {
+      XCTAssertEqual(
+        Self.srgbHex(UIColor(BeidControlPalette.interactive(ground: ground, isEnabled: enabled))),
+        hex,
+        "interactive(\(ground), enabled: \(enabled))"
+      )
+    }
+  }
+
+  func testPrimaryPaletteResolvesFillAndLabelPerToneAndState() {
+    let table: [(BeidPrimaryButton.Tone, Bool, fill: String, label: String)] = [
+      (.primary, true, "#0B0B0F", "#FFFFFF"),
+      (.inverse, true, "#FFFFFF", "#0B0B0F"),
+      (.primary, false, "#F2F2F4", "#6E6E78"),
+      (.inverse, false, "#2A2A31", "#8E8E96"),
+    ]
+    for (tone, enabled, fill, label) in table {
+      XCTAssertEqual(
+        Self.srgbHex(UIColor(BeidControlPalette.primaryFill(tone: tone, isEnabled: enabled))),
+        fill,
+        "primaryFill(\(tone), enabled: \(enabled))"
+      )
+      XCTAssertEqual(
+        Self.srgbHex(UIColor(BeidControlPalette.primaryLabel(tone: tone, isEnabled: enabled))),
+        label,
+        "primaryLabel(\(tone), enabled: \(enabled))"
+      )
+    }
+  }
+
+  func testActionTitlePaletteResolvesPerGroundAndState() {
+    let table: [(BeidGround, Bool, String)] = [
+      (.canvas, true, "#0B0B0F"),
+      (.ink, true, "#FFFFFF"),
+      (.canvas, false, "#8E8E96"),
+      (.ink, false, "#5C5C66"),
+    ]
+    for (ground, enabled, hex) in table {
+      XCTAssertEqual(
+        Self.srgbHex(UIColor(BeidControlPalette.actionTitle(ground: ground, isEnabled: enabled))),
+        hex,
+        "actionTitle(\(ground), enabled: \(enabled))"
+      )
+    }
+  }
+
+  /// WCAG 2.x contrast of the resolved colors, asserted as literal thresholds
+  /// so a retuned hex that loses legibility fails here. Measured 2026-11-18.
+  func testControlContrastMeetsTheAccessibilityFloor() throws {
+    let white = "#FFFFFF"
+    let ink = "#0B0B0F"
+    let tile = "#F2F2F4"
+    let normal = UITraitCollection(accessibilityContrast: .normal)
+    let increased = UITraitCollection(accessibilityContrast: .high)
+    func hex(_ color: Color, _ traits: UITraitCollection) -> String {
+      Self.srgbHex(UIColor(color).resolvedColor(with: traits)) ?? "?"
+    }
+
+    // Accent text on its own ground: at least 4.5:1, base and Increase Contrast.
+    for traits in [normal, increased] {
+      let accent = hex(DS.Color.actionAccent, traits)
+      let onInk = hex(DS.Color.actionAccentOnInk, traits)
+      XCTAssertGreaterThanOrEqual(try Self.contrast(accent, white), 4.5, "accent on bg \(accent)")
+      XCTAssertGreaterThanOrEqual(try Self.contrast(accent, tile), 4.5, "accent on tile \(accent)")
+      XCTAssertGreaterThanOrEqual(try Self.contrast(onInk, ink), 4.5, "on-ink accent on ink \(onInk)")
+    }
+    // Outlines that identify a control: at least 3:1.
+    XCTAssertGreaterThanOrEqual(try Self.contrast(hex(DS.Color.actionAccent, normal), white), 3)
+    XCTAssertGreaterThanOrEqual(try Self.contrast(hex(DS.Color.actionAccentOnInk, normal), ink), 3)
+    // An OS-drawn white glyph on the on-ink accent keeps at least 3:1, also under Increase Contrast.
+    XCTAssertGreaterThanOrEqual(try Self.contrast(white, hex(DS.Color.actionAccentOnInk, normal)), 3)
+    XCTAssertGreaterThanOrEqual(try Self.contrast(white, hex(DS.Color.actionAccentOnInk, increased)), 3)
+    // Cross-ground use stays banned: each value is below AA on the other ground.
+    XCTAssertLessThan(try Self.contrast(hex(DS.Color.actionAccentOnInk, normal), white), 4.5)
+    XCTAssertLessThan(try Self.contrast(hex(DS.Color.actionAccent, normal), ink), 4.5)
+    // Under Increase Contrast the light accent is under 3:1 against ink text,
+    // which is why enabled text controls are underlined then.
+    XCTAssertLessThan(try Self.contrast(hex(DS.Color.actionAccent, increased), ink), 3)
+
+    // Enabled primary labels at least 4.5:1; disabled capsule labels at least 4.3:1.
+    for tone in [BeidPrimaryButton.Tone.primary, .inverse] {
+      let enabled = try Self.contrast(
+        Self.srgbHex(UIColor(BeidControlPalette.primaryLabel(tone: tone, isEnabled: true))) ?? "?",
+        Self.srgbHex(UIColor(BeidControlPalette.primaryFill(tone: tone, isEnabled: true))) ?? "?"
+      )
+      XCTAssertGreaterThanOrEqual(enabled, 4.5, "enabled \(tone)")
+      let disabled = try Self.contrast(
+        Self.srgbHex(UIColor(BeidControlPalette.primaryLabel(tone: tone, isEnabled: false))) ?? "?",
+        Self.srgbHex(UIColor(BeidControlPalette.primaryFill(tone: tone, isEnabled: false))) ?? "?"
+      )
+      XCTAssertGreaterThanOrEqual(disabled, 4.3, "disabled \(tone)")
+    }
+    // Disabled text, outlines and cues: inactive components, but at least 2.5:1.
+    XCTAssertGreaterThanOrEqual(try Self.contrast(hex(DS.Color.labelDisabled, normal), white), 2.5)
+    XCTAssertGreaterThanOrEqual(try Self.contrast(hex(DS.Color.labelDisabledOnInk, normal), ink), 2.5)
+  }
+
+  /// Truth table of the Button Shapes / Differentiate Without Color /
+  /// Increase Contrast underline: only enabled text controls, only when one of
+  /// the three is on.
+  func testTextControlUnderlineTruthTable() {
+    for isEnabled in [true, false] {
+      for shapes in [true, false] {
+        for differentiates in [true, false] {
+          for contrast in [ColorSchemeContrast.standard, .increased] {
+            let expected = isEnabled && (shapes || differentiates || contrast == .increased)
+            XCTAssertEqual(
+              BeidControlPalette.underlinesTextControl(
+                isEnabled: isEnabled,
+                showsButtonShapes: shapes,
+                differentiatesWithoutColor: differentiates,
+                contrast: contrast
+              ),
+              expected,
+              "enabled \(isEnabled), shapes \(shapes), differentiate \(differentiates), contrast \(contrast)"
+            )
+          }
+        }
+      }
+    }
   }
 
   func testPageMarginAndEmptyBlockSpacingMatchFlat2b() {
@@ -425,6 +609,28 @@ final class DesignTokensTests: XCTestCase {
   }
 
   /// `#RRGGBB` of `color` in 8-bit sRGB.
+  /// WCAG 2.x contrast ratio between two `#RRGGBB` literals.
+  private static func contrast(_ first: String, _ second: String) throws -> Double {
+    func luminance(_ hex: String) throws -> Double {
+      let digits = hex.dropFirst()
+      guard digits.count == 6, let value = Int(digits, radix: 16) else {
+        throw ContrastError.notAHexLiteral(hex)
+      }
+      let channels = [(value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF].map { byte -> Double in
+        let c = Double(byte) / 255
+        return c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+      }
+      return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+    }
+    let a = try luminance(first)
+    let b = try luminance(second)
+    return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+  }
+
+  private enum ContrastError: Error {
+    case notAHexLiteral(String)
+  }
+
   private static func srgbHex(_ color: UIColor) -> String? {
     guard
       let srgb = CGColorSpace(name: CGColorSpace.sRGB),
