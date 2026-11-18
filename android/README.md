@@ -127,14 +127,18 @@ JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
 
 `ui/theme/{Color,Type,Spacing,Theme}.kt` port DESIGN.md's token values into
 Compose, mirroring iOS's `DS` namespace (`ios/Beid/DesignSystem/Tokens.swift`)
-role-for-role — `BeidTheme.colors.signalActive`, `BeidSpacing.pageMargin`,
+role-for-role — `BeidTheme.colors.actionPrimary`, `BeidSpacing.pageMargin`,
 etc. Ratification status varies by section, per DESIGN.md itself: §5 Color's
 palette *direction* and color *roles* are ratified (Ken, 2026-07-10), though
 the exact secondary hex values are still `PROPOSAL — Ken ratification
-pending`; §7 Spacing and §8 Shape are ratified; §6 Typography is explicitly
-`PROPOSAL — Ken ratification pending` in full — `Type.kt`'s sp values are
-this scaffold's own iOS-Dynamic-Type-to-Material3 mapping, not a ratified
-spec, and its kdoc says so. This is a values port, not a code port:
+pending`; §7 Spacing and §8 Shape are ratified; §6 Typography is the Flat 2b
+ramp (owner decision 2026-09-22). `Type.kt` uses the same static font files
+iOS bundles (`res/font/`, OFL texts in `assets/licenses/`), the 17
+`BeidFont.Library` styles and 8 `BeidFont` roles under iOS's names, and maps
+every Material3 slot to one of those styles, so screens reading
+`MaterialTheme.typography.*` get them. Sizes are plain `sp` and line heights
+are the spec values on every API level (DECISIONS.md 2026-11-18), not iOS's
+Dynamic Type curves. This is a values port, not a code port:
 `DesignSystem/Tokens.swift`'s Swift is not translated line-by-line, since
 Compose's token/theming idioms (`CompositionLocal`, Material3
 `ColorScheme`/`Typography`) differ structurally from SwiftUI's. Colors are

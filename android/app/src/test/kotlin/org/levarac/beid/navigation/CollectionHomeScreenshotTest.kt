@@ -31,9 +31,11 @@ import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.NearbyEventCardVerification
+import org.levarac.beid.ui.screens.AccountScreenTestTags
 import org.levarac.beid.ui.screens.EventJoinScreenTestTags
 import org.levarac.beid.ui.screens.FakeEventJoinSession
 import org.levarac.beid.ui.screens.RecordsScreenTestTags
+import org.levarac.beid.ui.screens.WelcomeScreenTestTags
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -96,21 +98,31 @@ class CollectionHomeScreenshotTest {
         record(5, "community-workshop", "2026-10-21T11:00:00Z", "Community workshop", 12),
     )
 
-    private fun launch(dark: Boolean = false, fontScale: Float = 1f) {
+    private fun launch(fontScale: Float = 1f) {
+        setAppContent(fontScale)
+        composeTestRule.onNodeWithTag("collection_home").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(nearby.eventCodeHashHex))
+            .assertIsDisplayed()
+    }
+
+    /** Production [AppNavHost]; its start destination follows the onboarding preference. */
+    private fun setAppContent(fontScale: Float = 1f) {
         val session = FakeEventJoinSession(nearbyEventCards = listOf(nearby))
         composeTestRule.runOnUiThread {
             screenshotView = ComposeView(composeTestRule.activity)
             composeTestRule.activity.setContentView(screenshotView)
             screenshotView.setContent {
                 CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
-                    BeidAppTheme(darkTheme = dark) { AppNavHost(session, store) }
+                    BeidAppTheme { AppNavHost(session, store) }
                 }
             }
         }
-        composeTestRule.onNodeWithTag("collection_home").assertIsDisplayed()
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(nearby.eventCodeHashHex))
-            .assertIsDisplayed()
+    }
+
+    private fun openAccount() {
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).assertIsDisplayed()
     }
 
     private fun capture(name: String) {
@@ -150,12 +162,6 @@ class CollectionHomeScreenshotTest {
         capture("home-collection-light") // Account action is included in this frame.
     }
 
-    @Test @Config(qualifiers = "+night") fun collectionDark() {
-        seedCollection()
-        launch(dark = true)
-        capture("home-collection-dark")
-    }
-
     @Test fun collectionLargeFont() {
         seedCollection()
         launch(fontScale = 1.5f)
@@ -172,5 +178,45 @@ class CollectionHomeScreenshotTest {
         composeTestRule.onNodeWithTag(RecordsScreenTestTags.recordRow(records[0].id)).assertDoesNotExist()
         composeTestRule.onNodeWithTag(RecordsScreenTestTags.recordRow(records[4].id)).assertDoesNotExist()
         capture("event-records-list")
+    }
+
+    @Test fun welcome() {
+        OnboardingPreferences(context).hasCompletedOnboarding = false
+        setAppContent()
+        composeTestRule.onNodeWithTag(WelcomeScreenTestTags.GET_STARTED_BUTTON).assertIsDisplayed()
+        composeTestRule.onNodeWithTag("collection_home").assertDoesNotExist()
+        capture("welcome")
+    }
+
+    @Test fun account() {
+        seedCollection()
+        launch()
+        openAccount()
+        capture("account") // Top of the scrollable Account column.
+    }
+
+    @Test fun accountLargeFont() {
+        seedCollection()
+        launch(fontScale = 1.5f)
+        openAccount()
+        capture("account-large-font")
+    }
+
+    // At 1x the whole Account column fits one frame; at 1.5x it scrolls.
+    @Test fun accountLargeFontScrolledToEnd() {
+        seedCollection()
+        launch(fontScale = 1.5f)
+        openAccount()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.VERSION_TEXT).performScrollTo().assertIsDisplayed()
+        capture("account-large-font-scrolled-to-end")
+    }
+
+    @Test fun recordsFromAccount() {
+        val records = seedCollection()
+        launch()
+        openAccount()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(RecordsScreenTestTags.recordRow(records[0].id)).assertIsDisplayed()
+        capture("records-from-account")
     }
 }

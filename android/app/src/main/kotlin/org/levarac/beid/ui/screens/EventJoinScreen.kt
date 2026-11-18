@@ -261,15 +261,13 @@ fun EventJoinContent(
         BackHandler(enabled = state.stopConfirmation != null) { onKeepSensing() }
         val confirmation = state.stopConfirmation
         if (confirmation != null) {
-            BeidAppTheme(darkTheme = true) {
-                SensingStopConfirmScreen(
-                    event = confirmation.event,
-                    metrics = state.scanSessionMetrics,
-                    onStop = onConfirmStopSensing,
-                    onKeepSensing = onKeepSensing,
-                    modifier = Modifier.padding(innerPadding),
-                )
-            }
+            SensingStopConfirmScreen(
+                event = confirmation.event,
+                metrics = state.scanSessionMetrics,
+                onStop = onConfirmStopSensing,
+                onKeepSensing = onKeepSensing,
+                modifier = Modifier.padding(innerPadding),
+            )
             return@Scaffold
         }
         Column(
@@ -332,7 +330,7 @@ fun EventJoinContent(
                     BeidPrimaryButton(
                         text = stringResource(R.string.event_join_open_settings),
                         containerColor = BeidTheme.colors.actionPrimary,
-                        contentColor = BeidTheme.colors.surfaceCanvas,
+                        contentColor = BeidTheme.colors.labelOnActionPrimary,
                         onClick = onOpenSettings,
                         modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
                     )
@@ -459,7 +457,7 @@ fun ManualEventCodeContent(
             BeidPrimaryButton(
                 text = stringResource(R.string.event_join_button),
                 containerColor = BeidTheme.colors.actionPrimary,
-                contentColor = BeidTheme.colors.surfaceCanvas,
+                contentColor = BeidTheme.colors.labelOnActionPrimary,
                 onClick = onSubmit,
                 modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
             )
@@ -523,7 +521,7 @@ private fun NearbyEventCards(
                 if (isSearching) {
                     CircularProgressIndicator(
                         modifier = Modifier.semantics { stateDescription = searchingLabel },
-                        color = BeidTheme.colors.signalActive,
+                        color = BeidTheme.colors.actionPrimary,
                     )
                 }
                 Text(
