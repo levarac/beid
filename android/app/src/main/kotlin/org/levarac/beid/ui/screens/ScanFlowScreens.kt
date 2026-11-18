@@ -120,13 +120,13 @@ fun SensingScreen() {
             modifier = Modifier.semantics { heading() },
         )
         CircularProgressIndicator(
-            color = BeidTheme.colors.signalActive,
+            color = BeidTheme.colors.actionPrimary,
             modifier = Modifier.semantics {
                 stateDescription = sensingStatus
             },
         )
         BeidGlyph(
-            tint = BeidTheme.colors.signalActive,
+            tint = BeidTheme.colors.actionPrimary,
             contentSlot = { EncounterFieldPulseGlyph() },
         )
         Text(
@@ -161,14 +161,14 @@ fun EventFoundScreen(session: ScanEventSession) {
             icon = Icons.Filled.AutoAwesome,
             title = stringResource(R.string.scan_event_found_title),
             subtitle = foundMessage,
-            tint = BeidTheme.colors.signalActive,
+            tint = BeidTheme.colors.actionPrimary,
         )
         BeidStatusPill(
             label = foundStatus,
             tone = BeidStatusPill.Tone.Active,
         )
         CircularProgressIndicator(
-            color = BeidTheme.colors.signalActive,
+            color = BeidTheme.colors.actionPrimary,
             modifier = Modifier.semantics {
                 stateDescription = foundStatus
             },
@@ -178,9 +178,9 @@ fun EventFoundScreen(session: ScanEventSession) {
 
 /**
  * Screens 06b/06c/07 merged: the steady Recording phase — mirrors iOS's
- * `RecordingView`. Tinted [BeidTheme.colors.proofSeal] throughout (not just
- * the ceremony), matching iOS's `.tint(DS.Color.proofSeal)` on the whole
- * view.
+ * `RecordingView`. Tinted [BeidTheme.colors.actionPrimary] throughout (not
+ * just the ceremony), matching iOS's `.tint(DS.Color.actionPrimary)` on the
+ * whole view (#628: Flat 2b has one ink).
  *
  * [showEntranceCeremony] is read exactly once, at this composable's first
  * composition ([remember]'s seed-once semantics — the Compose analogue of
@@ -237,7 +237,7 @@ fun RecordingScreen(
             BeidHeroHeader(
                 title = stringResource(R.string.scan_recording_ceremony_title),
                 subtitle = stringResource(R.string.scan_recording_ceremony_subtitle),
-                tint = BeidTheme.colors.proofSeal,
+                tint = BeidTheme.colors.actionPrimary,
                 contentSlot = { ProofSealMarkGlyph() },
             )
         } else {
@@ -271,16 +271,16 @@ fun RecordingScreen(
             if (showSimulateSignalLost) {
                 BeidSecondaryButton(
                     text = stringResource(R.string.event_join_simulate_signal_lost),
-                    contentColor = BeidTheme.colors.proofSeal,
-                    borderColor = BeidTheme.colors.proofSeal,
+                    contentColor = BeidTheme.colors.actionPrimary,
+                    borderColor = BeidTheme.colors.actionPrimary,
                     onClick = onSimulateSignalLost,
                     modifier = Modifier.testTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON),
                 )
             }
             BeidSecondaryButton(
                 text = stringResource(R.string.event_join_bind_wallet),
-                contentColor = BeidTheme.colors.proofSeal,
-                borderColor = BeidTheme.colors.proofSeal,
+                contentColor = BeidTheme.colors.actionPrimary,
+                borderColor = BeidTheme.colors.actionPrimary,
                 onClick = onStartWalletBinding,
                 modifier = Modifier.testTag(EventJoinScreenTestTags.BIND_WALLET_BUTTON),
             )
@@ -308,7 +308,7 @@ fun SignalLostScreen(session: ScanEventSession, peersVerified: Int, onResumeSens
             icon = Icons.Filled.Warning,
             title = stringResource(R.string.scan_signal_lost_title),
             subtitle = stringResource(R.string.scan_signal_lost_message, session.eventName ?: session.eventCode),
-            tint = BeidTheme.colors.signalWarning,
+            tint = BeidTheme.colors.actionPrimary,
         )
         BeidStatusPill(
             label = stringResource(R.string.event_join_status_pill_paused),
@@ -329,8 +329,8 @@ fun SignalLostScreen(session: ScanEventSession, peersVerified: Int, onResumeSens
         // session in place — never a restart, which would discard peersVerified.
         BeidPrimaryButton(
             text = stringResource(R.string.event_join_resume_sensing),
-            containerColor = BeidTheme.colors.signalWarning,
-            contentColor = BeidTheme.colors.labelOnWarning,
+            containerColor = BeidTheme.colors.actionPrimary,
+            contentColor = BeidTheme.colors.labelOnActionPrimary,
             onClick = onResumeSensing,
             modifier = Modifier.testTag(EventJoinScreenTestTags.RESUME_BUTTON),
         )

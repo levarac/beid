@@ -11,10 +11,10 @@ import org.levarac.beid.ui.theme.BeidTheme
 
 /**
  * Custom illustrations reproducing three of iOS's four
- * `ios/Beid/DesignSystem/Illustrations.xcassets` SVG assets (each asset has
- * a light and a dark variant; both variants' colors are transcribed below
- * as [BeidTheme.colors] tokens, so a single Compose composable already
- * covers both themes). The fourth iOS asset, `encounter-field-empty`, is
+ * `ios/Beid/DesignSystem/Illustrations.xcassets` SVG assets, drawn with
+ * [BeidTheme.colors] tokens. iOS #632 removed the dark SVG variants; the app
+ * has a single appearance. The iOS SVGs still carry their pre-Flat 2b hex
+ * colors, which no longer match a token — see each glyph's note. The fourth iOS asset, `encounter-field-empty`, is
  * intentionally NOT ported here — its only iOS call site is
  * `CollectionHomeView`'s empty state, which is beid#337 and was withdrawn
  * from this slice by the PM; porting it now would have no caller.
@@ -26,10 +26,8 @@ import org.levarac.beid.ui.theme.BeidTheme
  * and re-transcribe these constants by hand. This is a deliberate,
  * accepted cost (see the beid#338 PR description), chosen because every
  * source SVG here is only circle/line primitives (no bezier paths, so no
- * arc-flag transcription risk) and each one's hex color matches a
- * [BeidTheme.colors] token exactly in both light and dark, so redrawing
- * with the theme token avoids shipping a second, non-theme-aware asset
- * pair.
+ * arc-flag transcription risk), and redrawing with a theme token keeps
+ * raw colors out of composables.
  *
  * All coordinates below are transcribed directly from each source SVG's
  * `viewBox="0 0 200 200"`. Each [Canvas] scales by `s = size.minDimension /
@@ -47,9 +45,8 @@ private data class Segment(val x1: Float, val y1: Float, val x2: Float, val y2: 
 /**
  * Ports iOS's `welcome-mark` illustration
  * (`ios/Beid/DesignSystem/Illustrations.xcassets/welcome-mark.imageset/welcome-mark.svg`
- * and `welcome-mark-dark.svg`) — a compass/dial mark. Color:
- * [BeidTheme.colors.actionPrimary] (`#2A2E33` light / `#E8EAEC` dark in the
- * source SVGs, an exact match). Wired into `WelcomeScreen` via
+ * — a compass/dial mark. Color: [BeidTheme.colors.actionPrimary] (Library
+ * `ink`, `#0B0B0F`; the iOS SVG still uses the pre-Flat 2b `#2A2E33`). Wired into `WelcomeScreen` via
  * `BeidStateScreen`'s `contentSlot`.
  */
 private object WelcomeMarkGeometry {
@@ -151,10 +148,10 @@ fun WelcomeMarkGlyph() {
 /**
  * Ports iOS's `encounter-field-pulse` illustration
  * (`ios/Beid/DesignSystem/Illustrations.xcassets/encounter-field-pulse.imageset/encounter-field-pulse.svg`
- * and `encounter-field-pulse-dark.svg`) — concentric sensing rings plus
- * scattered presence dots. Color: [BeidTheme.colors.signalActive]
- * (`#18C7A7` light / `#62E8D0` dark in the source SVGs, an exact match).
- * Not wired to a screen yet — landing with #336's Sensing screen.
+ * — concentric sensing rings plus scattered presence dots. Drawn in
+ * [BeidTheme.colors.actionPrimary] (ink), not the removed `signalActive`
+ * teal `#18C7A7` the iOS SVG still uses, until the radar/screens step
+ * replaces it (DECISIONS.md 2026-11-18, Android Flat 2b foundation).
  */
 private object EncounterFieldPulseGeometry {
     const val Center = 100f
@@ -183,7 +180,7 @@ private object EncounterFieldPulseGeometry {
 
 @Composable
 fun EncounterFieldPulseGlyph() {
-    val color = BeidTheme.colors.signalActive
+    val color = BeidTheme.colors.actionPrimary
     Canvas(modifier = Modifier.fillMaxSize(0.68f)) {
         val s = size.minDimension / ViewBoxSize
         fun p(x: Float, y: Float) = Offset(x * s, y * s)
@@ -237,10 +234,10 @@ fun EncounterFieldPulseGlyph() {
 /**
  * Ports iOS's `proof-seal-mark` illustration
  * (`ios/Beid/DesignSystem/Illustrations.xcassets/proof-seal-mark.imageset/proof-seal-mark.svg`
- * and `proof-seal-mark-dark.svg`) — a signet-ring rim plus a stamped bar
- * mark. Color: [BeidTheme.colors.proofSeal] (`#6E5AEF` light / `#9D8CFF`
- * dark in the source SVGs, an exact match). Not wired to a screen yet —
- * landing with #336's Recording screen.
+ * — a signet-ring rim plus a stamped bar mark. Drawn in
+ * [BeidTheme.colors.actionPrimary] (ink), not the removed `proofSeal`
+ * violet `#6E5AEF` the iOS SVG still uses, until the radar/screens step
+ * replaces it (DECISIONS.md 2026-11-18, Android Flat 2b foundation).
  */
 private object ProofSealMarkGeometry {
     const val Center = 100f
@@ -260,7 +257,7 @@ private object ProofSealMarkGeometry {
 
 @Composable
 fun ProofSealMarkGlyph() {
-    val color = BeidTheme.colors.proofSeal
+    val color = BeidTheme.colors.actionPrimary
     Canvas(modifier = Modifier.fillMaxSize(0.68f)) {
         val s = size.minDimension / ViewBoxSize
         fun p(x: Float, y: Float) = Offset(x * s, y * s)

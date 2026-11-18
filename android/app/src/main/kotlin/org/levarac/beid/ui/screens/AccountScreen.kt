@@ -97,10 +97,11 @@ fun AccountScreen(
 
             WalletReference(walletState)
 
-            // Plain Row + colored dot + Text — not BeidStatusPill, whose Tone enum only
-            // maps Active/Paused onto signalActive/signalWarning (BLE signal quality),
-            // not this generic on/off radio-power toggle. Mirrors iOS's own hand-rolled
-            // Label + Circle + Text in AccountSheetView for the same reason.
+            // Plain Row + colored dot + Text — not BeidStatusPill, whose tones carry
+            // sensing/proof states rather than this generic on/off radio-power toggle.
+            // Mirrors iOS's own hand-rolled Label + Circle + Text in AccountSheetView
+            // for the same reason. The dot carries the semantic color; the words use
+            // textPrimary (DESIGN.md §5, #628: semantic colors are never text on bg).
             val bluetoothStatusColor = if (isBluetoothOn) BeidTheme.colors.statusOn else BeidTheme.colors.statusOff
             val bluetoothStatusText = stringResource(
                 if (isBluetoothOn) R.string.account_bluetooth_status_on else R.string.account_bluetooth_status_off,
@@ -127,7 +128,7 @@ fun AccountScreen(
                     Text(
                         text = bluetoothStatusText,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = bluetoothStatusColor,
+                        color = BeidTheme.colors.textPrimary,
                         modifier = Modifier.testTag(AccountScreenTestTags.BLUETOOTH_STATUS_TEXT),
                     )
                 }

@@ -57,7 +57,7 @@ internal fun VenueScreen(
             Text(stringResource(R.string.venue_title), style = MaterialTheme.typography.headlineMedium)
             Card(
                 Modifier.fillMaxWidth().testTag("venue-pack"),
-                colors = CardDefaults.cardColors(containerColor = BeidTheme.colors.surfaceRaised),
+                colors = CardDefaults.cardColors(containerColor = BeidTheme.colors.surfaceCanvas),
             ) {
                 Column(Modifier.padding(BeidSpacing.m), verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
                     Text(stringResource(R.string.venue_current_pack), style = MaterialTheme.typography.titleMedium)

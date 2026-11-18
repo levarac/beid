@@ -39,15 +39,16 @@ object BeidStatusPill {
     /**
      * [Neutral]/[Sealed] added for [org.levarac.beid.ui.screens.RecordsScreen]'s
      * three-state signature-status pill (beid#121: not-yet-signed / self-proof
-     * recorded / bound). [Neutral] reuses the existing "off/absent" semantic
-     * ([org.levarac.beid.ui.theme.BeidColorScheme.statusOff]) rather than
-     * [Paused]'s warning accent — an unsigned proof isn't a problem state, just
-     * an absent one. [Sealed] reuses [org.levarac.beid.ui.theme.BeidColorScheme.proofSeal],
-     * the same token iOS already uses for "fully verified/sealed" (see
-     * `EventIdentityVerificationRow.swift`'s `usesProofSeal`), so "bound" reads
-     * as the strongest of the three states on both platforms. [Active] doubles
-     * as "self-proof recorded" (a positive, in-progress state) — no separate
-     * case needed there.
+     * recorded / bound). [Active] doubles as "self-proof recorded".
+     *
+     * Dot colors follow DESIGN.md §5's #628 mapping: [Active] (iOS
+     * `.sensingAutomatically`) takes `statusOn`; [Paused] (iOS `.sensingPaused`,
+     * waiting for the signal to return) takes `statusPending`; [Sealed] takes
+     * `textPrimary`, because a sealed proof is none of on / pending / off and
+     * `textPrimary` is the role for neutral marks. [Neutral] ("not signed",
+     * "queued", "unavailable", "recovery", …) also takes `textPrimary` and
+     * leaves the meaning to its label, not the red `statusOff`
+     * (DECISIONS.md 2026-11-18, Android Flat 2b foundation).
      */
     enum class Tone { Active, Paused, Neutral, Sealed }
 
@@ -58,10 +59,10 @@ object BeidStatusPill {
         modifier: Modifier = Modifier,
     ) {
         val dotColor = when (tone) {
-            Tone.Active -> BeidTheme.colors.signalActive
-            Tone.Paused -> BeidTheme.colors.signalWarning
-            Tone.Neutral -> BeidTheme.colors.statusOff
-            Tone.Sealed -> BeidTheme.colors.proofSeal
+            Tone.Active -> BeidTheme.colors.statusOn
+            Tone.Paused -> BeidTheme.colors.statusPending
+            Tone.Neutral -> BeidTheme.colors.textPrimary
+            Tone.Sealed -> BeidTheme.colors.textPrimary
         }
 
         Row(
