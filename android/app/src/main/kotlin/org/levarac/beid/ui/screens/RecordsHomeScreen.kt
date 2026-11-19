@@ -50,6 +50,10 @@ import java.util.UUID
 import org.levarac.beid.R
 import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
+import org.levarac.beid.persistence.SigilPresenceStore
+import org.levarac.beid.shared.sigil.SigilInput
+import org.levarac.beid.ui.designsystem.RecordSigilPlacement
+import org.levarac.beid.ui.designsystem.RecordSigilSlot
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.beid.ui.theme.BeidFont
 import org.levarac.beid.ui.theme.BeidRadius
@@ -70,6 +74,8 @@ object RecordsHomeScreenTestTags {
     const val BY_EVENT_ROW = "records_by_event_row"
     fun attendanceTile(id: UUID): String = "records_home_record_$id"
     fun byEventRow(id: UUID): String = "records_by_event_row_$id"
+    fun attendanceSigil(id: UUID): String = "records_home_sigil_$id"
+    fun byEventSigil(id: UUID): String = "records_by_event_sigil_$id"
 }
 
 /**
@@ -85,9 +91,10 @@ object RecordsHomeScreenTestTags {
  * Content only: the tab shell supplies the tab bar and any top bar. The large
  * title scrolls with the content, as iOS's `records.title` does.
  *
- * **Not ported:** the Sigil artwork (`RecordSigilSlot`) above each tile and
- * row. Android's records UI has no Sigil or placeholder yet, so nothing
- * stands in for it.
+ * Each tile leads with the newest session's Sigil (beid#722, iOS
+ * `RecordSigilSlot(..., placement: .recordsGrid)` without `isDeviceRecord`,
+ * as on integration/ios-1.1.1), read through [sigilInput]; a record without a
+ * stored row keeps the neutral ring.
  *
  * **Android-only:** the TODAY control at the end. iOS #795 leaves Today
  * without an entry point; Android keeps one here, where main's iOS home
@@ -100,6 +107,8 @@ fun RecordsHomeScreen(
     onOpenByEvent: () -> Unit,
     onOpenToday: () -> Unit,
     modifier: Modifier = Modifier,
+    /** beid#722: a record's stored Sigil input, or `null` for the neutral ring. Read-only. */
+    sigilInput: (UUID) -> SigilInput? = { null },
 ) {
     Column(
         modifier = modifier
@@ -144,7 +153,7 @@ fun RecordsHomeScreen(
                 )
             }
         } else {
-            AttendanceGrid(groups, onOpenRecord)
+            AttendanceGrid(groups, onOpenRecord, sigilInput)
         }
         TextControl(
             title = stringResource(R.string.records_home_today),
@@ -163,13 +172,17 @@ fun RecordsHomeScreen(
 private const val SingleColumnFontScale = 1.65f
 
 @Composable
-private fun AttendanceGrid(groups: List<List<ProofRecord>>, onOpenRecord: (UUID) -> Unit) {
+private fun AttendanceGrid(
+    groups: List<List<ProofRecord>>,
+    onOpenRecord: (UUID) -> Unit,
+    sigilInput: (UUID) -> SigilInput?,
+) {
     val columns = if (LocalDensity.current.fontScale >= SingleColumnFontScale) 1 else 2
     Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.l)) {
         groups.chunked(columns).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(BeidSpacing.l)) {
                 row.forEach { group ->
-                    AttendanceTile(group, onOpenRecord, Modifier.weight(1f))
+                    AttendanceTile(group, onOpenRecord, sigilInput, Modifier.weight(1f))
                 }
                 repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
             }
@@ -178,7 +191,12 @@ private fun AttendanceGrid(groups: List<List<ProofRecord>>, onOpenRecord: (UUID)
 }
 
 @Composable
-private fun AttendanceTile(group: List<ProofRecord>, onOpenRecord: (UUID) -> Unit, modifier: Modifier) {
+private fun AttendanceTile(
+    group: List<ProofRecord>,
+    onOpenRecord: (UUID) -> Unit,
+    sigilInput: (UUID) -> SigilInput?,
+    modifier: Modifier,
+) {
     val newest = group.first()
     val label = group.eventLabel()
     val description = stringResource(R.string.records_home_record_accessibility, label)
@@ -194,6 +212,11 @@ private fun AttendanceTile(group: List<ProofRecord>, onOpenRecord: (UUID) -> Uni
                 .testTag(RecordsHomeScreenTestTags.ATTENDANCE_TILE),
             verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
         ) {
+            RecordSigilSlot(
+                input = sigilInput(newest.id),
+                placement = RecordSigilPlacement.RecordsGrid,
+                modifier = Modifier.testTag(RecordsHomeScreenTestTags.attendanceSigil(newest.id)),
+            )
             StyledText(stringResource(R.string.records_home_attendance), BeidFont.Library.title17)
             StyledText(
                 text = label.uppercase(),
@@ -215,6 +238,8 @@ fun RecordsByEventScreen(
     groups: List<List<ProofRecord>>,
     onOpenEventRecords: (UUID) -> Unit,
     modifier: Modifier = Modifier,
+    /** beid#722: a record's stored Sigil input, or `null` for the neutral ring. Read-only. */
+    sigilInput: (UUID) -> SigilInput? = { null },
 ) {
     Column(
         modifier = modifier
@@ -236,7 +261,7 @@ fun RecordsByEventScreen(
         )
         groups.forEachIndexed { index, group ->
             if (index > 0) Hairline()
-            ByEventRow(group, onOpenEventRecords)
+            ByEventRow(group, onOpenEventRecords, sigilInput)
         }
     }
 }
@@ -248,7 +273,11 @@ private val byEventDateFormatter: DateTimeFormatter =
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault())
 
 @Composable
-private fun ByEventRow(group: List<ProofRecord>, onOpenEventRecords: (UUID) -> Unit) {
+private fun ByEventRow(
+    group: List<ProofRecord>,
+    onOpenEventRecords: (UUID) -> Unit,
+    sigilInput: (UUID) -> SigilInput?,
+) {
     val newest = group.first()
     Row(
         modifier = Modifier
@@ -259,6 +288,12 @@ private fun ByEventRow(group: List<ProofRecord>, onOpenEventRecords: (UUID) -> U
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BeidSpacing.m),
     ) {
+        // iOS #795 / 1.1.1 `eventList`: `.homePastRow`, no isDeviceRecord.
+        RecordSigilSlot(
+            input = sigilInput(newest.id),
+            placement = RecordSigilPlacement.HomePastRow,
+            modifier = Modifier.testTag(RecordsHomeScreenTestTags.byEventSigil(newest.id)),
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -389,6 +424,7 @@ fun RecordsHomeRoute(
     onOpenToday: () -> Unit,
     onOpenByEvent: () -> Unit,
     modifier: Modifier = Modifier,
+    sigilPresenceStore: SigilPresenceStore? = null,
 ) {
     val groups = rememberRecordGroups(proofRecordStore)
     RecordsHomeScreen(
@@ -397,6 +433,7 @@ fun RecordsHomeRoute(
         onOpenByEvent = onOpenByEvent,
         onOpenToday = onOpenToday,
         modifier = modifier,
+        sigilInput = sigilPresenceStore.sigilLookup(),
     )
 }
 
@@ -406,11 +443,13 @@ fun RecordsByEventRoute(
     proofRecordStore: ProofRecordStore,
     onOpenEventRecords: (UUID) -> Unit,
     modifier: Modifier = Modifier,
+    sigilPresenceStore: SigilPresenceStore? = null,
 ) {
     RecordsByEventScreen(
         groups = rememberRecordGroups(proofRecordStore),
         onOpenEventRecords = onOpenEventRecords,
         modifier = modifier,
+        sigilInput = sigilPresenceStore.sigilLookup(),
     )
 }
 
@@ -428,3 +467,11 @@ private fun RecordsHomeEmptyPreview() {
         RecordsHomeScreen(groups = emptyList(), onOpenRecord = {}, onOpenByEvent = {}, onOpenToday = {})
     }
 }
+
+/**
+ * beid#722: the record sites' Sigil lookup. Absent store, absent row: `null`,
+ * the neutral ring. The store memoizes each decoded row, so calling this
+ * during composition decodes a record once.
+ */
+internal fun SigilPresenceStore?.sigilLookup(): (UUID) -> SigilInput? =
+    this?.let { store -> { id -> store.sigilInput(id) } } ?: { null }

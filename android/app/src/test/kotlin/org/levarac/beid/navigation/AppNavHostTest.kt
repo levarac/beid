@@ -278,8 +278,9 @@ class AppNavHostTest {
         composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).performClick()
         composeTestRule.onNodeWithTag(RecordsScreenTestTags.recordRow(record.id)).performClick()
 
-        composeTestRule.onNodeWithTag(RecordDetailScreenTestTags.SELF_PROOF_VALUE).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(RecordDetailScreenTestTags.BINDING_VALUE).assertIsDisplayed()
+        // The detail's Sigil slot (beid#722) leads the screen; scroll to the rows.
+        composeTestRule.onNodeWithTag(RecordDetailScreenTestTags.SELF_PROOF_VALUE).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RecordDetailScreenTestTags.BINDING_VALUE).performScrollTo().assertIsDisplayed()
     }
 
     @Test

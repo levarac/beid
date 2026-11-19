@@ -38,6 +38,14 @@ internal class AggregationRuntime {
         }
     }
 
+    /**
+     * The accumulated input, read-only, for the Sigil presence builder
+     * (beid#722), which must read the same rows the counts come from. The
+     * instance changes on [reset]; a presence session bound to the old one
+     * then fails closed (`input_mismatch`).
+     */
+    val observations: AggregationObservationInput get() = input
+
     val sessionAggregate: SessionAggregate
         get() = aggregateObservationsForSession(input = input, windowsPerBand = 1)
 

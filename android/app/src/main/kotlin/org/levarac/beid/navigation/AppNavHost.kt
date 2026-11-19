@@ -28,6 +28,7 @@ import java.util.UUID
 import org.levarac.beid.onboarding.OnboardingPreferences
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
+import org.levarac.beid.persistence.SigilPresenceStore
 import org.levarac.beid.sensing.BluetoothPermissionState
 import org.levarac.beid.sensing.BluetoothRadioMonitor
 import org.levarac.beid.sensing.BluetoothRouteScreen
@@ -72,6 +73,7 @@ fun AppNavHost(
     session: EventJoinSession,
     proofRecordStore: ProofRecordStore,
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null,
+    sigilPresenceStore: SigilPresenceStore? = null,
     walletState: WalletConnectorState = WalletConnectorState.Idle,
     onStartWalletBinding: () -> Unit = {},
 ) {
@@ -206,6 +208,7 @@ fun AppNavHost(
                     onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
                     onOpenByEvent = { navController.navigate(Screen.RecordsByEvent.route) },
                     onStartWalletBinding = onStartWalletBinding,
+                    sigilPresenceStore = sigilPresenceStore,
                 )
             }
 
@@ -247,6 +250,7 @@ fun AppNavHost(
                 RecordsByEventRoute(
                     proofRecordStore,
                     onOpenEventRecords = { navController.navigate(Screen.EventRecords.route(it)) },
+                    sigilPresenceStore = sigilPresenceStore,
                 )
             }
 
@@ -272,6 +276,7 @@ fun AppNavHost(
                     onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
                     onOpenDetail = { navController.navigate(Screen.RecordDetail.route(it)) },
                     eventGroupAnchorId = anchorId,
+                    sigilPresenceStore = sigilPresenceStore,
                 )
             }
 
@@ -287,6 +292,7 @@ fun AppNavHost(
                     sessionAggregateSnapshotStore,
                     recordId = UUID.fromString(recordIdArg),
                     onRecordNotFound = { navController.popBackStack() },
+                    sigilPresenceStore = sigilPresenceStore,
                 )
             }
         }

@@ -149,7 +149,7 @@ class RecordDetailScreenTest {
         composeTestRule.setContent { BeidAppTheme { RecordDetailScreen(record = record(), aggregate = aggregate) } }
         composeTestRule.onNodeWithTag(RecordDetailScreenTestTags.TIME_BAND_BUILDUP_VALUE)
             .assertTextEquals(recordedText)
-        composeTestRule.onNodeWithText("7: 1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("7: 1").performScrollTo().assertIsDisplayed()
     }
 
     @Test

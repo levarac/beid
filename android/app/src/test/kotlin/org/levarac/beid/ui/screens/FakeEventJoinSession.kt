@@ -7,6 +7,7 @@ import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.BluetoothPermissionState
 import org.levarac.beid.sensing.NearbyEventCard
+import org.levarac.beid.sensing.SensingRadarPeerSignal
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 
 /** Shared test double for [EventJoinSession] — no real `Activity`/`BarnardEngine` involved. */
@@ -25,6 +26,9 @@ internal class FakeEventJoinSession(
         mutableSearchOutcome.asStateFlow()
     private val mutableNearbyEventsOmitted = MutableStateFlow(nearbyEventsOmitted)
     override val nearbyEventsOmitted: StateFlow<Boolean> = mutableNearbyEventsOmitted.asStateFlow()
+    private val mutableRadarPeers = MutableStateFlow<List<SensingRadarPeerSignal>>(emptyList())
+    override val radarPeers: StateFlow<List<SensingRadarPeerSignal>> = mutableRadarPeers.asStateFlow()
+
     /** Settable so a test can change the runtime answer the next refresh reads. */
     override var bluetoothPermissionState: BluetoothPermissionState = initialBluetoothPermissionState
 
@@ -102,6 +106,10 @@ internal class FakeEventJoinSession(
 
     fun emit(next: EventJoinUiState) {
         mutableState.value = next
+    }
+
+    fun emitRadarPeers(peers: List<SensingRadarPeerSignal>) {
+        mutableRadarPeers.value = peers
     }
 
     fun emitNearbyEventCards(cards: List<NearbyEventCard>) {

@@ -23,7 +23,9 @@ import org.robolectric.annotation.Config
  * instrumented `androidTest`.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+// Phone height: these render a phase screen with no scroll container, and the
+// Recording / EventFound screens now carry the radar (beid#722).
+@Config(sdk = [34], qualifiers = "w411dp-h1000dp")
 class ScanFlowScreensTest {
     @get:Rule
     val composeTestRule = createComposeRule()

@@ -46,6 +46,7 @@ import org.levarac.beid.R
 import org.levarac.beid.navigation.HomeStandbyViewModel
 import org.levarac.beid.navigation.HomeTab
 import org.levarac.beid.persistence.ProofRecordStore
+import org.levarac.beid.persistence.SigilPresenceStore
 import org.levarac.beid.sensing.ClockPreflightController
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
@@ -100,11 +101,15 @@ fun HomeRoute(
     },
     standbyUptimeMillis: () -> Long = SystemClock::uptimeMillis,
     showSimulateSignalLost: Boolean = BuildConfig.DEBUG,
+    /** beid#722: stored Sigil rows for the Records tab; `null` draws every record's ring. */
+    sigilPresenceStore: SigilPresenceStore? = null,
 ) {
     val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session, clockPreflight))
     val standbyViewModel: HomeStandbyViewModel =
         viewModel(factory = HomeStandbyViewModel.Factory(session, standbyUptimeMillis))
     val uiState by viewModel.uiState.collectAsState()
+    // A new list on every detection or signal republish, so Now's radar redraws with it.
+    val radarPeers by session.radarPeers.collectAsState()
     val standby by standbyViewModel.presentation.collectAsState()
 
     var selectedTab by rememberSaveable { mutableStateOf(HomeTab.Now) }
@@ -155,6 +160,7 @@ fun HomeRoute(
                 showSimulateSignalLost = showSimulateSignalLost,
                 onKeepSensing = viewModel::keepSensing,
                 onConfirmStopSensing = viewModel::confirmStopSensing,
+                radarPeers = radarPeers,
                 modifier = contentModifier,
             )
         },
@@ -165,6 +171,7 @@ fun HomeRoute(
                 onOpenToday = onOpenToday,
                 onOpenByEvent = onOpenByEvent,
                 modifier = contentModifier,
+                sigilPresenceStore = sigilPresenceStore,
             )
         },
     )

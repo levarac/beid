@@ -43,6 +43,10 @@ import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
+import org.levarac.beid.persistence.SigilPresenceStore
+import org.levarac.beid.persistence.SigilPresenceStoreException
+import org.levarac.beid.shared.sensing.normalizedDisplayIdOrNull
+import org.levarac.beid.shared.sigil.SigilInput
 import org.levarac.beid.persistence.SessionCheckpoint
 import org.levarac.beid.persistence.SessionCheckpointStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
@@ -153,6 +157,9 @@ class EventJoinCoordinator internal constructor(
     checkpointDispatcher: CoroutineDispatcher = Dispatchers.IO,
     checkpointPersistence: ((SessionCheckpoint) -> Unit)? = null,
     private val checkpointRuntimeOwner: SessionCheckpointRuntimeOwner = ProcessSessionCheckpointRuntimeOwner,
+    /** Read by MainActivity to hand the Records screens the same store (beid#722 wiring). */
+    internal val sigilPresenceStore: SigilPresenceStore? = null,
+    private val sigilPresenceTokenSource: SigilPresenceTokenSource = SecureRandomSigilPresenceTokenSource(),
 ) : EventJoinSession {
     constructor(context: Context) : this(
         engine = BarnardEventJoinEngine(context),
@@ -168,6 +175,7 @@ class EventJoinCoordinator internal constructor(
         windowObservationRuntimeOwner = ProcessWindowObservationRuntimeOwner,
         initialBluetoothPermissionState = currentBluetoothPermissionState(context),
         readBluetoothPermissionState = context.applicationContext.let { app -> { currentBluetoothPermissionState(app) } },
+        sigilPresenceStore = SigilPresenceStore.forDevice(context),
     )
 
     private val selfProofRecordStore = checkpointRuntimeOwner.selfProofStore(selfProofRecordStore.file, selfProofRecordStore)
@@ -186,6 +194,13 @@ class EventJoinCoordinator internal constructor(
     private val accounting = ScanDeviceAccounting()
     private var checkpointEninEnd: Long? = null
     private var aggregationRuntime = AggregationRuntime()
+
+    /**
+     * beid#722: this session's in-memory display id -> token map, bound to
+     * [aggregationRuntime]'s observations. Never persisted, never logged;
+     * replaced together with [aggregationRuntime] in [resetSessionState].
+     */
+    private var sigilPresence = SigilPresenceRuntime(aggregationRuntime, sigilPresenceTokenSource)
     private val sessionCheckpointStore = ledgerFilesDir?.let {
         checkpointRuntimeOwner.checkpointStore(SessionCheckpointStore.defaultDirectory(it))
     }
@@ -203,6 +218,45 @@ class EventJoinCoordinator internal constructor(
     }
 
     internal fun sessionAggregateSnapshot(proofId: UUID) = sessionAggregateSnapshotStore?.snapshot(proofId)
+
+    /**
+     * beid#722 (iOS `sigilInput(forProofId:)`): the stored Sigil input for
+     * [proofId], or `null`, which every caller draws as the neutral ring (no
+     * row, an unreadable row, a session that could not be encoded, or no
+     * store). Memoized per proofId by [SigilPresenceStore]; read-only.
+     */
+    override fun sigilInput(proofId: UUID): SigilInput? = sigilPresenceStore?.sigilInput(proofId)
+
+    /**
+     * beid#722 (iOS `liveSigilInput`): the in-progress record's Sigil, built
+     * from this session's observations by the same shared builder that writes
+     * the stored row at session end, so the live and the sealed Sigil cannot
+     * disagree. `null` until the recording threshold creates a Proof, and
+     * whenever shared cannot build one. Main thread only: it reads the live
+     * observation input the detection path appends to.
+     */
+    override fun liveSigilInput(): SigilInput? {
+        if (activeProofId == null) return null
+        return sigilPresence.liveInput()
+    }
+
+    /**
+     * beid#722 (iOS `SensingView.radarPeers`): every peer detected in this
+     * session, keyed by normalized display id and sorted, with its coalesced
+     * signal strength or `null` (unmeasured). Display only and in memory
+     * only; cleared in [resetSessionState].
+     */
+    private val _radarPeers = MutableStateFlow<List<SensingRadarPeerSignal>>(emptyList())
+    override val radarPeers: StateFlow<List<SensingRadarPeerSignal>> = _radarPeers.asStateFlow()
+
+    /** Published, coalesced dBm per node (iOS `nodeSignalStrengths`); an absent key is unmeasured. */
+    private var nodeSignalStrengths: Map<String, Double> = emptyMap()
+
+    /** Live smoothed dBm per node, updated on every usable sample (iOS `smoothedNodeSignalDbm`). */
+    private val smoothedNodeSignalDbm = HashMap<String, Double>()
+
+    /** Barnard event timestamp of the last [nodeSignalStrengths] republish, or `null` this session. */
+    private var lastNodeSignalPublishAtMillis: Long? = null
 
     /**
      * The registry this join gate reads. `null` means the deployment has no
@@ -868,6 +922,14 @@ class EventJoinCoordinator internal constructor(
                     detectedDisplayId = detection.detectedDisplayId,
                     reporterRpid = detection.reporterRpid,
                 )
+                // A SIBLING call after handleDetection (iOS beid#652), never an
+                // argument to it: signal strength stays out of lexical scope
+                // everywhere a record is built. No ENIN is passed either.
+                handleSignalStrength(detection.rssi, detection.detectedDisplayId, detection.timestampMs)
+            }
+            is BarnardEvent.RssiUpdate -> {
+                val update = event.update
+                handleSignalStrength(update.rssi, update.detectedDisplayId, update.timestampMs)
             }
             else -> Unit
         }
@@ -953,6 +1015,9 @@ class EventJoinCoordinator internal constructor(
             logRuntimeDiagnostic("peer_detection co_present=${accounting.coPresentDeviceCount} distinct=${accounting.distinctDeviceCount}")
         }
         val observationAccepted = aggregationRuntime.recordObservation(enin, rpid, detectedDisplayId)
+        // As iOS's recordDeviceIdentity: after every observation, accepted or not.
+        sigilPresence.topUpTokens()
+        publishRadarPeers()
         val aggregateSnapshot = aggregationRuntime.snapshotAggregate()
         val since = firstSightingAt
         val detected = accounting.distinctDeviceCount
@@ -1118,6 +1183,7 @@ class EventJoinCoordinator internal constructor(
      */
     private fun finalizeSelfProofIfNeeded(): SelfProofRecord? {
         val proofId = activeProofId ?: return null
+        persistSigilPresenceIfNeeded(proofId)
         return try {
             val snapshot = currentSessionCheckpoint() ?: return null
             val writer = sessionCheckpointWriter
@@ -1276,12 +1342,96 @@ class EventJoinCoordinator internal constructor(
         joinDiagnostics("session_checkpoint_${operation}_failed type=${error.javaClass.simpleName}")
     }
 
+    /**
+     * beid#722 (iOS `persistSigilPresenceIfNeeded`): stores this session's
+     * Sigil presence for its Proof at a graceful session end, before
+     * [resetSessionState] drops the in-memory token map. Same gate as the
+     * count snapshot's graceful path (a Proof and an observed window).
+     * Best-effort: a failure never blocks the self-proof. A killed session
+     * writes nothing, and checkpoint recovery cannot write it later because
+     * the token map died with the process — by design, the map is never
+     * checkpointed (checkpoints live in the backed-up `filesDir`).
+     *
+     * Logs only the payload-free reason or an exception type, never a token,
+     * a display id, a path or a message.
+     */
+    private fun persistSigilPresenceIfNeeded(proofId: UUID) {
+        val store = sigilPresenceStore ?: return
+        if (accounting.firstWindowEnin == null) return
+        try {
+            sigilPresence.persist(store, proofId)
+        } catch (error: SigilPresenceStoreException) {
+            joinDiagnostics("sigil_presence_persist_failed reason=${error.reason.name}")
+        } catch (error: Exception) {
+            joinDiagnostics("sigil_presence_write_failed type=${error.javaClass.simpleName}")
+        }
+    }
+
+    /**
+     * Folds one RSSI sample into the display-only per-node signal strength —
+     * a port of iOS `SensingCoordinator.handleSignalStrength` (beid#652).
+     *
+     * A sibling of [handleDetection], never a step inside it, and it takes no
+     * ENIN: nothing on the recording path calls this or is called by it.
+     *
+     * Gated to a joined session in `Sensing`/`EventFound`/`Recording`.
+     * `SignalLost` is a frozen count, so the radar freezes with it; the phase
+     * gates the display and the display gates nothing.
+     *
+     * 1. Usability: only `rssi < nodeSignalUsableUpperBoundDbm` is a
+     *    measurement; anything else creates no entry.
+     * 2. Smoothing on every usable sample (EMA); the first sample seeds the
+     *    value directly rather than ramping from 0 dBm.
+     * 3. Republishing at most once per `nodeSignalRedrawMinimumIntervalMillis`
+     *    of Barnard event time, except a node's first measurement, which
+     *    always publishes. A non-increasing timestamp never republishes.
+     */
+    internal fun handleSignalStrength(rssi: Int, detectedDisplayId: String?, timestampMillis: Long) {
+        if (_state.value !is EventJoinUiState.Sensing) return
+        when (scanPhase) {
+            is ScanPhase.Sensing, is ScanPhase.EventFound, is ScanPhase.Recording -> Unit
+            is ScanPhase.Idle, is ScanPhase.SignalLost -> return
+        }
+        val nodeId = normalizedDisplayIdOrNull(detectedDisplayId) ?: return
+        if (rssi >= BeidConfig.nodeSignalUsableUpperBoundDbm) return
+
+        val sample = rssi.toDouble()
+        val previous = smoothedNodeSignalDbm[nodeId]
+        smoothedNodeSignalDbm[nodeId] = if (previous == null) {
+            sample
+        } else {
+            previous + BeidConfig.nodeSignalSmoothingFactor * (sample - previous)
+        }
+
+        val last = lastNodeSignalPublishAtMillis
+        val due = last == null || timestampMillis - last >= BeidConfig.nodeSignalRedrawMinimumIntervalMillis
+        if (previous != null && !due) return
+        lastNodeSignalPublishAtMillis = timestampMillis
+        nodeSignalStrengths = HashMap(smoothedNodeSignalDbm)
+        publishRadarPeers()
+    }
+
+    /** iOS `radarPeers`: the detected display ids, sorted, each with its published strength. */
+    private fun publishRadarPeers() {
+        _radarPeers.value = accounting.detectedDisplayIds.sorted().map { id ->
+            SensingRadarPeerSignal(id, nodeSignalStrengths[id])
+        }
+    }
+
     private fun resetSessionState() {
         firstSightingAt = null
         _scanSessionMetrics.value = { ScanSessionMetrics() }
         accounting.reset()
         checkpointEninEnd = null
         aggregationRuntime = AggregationRuntime()
+        sigilPresence = SigilPresenceRuntime(aggregationRuntime, sigilPresenceTokenSource)
+        // Display-only but per-session: a radius from the last event must not
+        // appear at the next, and a stale publish time must not hold back the
+        // new session's first redraw. Cleared together, as on iOS.
+        _radarPeers.value = emptyList()
+        nodeSignalStrengths = emptyMap()
+        smoothedNodeSignalDbm.clear()
+        lastNodeSignalPublishAtMillis = null
         activeProofId = null
         bindingState = EventBindingState.None
         pendingBindingMessage = null

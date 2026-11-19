@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.stateDescription
 import org.levarac.beid.R
 import org.levarac.beid.navigation.NowStandbyPresentation
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.SensingRadarPeerSignal
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
 import org.levarac.beid.ui.theme.BeidFont
 import org.levarac.beid.ui.theme.BeidRadius
@@ -96,6 +97,8 @@ fun NowContent(
     showSimulateSignalLost: Boolean = false,
     onKeepSensing: () -> Unit = {},
     onConfirmStopSensing: () -> Unit = {},
+    /** beid#722: the live session's detected peers for the EventFound / Recording radar. */
+    radarPeers: List<SensingRadarPeerSignal> = emptyList(),
 ) {
     // System Back on the confirmation means "Keep sensing". Home is the
     // navigation root, so an unhandled Back would leave the activity instead.
@@ -133,6 +136,7 @@ fun NowContent(
                 onSimulateSignalLost = onSimulateSignalLost,
                 onResumeSensing = onResumeSensing,
                 onStartWalletBinding = onStartWalletBinding,
+                radarPeers = radarPeers,
             )
             return@Column
         }

@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.time.Instant
 import java.util.UUID
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
+import org.levarac.beid.shared.sigil.SigilInput
 
 /**
  * A nearby beacon candidate. Its name is an unauthenticated B005 announcement;
@@ -82,6 +83,8 @@ data class ScanSessionMetrics(
     val windowCount: Int = 0,
 )
 
+private val emptyRadarPeers = MutableStateFlow<List<SensingRadarPeerSignal>>(emptyList()).asStateFlow()
+
 private val emptyScanSessionMetrics = MutableStateFlow<() -> ScanSessionMetrics>({ ScanSessionMetrics() }).asStateFlow()
 
 /**
@@ -102,6 +105,28 @@ interface EventJoinSession {
     fun hasStoredProof(proofId: UUID): Boolean = false
     /** O(1) snapshots; shared aggregation is evaluated only while 05e is visible. */
     val scanSessionMetrics: StateFlow<() -> ScanSessionMetrics> get() = emptyScanSessionMetrics
+
+    /**
+     * beid#722: the stored Sigil input of record [proofId], decoded by shared
+     * and memoized, or `null` (draw the neutral ring). Read-only: hand it to
+     * `layoutSigil` only. The windows it draws equal the record's
+     * `SessionAggregate.windowCount` (iOS `observedWindowCount`).
+     */
+    fun sigilInput(proofId: UUID): SigilInput? = null
+
+    /**
+     * beid#722: the in-progress record's Sigil, or `null` before a Proof
+     * exists or when shared cannot build one. Main thread only. Its window
+     * count is [ScanSessionMetrics.windowCount] of the same session.
+     */
+    fun liveSigilInput(): SigilInput? = null
+
+    /**
+     * beid#722: every peer detected in the live session, sorted by normalized
+     * display id, with its smoothed dBm or `null` (unmeasured). Display only,
+     * in memory only; empty outside a session.
+     */
+    val radarPeers: StateFlow<List<SensingRadarPeerSignal>> get() = emptyRadarPeers
 
     /** The latest native permission answer used by onboarding navigation. */
     val bluetoothPermissionState: BluetoothPermissionState
