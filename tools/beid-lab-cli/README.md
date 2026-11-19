@@ -165,7 +165,9 @@ selecting its current slice is lease logic; both live in
 here would be a second implementation of a shared decision, which
 `AGENTS.md`'s ownership boundary forbids, and issue #588's own scope says
 this CLI is Barnard-only with no shared macOS build. Extract the envelope
-with the tooling that owns bundle decoding and pass the container.
+with the tooling that owns bundle decoding and pass the container:
+`tools/event-occurrence/container.mjs` in levarac/parallax writes the
+container for the current time from a published bundle.
 
 ### `participate`
 

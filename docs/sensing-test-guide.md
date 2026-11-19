@@ -59,14 +59,16 @@ cd tools/beid-lab-cli
 
 ### C. A Mac as the venue
 
-`beid-lab-cli venue` can broadcast the event from a Mac instead of an iPhone. It serves a hop-zero container, which is one signed envelope with a 4-byte header, valid only for its window of about one hour. Ask the maintainer who registered the event for the container file for the current hour (or the venue bundle plus a way to cut containers from it).
+`beid-lab-cli venue` can broadcast the event from a Mac instead of an iPhone. It serves a hop-zero container, which is one signed envelope with a 4-byte header, valid only for its window of about one hour. Cut the current container from the event's venue bundle with `tools/event-occurrence/container.mjs` in levarac/parallax (a private repository; project members have read access). The bundle is public and holds no keys: it is on the venue link's host at `/artifacts/venue-bundles/<EVENT_ID>`.
 
 ```sh
+curl -fsS -o venue-bundle.cbor "https://<venue link host>/artifacts/venue-bundles/<EVENT_ID>"
+node <parallax checkout>/tools/event-occurrence/container.mjs --bundle venue-bundle.cbor --out container.bin
 cd tools/beid-lab-cli
-./scripts/run.sh --skip-build venue --container <file> --timeout 3300
+./scripts/run.sh --skip-build venue --container ../../container.bin --timeout <secondsLeft>
 ```
 
-- Replace the container about hourly: stop the run and start it again with the next hour's file.
+- `container.mjs` prints `secondsLeft`, the time until this container's window ends. Pass it as `--timeout`, then cut the next container and start again. `no envelope serves` means the event is not open at that time.
 - `venue_ready` should show the event ID prefix, the window in Unix seconds next to `nowUnix`, and `receiverState` as verified with result `match`. `UNVERIFIED` with `mismatch` means the signature did not check out. The window is not judged there: check that `nowUnix` lies between the two window values, and switch to the next hour's container before it ends.
 - The Bluetooth approval and stable signing are the same as in B; see the tool README.
 - The same Mac can also run `participate` in a second terminal as an extra participant. This was observed to work once alongside `venue`; it is not guaranteed.
