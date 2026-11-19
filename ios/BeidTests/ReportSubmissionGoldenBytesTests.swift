@@ -124,6 +124,7 @@ enum ReportSubmissionGoldenScenario {
         peerRpids: peerRpids,
         reporterRpid: reporterRpid,
         participantCommitment: participantCommitment,
+        eventSigningPublicKey: TestSensingCryptography().eventSigningPublicKey(eventCode: eventCode),
         finalizedAt: finalizedAt,
         createdAt: createdAt
       )
