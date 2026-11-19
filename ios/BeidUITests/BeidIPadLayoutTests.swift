@@ -16,7 +16,17 @@ final class BeidIPadLayoutTests: XCTestCase {
     capturePrimaryFlow(orientation: "portrait")
   }
 
-  func testPrimaryFlowInLandscape() {
+  func testPrimaryFlowInLandscape() throws {
+    // Landscape is supported on iPad only (see the supported interface
+    // orientations): on iPhone the app stays portrait, so rotating the device
+    // there exercises no landscape layout.
+    guard UIDevice.current.userInterfaceIdiom == .pad else {
+      throw XCTSkip("Requires an iPad: the app supports landscape on iPad only")
+    }
+    // Leave the device as it was found: later tests in the same run must not
+    // inherit a rotated simulator.
+    let initialOrientation = XCUIDevice.shared.orientation
+    defer { XCUIDevice.shared.orientation = initialOrientation }
     XCUIDevice.shared.orientation = .landscapeLeft
     capturePrimaryFlow(orientation: "landscape")
   }
@@ -155,6 +165,21 @@ final class BeidIPadLayoutTests: XCTestCase {
   private func capturePrimaryFlow(orientation: String) {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
+    if UIDevice.current.userInterfaceIdiom == .pad {
+      // Only the iPad build rotates. Screenshots start after the window has
+      // taken the requested shape, not while the rotation is still running.
+      let window = app.windows.firstMatch
+      let rotated = XCTNSPredicateExpectation(
+        predicate: NSPredicate { _, _ in
+          window.exists && (window.frame.width > window.frame.height) == (orientation == "landscape")
+        },
+        object: nil
+      )
+      XCTAssertEqual(
+        XCTWaiter.wait(for: [rotated], timeout: 5), .completed,
+        "The app window did not settle in \(orientation)"
+      )
+    }
 
     assertWelcomeLayout(named: "welcome-\(orientation)")
     app.buttons["Continue"].tap()
