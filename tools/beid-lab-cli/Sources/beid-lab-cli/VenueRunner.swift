@@ -157,8 +157,10 @@ final class VenueRunner {
   /// check, not this tool's, so the signature is checked at the container's
   /// own first ENIN rather than at the host clock. Barnard's `verify` returns
   /// nil when given no ENIN at all, which reported every container as
-  /// unverified. Compare validFromUnix and validThroughUnix with nowUnix to
-  /// see whether the window is open.
+  /// unverified. Phones accept the envelope from validFromUnix through
+  /// acceptedThroughUnix (the second before relayExpiresAtEnin, spec 134);
+  /// validThroughUnix is the envelope's outer bound and runs past that, so
+  /// compare nowUnix with acceptedThroughUnix to know when to switch.
   private func describe(_ container: [UInt8]) {
     var data: [String: LabValue] = ["bytes": .int(container.count)]
     if let scheduling = BarnardB005EnvelopeV2.schedulingFields(container: container) {
@@ -172,6 +174,7 @@ final class VenueRunner {
       if seconds > 0 {
         data["validFromUnix"] = .int(Int(scheduling.validFromEnin) * seconds)
         data["validThroughUnix"] = .int((Int(scheduling.validThroughEnin) + 1) * seconds - 1)
+        data["acceptedThroughUnix"] = .int(Int(scheduling.relayExpiresAtEnin) * seconds - 1)
         data["nowUnix"] = .int(Int(Date().timeIntervalSince1970))
       }
     }

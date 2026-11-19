@@ -69,7 +69,7 @@ cd tools/beid-lab-cli
 ```
 
 - `container.mjs` prints `secondsLeft`, the time until this container's window ends. Pass it as `--timeout`, then cut the next container and start again. `no envelope serves` means the event is not open at that time.
-- `venue_ready` should show the event ID prefix, the window in Unix seconds next to `nowUnix`, and `receiverState` as verified with result `match`. `UNVERIFIED` with `mismatch` means the signature did not check out. The window is not judged there: check that `nowUnix` lies between the two window values, and switch to the next hour's container before it ends.
+- `venue_ready` should show the event ID prefix, the window in Unix seconds next to `nowUnix`, and `receiverState` as verified with result `match`. `UNVERIFIED` with `mismatch` means the signature did not check out. The window is not judged there: phones accept the container from `validFromUnix` through `acceptedThroughUnix`, so check that `nowUnix` lies between those two. `validThroughUnix` runs up to ten minutes past the point where phones stop accepting it; do not use it to decide when to switch.
 - The Bluetooth approval and stable signing are the same as in B; see the tool README.
 - The same Mac can also run `participate` in a second terminal as an extra participant. This was observed to work once alongside `venue`; it is not guaranteed.
 

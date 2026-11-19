@@ -151,7 +151,11 @@ event id, display name, ENIN window, and the same window in Unix seconds
 next to the host's clock — so an operator who copied the wrong file finds out
 before the phones do. `receiverState` checks the signature at the
 container's own first ENIN, so it says whether the container is genuine, not
-whether its window is open now; compare the window with `nowUnix` for that.
+whether its window is open now; compare `nowUnix` with `validFromUnix` and
+`acceptedThroughUnix` for that. Phones stop accepting the envelope when the
+clock reaches its `relayExpiresAtEnin`, so `acceptedThroughUnix` is the last
+second to serve it; `validThroughUnix` is the envelope's outer bound and runs
+up to ten minutes later.
 Whether to serve is deliberately not this tool's call.
 
 | Option | Meaning |
