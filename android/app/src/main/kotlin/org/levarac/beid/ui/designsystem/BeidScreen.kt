@@ -4,8 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +32,16 @@ import org.levarac.beid.ui.theme.BeidTheme
  * just growing past the screen (see `BluetoothPermissionScreen`, added
  * alongside beid#338's header-icon wiring once that icon roundel pushed its
  * body past the viewport in tests).
+ *
+ * Window insets: targetSdk 35+ draws edge-to-edge on Android 15+, so the
+ * canvas is painted under the bars first and content + footer are then
+ * padded by the system bars and display cutout. The IME is deliberately not
+ * part of that set: what the keyboard does is left to the activity's
+ * `windowSoftInputMode` (unset, so the platform chooses), as it was when the
+ * Venue screen used a default Material 3 Scaffold, whose content insets also
+ * exclude it. `windowInsetsPadding` only applies insets an ancestor has not
+ * already consumed, so a parent that pads and consumes them (for example a
+ * Scaffold body with `consumeWindowInsets(innerPadding)`) is not padded twice.
  */
 @Composable
 fun BeidScreen(
@@ -38,6 +53,7 @@ fun BeidScreen(
         modifier = modifier
             .fillMaxSize()
             .background(BeidTheme.colors.surfaceCanvas)
+            .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
             .padding(horizontal = BeidSpacing.pageMargin),
         verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
     ) {
