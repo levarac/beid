@@ -19,10 +19,10 @@ struct BluetoothPermissionView: View {
 
             VStack(spacing: DS.Space.s + DS.Space.xs) {
               Text("Allow Bluetooth access")
-                .font(.title2.weight(.semibold))
+                .beidTextStyle(DS.Font.Library.title19)
                 .accessibilityAddTraits(.isHeader)
               Text("beid needs Bluetooth to find your event and exchange signals with nearby devices. These observations help create your Record.")
-                .font(.body)
+                .beidTextStyle(DS.Font.Library.body15)
                 .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .center)
                 .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center)
                 .accessibilityIdentifier("bluetooth.permission.purpose")
@@ -33,7 +33,7 @@ struct BluetoothPermissionView: View {
 
             VStack(spacing: DS.Space.s + DS.Space.xs) {
               Text("Your device may ask for permission.")
-                .font(.subheadline)
+                .beidTextStyle(DS.Font.Library.body13)
                 .foregroundStyle(DS.Color.textSecondary)
                 .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .center)
                 .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center)
@@ -67,12 +67,12 @@ struct BluetoothNearbyIllustration: View {
   var body: some View {
     HStack(spacing: DS.Space.m) {
       Image(systemName: "iphone")
-        .font(.system(size: 40))
+        .font(DS.Font.bluetoothEndpointSymbol)
       Image(systemName: isOff ? "xmark.circle" : "dot.radiowaves.left.and.right")
-        .font(.system(size: 28, weight: .medium))
+        .font(DS.Font.bluetoothStateSymbol)
         .foregroundStyle(isOff ? DS.Color.statusOff : DS.Color.textPrimary)
       Image(systemName: "iphone")
-        .font(.system(size: 40))
+        .font(DS.Font.bluetoothEndpointSymbol)
     }
     .foregroundStyle(DS.Color.textPrimary)
     .frame(maxWidth: .infinity)

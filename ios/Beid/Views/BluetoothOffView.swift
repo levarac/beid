@@ -19,10 +19,10 @@ struct BluetoothOffView: View {
 
             VStack(spacing: DS.Space.s + DS.Space.xs) {
               Text("Bluetooth is off")
-                .font(.title2.weight(.semibold))
+                .beidTextStyle(DS.Font.Library.title19)
                 .accessibilityAddTraits(.isHeader)
               Text("beid can’t find nearby events or record observations while Bluetooth is off.")
-                .font(.body)
+                .beidTextStyle(DS.Font.Library.body15)
                 .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .center)
                 .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center)
             }
@@ -32,7 +32,7 @@ struct BluetoothOffView: View {
 
             VStack(spacing: DS.Space.s + DS.Space.xs) {
               Text("Turn on Bluetooth in Settings > Bluetooth, then return to beid.")
-                .font(.subheadline)
+                .beidTextStyle(DS.Font.Library.body13)
                 .foregroundStyle(DS.Color.textSecondary)
                 .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .center)
                 .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center)
