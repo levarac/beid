@@ -1451,11 +1451,20 @@ class EventJoinCoordinator internal constructor(
 
     /**
      * Pauses standby discovery while the radio is off and resumes it when the
-     * radio is back. Mirrors integration/ios-1.1.1: `AppCoordinator.updateHomeStandby`
+     * radio is back — but only a standby the gate still wants. Mirrors
+     * integration/ios-1.1.1: `AppCoordinator.updateHomeStandby`
      * (`ios/Beid/Navigation/AppCoordinator.swift:941-958`) gates standby on `!homeBluetoothIsOff` and,
      * when the gate closes, stops discovery only while idle;
      * `SensingCoordinator.handle(.state)` (`ios/Beid/Sensing/SensingCoordinator.swift:1849-1856`)
      * restarts a requested standby scan once scanning is possible again.
+     *
+     * Ownership: the caller of [startNearbyEventDiscovery] /
+     * [stopNearbyEventDiscovery] (Home's standby gate) decides whether standby
+     * should run. This method only decides whether it *can*: it defers a
+     * requested standby while the radio is off and runs it when the radio
+     * returns. [stopNearbyEventDiscovery] withdraws the request, as iOS clears
+     * `homeStandbyDiscoveryRequested`, so a radio returning after the gate
+     * closed starts nothing.
      *
      * A joined session is never touched: the radio does not change
      * EventFound / Recording / SignalLost, and its transport is Barnard's.
@@ -1468,8 +1477,10 @@ class EventJoinCoordinator internal constructor(
         if (!isOn) {
             val standbyActive = discoveryOnlyScanOwned || nearbyDiscoveryStartedAtEpochMillis != null
             if (scanPhase == ScanPhase.Idle && standbyActive) {
-                standbyPausedForRadio = true
                 stopNearbyEventDiscovery()
+                // After the stop, which withdraws any request: this pause is
+                // the radio's, and the request it keeps is still the gate's.
+                standbyPausedForRadio = true
             }
         } else if (standbyPausedForRadio) {
             standbyPausedForRadio = false
@@ -1543,6 +1554,9 @@ class EventJoinCoordinator internal constructor(
     }
 
     override fun stopNearbyEventDiscovery() {
+        // The caller no longer wants standby, so a start deferred for the
+        // radio is withdrawn with it (iOS: `homeStandbyDiscoveryRequested = false`).
+        standbyPausedForRadio = false
         val isAdvertising = !disposed && engine.getState().isAdvertising
         val shouldStopScan = discoveryOnlyScanOwned &&
             scanPhase == ScanPhase.Idle &&

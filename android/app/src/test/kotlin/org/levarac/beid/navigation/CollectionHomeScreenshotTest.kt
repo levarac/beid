@@ -1,6 +1,7 @@
 package org.levarac.beid.navigation
 
 import android.bluetooth.BluetoothAdapter
+import android.content.Intent
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -48,6 +49,7 @@ import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLooper
 import org.robolectric.annotation.GraphicsMode
 
 /**
@@ -121,23 +123,33 @@ class CollectionHomeScreenshotTest {
         session: FakeEventJoinSession = FakeEventJoinSession(nearbyEventCards = listOf(nearby)),
         bluetoothOff: Boolean = false,
     ) {
-        setAppContent(fontScale, session, bluetoothOff)
+        setAppContent(fontScale, session)
         composeTestRule.onNodeWithTag(HomeScreenTestTags.ROOT).assertIsDisplayed()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).assertIsDisplayed()
+        if (bluetoothOff) radioOff()
+    }
+
+    /** Home is reached with the radio on; the radio then drops, as `BluetoothStateMonitor` hears it. */
+    private fun radioOff() {
+        shadowOf(BluetoothAdapter.getDefaultAdapter()).setEnabled(false)
+        composeTestRule.activity.sendBroadcast(
+            Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF),
+        )
+        ShadowLooper.idleMainLooper()
+        composeTestRule.waitForIdle()
     }
 
     /** Production [AppNavHost]; its start destination follows the onboarding preference. */
     private fun setAppContent(
         fontScale: Float = 1f,
         session: FakeEventJoinSession = FakeEventJoinSession(nearbyEventCards = listOf(nearby)),
-        bluetoothOff: Boolean = false,
     ) {
         composeTestRule.runOnUiThread {
             screenshotView = ComposeView(composeTestRule.activity)
             composeTestRule.activity.setContentView(screenshotView)
             screenshotView.setContent {
                 CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
-                    BeidAppTheme { AppNavHost(session, store, homeBluetoothOff = { bluetoothOff }) }
+                    BeidAppTheme { AppNavHost(session, store) }
                 }
             }
         }

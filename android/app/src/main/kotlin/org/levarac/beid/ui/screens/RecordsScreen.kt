@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -134,6 +137,9 @@ fun RecordsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BeidTheme.colors.surfaceCanvas)
+            // A pushed route with no Scaffold: clear the system bars edge-to-edge
+            // windows draw under, keeping the canvas behind them.
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = BeidSpacing.pageMargin)
             .padding(vertical = BeidSpacing.l),
         verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),

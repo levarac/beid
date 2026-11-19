@@ -44,6 +44,12 @@ data class NowStandbyPresentation(
  * session into permission and registry checks with its candidate still
  * needed, and a joined session owns its own scan.
  *
+ * This gate is the one owner of whether standby discovery should run. The
+ * session only decides whether it can: a start requested while the radio is
+ * off is deferred until the radio returns, and [EventJoinSession.stopNearbyEventDiscovery]
+ * withdraws it (`EventJoinCoordinator.onBluetoothRadioChanged`), so the radio
+ * never restarts discovery behind a closed gate.
+ *
  * [uptimeMillis] is injected so tests measure the wait on virtual time.
  */
 class HomeStandbyViewModel(
