@@ -16,6 +16,8 @@ Also check the event's validity window (its start and end time). Outside it, joi
 
 **The event code and the Event ID are different strings.** The app takes the event code. `beid-lab-cli --event-id` takes the Event ID. Mixing them up does not produce an error; it produces a run in which nobody is detected (see the lab CLI README).
 
+**At least four participating devices.** A device records only after it has verified three others ([`defaultEventConfirmThreshold = 3`](../shared/src/commonMain/kotlin/org/levarac/beid/shared/sensing/EventConfirmThreshold.kt)), so three phones sense each other but never reach recording. Venue devices do not count; a Mac running `beid-lab-cli participate` does.
+
 **The same build on every device.** A mixed set of builds can fail silently. Read out the build number on each device before starting.
 
 ## 1. Join on iPhone
@@ -55,11 +57,23 @@ cd tools/beid-lab-cli
 - Output is one JSON object per line; `-v` adds discoveries with RSSI.
 - Exit codes: 0 ran the whole window as asked; 1 arguments or a missing file; 2 the expected peer count was not reached (only with `--expect-peers`); 3 Bluetooth unavailable (not yet granted, off, or restricted).
 
-The `venue` subcommand can also broadcast from a Mac, but it needs a signed container extracted for the current hour and replaced as the hours roll over. For this test, broadcast from an iPhone.
+### C. A Mac as the venue
+
+`beid-lab-cli venue` can broadcast the event from a Mac instead of an iPhone. It serves a hop-zero container, which is one signed envelope with a 4-byte header, valid only for its window of about one hour. Ask the maintainer who registered the event for the container file for the current hour (or the venue bundle plus a way to cut containers from it).
+
+```sh
+cd tools/beid-lab-cli
+./scripts/run.sh --skip-build venue --container <file> --timeout 3300
+```
+
+- Replace the container about hourly: stop the run and start it again with the next hour's file.
+- `venue_ready` should show the event ID prefix, the window in Unix seconds next to `nowUnix`, and `receiverState` as verified with result `match`. `UNVERIFIED` with `mismatch` means the signature or the window did not check out.
+- The Bluetooth approval and stable signing are the same as in B; see the tool README.
+- The same Mac can also run `participate` in a second terminal as an extra participant. This was observed to work once alongside `venue`; it is not guaranteed.
 
 ## 4. Check mutual sensing
 
-1. Put the joined devices (two or more iPhones, or iPhones plus a Mac) near each other with Beid in the foreground, and wait a few minutes.
+1. Put the joined devices (two or more iPhones, or iPhones plus a Mac) near each other with Beid in the foreground, and wait a few minutes. Two or more devices are enough to see the detected count rise, but a Record is created and submitted only with four or more participants.
 2. On iPhone, the count of detected participants should rise. On the Mac, the JSON log should show lines for detected peers.
 3. If nothing is detected, check in this order: every device joined the same event (the Event ID matches), Bluetooth is granted, Beid is in the foreground, and all devices run the same build.
 

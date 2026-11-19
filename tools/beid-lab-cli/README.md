@@ -127,6 +127,14 @@ Serves a signed event-info container and advertises.
 beid-lab-cli venue --container ~/event-05.container --timeout 900
 ```
 
+The container must be hop-zero: the signed envelope preceded by a 4-byte
+header, `[3, relayHopCount (0), length >> 8, length & 255]` (what
+`BarnardB005EnvelopeV2.encodeContainer(relayHopCount: 0, signedEnvelope:)`
+produces). A bare envelope is rejected with `container_structure` /
+`formatVersion`. A container is valid only for its lease window of about one
+hour, so a long event needs a fresh container, passed to a new run, about
+hourly.
+
 The container arrives already signed. `configureOwnEventInfoEnvelopeV2`
 serves those bytes verbatim — the SDK does not sign, re-encode or re-verify
 them — so this subcommand supplies bytes and performs **no venue policy**: it
@@ -141,8 +149,9 @@ a participant B004 on the air beside real participants.
 The `venue_ready` line reports what the container claims about itself —
 event id, display name, ENIN window, and the same window in Unix seconds
 next to the host's clock — so an operator who copied the wrong file finds out
-before the phones do. Whether the window is open *now* is deliberately not
-this tool's call.
+before the phones do. `receiverState` is computed with the host clock, so a
+correct container outside its window reports a mismatch there. The tool still
+serves it: whether to serve is deliberately not this tool's call.
 
 | Option | Meaning |
 | --- | --- |

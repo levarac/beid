@@ -153,10 +153,12 @@ final class VenueRunner {
   /// Says what the container claims about itself, so an operator who copied
   /// the wrong file finds out before the phones do.
   ///
-  /// `currentEnin` is nil on purpose: whether the window is open now is the
-  /// operator's call and the phones' check, not this tool's. Passing a clock
-  /// reading would make the CLI quietly refuse a container it was told to
-  /// serve.
+  /// Whether the window is open now is the operator's call and the phones'
+  /// check, not this tool's, so the signature is checked at the container's
+  /// own first ENIN rather than at the host clock. Barnard's `verify` returns
+  /// nil when given no ENIN at all, which reported every container as
+  /// unverified. Compare validFromUnix and validThroughUnix with nowUnix to
+  /// see whether the window is open.
   private func describe(_ container: [UInt8]) {
     var data: [String: LabValue] = ["bytes": .int(container.count)]
     if let scheduling = BarnardB005EnvelopeV2.schedulingFields(container: container) {
@@ -173,8 +175,10 @@ final class VenueRunner {
         data["nowUnix"] = .int(Int(Date().timeIntervalSince1970))
       }
     }
+    let ownStartEnin = BarnardB005EnvelopeV2.schedulingFields(container: container)
+      .map { Int64($0.validFromEnin) }
     if let verified = BarnardB005EnvelopeV2.verify(
-      container: container, currentEnin: nil,
+      container: container, currentEnin: ownStartEnin,
       nameValidator: BarnardB005NativeDisplayNameNormalizer())
     {
       let eventIdHex = LabRedaction.hex(verified.eventId)
