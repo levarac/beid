@@ -17,7 +17,7 @@ final class FlatScreenshotTourB: XCTestCase {
   func testShot_04_Events() {
     launchHome(arguments: ["-beid-home-frame-04"])
     XCTAssertTrue(app.otherElements["home.active-event"].waitForExistence(timeout: 5))
-    assertNavigationTitleDrawn("Now", onDarkBackground: true)
+    assertNavigationTitleDrawn("Now")
     let title = app.navigationBars.staticTexts["Now"]
     let activeContent = app.otherElements["home.active-event"]
     XCTAssertEqual(activeContent.frame.minX, title.frame.minX, accuracy: 1.0,
@@ -131,12 +131,12 @@ final class FlatScreenshotTourB: XCTestCase {
   func testHomeTabsUseNavigationTitles() {
     launchHome(arguments: ["-beid-home-frame-04b"])
     XCTAssertTrue(app.navigationBars.staticTexts["Now"].waitForExistence(timeout: 5))
-    assertNavigationTitleDrawn("Now", onDarkBackground: false)
+    assertNavigationTitleDrawn("Now")
     XCTAssertTrue(app.buttons["home.account"].isHittable)
     capture("now-navigation")
     app.tabButton("Records").tap()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].waitForExistence(timeout: 5))
-    assertNavigationTitleDrawn("Records", onDarkBackground: false)
+    assertNavigationTitleDrawn("Records")
     XCTAssertTrue(app.buttons["records.by-event"].isHittable)
     XCTAssertTrue(app.buttons["home.account"].isHittable)
     capture("records-navigation")
@@ -194,7 +194,7 @@ final class FlatScreenshotTourB: XCTestCase {
     add(attachment)
   }
 
-  private func assertNavigationTitleDrawn(_ title: String, onDarkBackground: Bool, file: StaticString = #filePath, line: UInt = #line) {
+  private func assertNavigationTitleDrawn(_ title: String, file: StaticString = #filePath, line: UInt = #line) {
     let label = app.navigationBars.staticTexts[title]
     XCTAssertTrue(label.waitForExistence(timeout: 5), file: file, line: line)
     let window = app.windows.firstMatch
@@ -216,7 +216,8 @@ final class FlatScreenshotTourB: XCTestCase {
       return true
     }
     XCTAssertTrue(rendered, file: file, line: line)
-    let contrastingPixels = pixels.filter { onDarkBackground ? $0 > 160 : $0 < 160 }.count
-    XCTAssertGreaterThan(contrastingPixels, 10, "Navigation title must be visible against its background", file: file, line: line)
+    let foregroundPixels = pixels.filter { $0 < 160 }.count
+    XCTAssertLessThan(foregroundPixels, pixels.count / 2, "The navigation bar must have a light background", file: file, line: line)
+    XCTAssertGreaterThan(foregroundPixels, 10, "Navigation title must be visible against its background", file: file, line: line)
   }
 }

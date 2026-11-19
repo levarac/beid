@@ -108,11 +108,12 @@ private struct NowHomeView: View {
         .background((usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas).ignoresSafeArea())
       }
       .background((usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas).ignoresSafeArea())
-      .modifier(HomeAccountToolbar(title: "home.now.title", iconColor: foreground))
+      .modifier(HomeAccountToolbar(title: "home.now.title", iconColor: DS.Color.textPrimary))
       .toolbarBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, for: .tabBar)
-      .toolbarBackground(DS.Color.textPrimary, for: .navigationBar)
-      .toolbarBackground(usesInk ? .visible : .hidden, for: .navigationBar)
-      .toolbarColorScheme(usesInk ? .dark : .light, for: .navigationBar, .tabBar)
+      .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
+      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarColorScheme(.light, for: .navigationBar)
+      .toolbarColorScheme(usesInk ? .dark : .light, for: .tabBar)
       .navigationDestination(isPresented: $showAboutSensing) { AboutSensingView() }
       .navigationDestination(isPresented: $showWhatWeSend) { WhatWeSendView() }
       .navigationDestination(isPresented: $coordinator.scanPresented) {
