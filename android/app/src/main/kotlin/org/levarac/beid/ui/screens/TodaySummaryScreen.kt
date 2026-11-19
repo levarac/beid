@@ -1,9 +1,14 @@
 package org.levarac.beid.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,7 +32,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.levarac.beid.R
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.ui.designsystem.BeidPanel
-import org.levarac.beid.ui.designsystem.BeidScreen
 import org.levarac.beid.ui.designsystem.BeidStatusPill
 import org.levarac.beid.ui.theme.BeidSpacing
 import org.levarac.beid.ui.theme.BeidTheme
@@ -36,10 +40,23 @@ object TodaySummaryScreenTestTags {
     const val EMPTY_STATE = "today_summary_empty_state"
 }
 
-/** Today's proof count and separately labelled all-time durable submission status. */
+/**
+ * Today's proof count and separately labelled all-time durable submission status.
+ *
+ * Top-aligned and scrolling, as iOS `DailySummaryView` is (a `ScrollView`
+ * with `pageMargin` padding). [BeidScreen] centers its content vertically,
+ * which is right for state screens but left a large gap above this title.
+ */
 @Composable
 fun TodaySummaryScreen(recordCount: Int, submissionStatus: UnsentWindowSubmissionSummary? = null) {
-    BeidScreen {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BeidTheme.colors.surfaceCanvas)
+            .verticalScroll(rememberScrollState())
+            .padding(BeidSpacing.pageMargin),
+        verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
+    ) {
         Text(
             text = stringResource(R.string.today_summary_title),
             style = MaterialTheme.typography.headlineLarge,
