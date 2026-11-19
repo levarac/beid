@@ -23,6 +23,7 @@ EXPECTED_PATHS = [
     'scripts/download_xcodegen.sh',
     'scripts/ci_simulator.py',
     'scripts/ios_ui_smoke.py',
+    'scripts/ios_test_shards.py',
     'scripts/run_local_tests.py',
 ]
 

@@ -76,7 +76,7 @@ def outputs_for(files: list[str]) -> dict:
 
 
 LANES = {
-    "ios": (IOS, "ios-simulator", "iOS simulator"),
+    "ios": (IOS, "ios-build", "iOS simulator build"),
     "lab-cli": (LAB_CLI, "lab-cli", "beid-lab-cli build and test"),
 }
 
@@ -93,6 +93,7 @@ class LaneNamesTest(unittest.TestCase):
         for lane, (path, job_id, name) in LANES.items():
             with self.subTest(lane=lane):
                 self.assertEqual(job_name(path, job_id), name)
+        self.assertEqual(job_name(IOS, "ios-simulator"), "iOS simulator")
 
     def test_lanes_are_gated_by_a_job_not_a_workflow_path_filter(self):
         for lane, (path, job_id, _) in LANES.items():
