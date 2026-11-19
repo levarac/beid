@@ -25,7 +25,7 @@ struct ScanFlowView: View {
         if showsFirstTimeHint == nil { showsFirstTimeHint = !hasShownFirstTimeHint }
       }
       .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: sensing.phase)
-      .navigationTitle("")
+      .navigationTitle(statusTitle)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar(proofCollectedForDisplay == nil ? .visible : .hidden, for: .navigationBar)
       .toolbar(.hidden, for: .tabBar)
@@ -33,25 +33,42 @@ struct ScanFlowView: View {
       .toolbarBackground(.visible, for: .navigationBar)
       .toolbarColorScheme(usesInkGround ? .dark : .light, for: .navigationBar)
       .toolbar {
-        if proofCollectedForDisplay == nil {
-          ToolbarItem(placement: .principal) {
-            Text(statusTitle)
-              .beidTextStyle(DS.Font.Library.labelMono11)
-          }
-          if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
-            ToolbarItem(placement: .confirmationAction) { doneButton }
-          }
+        if proofCollectedForDisplay == nil,
+          coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
+          ToolbarItem(placement: .confirmationAction) { doneButton }
         }
       }
       .safeAreaInset(edge: .bottom) {
         if showsStopControl {
-          BeidTextControl("STOP SENSING", labelColor: usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary) {
-            coordinator.requestScanClose()
+          BeidAdaptiveContent {
+            Button {
+              coordinator.requestScanClose()
+            } label: {
+              Text("Stop sensing")
+                .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
+            }
+            .font(.body.weight(.medium))
+            .buttonStyle(.bordered)
+            .tint(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
+            .accessibilityIdentifier("scan.stop-sensing")
+            .alert(
+              "Stop sensing?",
+              isPresented: stopConfirmationPresented,
+              presenting: coordinator.stopConfirmSnapshot
+            ) { snapshot in
+              Button(LocalizedStringKey(snapshot.copy.stopTitle)) {
+                coordinator.confirmStopSensing()
+              }
+              Button("Cancel", role: .cancel) {
+                coordinator.keepSensing()
+              }
+            } message: { snapshot in
+              Text(verbatim: snapshot.copy.body)
+            }
+            .padding(.horizontal, DS.Space.pageMargin)
           }
-          .frame(maxWidth: .infinity)
-          .padding(DS.Space.m)
+          .padding(.vertical, DS.Space.s)
           .background(usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
-          .accessibilityIdentifier("scan.stop-sensing")
         }
       }
       #if DEBUG
@@ -67,6 +84,7 @@ struct ScanFlowView: View {
         if newPhase == .background { sensing.checkpointOpenWindowForBackgrounding() }
         if newPhase == .active { sensing.retryPendingSubmissionsOnForeground() }
       }
+      .environment(\.colorScheme, usesInkGround ? .dark : .light)
   }
 
   @ViewBuilder private var doneButton: some View {
@@ -86,17 +104,26 @@ struct ScanFlowView: View {
   }
 
   private var showsStopControl: Bool {
-    guard coordinator.sealedSnapshot == nil, coordinator.stopConfirmSnapshot == nil,
+    guard coordinator.sealedSnapshot == nil,
       proofCollectedForDisplay == nil else { return false }
     #if DEBUG
     if let fixture = sensing.sensingScreenshotFixture {
       switch fixture {
-      case .sensing, .detecting, .detectingLong, .detectingFirstTime: return true
-      case .cantJoin, .stopConfirm, .sealed, .proofCollected: return false
+      case .sensing, .detecting, .detectingLong, .detectingFirstTime, .stopConfirm: return true
+      case .cantJoin, .sealed, .proofCollected: return false
       }
     }
     #endif
     return Self.showsStopControl(phase: sensing.phase, joinedEventCode: sensing.joinedEventCode)
+  }
+
+  private var stopConfirmationPresented: Binding<Bool> {
+    Binding(
+      get: { coordinator.stopConfirmSnapshot != nil },
+      set: { isPresented in
+        if !isPresented { coordinator.keepSensing() }
+      }
+    )
   }
 
   /// After JOIN the phase stays `.sensing` until the first detection. A
@@ -112,7 +139,7 @@ struct ScanFlowView: View {
 
   private var usesInkGround: Bool {
     if proofCollectedForDisplay != nil { return false }
-    if coordinator.stopConfirmSnapshot != nil || coordinator.sealedSnapshot != nil { return true }
+    if coordinator.sealedSnapshot != nil { return true }
     #if DEBUG
     if sensing.sensingScreenshotFixture != nil { return true }
     #endif
@@ -123,7 +150,7 @@ struct ScanFlowView: View {
     }
   }
 
-  private var statusTitle: String {
+  private var statusTitle: LocalizedStringKey {
     if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture { return "Record saved" }
     if sensing.joinRefusalReasonKey != nil { return "Can't join" }
     #if DEBUG
@@ -159,13 +186,6 @@ struct ScanFlowView: View {
       }
     } else if let sealed = coordinator.sealedSnapshot {
       SensingSealedView(snapshot: sealed, sigilInput: sealed.recordID.flatMap { sensing.sigilInput(forProofId: $0) })
-    } else if let pending = coordinator.stopConfirmSnapshot {
-      SensingStopConfirmView(
-        sensing: sensing,
-        snapshot: pending,
-        onStop: { coordinator.confirmStopSensing() },
-        onKeepSensing: { coordinator.keepSensing() }
-      )
     } else {
       ScanFlowContent.view(phase: sensing.phase, sensing: sensing, clockPreflight: coordinator.clockPreflight)
     }
@@ -291,15 +311,7 @@ enum ScanFlowContent {
         )
       )
     case .stopConfirm:
-      SensingStopConfirmView(
-        sensing: sensing,
-        snapshot: SensingStopConfirmSnapshot(
-          proofID: UUID(uuidString: "00000000-0000-4000-8000-000000000005"),
-          event: event
-        ),
-        onStop: {},
-        onKeepSensing: {}
-      )
+      SensingSessionSurface(sensing: sensing, event: event, presentation: .steady)
     case .sealed:
       SensingSealedView(snapshot: SensingSealedSnapshot(
         recordID: nil,

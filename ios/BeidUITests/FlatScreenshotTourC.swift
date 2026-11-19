@@ -43,7 +43,20 @@ final class FlatScreenshotTourC: XCTestCase {
     attachment.lifetime = .keepAlways
     add(attachment)
   }
-  func testShot_05e_StopConfirm() { capture("05e") }
+  func testShot_05e_StopConfirm() {
+    let app = launchSensingFixture("05e")
+    SensingVisualOracle.assertInitialMetrics(in: app, test: self, name: "05e-before-stop", expected: ("13", "25:00"))
+    app.buttons["scan.stop-sensing"].assertHittable()
+    app.buttons["scan.stop-sensing"].tap()
+    let alert = app.alerts["Stop sensing?"]
+    XCTAssertTrue(alert.waitForExistence(timeout: 5))
+    XCTAssertTrue(alert.buttons["Cancel"].exists)
+    XCTAssertTrue(alert.buttons["Stop sensing"].exists)
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "05e"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
   func testShot_06_Sealed() { capture("06") }
   func testSensingGuidanceRemainsReachableAfterScrolling() {
     let app = launchSensingFixture("05a3")
@@ -101,8 +114,8 @@ final class FlatScreenshotTourC: XCTestCase {
     recordID.assertExists()
 
     XCTAssertTrue(
-      disclosureLabel.localizedCaseInsensitiveContains("what was sent"),
-      "Collected record disclosure must say WHAT WAS SENT; got: \(disclosureLabel)"
+      disclosureLabel.localizedCaseInsensitiveContains("what we send"),
+      "The general disclosure must say WHAT WE SEND; got: \(disclosureLabel)"
     )
     let title = app.staticTexts.matching(
       NSPredicate(format: "label CONTAINS[c] %@", "collected")

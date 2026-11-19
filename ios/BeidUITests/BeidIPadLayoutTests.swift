@@ -203,6 +203,12 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.buttons["scan.stop-sensing"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     capture(named: "stop-confirm-\(orientation)")
+    // Cancelling must leave the existing sensing session live.
+    app.alerts.buttons["Cancel"].tap()
+    XCTAssertTrue(app.buttons["scan.stop-sensing"].isHittable)
+    XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
+    app.buttons["scan.stop-sensing"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     capture(named: "sealed-\(orientation)")

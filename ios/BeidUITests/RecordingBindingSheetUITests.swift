@@ -11,11 +11,25 @@ final class RecordingBindingSheetUITests: XCTestCase {
 
   override func setUpWithError() throws { continueAfterFailure = false }
 
+  func testStopConfirmationKeepsLiveDetailsVisible() {
+    reachRecording()
+    app.buttons["scan.stop-sensing"].tap()
+    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Sensing"].exists)
+    XCTAssertTrue(app.alerts.buttons["Cancel"].exists)
+    XCTAssertTrue(app.buttons["Stop and keep record"].exists)
+    app.alerts.buttons["Cancel"].tap()
+    XCTAssertTrue(app.buttons["scan.stop-sensing"].isHittable)
+    XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
+  }
+
   func testFirstRecordingDoesNotPresentWalletSheet() {
     reachRecording()
     XCTAssertFalse(app.buttons["Cancel"].exists)
     XCTAssertFalse(app.buttons["Connect wallet"].exists)
     XCTAssertTrue(app.buttons["scan.stop-sensing"].isHittable)
+    XCTAssertEqual(app.buttons["scan.stop-sensing"].label, "Stop sensing")
+    XCTAssertGreaterThanOrEqual(app.buttons["scan.stop-sensing"].frame.height, 44)
     XCTAssertFalse(app.staticTexts["MUTUAL"].exists)
     XCTAssertTrue(app.staticTexts["DEVICES HEARD"].exists)
     XCTAssertTrue(app.staticTexts["ELAPSED"].exists)
@@ -26,10 +40,24 @@ final class RecordingBindingSheetUITests: XCTestCase {
     reachRecording()
     app.buttons["scan.stop-sensing"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
-    app.buttons["Keep sensing"].tap()
+    app.alerts.buttons["Cancel"].tap()
     XCTAssertTrue(app.buttons["scan.stop-sensing"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
     XCTAssertFalse(app.buttons["Cancel"].exists)
+    XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
+  }
+
+  func testCancelStopThenGoBackKeepsSensing() {
+    reachRecording()
+    app.buttons["scan.stop-sensing"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.alerts.buttons["Cancel"].tap()
+    app.navigationBars.buttons.firstMatch.tap()
+    let details = app.buttons["home.open-details"]
+    XCTAssertTrue(details.waitForExistence(timeout: 5))
+    details.tap()
+    XCTAssertTrue(app.buttons["scan.stop-sensing"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
   }
 
@@ -39,13 +67,14 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts["Your record is saved on this phone. You'll find it in Records."].exists)
+    XCTAssertTrue(app.staticTexts["Your record is saved on this device. You'll find it in Records."].exists)
     app.buttons["Done"].tap()
     XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))
     app.buttons["View records"].tap()
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     app.tabButton("Now").tap()
     XCTAssertTrue(app.staticTexts["You’re done."].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Your record is saved on this device. You can close the app."].exists)
     XCTAssertTrue(app.buttons["home.saved.view-record"].exists)
     XCTAssertTrue(app.staticTexts["home.listening"].exists)
     let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -89,7 +118,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
 /// Initial checks never scroll. Post-scroll checks retain their own initial evidence.
 enum SensingVisualOracle {
   static let savedCaption = "DONE · YOU CAN CLOSE THE APP"
-  private static let guidance = "Keep the app open nearby to help phones observe each other and keep signed records."
+  private static let guidance = "Keep the app open nearby to help devices observe each other and keep signed records."
 
   static func assertInitialMetrics(
     in app: XCUIApplication, test: XCTestCase, name: String,

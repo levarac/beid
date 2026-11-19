@@ -128,7 +128,7 @@ struct SensingView: View {
         BeidAdaptiveContent {
           VStack(spacing: DS.Space.l) {
             if isListeningAfterJoin {
-              Text("Listening for nearby phones…")
+              Text("Listening for nearby devices…")
                 .beidTextStyle(DS.Font.Library.labelMono11)
             } else {
               Text("Listening for nearby events")
@@ -139,7 +139,7 @@ struct SensingView: View {
 
             Group {
               if isListeningAfterJoin {
-                Text("Keep the app open. Sensing starts when beid hears another phone at this event.")
+                Text("Keep the app open. Sensing starts when beid hears another device at this event.")
               } else {
                 Text("Nearby events appear here. Tap JOIN to begin sensing.")
               }
@@ -536,6 +536,7 @@ extension EnvironmentValues {
 
 struct SensingSessionSurface: View {
   @Environment(\.showsFirstSensingHint) private var showsFirstSensingHint
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @AppStorage("beid.sensing.firstTimeHintShown") private var hasShownFirstTimeHint = false
   enum Presentation: Equatable {
     case detecting
@@ -561,69 +562,73 @@ struct SensingSessionSurface: View {
     TimelineView(.periodic(from: .now, by: 1)) { timeline in
       let now = sensing.sensingPresentationNow(timeline.date)
       GeometryReader { geometry in
-        let contentWidth = max(0, geometry.size.width - 2 * DS.Space.pageMargin)
+        let layoutWidth = horizontalSizeClass == .regular
+          ? min(geometry.size.width, DS.Layout.stateContentMaxWidth) : geometry.size.width
+        let contentWidth = max(0, layoutWidth - 2 * DS.Space.pageMargin)
         ScrollView {
-          VStack(alignment: .leading, spacing: 0) {
-            if presentation == .steady {
-              eventHeading
-            } else {
-              eventHeading.accessibilityIdentifier("scan.event-found")
-            }
-
-            if let eventSubtitle = eventSubtitle {
-              Text(verbatim: eventSubtitle)
-                .beidTextStyle(DS.Font.Library.body15)
-                .foregroundStyle(DS.Color.textSecondaryOnInk)
-                .padding(.top, DS.Space.s)
-            }
-
-            SensingRadarView(
-              peers: radarPeers,
-              mutualDeviceCount: 0,
-              observedWindowCount: observedWindowCount ?? 0,
-              showsEdges: false,
-              size: max(0, min(DS.Size.radarField, geometry.size.width - DS.Space.pageMargin))
-            )
-            // Keep the measured radar centered without widening the inset content.
-            .frame(width: contentWidth)
-            .padding(.top, DS.Space.m)
-
-            metrics(at: now)
-              .padding(.top, DS.Space.m)
-
-            SensingWindowBars(aggregate: sensing.sessionAggregate, firstSightingAt: sensing.firstSightingAt)
-              .accessibilityHidden(true)
-              .frame(width: contentWidth)
-              .padding(.top, DS.Space.l)
-
-            Rectangle()
-              .fill(DS.Color.strokeHairlineOnInk)
-              .frame(width: contentWidth, height: DS.Size.hairline)
-              .padding(.top, DS.Space.l)
-
-            if EventIdentityVerificationPresentation.forStatus(event.identityVerification) != nil {
-              BeidPanel {
-                EventIdentityVerificationRow(
-                  status: event.identityVerification,
-                  onRetry: onRetryVerification
-                )
+          BeidAdaptiveContent {
+            VStack(alignment: .leading, spacing: 0) {
+              if presentation == .steady {
+                eventHeading
+              } else {
+                eventHeading.accessibilityIdentifier("scan.event-found")
               }
+
+              if let eventSubtitle = eventSubtitle {
+                Text(verbatim: eventSubtitle)
+                  .beidTextStyle(DS.Font.Library.body15)
+                  .foregroundStyle(DS.Color.textSecondaryOnInk)
+                  .padding(.top, DS.Space.s)
+              }
+
+              SensingRadarView(
+                peers: radarPeers,
+                mutualDeviceCount: 0,
+                observedWindowCount: observedWindowCount ?? 0,
+                showsEdges: false,
+                size: min(DS.Size.radarField, contentWidth)
+              )
+              // Keep the measured radar centered without widening the inset content.
+              .frame(width: contentWidth)
               .padding(.top, DS.Space.m)
-            }
 
-            if let diagnosticCaption {
-              Text(verbatim: diagnosticCaption)
-                .beidTextStyle(DS.Font.Library.body13)
-                .foregroundStyle(DS.Color.textSecondaryOnInk)
-                .padding(.top, DS.Space.s)
-            }
+              metrics(at: now)
+                .padding(.top, DS.Space.m)
 
-            Spacer(minLength: DS.Space.m)
-            footer(at: now)
-              .frame(maxWidth: .infinity)
+              SensingWindowBars(aggregate: sensing.sessionAggregate, firstSightingAt: sensing.firstSightingAt)
+                .accessibilityHidden(true)
+                .frame(width: contentWidth)
+                .padding(.top, DS.Space.l)
+
+              Rectangle()
+                .fill(DS.Color.strokeHairlineOnInk)
+                .frame(width: contentWidth, height: DS.Size.hairline)
+                .padding(.top, DS.Space.l)
+
+              if EventIdentityVerificationPresentation.forStatus(event.identityVerification) != nil {
+                BeidPanel {
+                  EventIdentityVerificationRow(
+                    status: event.identityVerification,
+                    onRetry: onRetryVerification
+                  )
+                }
+                .padding(.top, DS.Space.m)
+              }
+
+              if let diagnosticCaption {
+                Text(verbatim: diagnosticCaption)
+                  .beidTextStyle(DS.Font.Library.body13)
+                  .foregroundStyle(DS.Color.textSecondaryOnInk)
+                  .padding(.top, DS.Space.s)
+              }
+
+              Spacer(minLength: DS.Space.m)
+              footer(at: now)
+                .frame(maxWidth: .infinity)
+            }
+            .frame(minHeight: geometry.size.height, alignment: .top)
+            .padding(.horizontal, DS.Space.pageMargin)
           }
-          .frame(minHeight: geometry.size.height, alignment: .top)
-          .padding(.horizontal, DS.Space.pageMargin)
         }
       }
     }
@@ -633,10 +638,10 @@ struct SensingSessionSurface: View {
 
   private var eventHeading: some View {
     Text(verbatim: event.name)
-      .beidTextStyle(DS.Font.Library.display46)
+      .beidTextStyle(DS.Font.Library.title19)
       .foregroundStyle(DS.Color.labelOnActionPrimary)
       .fixedSize(horizontal: false, vertical: true)
-      .frame(maxWidth: 220, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .leading)
       .accessibilityAddTraits(.isHeader)
   }
 
@@ -669,24 +674,12 @@ struct SensingSessionSurface: View {
       SensingMetric(value: String(sensing.devicesVerified), label: "DEVICES HEARD"),
       SensingMetric(value: ElapsedTimeFormat.minutesSeconds(elapsed), label: "ELAPSED")
     ]
-    return HStack(alignment: .top, spacing: 0) {
-      ForEach(items) { item in
-        VStack(alignment: .leading, spacing: DS.Space.xs) {
-          Text(verbatim: item.value)
-            .beidTextStyle(DS.Font.Library.displayNumber40)
-            .foregroundStyle(DS.Color.labelOnActionPrimary)
-          Text(verbatim: item.label)
-            .beidTextStyle(DS.Font.Library.labelMono10)
-            .foregroundStyle(DS.Color.textSecondaryOnInk)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-      }
-    }
+    return SensingMetricsView(items: items)
   }
 
   private func footer(at _: Date) -> some View {
     VStack(alignment: .leading, spacing: DS.Space.m) {
-      Text("Keep the app open nearby to help phones observe each other and keep signed records.")
+      Text("Keep the app open nearby to help devices observe each other and keep signed records.")
         .beidTextStyle(DS.Font.Library.body13)
         .foregroundStyle(DS.Color.textSecondaryOnInk)
       if showsFirstSensingHint || presentation != .steady {
@@ -714,6 +707,31 @@ struct SensingMetric: Identifiable {
   let value: String
   let label: String
   var id: String { label }
+}
+
+struct SensingMetricsView: View {
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  let items: [SensingMetric]
+
+  var body: some View {
+    let layout = dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.l))
+      : AnyLayout(HStackLayout(alignment: .top, spacing: 0))
+    layout {
+      ForEach(items) { item in
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+          Text(verbatim: item.value)
+            .beidTextStyle(DS.Font.Library.displayNumber40)
+            .foregroundStyle(DS.Color.labelOnActionPrimary)
+          Text(verbatim: item.label)
+            .beidTextStyle(DS.Font.Library.labelMono10)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+  }
 }
 
 /// Six most recently observed windows. Each column represents one actual

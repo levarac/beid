@@ -51,6 +51,7 @@ private struct HomeAccountToolbar: ViewModifier {
 private struct NowHomeView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @ObservedObject var sensing: SensingCoordinator
   @ObservedObject var bluetooth: BluetoothMonitor
   @State private var isRootVisible = false
@@ -139,7 +140,12 @@ private struct NowHomeView: View {
       refreshStandby()
     }
     .onChange(of: coordinator.selectedHomeTab) { _, _ in refreshStandby() }
-    .onChange(of: coordinator.scanPresented) { _, _ in refreshStandby() }
+    .onChange(of: coordinator.scanPresented) { _, isPresented in
+      if !isPresented, coordinator.stopConfirmSnapshot != nil {
+        coordinator.keepSensing()
+      }
+      refreshStandby()
+    }
     .onChange(of: coordinator.accountSheetPresented) { _, _ in refreshStandby() }
     .onChange(of: coordinator.homeEventCodeSheetPresented) { _, _ in refreshStandby() }
     .onChange(of: bluetooth.state) { _, _ in refreshStandby() }
@@ -341,11 +347,11 @@ private struct NowHomeView: View {
 
   private var continuingSummary: some View {
     VStack(alignment: .leading, spacing: DS.Space.l) {
-      Text("SENSING")
-        .beidTextStyle(DS.Font.Library.labelMono11)
+      Text("Sensing continues")
+        .beidTextStyle(DS.Font.Library.display46)
+        .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier("collection.continuous-sensing")
-      Text("Sensing continues").beidTextStyle(DS.Font.Library.display46)
-      instructionTile(title: "now.keep-open.title", body: "Nearby phones can keep observing each other.")
+      instructionTile(title: "now.keep-open.title", body: "Nearby devices can keep observing each other.")
       openDetails
     }
     .foregroundStyle(foreground)
@@ -353,8 +359,8 @@ private struct NowHomeView: View {
 
   private var joiningSummary: some View {
     VStack(alignment: .leading, spacing: DS.Space.l) {
-      Text("JOINING").beidTextStyle(DS.Font.Library.labelMono11)
       if let registration = coordinator.nowEventRegistration {
+        Text("JOINING").beidTextStyle(DS.Font.Library.labelMono11)
         Text(verbatim: registration.name).beidTextStyle(DS.Font.Library.display46)
       } else {
         Text("Joining event…").beidTextStyle(DS.Font.Library.display46)
@@ -367,13 +373,16 @@ private struct NowHomeView: View {
 
   private func activeSummary(event: EventSession, now: Date) -> some View {
     VStack(alignment: .leading, spacing: DS.Space.l) {
-      Text("NOW · SENSING")
+      Text(activeStatusTitle)
         .beidTextStyle(DS.Font.Library.labelMono11)
         .foregroundStyle(secondary)
       Text(verbatim: event.name)
         .beidTextStyle(DS.Font.Library.display46)
         .accessibilityAddTraits(.isHeader)
-      HStack(alignment: .top, spacing: DS.Space.xl) {
+      let metricLayout = dynamicTypeSize.isAccessibilitySize
+        ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.l))
+        : AnyLayout(HStackLayout(alignment: .top, spacing: DS.Space.xl))
+      metricLayout {
         metric(value: "\(sensing.devicesVerified)", label: "DEVICES HEARD")
         metric(value: elapsedString(sensing.firstSightingAt.map {
           sensing.sensingPresentationNow(now).timeIntervalSince($0)
@@ -381,10 +390,10 @@ private struct NowHomeView: View {
       }
       instructionTile(
         title: "Stay nearby. Keep the app open.",
-        body: "Keeping beid open helps nearby phones observe each other and keep signed records."
+        body: "Keeping beid open helps nearby devices observe each other and keep signed records."
       )
-      if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
       openDetails
+      if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
     }
     .foregroundStyle(foreground)
     .accessibilityElement(children: .contain)
@@ -402,7 +411,7 @@ private struct NowHomeView: View {
       Text("You’re done.")
         .beidTextStyle(DS.Font.Library.display46)
         .accessibilityIdentifier("home.saved.title")
-      Text("Your record is saved on this phone. You can close the app.")
+      Text("Your record is saved on this device. You can close the app.")
         .beidTextStyle(DS.Font.Library.body15)
         .foregroundStyle(secondary)
       if let recordID = snapshot.recordID, let record = coordinator.proofStore.proof(withId: recordID) {
@@ -436,15 +445,31 @@ private struct NowHomeView: View {
     }
   }
 
+  private var activeStatusTitle: LocalizedStringKey {
+    if case .signalLost = sensing.phase { return "Signal lost" }
+    return "Sensing"
+  }
+
   private var openDetails: some View {
-    BeidTextControl("OPEN DETAILS", glyph: .trailing("→", announcing: "Open sensing details"),
-                    labelColor: foreground) { coordinator.scanPresented = true }
-      .accessibilityIdentifier("home.open-details")
+    Button {
+      coordinator.scanPresented = true
+    } label: {
+      HStack {
+        Text("Sensing details")
+        Spacer(minLength: DS.Space.m)
+        Image(systemName: "chevron.forward")
+          .accessibilityHidden(true)
+      }
+      .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget, alignment: .leading)
+    }
+    .font(.body.weight(.semibold))
+    .buttonStyle(.bordered)
+    .tint(foreground)
+    .accessibilityIdentifier("home.open-details")
   }
 
   private func instructionTile(title: LocalizedStringKey, body: LocalizedStringKey) -> some View {
     VStack(alignment: .leading, spacing: DS.Space.s) {
-      Text("DO THIS NOW").beidTextStyle(DS.Font.Library.labelMono10).foregroundStyle(secondary)
       Text(title).beidTextStyle(DS.Font.Library.title17)
       Text(body).beidTextStyle(DS.Font.Library.body13).foregroundStyle(secondary)
     }
