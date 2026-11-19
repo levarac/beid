@@ -206,6 +206,10 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
       return .failure(.relayFailure("MetaMask is not installed"))
     }
 
+    // Supersession cancels the old request without invalidating the session.
+    // Resolve its one-shot gate before replacing it, so either stale guard
+    // can only ignore a late response rather than report a lost connection.
+    signGate?.finish(.failure(.cancelled))
     let attemptID = UUID()
     signAttemptID = attemptID
 
