@@ -149,9 +149,10 @@ a participant B004 on the air beside real participants.
 The `venue_ready` line reports what the container claims about itself —
 event id, display name, ENIN window, and the same window in Unix seconds
 next to the host's clock — so an operator who copied the wrong file finds out
-before the phones do. `receiverState` is computed with the host clock, so a
-correct container outside its window reports a mismatch there. The tool still
-serves it: whether to serve is deliberately not this tool's call.
+before the phones do. `receiverState` checks the signature at the
+container's own first ENIN, so it says whether the container is genuine, not
+whether its window is open now; compare the window with `nowUnix` for that.
+Whether to serve is deliberately not this tool's call.
 
 | Option | Meaning |
 | --- | --- |
