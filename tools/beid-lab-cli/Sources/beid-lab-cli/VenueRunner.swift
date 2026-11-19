@@ -170,11 +170,14 @@ final class VenueRunner {
       data["eninSeconds"] = .int(Int(scheduling.eninSeconds))
       // The window in wall-clock terms, because ENIN numbers are not
       // something an operator in a room can compare against a watch.
-      let seconds = Int(scheduling.eninSeconds)
+      let seconds = Int64(scheduling.eninSeconds)
       if seconds > 0 {
-        data["validFromUnix"] = .int(Int(scheduling.validFromEnin) * seconds)
-        data["validThroughUnix"] = .int((Int(scheduling.validThroughEnin) + 1) * seconds - 1)
-        data["acceptedThroughUnix"] = .int(Int(scheduling.relayExpiresAtEnin) * seconds - 1)
+        data["validFromUnix"] = .int(Int(LabVenueWindow.validFromUnix(
+          validFromEnin: Int64(scheduling.validFromEnin), eninSeconds: seconds)))
+        data["validThroughUnix"] = .int(Int(LabVenueWindow.validThroughUnix(
+          validThroughEnin: Int64(scheduling.validThroughEnin), eninSeconds: seconds)))
+        data["acceptedThroughUnix"] = .int(Int(LabVenueWindow.acceptedThroughUnix(
+          relayExpiresAtEnin: Int64(scheduling.relayExpiresAtEnin), eninSeconds: seconds)))
         data["nowUnix"] = .int(Int(Date().timeIntervalSince1970))
       }
     }
