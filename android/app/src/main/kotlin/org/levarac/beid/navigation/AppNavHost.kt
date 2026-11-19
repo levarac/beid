@@ -45,6 +45,7 @@ import org.levarac.beid.ui.screens.BluetoothPermissionScreen
 import org.levarac.beid.ui.screens.HomeRoute
 import org.levarac.beid.ui.screens.ManualEventCodeRoute
 import org.levarac.beid.ui.screens.RecordDetailRoute
+import org.levarac.beid.ui.screens.RecordsByEventRoute
 import org.levarac.beid.ui.screens.RecordsRoute
 import org.levarac.beid.ui.screens.TodaySummaryRoute
 import org.levarac.beid.ui.screens.WelcomeScreen
@@ -58,7 +59,8 @@ import org.levarac.beid.support.supportShareIntent
  * `RootView` + `AppCoordinator`. Onboarding (Welcome → BluetoothPermission →
  * Home/BluetoothOff/BluetoothDenied) mirrors `AppCoordinator`'s guestFirst path
  * (`beginOnboarding()` → `requestBluetoothPermission()` →
- * `evaluateBluetoothState()`). [Screen.Home] retains automatic nearby discovery.
+ * `evaluateBluetoothState()`). [Screen.Home] is the Now / Records tab shell of
+ * iOS #795; nearby discovery runs only while its Now tab is visible and active.
  *
  * Start-destination resolution mirrors iOS's #194 restore fix
  * (`AppCoordinator.restoreAfterOnboarding()`): a user who already completed
@@ -72,11 +74,18 @@ fun AppNavHost(
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null,
     walletState: WalletConnectorState = WalletConnectorState.Idle,
     onStartWalletBinding: () -> Unit = {},
+    /**
+     * Bluetooth-off binding point for Home's Now tab (inline block and standby
+     * gate). `null` reads the existing [BluetoothRadioMonitor]; an observable
+     * radio state can be passed here instead.
+     */
+    homeBluetoothOff: (() -> Boolean)? = null,
 ) {
     val context = LocalContext.current
     val navController = rememberNavController()
     val onboardingPreferences = remember { OnboardingPreferences(context) }
     val radioMonitor = remember { BluetoothRadioMonitor(context) }
+    val isHomeBluetoothOff: () -> Boolean = homeBluetoothOff ?: { !radioMonitor.isOn }
     val supportDiagnostics: SupportDiagnostics = viewModel()
     LaunchedEffect(session) {
         session.state.collect { supportDiagnostics.accept(it) }
@@ -196,14 +205,19 @@ fun AppNavHost(
                 session,
                 proofRecordStore,
                 onOpenAccount = { navController.navigate(Screen.Account.route) },
-                onStartWalletBinding = onStartWalletBinding,
-                // beid#463. The same destination Account reaches, now also
-                // reachable from the surface where a participant discovers the
-                // radio found nothing — which is where they actually are when
-                // they need it.
-                onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
+                onOpenEventCodeEntry = { navController.navigate(Screen.HomeEventCode.route) },
                 onOpenRecord = { navController.navigate(Screen.RecordDetail.route(it)) },
-                onOpenEventRecords = { navController.navigate(Screen.EventRecords.route(it)) },
+                onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
+                onOpenByEvent = { navController.navigate(Screen.RecordsByEvent.route) },
+                // iOS sets `coordinator.screen = .bluetoothOff`, a root switch,
+                // so Home is not kept underneath; "I've turned it on" returns
+                // to a fresh Home the same way onboarding reaches it.
+                onFixBluetooth = { navigateClearingOnboarding(navController, Screen.BluetoothOff.route) },
+                onOpenBluetoothSettings = {
+                    context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                },
+                isBluetoothOff = isHomeBluetoothOff,
+                onStartWalletBinding = onStartWalletBinding,
             )
         }
 
@@ -230,6 +244,22 @@ fun AppNavHost(
 
         composable(Screen.ManualEventCode.route) {
             ManualEventCodeRoute(session, onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.HomeEventCode.route) {
+            ManualEventCodeRoute(
+                session,
+                onBack = { navController.popBackStack() },
+                onJoined = { navController.popBackStack(Screen.Home.route, inclusive = false) },
+            )
+        }
+
+        // Content only, like the other pushed record screens: no top bar, system Back.
+        composable(Screen.RecordsByEvent.route) {
+            RecordsByEventRoute(
+                proofRecordStore,
+                onOpenEventRecords = { navController.navigate(Screen.EventRecords.route(it)) },
+            )
         }
 
         composable(Screen.Records.route) {

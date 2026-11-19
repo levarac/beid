@@ -1542,7 +1542,7 @@ class EventJoinCoordinator internal constructor(
         )
     }
 
-    fun stopNearbyEventDiscovery() {
+    override fun stopNearbyEventDiscovery() {
         val isAdvertising = !disposed && engine.getState().isAdvertising
         val shouldStopScan = discoveryOnlyScanOwned &&
             scanPhase == ScanPhase.Idle &&

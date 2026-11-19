@@ -77,6 +77,13 @@ internal class FakeEventJoinSession(
         nearbyEventDiscoveryStartCalls += 1
     }
 
+    var nearbyEventDiscoveryStopCalls: Int = 0
+        private set
+
+    override fun stopNearbyEventDiscovery() {
+        nearbyEventDiscoveryStopCalls += 1
+    }
+
     override fun simulateSignalLost() {
         signalLostSimulated = true
     }

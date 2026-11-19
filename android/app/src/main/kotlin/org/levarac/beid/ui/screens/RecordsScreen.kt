@@ -21,7 +21,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.time.Instant
@@ -115,10 +114,10 @@ fun ProofRecord.toRecordListItem(): RecordListItem = RecordListItem(
  * component, but as of this slice it has no other caller and its `icon`
  * parameter requires an `ImageVector` from a `material-icons` artifact not
  * currently on `:app`'s classpath — adding that dependency was out of this
- * slice's authorized file list. The empty state below instead reuses the
- * plain, centered `Text` idiom iOS's own `PastEventsView` already uses for
- * this exact case (no icon), rather than inventing new UI or an
- * unauthorized dependency change.
+ * slice's authorized file list. The empty state below instead uses plain
+ * `Text` with no icon, leading-aligned like its title, as iOS's
+ * `PastEventsView` and `DailySummaryView` empty states are, rather than
+ * inventing new UI or an unauthorized dependency change.
  *
  * **Tap-to-detail** (beid#122): each row is clickable and navigates to
  * [RecordDetailScreen] carrying the tapped [ProofRecord.id], via
@@ -166,8 +165,6 @@ fun RecordsScreen(
                     text = stringResource(R.string.records_empty_message),
                     style = MaterialTheme.typography.bodyLarge,
                     color = BeidTheme.colors.textSecondary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         } else {
@@ -237,7 +234,7 @@ private fun signatureStatusPill(record: RecordListItem) {
  * Constructs (via [RecordsViewModel.Factory]) and remembers the screen's
  * [RecordsViewModel], scoped to the current
  * [androidx.lifecycle.ViewModelStoreOwner] (`MainActivity`) — same split as
- * [EventJoinRoute]/[AccountRoute].
+ * [HomeRoute]/[AccountRoute].
  */
 @Composable
 fun RecordsRoute(

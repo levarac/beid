@@ -135,6 +135,14 @@ interface EventJoinSession {
     /** Starts passive nearby-event discovery when the EventJoin surface becomes active. */
     fun startNearbyEventDiscovery()
 
+    /**
+     * Ends passive nearby-event discovery when Now stops being the visible,
+     * active surface (iOS #795 `stopNearbyEventDiscovery()` from
+     * `updateHomeStandby`). Never stops a joined session's scan: the caller
+     * only invokes it while no join is in flight and nothing is sensing.
+     */
+    fun stopNearbyEventDiscovery()
+
     fun joinEvent(code: String)
 
     /**

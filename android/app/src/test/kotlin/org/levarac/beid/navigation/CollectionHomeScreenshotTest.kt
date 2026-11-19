@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.ComposeView
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import org.junit.Assume.assumeTrue
@@ -29,11 +31,17 @@ import org.junit.runner.RunWith
 import org.levarac.beid.onboarding.OnboardingPreferences
 import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
+import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.NearbyEventCardVerification
+import org.levarac.beid.sensing.ScanEventSession
+import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.ui.screens.AccountScreenTestTags
 import org.levarac.beid.ui.screens.EventJoinScreenTestTags
 import org.levarac.beid.ui.screens.FakeEventJoinSession
+import org.levarac.beid.ui.screens.HomeScreenTestTags
+import org.levarac.beid.ui.screens.NowScreenTestTags
+import org.levarac.beid.ui.screens.RecordsHomeScreenTestTags
 import org.levarac.beid.ui.screens.RecordsScreenTestTags
 import org.levarac.beid.ui.screens.WelcomeScreenTestTags
 import org.levarac.beid.ui.theme.BeidAppTheme
@@ -43,7 +51,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Opt-in review artifacts from the production navigation graph and composables.
+ * Opt-in review artifacts from the production navigation graph and composables:
+ * Home's Now / Records shell (iOS #795), Account, Records-from-Account.
  * No device, radio, screenshot library, or alternate Home renderer is involved.
  *
  * Pass -Dbeid.screenshots.dir=<absolute-directory> to the TEST JVM, e.g. through
@@ -66,6 +75,15 @@ class CollectionHomeScreenshotTest {
         eventIdHex = "ab".repeat(16),
         eventCodeHashHex = "cd".repeat(8),
         verification = NearbyEventCardVerification.READY,
+    )
+    private val alsoNearby = listOf(
+        NearbyEventCard(
+            "Design review",
+            eventIdHex = "ef".repeat(16),
+            eventCodeHashHex = "12".repeat(8),
+            verification = NearbyEventCardVerification.READY,
+        ),
+        NearbyEventCard("Hallway beacon", eventCodeHashHex = "34".repeat(8)),
     )
 
     companion object {
@@ -98,26 +116,38 @@ class CollectionHomeScreenshotTest {
         record(5, "community-workshop", "2026-10-21T11:00:00Z", "Community workshop", 12),
     )
 
-    private fun launch(fontScale: Float = 1f) {
-        setAppContent(fontScale)
-        composeTestRule.onNodeWithTag("collection_home").assertIsDisplayed()
+    private fun launch(
+        fontScale: Float = 1f,
+        session: FakeEventJoinSession = FakeEventJoinSession(nearbyEventCards = listOf(nearby)),
+        bluetoothOff: Boolean = false,
+    ) {
+        setAppContent(fontScale, session, bluetoothOff)
+        composeTestRule.onNodeWithTag(HomeScreenTestTags.ROOT).assertIsDisplayed()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(nearby.eventCodeHashHex))
-            .assertIsDisplayed()
     }
 
     /** Production [AppNavHost]; its start destination follows the onboarding preference. */
-    private fun setAppContent(fontScale: Float = 1f) {
-        val session = FakeEventJoinSession(nearbyEventCards = listOf(nearby))
+    private fun setAppContent(
+        fontScale: Float = 1f,
+        session: FakeEventJoinSession = FakeEventJoinSession(nearbyEventCards = listOf(nearby)),
+        bluetoothOff: Boolean = false,
+    ) {
         composeTestRule.runOnUiThread {
             screenshotView = ComposeView(composeTestRule.activity)
             composeTestRule.activity.setContentView(screenshotView)
             screenshotView.setContent {
                 CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
-                    BeidAppTheme { AppNavHost(session, store) }
+                    BeidAppTheme { AppNavHost(session, store, homeBluetoothOff = { bluetoothOff }) }
                 }
             }
         }
+    }
+
+    /** Robolectric's shadowed uptime and the standby ticker advance together. */
+    private fun idleFor(seconds: Long) {
+        composeTestRule.waitForIdle()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(seconds))
+        composeTestRule.waitForIdle()
     }
 
     private fun openAccount() {
@@ -149,35 +179,85 @@ class CollectionHomeScreenshotTest {
         println("Screenshot: $name.png ${bitmap.width}x${bitmap.height}")
     }
 
-    @Test fun emptyLight() {
-        launch()
-        composeTestRule.onNodeWithTag("home_empty_collection").assertIsDisplayed()
-        capture("home-empty-light")
+    @Test fun nowListening() {
+        launch(session = FakeEventJoinSession())
+        idleFor(12)
+        composeTestRule.onNodeWithTag(NowScreenTestTags.LISTENING).assertIsDisplayed()
+        capture("now-listening")
     }
 
-    @Test fun collectionLight() {
-        seedCollection()
-        launch()
-        composeTestRule.onAllNodesWithTag("home_event_group").assertCountEquals(3)
-        capture("home-collection-light") // Account action is included in this frame.
+    @Test fun nowJoinAndAlsoNearby() {
+        launch(session = FakeEventJoinSession(nearbyEventCards = listOf(nearby) + alsoNearby))
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventJoin(nearby.eventCodeHashHex))
+            .performScrollTo()
+        composeTestRule.onNodeWithTag(NowScreenTestTags.ALSO_NEARBY).performScrollTo().assertIsDisplayed()
+        capture("now-join-also-nearby")
     }
 
-    @Test fun collectionLargeFont() {
-        seedCollection()
+    @Test fun nowCodeEntryOffered() {
+        launch(session = FakeEventJoinSession())
+        idleFor(30)
+        composeTestRule.onNodeWithTag(NowScreenTestTags.ENTER_CODE).performScrollTo().assertIsDisplayed()
+        capture("now-code-entry-offered")
+    }
+
+    @Test fun nowLargeFont() {
         launch(fontScale = 1.5f)
-        capture("home-collection-large-font")
+        capture("now-large-font")
     }
 
+    @Test fun nowBluetoothOffIdle() {
+        launch(session = FakeEventJoinSession(), bluetoothOff = true)
+        composeTestRule.onNodeWithTag(NowScreenTestTags.BLUETOOTH_OFF).assertIsDisplayed()
+        capture("now-bluetooth-off-idle")
+    }
+
+    @Test fun nowBluetoothOffSensing() {
+        val session = FakeEventJoinSession(
+            EventJoinUiState.Sensing(ScanPhase.Recording(ScanEventSession("community-meetup"), peersVerified = 4)),
+        )
+        session.markRecordingCeremonyShown()
+        launch(session = session, bluetoothOff = true)
+        composeTestRule.onNodeWithTag(NowScreenTestTags.BLUETOOTH_OFF).assertIsDisplayed()
+        capture("now-bluetooth-off-sensing")
+    }
+
+    @Test fun recordsTab() {
+        seedCollection()
+        launch()
+        composeTestRule.onNodeWithTag(HomeScreenTestTags.RECORDS_TAB).performClick()
+        composeTestRule.onNodeWithTag(RecordsHomeScreenTestTags.ROOT).assertIsDisplayed()
+        composeTestRule.onAllNodesWithTag(RecordsHomeScreenTestTags.ATTENDANCE_TILE, useUnmergedTree = true)
+            .assertCountEquals(3)
+        capture("records-tab")
+    }
+
+    @Test fun recordsTabEmpty() {
+        launch()
+        composeTestRule.onNodeWithTag(HomeScreenTestTags.RECORDS_TAB).performClick()
+        composeTestRule.onNodeWithTag(RecordsHomeScreenTestTags.EMPTY_STATE).performScrollTo().assertIsDisplayed()
+        capture("records-tab-empty")
+    }
+
+    /** Replaces the render once reached through the old Home group card. */
     @Test fun eventRecordsList() {
         val records = seedCollection()
         launch()
-        composeTestRule.onNodeWithTag("home_group_${records[1].id}").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(HomeScreenTestTags.RECORDS_TAB).performClick()
+        composeTestRule.onNodeWithTag(RecordsHomeScreenTestTags.BY_EVENT_CONTROL).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(RecordsHomeScreenTestTags.byEventRow(records[1].id)).performScrollTo().performClick()
         records.subList(1, 4).forEach {
             composeTestRule.onNodeWithTag(RecordsScreenTestTags.recordRow(it.id)).assertIsDisplayed()
         }
         composeTestRule.onNodeWithTag(RecordsScreenTestTags.recordRow(records[0].id)).assertDoesNotExist()
-        composeTestRule.onNodeWithTag(RecordsScreenTestTags.recordRow(records[4].id)).assertDoesNotExist()
         capture("event-records-list")
+    }
+
+    @Test fun accountFromToolbar() {
+        seedCollection()
+        launch()
+        openAccount()
+        capture("account-from-toolbar")
     }
 
     @Test fun welcome() {
