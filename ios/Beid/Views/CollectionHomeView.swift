@@ -542,10 +542,14 @@ private struct NowHomeView: View {
 }
 
 private struct RecordsHomeView: View {
+  private enum Grouping: Hashable {
+    case allRecords, byEvent
+  }
+
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject var proofStore: ProofStore
   @ObservedObject var sensing: SensingCoordinator
-  @State private var showsEvents = false
+  @State private var grouping: Grouping = .allRecords
   @State private var selectedRecord: Proof?
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -559,17 +563,19 @@ private struct RecordsHomeView: View {
       ScrollView {
         BeidLargeTitleContent(regularMaxWidth: DS.Layout.recordsContentMaxWidth) {
           VStack(alignment: .leading, spacing: DS.Space.l) {
-            BeidTextControl("BY EVENT", glyph: .trailing("→", announcing: "Records by event")) {
-              showsEvents = true
+            Picker("Record grouping", selection: $grouping) {
+              Text("All records").tag(Grouping.allRecords)
+              Text("By event").tag(Grouping.byEvent)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .accessibilityIdentifier("records.by-event")
-            if proofStore.proofs.isEmpty {
+            .pickerStyle(.segmented)
+            if eventGroups.isEmpty {
               BeidEmptyBlock {
                 Text("Saved records appear here after sensing.")
                   .beidTextStyle(DS.Font.Library.body13)
                   .foregroundStyle(DS.Color.textSecondary)
               }
+            } else if grouping == .byEvent {
+              eventList
             } else {
               LazyVGrid(columns: columns, alignment: .leading, spacing: DS.Space.l) {
                 ForEach(eventGroups, id: \.first?.id) { group in
@@ -581,12 +587,11 @@ private struct RecordsHomeView: View {
           .padding(.vertical, DS.Space.s)
         }
       }
-      .accessibilityIdentifier("records.grid")
+      .accessibilityIdentifier(grouping == .byEvent ? "records.events" : "records.grid")
       .background(DS.Color.surfaceCanvas.ignoresSafeArea())
       .modifier(HomeAccountToolbar(title: "records.title", iconColor: DS.Color.textPrimary))
       .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.light, for: .navigationBar)
-      .navigationDestination(isPresented: $showsEvents) { eventList }
       .navigationDestination(item: $selectedRecord) { HomeRecordDetail(proof: $0) }
     }
   }
@@ -614,15 +619,7 @@ private struct RecordsHomeView: View {
   }
 
   private var eventList: some View {
-    List {
-      BeidTextControl("ALL RECORDS", glyph: .trailing("→", announcing: "All records")) {
-        showsEvents = false
-      }
-      .frame(maxWidth: .infinity, alignment: .trailing)
-      .accessibilityIdentifier("records.all-records")
-      .listRowSeparator(.hidden)
-      .listRowBackground(DS.Color.surfaceCanvas)
-
+    LazyVStack(alignment: .leading, spacing: 0) {
       ForEach(eventGroups, id: \.first?.id) { group in
         if let proof = group.first {
           // v1.1 has one Attendance record per event, with multiple stored sessions.
@@ -656,15 +653,10 @@ private struct RecordsHomeView: View {
           }
           .buttonStyle(.plain)
           .accessibilityIdentifier("home.past-event.\(proof.eventCode ?? proof.id.uuidString)")
-          .listRowBackground(DS.Color.surfaceCanvas)
+          Divider()
         }
       }
     }
-    .listStyle(.plain)
-    .scrollContentBackground(.hidden)
-    .background(DS.Color.surfaceCanvas)
-    .navigationTitle("By event")
-    .accessibilityIdentifier("records.events")
   }
 }
 

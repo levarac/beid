@@ -137,7 +137,7 @@ final class FlatScreenshotTourB: XCTestCase {
     app.tabButton("Records").tap()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].waitForExistence(timeout: 5))
     assertNavigationTitleDrawn("Records")
-    XCTAssertTrue(app.buttons["records.by-event"].isHittable)
+    XCTAssertTrue(app.buttons["By event"].isHittable)
     XCTAssertTrue(app.buttons["home.account"].isHittable)
     capture("records-navigation")
   }
@@ -170,6 +170,7 @@ final class FlatScreenshotTourB: XCTestCase {
     XCTAssertEqual(gridRecordIDs.count, 4)
 
     app.openRecordsByEvent()
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists, "By event should keep the Records navigation bar")
     let multiSession = app.buttons["home.past-event.DEVCON-BANGKOK"]
     multiSession.assertExists()
     let multiDate = Date(timeIntervalSince1970: 1_763_467_200)
@@ -189,11 +190,14 @@ final class FlatScreenshotTourB: XCTestCase {
     multiSession.tap()
     app.staticTexts["event-detail.heading"].assertExists()
     app.navigationBars.buttons.firstMatch.tap()
-    let allRecords = app.buttons["records.all-records"]
+    app.scrollViews["records.events"].assertExists()
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
+    let allRecords = app.buttons["All records"]
     allRecords.assertHittable()
     XCTAssertEqual(allRecords.label, "All records")
     allRecords.tap()
     app.scrollViews["records.grid"].assertExists()
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
     XCTAssertEqual(Set(tiles.allElementsBoundByIndex.map(\.identifier)), gridRecordIDs)
   }
 

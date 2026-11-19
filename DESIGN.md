@@ -2084,6 +2084,9 @@ toolbars and Now / Records tabs (the 1.1 screen specification).**
   the role of Bluetooth. The illustration is noninteractive and hidden
   from accessibility because the adjacent text conveys the same
   information. The symbols stay within the 32 pt decorative cap (§12).
+- **Records grouping (#853).** Records uses a native segmented picker for
+  `All records` and `By event`. The system styles the labels and selected
+  state, and changing the grouping keeps the same Records screen.
 - MUST: The Now / Records tab bar uses `TabView` with system symbols and
   titles. Its labels use the system font and its appearance belongs to the OS.
 - MUST: Navigation-bar and toolbar items are OS-standard items, not
