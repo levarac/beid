@@ -25,8 +25,8 @@ final class JoinRefusalUITests: XCTestCase {
     app.launch()
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
     app.buttons["home.demo.join"].assertHittable()
     app.buttons["home.demo.join"].tap()
     app.scrollViews["scan.cant-join"].assertHittable()
@@ -48,8 +48,8 @@ final class JoinRefusalUITests: XCTestCase {
     app.launch()
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
     // Home standby reads the locked key on both idioms. Wait for that same
     // failure before JOIN instead of choosing a route from a timing window.
     let alert = app.alerts["Recording unavailable"]
@@ -113,8 +113,8 @@ final class JoinRefusalUITests: XCTestCase {
 
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
 
     let senseEvent = app.buttons["home.demo.join"]
     senseEvent.assertHittable()

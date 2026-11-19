@@ -43,7 +43,7 @@ struct WelcomeView: View {
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, DS.Onboarding.welcomeTitleGap)
 
-        Text("Your phones say hello to each other, and keep a note anyone can verify.")
+        Text("Nearby devices say hello to each other, and keep a note anyone can verify.")
           .beidTextStyle(DS.Font.Library.body15)
           .foregroundStyle(DS.Color.textSecondary)
           .fixedSize(horizontal: false, vertical: true)

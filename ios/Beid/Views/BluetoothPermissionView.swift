@@ -3,51 +3,80 @@
 
 import SwiftUI
 
-/// Screen 02: Bluetooth permission guide. The existing permission request
-/// remains the action behind the Flat 2b primary button.
+/// Explains the Bluetooth request before the system asks for permission.
 struct BluetoothPermissionView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
-
-  private let steps: [FlatOnboardingSteps.Step] = [
-    .init("sensing.explainer.chooseEvent.title", detail: "sensing.explainer.chooseEvent.detail"),
-    .init("Private by design", detail: "Phones exchange rotating anonymous IDs, not names or wallet addresses."),
-    .init("sensing.explainer.keepOpen.title", detail: "sensing.explainer.keepOpen.detail"),
-  ]
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   var body: some View {
-    FlatOnboardingPage {
-      VStack(alignment: .leading, spacing: 0) {
-        Text("Setup · 1 / 1")
-          .beidTextStyle(DS.Font.Library.labelMono11)
-          .foregroundStyle(DS.Color.textPrimary)
+    GeometryReader { geometry in
+      ScrollView {
+        VStack(spacing: 0) {
+          Spacer(minLength: DS.Space.l)
 
-        Text("Enable\nBluetooth")
-          .beidTextStyle(DS.Font.Library.display52)
-          .foregroundStyle(DS.Color.textPrimary)
-          .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, DS.Onboarding.titleGap)
+          VStack(spacing: DS.Space.l) {
+            BluetoothNearbyIllustration()
 
-        Text("beid uses Bluetooth Low Energy to find nearby events and hear nearby phones.")
-          .beidTextStyle(DS.Font.Library.body15)
-          .foregroundStyle(DS.Color.textSecondary)
-          .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, DS.Onboarding.titleToBodyGap)
+            VStack(spacing: DS.Space.s + DS.Space.xs) {
+              Text("Allow Bluetooth access")
+                .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+              Text("beid needs Bluetooth to find your event and exchange signals with nearby devices. These observations help create your Record.")
+                .font(.body)
+                .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .center)
+                .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center)
+                .accessibilityIdentifier("bluetooth.permission.purpose")
+            }
+            .foregroundStyle(DS.Color.textPrimary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
 
-        FlatOnboardingSteps(steps: steps)
-          .padding(.top, DS.Onboarding.permissionStepsGap)
-      }
-    } footer: {
-      VStack(spacing: DS.Onboarding.noteToButtonGap) {
-        Text("You can change this anytime in Settings")
-          .beidTextStyle(DS.Font.Library.labelMono9)
-          .foregroundStyle(DS.Color.textSecondary)
-          .frame(maxWidth: .infinity)
+            VStack(spacing: DS.Space.s + DS.Space.xs) {
+              Text("Your device may ask for permission.")
+                .font(.subheadline)
+                .foregroundStyle(DS.Color.textSecondary)
+                .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .center)
+                .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center)
+              Button {
+                coordinator.requestBluetoothPermission()
+              } label: {
+                Text("Continue").frame(maxWidth: .infinity)
+              }
+              .buttonStyle(.borderedProminent)
+              .controlSize(.large)
+              .tint(DS.Color.actionPrimary)
+              .accessibilityIdentifier("bluetooth.permission.continue")
+            }
+          }
+          .padding(.horizontal, DS.Space.l)
+          .frame(maxWidth: 440)
 
-        BeidPrimaryButton("Allow Bluetooth") {
-          coordinator.requestBluetoothPermission()
+          Spacer(minLength: DS.Space.l)
         }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: geometry.size.height)
       }
+      .background(DS.Color.surfaceCanvas)
     }
+  }
+}
+
+struct BluetoothNearbyIllustration: View {
+  var isOff = false
+
+  var body: some View {
+    HStack(spacing: DS.Space.m) {
+      Image(systemName: "iphone")
+        .font(.system(size: 40))
+      Image(systemName: isOff ? "xmark.circle" : "dot.radiowaves.left.and.right")
+        .font(.system(size: 28, weight: .medium))
+        .foregroundStyle(isOff ? DS.Color.statusOff : DS.Color.textPrimary)
+      Image(systemName: "iphone")
+        .font(.system(size: 40))
+    }
+    .foregroundStyle(DS.Color.textPrimary)
+    .frame(maxWidth: .infinity)
+    .accessibilityHidden(true)
   }
 }
 

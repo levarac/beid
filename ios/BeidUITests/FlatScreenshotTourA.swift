@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import XCTest
+import UIKit
 
 /// Captures Flat 2b onboarding and event-code states through production navigation.
 final class FlatScreenshotTourA: XCTestCase {
@@ -15,7 +16,7 @@ final class FlatScreenshotTourA: XCTestCase {
     launch()
     assertExactText("Record you were there.", message: "Welcome must use the approved Record headline")
     assertExactText(
-      "Your phones say hello to each other, and keep a note anyone can verify.",
+      "Nearby devices say hello to each other, and keep a note anyone can verify.",
       message: "Welcome must use the approved keep-a-note explanation"
     )
     XCTAssertTrue(
@@ -32,20 +33,36 @@ final class FlatScreenshotTourA: XCTestCase {
   func testShot_02_EnableBluetooth() {
     launch()
     showBluetoothPermission()
+    let title = app.staticTexts["Allow Bluetooth access"]
+    XCTAssertTrue(title.exists && title.isHittable, "The Bluetooth permission request must be visible")
+    assertVisibleDarkText(title)
+    XCTAssertFalse(app.navigationBars["Bluetooth"].exists)
+    assertExactText("Allow Bluetooth access")
+    assertExactText("Your device may ask for permission.")
     assertExactText(
-      "beid uses Bluetooth Low Energy to find nearby events and hear nearby phones.",
+      "beid needs Bluetooth to find your event and exchange signals with nearby devices. These observations help create your Record.",
       message: "Bluetooth permission must describe device observation"
     )
-    assertExplainerCopy()
+    XCTAssertTrue(app.staticTexts["bluetooth.permission.purpose"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["Setup · 1 / 1"].exists)
     XCTAssertFalse(app.buttons["Connect Wallet"].exists)
-    capture("02 Enable Bluetooth")
+    let continueButton = app.buttons["bluetooth.permission.continue"]
+    XCTAssertTrue(continueButton.exists)
+    XCTAssertEqual(continueButton.label, "Continue")
+    capture("02 Bluetooth")
+    continueButton.tap()
+    XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
   }
 
   func testShot_03_BluetoothOff() {
     launch(bluetoothOff: true)
     showBluetoothPermission()
-    app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["Open Settings"].waitForExistence(timeout: 5))
+    app.buttons["bluetooth.permission.continue"].tap()
+    XCTAssertTrue(app.staticTexts["Bluetooth is off"].waitForExistence(timeout: 5))
+    let checkAgain = app.buttons["bluetooth.off.check-again"]
+    XCTAssertTrue(checkAgain.isHittable)
+    XCTAssertEqual(checkAgain.label, "Check again")
+    assertExactText("Turn on Bluetooth in Settings > Bluetooth, then return to beid.")
     assertExactText("beid can’t find nearby events or record observations while Bluetooth is off.")
     capture("03 Bluetooth Off")
   }
@@ -95,7 +112,7 @@ final class FlatScreenshotTourA: XCTestCase {
     app.launch()
 
     app.buttons["Continue"].tap()
-    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    let allowBluetooth = app.buttons["bluetooth.permission.continue"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
 
@@ -137,11 +154,38 @@ final class FlatScreenshotTourA: XCTestCase {
       "Welcome must offer its primary action before Bluetooth permission"
     )
     getStarted.tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
   }
 
   private func capture(_ frameCode: String) {
     keepScreenshot(named: frameCode)
+  }
+
+  private func assertVisibleDarkText(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+    let windowElement = app.windows.firstMatch
+    let screenshot = windowElement.screenshot().image
+    guard let image = screenshot.cgImage else {
+      return XCTFail("Cannot inspect the navigation title screenshot", file: file, line: line)
+    }
+    let window = windowElement.frame
+    let scale = CGFloat(image.width) / window.width
+    let frame = element.frame.offsetBy(dx: -window.minX, dy: -window.minY)
+      .applying(CGAffineTransform(scaleX: scale, y: scale)).integral
+    guard let crop = image.cropping(to: frame), crop.width > 0, crop.height > 0 else {
+      return XCTFail("Navigation title has no visible screenshot area", file: file, line: line)
+    }
+    var pixels = [UInt8](repeating: 255, count: crop.width * crop.height)
+    let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
+      guard let context = CGContext(
+        data: buffer.baseAddress, width: crop.width, height: crop.height,
+        bitsPerComponent: 8, bytesPerRow: crop.width,
+        space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue
+      ) else { return false }
+      context.draw(crop, in: CGRect(x: 0, y: 0, width: crop.width, height: crop.height))
+      return true
+    }
+    XCTAssertTrue(rendered, "Cannot render the navigation title screenshot", file: file, line: line)
+    XCTAssertGreaterThan(pixels.filter { $0 < 160 }.count, 10, "Navigation title must be drawn", file: file, line: line)
   }
 
   func testWelcomeVersionMatchesTheAppMetadataInAccount() {
@@ -153,7 +197,7 @@ final class FlatScreenshotTourA: XCTestCase {
     )
     let welcomeVersion = version.label
     showBluetoothPermission()
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].tap()
     XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
     app.buttons["home.account"].tap()
     let accountVersion = app.staticTexts["account.version.value"]
@@ -237,7 +281,7 @@ final class FlatScreenshotTourA: XCTestCase {
     assertContainsText("Choose your event", message: "The explanation must require explicit event selection")
     assertContainsText("beid looks for nearby events. Tap JOIN when your event appears.")
     assertContainsText("Private by design")
-    assertContainsText("Phones exchange rotating anonymous IDs, not names or wallet addresses.")
+    assertContainsText("Devices exchange rotating anonymous IDs, not names or wallet addresses.")
     assertContainsText("Keep beid open")
     assertContainsText("Keep the app open while sensing. Tap STOP SENSING when you want to finish.")
   }
@@ -263,14 +307,26 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(howItWorks.waitForExistence(timeout: 5))
     assertMinimumHitTarget(howItWorks)
     howItWorks.tap()
+    XCTAssertTrue(app.navigationBars["About sensing"].waitForExistence(timeout: 5))
     let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
     XCTAssertTrue(whatWeSend.waitForExistence(timeout: 5))
     whatWeSend.tap()
     XCTAssertTrue(app.descendants(matching: .any)["whatWeSend.firstRow"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["What we send"].waitForExistence(timeout: 5))
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(whatWeSend.waitForExistence(timeout: 5))
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(howItWorks.waitForExistence(timeout: 5))
   }
 
   func testShot_15_AboutSensing() {
     openAboutSensing()
+    let title = app.navigationBars.staticTexts["About sensing"]
+    XCTAssertTrue(title.waitForExistence(timeout: 5) && title.isHittable)
+    assertVisibleDarkText(title)
+    let firstSection = app.staticTexts["HOW IT WORKS"]
+    XCTAssertEqual(firstSection.frame.minX, title.frame.minX, accuracy: 1.0,
+                   "The first section should align with the navigation title")
     keepScreenshot(named: "15")
     assertMinimumHitTarget(app.buttons["aboutSensing.whatWeSend"])
     assertMinimumHitTarget(app.navigationBars.buttons.firstMatch)
@@ -284,6 +340,12 @@ final class FlatScreenshotTourA: XCTestCase {
 
     let scroll = app.scrollViews["whatWeSend.scroll"]
     XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+    let title = app.navigationBars.staticTexts["What we send"]
+    XCTAssertTrue(title.waitForExistence(timeout: 5) && title.isHittable)
+    assertVisibleDarkText(title)
+    let firstSection = app.staticTexts["WHAT WE SEND"]
+    XCTAssertEqual(firstSection.frame.minX, title.frame.minX, accuracy: 1.0,
+                   "The first section should align with the navigation title")
     let firstRow = app.descendants(matching: .any)["whatWeSend.firstRow"]
     XCTAssertTrue(firstRow.isHittable)
     keepScreenshot(named: "16")
@@ -296,6 +358,9 @@ final class FlatScreenshotTourA: XCTestCase {
     }
     XCTAssertTrue(finalRow.isHittable)
     scroll.swipeUp()
+    let inlineTitle = app.navigationBars.staticTexts["What we send"]
+    XCTAssertTrue(inlineTitle.exists && inlineTitle.isHittable)
+    assertVisibleDarkText(inlineTitle)
     keepScreenshot(named: "16-bottom")
     assertMinimumHitTarget(app.navigationBars.buttons.firstMatch)
   }
@@ -307,7 +372,7 @@ final class FlatScreenshotTourA: XCTestCase {
     let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
     getStarted.tap()
-    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    let allowBluetooth = app.buttons["bluetooth.permission.continue"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
     let account = app.buttons["home.account"]

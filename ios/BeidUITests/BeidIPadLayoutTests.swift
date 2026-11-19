@@ -42,7 +42,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     let welcome = app.buttons["Continue"]
     XCTAssertTrue(welcome.waitForExistence(timeout: 5))
     welcome.tap()
-    let permission = app.buttons["Allow Bluetooth"]
+    let permission = app.buttons["bluetooth.permission.continue"]
     XCTAssertTrue(permission.waitForExistence(timeout: 5))
     permission.tap()
     let records = app.tabButton("Records")
@@ -162,10 +162,10 @@ final class BeidIPadLayoutTests: XCTestCase {
     // OnboardingMode.current is .guestFirst (event-first, the default — see
     // OnboardingFlagTests): Welcome's CTA routes straight to the
     // Bluetooth-permission screen, with no wallet-connect/event-code step.
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
     capture(named: "bluetooth-permission-\(orientation)")
 
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].tap()
     let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-empty-\(orientation)")
@@ -268,8 +268,8 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.launch()
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
     app.openRecordsByEvent()
     app.buttons["home.past-event.ETHTOKYO2026"].assertHittable()
     app.buttons["home.past-event.ETHTOKYO2026"].tap()
@@ -418,10 +418,10 @@ final class BeidIPadLayoutTests: XCTestCase {
 
     app.buttons["Continue"].tap()
     XCTAssertTrue(
-      app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5),
+      app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5),
       "Expected Bluetooth permission after Get Started.\n\(app.debugDescription)"
     )
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].tap()
 
     let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(
