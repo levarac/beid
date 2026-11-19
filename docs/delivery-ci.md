@@ -47,6 +47,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     `scripts/check_parallax_comparison_ran.py` only on trusted main push/manual
     events behind the `parallax-comparison` environment. Its token must be an
     environment secret; missing credentials fail the trusted lane.
+    New main revisions supersede older comparison runs, including approval
+    waiters; the replacement still requires environment approval.
     Android unit-test resource roots include `shared/src/commonTest/fixtures/`
     and `ios/BeidTests/Fixtures/venue-bundle-conformance/`. Non-documentation
     changes under either root run Android checks, including on merge groups;

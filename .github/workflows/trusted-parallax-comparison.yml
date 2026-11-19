@@ -9,8 +9,9 @@ permissions:
   contents: read
 
 concurrency:
+  # Keep the latest main revision eligible for approval instead of an outdated run.
   group: trusted-parallax-comparison
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   compare:
