@@ -115,6 +115,74 @@ class EventJoinCoordinatorRadioPauseTest {
         assertEquals(1, engine.startAutoCalls)
     }
 
+    /**
+     * The gate owns "should standby run". Once it stops discovery, a radio
+     * pause recorded before that is withdrawn (iOS `stopNearbyEventDiscovery`
+     * clears `homeStandbyDiscoveryRequested`), so the radio returning while the
+     * user is on Records, Account or in the background starts nothing.
+     */
+    @Test
+    fun aGateStopAfterARadioPauseWithdrawsTheResume() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        coordinator.startNearbyEventDiscovery()
+        coordinator.onBluetoothRadioChanged(isOn = false)
+
+        coordinator.stopNearbyEventDiscovery()
+        coordinator.onBluetoothRadioChanged(isOn = true)
+
+        assertEquals(1, engine.startScanCalls, "a closed gate is not reopened by the radio")
+        assertFalse(engine.engineState.isScanning)
+    }
+
+    @Test
+    fun aGateStopWithdrawsAStartDeferredWhileTheRadioWasOff() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        coordinator.onBluetoothRadioChanged(isOn = false)
+        coordinator.startNearbyEventDiscovery()
+
+        coordinator.stopNearbyEventDiscovery()
+        coordinator.onBluetoothRadioChanged(isOn = true)
+
+        assertEquals(0, engine.startScanCalls)
+    }
+
+    /** Gate closes on radio off, then reopens after the coordinator hears the radio is back. */
+    @Test
+    fun aToggleWithTheGateReopeningAfterTheRadioResumesOnce() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        coordinator.startNearbyEventDiscovery()
+
+        coordinator.onBluetoothRadioChanged(isOn = false)
+        coordinator.stopNearbyEventDiscovery()
+        coordinator.onBluetoothRadioChanged(isOn = true)
+        coordinator.startNearbyEventDiscovery()
+
+        assertEquals(2, engine.startScanCalls)
+        assertEquals(1, engine.stopScanCalls)
+        assertTrue(engine.engineState.isScanning)
+    }
+
+    /** Gate reopens before the coordinator hears the radio: the start is deferred, then runs once. */
+    @Test
+    fun aToggleWithTheGateReopeningBeforeTheRadioResumesOnce() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        coordinator.startNearbyEventDiscovery()
+
+        coordinator.stopNearbyEventDiscovery()
+        coordinator.onBluetoothRadioChanged(isOn = false)
+        coordinator.startNearbyEventDiscovery()
+        assertEquals(1, engine.startScanCalls, "a start requested while off is deferred")
+        coordinator.onBluetoothRadioChanged(isOn = true)
+
+        assertEquals(2, engine.startScanCalls)
+        assertEquals(1, engine.stopScanCalls)
+        assertTrue(engine.engineState.isScanning)
+    }
+
     private fun TestScope.coordinator(
         engine: FakeEventJoinEngine,
         nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),

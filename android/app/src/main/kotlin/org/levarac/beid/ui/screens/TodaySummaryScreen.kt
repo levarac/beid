@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +56,9 @@ fun TodaySummaryScreen(recordCount: Int, submissionStatus: UnsentWindowSubmissio
         modifier = Modifier
             .fillMaxSize()
             .background(BeidTheme.colors.surfaceCanvas)
+            // A pushed route with no Scaffold: clear the system bars edge-to-edge
+            // windows draw under, keeping the canvas behind them.
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .verticalScroll(rememberScrollState())
             .padding(BeidSpacing.pageMargin),
         verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),

@@ -27,7 +27,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -40,6 +39,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.util.UUID
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.levarac.beid.BuildConfig
 import org.levarac.beid.R
 import org.levarac.beid.navigation.HomeStandbyViewModel
@@ -48,6 +49,7 @@ import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.sensing.ClockPreflightController
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.LocalHomeBluetoothStatus
 import org.levarac.beid.sensing.OperatorDateHeaderSource
 import org.levarac.beid.sensing.operatorOriginOrNull
 import org.levarac.beid.ui.theme.BeidTheme
@@ -72,11 +74,13 @@ object HomeScreenTestTags {
  * record over Home, or backgrounding the app, stops discovery and resets the
  * 30-second wait.
  *
- * [isBluetoothOff] is the Bluetooth-off binding point: it is read on
- * composition and on every lifecycle event of the Home entry (so returning from
- * system settings re-reads it) and feeds both the inline Bluetooth-off block
- * and the standby gate. Production passes a read of `BluetoothRadioMonitor`;
- * an observable radio state can replace the provider without touching Now.
+ * Bluetooth comes from [LocalHomeBluetoothStatus], which `AppNavHost`
+ * provides from its live `BluetoothStateMonitor`. Its `isRadioOff` flow feeds
+ * both the inline Bluetooth-off block and the standby gate, so the radio
+ * changing while Home stays resumed reaches both; FIX and OPEN SETTINGS are
+ * its actions. Without a provider (a test or preview composing Home outside
+ * `AppNavHost`) the radio counts as not off: no block, and Bluetooth never
+ * closes the gate — the same "show no block" rule the status type documents.
  */
 @Composable
 fun HomeRoute(
@@ -87,9 +91,6 @@ fun HomeRoute(
     onOpenRecord: (UUID) -> Unit,
     onOpenToday: () -> Unit,
     onOpenByEvent: () -> Unit,
-    onFixBluetooth: () -> Unit,
-    onOpenBluetoothSettings: () -> Unit,
-    isBluetoothOff: () -> Boolean,
     onStartWalletBinding: () -> Unit = {},
     /** beid#464. Injectable so tests can pass a fake date source; production uses the default. */
     clockPreflight: ClockPreflightController = remember {
@@ -107,16 +108,19 @@ fun HomeRoute(
     val standby by standbyViewModel.presentation.collectAsState()
 
     var selectedTab by rememberSaveable { mutableStateOf(HomeTab.Now) }
-    var bluetoothOff by remember { mutableStateOf(isBluetoothOff()) }
-    val currentIsBluetoothOff by rememberUpdatedState(isBluetoothOff)
     LaunchedEffect(selectedTab) { standbyViewModel.onTabSelected(selectedTab) }
-    LaunchedEffect(bluetoothOff) { standbyViewModel.onBluetoothOffChanged(bluetoothOff) }
+
+    val bluetoothStatus = LocalHomeBluetoothStatus.current
+    val isRadioOff: StateFlow<Boolean> = remember(bluetoothStatus) { bluetoothStatus?.isRadioOff ?: MutableStateFlow(false) }
+    val bluetoothOff by isRadioOff.collectAsState()
+    // Collected for the gate directly rather than through recomposition, so a
+    // radio change closes or reopens it as soon as the flow emits.
+    LaunchedEffect(standbyViewModel, isRadioOff) { isRadioOff.collect { standbyViewModel.onBluetoothOffChanged(it) } }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, standbyViewModel) {
         val lifecycle = lifecycleOwner.lifecycle
         val observer = LifecycleEventObserver { _, _ ->
-            bluetoothOff = currentIsBluetoothOff()
             standbyViewModel.onRootResumedChanged(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
         }
         lifecycle.addObserver(observer)
@@ -139,8 +143,8 @@ fun HomeRoute(
                 bluetoothOff = bluetoothOff,
                 onJoinNearbyEvent = viewModel::joinNearbyEvent,
                 onOpenCodeEntry = onOpenEventCodeEntry,
-                onFixBluetooth = onFixBluetooth,
-                onOpenBluetoothSettings = onOpenBluetoothSettings,
+                onFixBluetooth = { bluetoothStatus?.onFix?.invoke() },
+                onOpenBluetoothSettings = { bluetoothStatus?.onOpenSettings?.invoke() },
                 onOpenSettings = viewModel::openAppSettings,
                 onSimulateSignalLost = viewModel::simulateSignalLost,
                 onResumeSensing = viewModel::resumeSensing,

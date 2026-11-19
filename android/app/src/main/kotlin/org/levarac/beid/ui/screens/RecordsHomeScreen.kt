@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -218,6 +221,9 @@ fun RecordsByEventScreen(
             .testTag(RecordsHomeScreenTestTags.BY_EVENT_ROOT)
             .fillMaxSize()
             .background(BeidTheme.colors.surfaceCanvas)
+            // A pushed route with no Scaffold: clear the system bars edge-to-edge
+            // windows draw under, keeping the canvas behind them.
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = BeidSpacing.pageMargin, vertical = BeidSpacing.s),
     ) {

@@ -1,14 +1,12 @@
 package org.levarac.beid.navigation
 
-import android.app.Application
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
+import android.content.Intent
 import android.os.Looper
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -44,7 +42,6 @@ import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.ui.screens.AccountScreenTestTags
-import org.levarac.beid.ui.screens.BluetoothOffScreenTestTags
 import org.levarac.beid.ui.screens.EventJoinScreenTestTags
 import org.levarac.beid.ui.screens.FakeEventJoinSession
 import org.levarac.beid.ui.screens.HomeScreenTestTags
@@ -58,6 +55,7 @@ import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLooper
 
 /**
  * Drives the production graph for Home's Now / Records shell (iOS #795): no
@@ -76,7 +74,6 @@ class CollectionHomeTest {
         eventCodeHashHex = "cd".repeat(8))
     private val second = NearbyEventCard("Second gathering", eventIdHex = "ef".repeat(16),
         eventCodeHashHex = "12".repeat(8))
-    private var bluetoothOff = false
 
     @Before fun prepare() {
         OnboardingPreferences(context).hasCompletedOnboarding = true
@@ -88,9 +85,19 @@ class CollectionHomeTest {
         fontScale: Float = 1f) {
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
-                BeidAppTheme { AppNavHost(session, store, homeBluetoothOff = { bluetoothOff }) }
+                BeidAppTheme { AppNavHost(session, store) }
             }
         }
+    }
+
+    /** The radio broadcast `AppNavHost`'s `BluetoothStateMonitor` follows. */
+    private fun radioOff() {
+        shadowOf(BluetoothAdapter.getDefaultAdapter()).setEnabled(false)
+        context.sendBroadcast(
+            Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF),
+        )
+        ShadowLooper.idleMainLooper()
+        compose.waitForIdle()
     }
 
     private fun back() = compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
@@ -238,50 +245,49 @@ class CollectionHomeTest {
     }
 
     @Test fun bluetoothOffReplacesDiscoveryAtRestAndClosesTheGate() {
-        bluetoothOff = true
         val session = FakeEventJoinSession(nearbyEventCards = listOf(card))
         launch(session)
+        home()
+        assertEquals(1, session.nearbyEventDiscoveryStartCalls)
+        radioOff()
         compose.onNodeWithTag(NowScreenTestTags.BLUETOOTH_OFF).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.now_bluetooth_off_label)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.now_bluetooth_off_tile_title)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag(NowScreenTestTags.LISTENING).assertDoesNotExist()
         compose.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(card.eventCodeHashHex)).assertDoesNotExist()
-        assertEquals(0, session.nearbyEventDiscoveryStartCalls)
+        assertEquals(1, session.nearbyEventDiscoveryStopCalls)
         idleFor(60)
         codeEntry().assertDoesNotExist()
+        assertEquals(1, session.nearbyEventDiscoveryStartCalls, "a closed gate starts nothing")
+    }
+
+    /** Home recomposes on return with the radio already off: the gate never opens, even briefly. */
+    @Test fun radioOffWhileOnAccountReturnsToAClosedGate() {
+        val session = FakeEventJoinSession()
+        launch(session)
+        compose.onNodeWithContentDescription(context.getString(R.string.home_account_title)).performClick()
+        compose.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).assertIsDisplayed()
+        assertEquals(1, session.nearbyEventDiscoveryStopCalls)
+
+        radioOff()
+        back()
+
+        compose.onNodeWithTag(NowScreenTestTags.BLUETOOTH_OFF).performScrollTo().assertIsDisplayed()
+        assertEquals(1, session.nearbyEventDiscoveryStartCalls, "no start for a gate that is closed by the radio")
+        assertEquals(1, session.nearbyEventDiscoveryStopCalls)
     }
 
     @Test fun bluetoothOffSitsAboveAnActiveSession() {
-        bluetoothOff = true
-        launch(FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Sensing)))
+        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Sensing))
+        launch(session)
+        radioOff()
         compose.onNodeWithTag(NowScreenTestTags.BLUETOOTH_OFF).assertIsDisplayed()
         compose.onNodeWithTag(EventJoinScreenTestTags.PHASE_STATUS_PILL).performScrollTo().assertIsDisplayed()
         val blockY = compose.onNodeWithTag(NowScreenTestTags.BLUETOOTH_OFF).fetchSemanticsNode().positionInRoot.y
         val pillY = compose.onNodeWithTag(EventJoinScreenTestTags.PHASE_STATUS_PILL).fetchSemanticsNode().positionInRoot.y
         assertTrue(blockY < pillY, "The block sits above the session: $blockY vs $pillY")
-    }
-
-    @Test fun bluetoothFixSwitchesToTheBluetoothOffScreen() {
-        bluetoothOff = true
-        launch(FakeEventJoinSession())
-        compose.onNodeWithTag(NowScreenTestTags.BLUETOOTH_FIX).performScrollTo()
-            .assertContentDescriptionEquals(context.getString(R.string.now_bluetooth_fix_accessibility))
-            .performClick()
-        compose.onNodeWithTag(BluetoothOffScreenTestTags.TURNED_ON_BUTTON).assertIsDisplayed()
-        compose.onNodeWithTag(HomeScreenTestTags.ROOT).assertDoesNotExist()
-    }
-
-    @Test fun bluetoothOpenSettingsOpensTheSystemBluetoothSettings() {
-        bluetoothOff = true
-        launch(FakeEventJoinSession())
-        compose.onNodeWithTag(NowScreenTestTags.BLUETOOTH_OPEN_SETTINGS).performScrollTo()
-            .assertContentDescriptionEquals(context.getString(R.string.now_open_settings_accessibility))
-            .performClick()
-        assertEquals(
-            Settings.ACTION_BLUETOOTH_SETTINGS,
-            shadowOf(ApplicationProvider.getApplicationContext<Application>()).nextStartedActivity?.action
-                ?: shadowOf(compose.activity).nextStartedActivity?.action,
-        )
+        assertEquals(0, session.leaveEventCallCount, "the radio never ends a joined session")
+        assertEquals(0, session.nearbyEventDiscoveryStopCalls)
     }
 
     /** Same fixture as the render tests: three events, "Design review" with three sessions. */

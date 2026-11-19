@@ -338,9 +338,6 @@ class EventJoinScreenTest {
                     onOpenRecord = {},
                     onOpenToday = {},
                     onOpenByEvent = {},
-                    onFixBluetooth = {},
-                    onOpenBluetoothSettings = {},
-                    isBluetoothOff = { false },
                     clockPreflight = controller,
                 )
             }

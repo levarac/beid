@@ -74,18 +74,11 @@ fun AppNavHost(
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null,
     walletState: WalletConnectorState = WalletConnectorState.Idle,
     onStartWalletBinding: () -> Unit = {},
-    /**
-     * Bluetooth-off binding point for Home's Now tab (inline block and standby
-     * gate). `null` reads the existing [BluetoothRadioMonitor]; an observable
-     * radio state can be passed here instead.
-     */
-    homeBluetoothOff: (() -> Boolean)? = null,
 ) {
     val context = LocalContext.current
     val navController = rememberNavController()
     val onboardingPreferences = remember { OnboardingPreferences(context) }
     val radioMonitor = remember { BluetoothRadioMonitor(context) }
-    val isHomeBluetoothOff: () -> Boolean = homeBluetoothOff ?: { !radioMonitor.isOn }
     val supportDiagnostics: SupportDiagnostics = viewModel()
     LaunchedEffect(session) {
         session.state.collect { supportDiagnostics.accept(it) }
@@ -148,160 +141,155 @@ fun AppNavHost(
     val homeBluetoothStatus = remember(bluetoothState) {
         HomeBluetoothStatus(
             isRadioOff = bluetoothState.isRadioOff,
+            // iOS sets `coordinator.screen = .bluetoothOff`, a root switch,
+            // so Home is not kept underneath; "I've turned it on" returns
+            // to a fresh Home the same way onboarding reaches it.
             onFix = { navigateClearingOnboarding(navController, Screen.BluetoothOff.route) },
             onOpenSettings = openBluetoothSettings,
         )
     }
 
     CompositionLocalProvider(LocalHomeBluetoothStatus provides homeBluetoothStatus) {
-    NavHost(navController = navController, startDestination = startDestination) {
-        composable(Screen.Welcome.route) {
-            WelcomeScreen(
-                onGetStarted = { navController.navigate(Screen.BluetoothPermission.route) },
-            )
-        }
+        NavHost(navController = navController, startDestination = startDestination) {
+            composable(Screen.Welcome.route) {
+                WelcomeScreen(
+                    onGetStarted = { navController.navigate(Screen.BluetoothPermission.route) },
+                )
+            }
 
-        composable(Screen.BluetoothPermission.route) {
-            BluetoothPermissionScreen(
-                onAllowBluetooth = {
-                    session.requestBluetoothPermission(handleBluetoothPermissionResult)
-                },
-            )
-        }
+            composable(Screen.BluetoothPermission.route) {
+                BluetoothPermissionScreen(
+                    onAllowBluetooth = {
+                        session.requestBluetoothPermission(handleBluetoothPermissionResult)
+                    },
+                )
+            }
 
-        composable(Screen.BluetoothDenied.route) {
-            BluetoothDeniedScreen(
-                onOpenSettings = { session.openAppSettings() },
-                onCheckAgain = {
-                    session.requestBluetoothPermission(handleBluetoothPermissionResult)
-                },
-            )
-        }
+            composable(Screen.BluetoothDenied.route) {
+                BluetoothDeniedScreen(
+                    onOpenSettings = { session.openAppSettings() },
+                    onCheckAgain = {
+                        session.requestBluetoothPermission(handleBluetoothPermissionResult)
+                    },
+                )
+            }
 
-        composable(Screen.BluetoothOff.route) {
-            BluetoothOffScreen(
-                onOpenSettings = openBluetoothSettings,
-                onTurnedOn = {
-                    if (radioMonitor.isOn) {
-                        navigateClearingOnboarding(navController, Screen.Home.route)
+            composable(Screen.BluetoothOff.route) {
+                BluetoothOffScreen(
+                    onOpenSettings = openBluetoothSettings,
+                    onTurnedOn = {
+                        if (radioMonitor.isOn) {
+                            navigateClearingOnboarding(navController, Screen.Home.route)
+                        }
+                        // Still off: no-op, stay on this screen — matches iOS, which
+                        // doesn't message failure either.
+                    },
+                )
+            }
+
+            composable(Screen.EventJoin.route) {
+                LaunchedEffect(Unit) {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.EventJoin.route) { inclusive = true }
+                        launchSingleTop = true
                     }
-                    // Still off: no-op, stay on this screen — matches iOS, which
-                    // doesn't message failure either.
-                },
-            )
-        }
-
-        composable(Screen.EventJoin.route) {
-            LaunchedEffect(Unit) {
-                navController.navigate(Screen.Home.route) {
-                    popUpTo(Screen.EventJoin.route) { inclusive = true }
-                    launchSingleTop = true
                 }
             }
-        }
 
-        composable(Screen.Home.route) {
-            HomeRoute(
-                session,
-                proofRecordStore,
-                onOpenAccount = { navController.navigate(Screen.Account.route) },
-                onOpenEventCodeEntry = { navController.navigate(Screen.HomeEventCode.route) },
-                onOpenRecord = { navController.navigate(Screen.RecordDetail.route(it)) },
-                onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
-                onOpenByEvent = { navController.navigate(Screen.RecordsByEvent.route) },
-                // iOS sets `coordinator.screen = .bluetoothOff`, a root switch,
-                // so Home is not kept underneath; "I've turned it on" returns
-                // to a fresh Home the same way onboarding reaches it.
-                onFixBluetooth = { navigateClearingOnboarding(navController, Screen.BluetoothOff.route) },
-                onOpenBluetoothSettings = {
-                    context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                },
-                isBluetoothOff = isHomeBluetoothOff,
-                onStartWalletBinding = onStartWalletBinding,
-            )
-        }
+            composable(Screen.Home.route) {
+                HomeRoute(
+                    session,
+                    proofRecordStore,
+                    onOpenAccount = { navController.navigate(Screen.Account.route) },
+                    onOpenEventCodeEntry = { navController.navigate(Screen.HomeEventCode.route) },
+                    onOpenRecord = { navController.navigate(Screen.RecordDetail.route(it)) },
+                    onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
+                    onOpenByEvent = { navController.navigate(Screen.RecordsByEvent.route) },
+                    onStartWalletBinding = onStartWalletBinding,
+                )
+            }
 
-        composable(Screen.Account.route) {
-            val supportShareTitle = stringResource(R.string.account_support_share)
-            AccountRoute(
-                session,
-                onOpenRecords = { navController.navigate(Screen.Records.route) },
-                onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
-                walletState = walletState,
-                onOpenVenue = { context.startActivity(VenueActivity.createIntent(context)) },
-                onShareSupport = {
-                    try {
-                        context.startActivity(supportShareIntent(
-                            supportDiagnostics.exportJson(),
-                            supportShareTitle,
-                        ))
-                    } catch (_: ActivityNotFoundException) {
-                        Toast.makeText(context, R.string.account_support_unavailable, Toast.LENGTH_LONG).show()
-                    }
-                },
-            )
-        }
+            composable(Screen.Account.route) {
+                val supportShareTitle = stringResource(R.string.account_support_share)
+                AccountRoute(
+                    session,
+                    onOpenRecords = { navController.navigate(Screen.Records.route) },
+                    onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
+                    walletState = walletState,
+                    onOpenVenue = { context.startActivity(VenueActivity.createIntent(context)) },
+                    onShareSupport = {
+                        try {
+                            context.startActivity(supportShareIntent(
+                                supportDiagnostics.exportJson(),
+                                supportShareTitle,
+                            ))
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(context, R.string.account_support_unavailable, Toast.LENGTH_LONG).show()
+                        }
+                    },
+                )
+            }
 
-        composable(Screen.ManualEventCode.route) {
-            ManualEventCodeRoute(session, onBack = { navController.popBackStack() })
-        }
+            composable(Screen.ManualEventCode.route) {
+                ManualEventCodeRoute(session, onBack = { navController.popBackStack() })
+            }
 
-        composable(Screen.HomeEventCode.route) {
-            ManualEventCodeRoute(
-                session,
-                onBack = { navController.popBackStack() },
-                onJoined = { navController.popBackStack(Screen.Home.route, inclusive = false) },
-            )
-        }
+            composable(Screen.HomeEventCode.route) {
+                ManualEventCodeRoute(
+                    session,
+                    onBack = { navController.popBackStack() },
+                    onJoined = { navController.popBackStack(Screen.Home.route, inclusive = false) },
+                )
+            }
 
-        // Content only, like the other pushed record screens: no top bar, system Back.
-        composable(Screen.RecordsByEvent.route) {
-            RecordsByEventRoute(
-                proofRecordStore,
-                onOpenEventRecords = { navController.navigate(Screen.EventRecords.route(it)) },
-            )
-        }
+            // Content only, like the other pushed record screens: no top bar, system Back.
+            composable(Screen.RecordsByEvent.route) {
+                RecordsByEventRoute(
+                    proofRecordStore,
+                    onOpenEventRecords = { navController.navigate(Screen.EventRecords.route(it)) },
+                )
+            }
 
-        composable(Screen.Records.route) {
-            RecordsRoute(
-                proofRecordStore,
-                onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
-                onOpenDetail = { recordId -> navController.navigate(Screen.RecordDetail.route(recordId)) },
-            )
-        }
+            composable(Screen.Records.route) {
+                RecordsRoute(
+                    proofRecordStore,
+                    onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
+                    onOpenDetail = { recordId -> navController.navigate(Screen.RecordDetail.route(recordId)) },
+                )
+            }
 
-        composable(Screen.TodaySummary.route) {
-            TodaySummaryRoute(proofRecordStore)
-        }
+            composable(Screen.TodaySummary.route) {
+                TodaySummaryRoute(proofRecordStore)
+            }
 
-        composable(
-            route = Screen.EventRecords.route,
-            arguments = listOf(navArgument(Screen.EventRecords.ANCHOR_ID_ARG) { type = NavType.StringType }),
-        ) { entry ->
-            val anchorId = UUID.fromString(requireNotNull(entry.arguments?.getString(Screen.EventRecords.ANCHOR_ID_ARG)))
-            RecordsRoute(
-                proofRecordStore,
-                onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
-                onOpenDetail = { navController.navigate(Screen.RecordDetail.route(it)) },
-                eventGroupAnchorId = anchorId,
-            )
-        }
+            composable(
+                route = Screen.EventRecords.route,
+                arguments = listOf(navArgument(Screen.EventRecords.ANCHOR_ID_ARG) { type = NavType.StringType }),
+            ) { entry ->
+                val anchorId = UUID.fromString(requireNotNull(entry.arguments?.getString(Screen.EventRecords.ANCHOR_ID_ARG)))
+                RecordsRoute(
+                    proofRecordStore,
+                    onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
+                    onOpenDetail = { navController.navigate(Screen.RecordDetail.route(it)) },
+                    eventGroupAnchorId = anchorId,
+                )
+            }
 
-        composable(
-            route = Screen.RecordDetail.route,
-            arguments = listOf(navArgument(Screen.RecordDetail.RECORD_ID_ARG) { type = NavType.StringType }),
-        ) { backStackEntry ->
-            val recordIdArg = requireNotNull(
-                backStackEntry.arguments?.getString(Screen.RecordDetail.RECORD_ID_ARG),
-            )
-            RecordDetailRoute(
-                proofRecordStore,
-                sessionAggregateSnapshotStore,
-                recordId = UUID.fromString(recordIdArg),
-                onRecordNotFound = { navController.popBackStack() },
-            )
+            composable(
+                route = Screen.RecordDetail.route,
+                arguments = listOf(navArgument(Screen.RecordDetail.RECORD_ID_ARG) { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val recordIdArg = requireNotNull(
+                    backStackEntry.arguments?.getString(Screen.RecordDetail.RECORD_ID_ARG),
+                )
+                RecordDetailRoute(
+                    proofRecordStore,
+                    sessionAggregateSnapshotStore,
+                    recordId = UUID.fromString(recordIdArg),
+                    onRecordNotFound = { navController.popBackStack() },
+                )
+            }
         }
-    }
     }
 }
 
