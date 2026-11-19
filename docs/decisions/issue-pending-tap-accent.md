@@ -1,6 +1,6 @@
 # What can be tapped: one interaction accent, three button tiers, and the Flat 2b rules they change
 
-**Status:** proposed 2026-11-18, awaiting the maintainer's choice of accent from side-by-side screenshots. The structural rules take effect for iOS when the maintainer accepts this record and the implementing PRs merge; Android follows later (see "Platform scope"). Every "Superseded 2026-11-18" block and every 2026-11-18 annotation in `DESIGN.md` points here (below: "D-tap-accent"). The tracking issue for this change is still to be filed; this file is named `issue-pending-tap-accent.md` until it is, and is renamed to carry the issue number then. The two accent value pairs carry `PROPOSAL — maintainer ratification pending` until then; the structural rules carry no tag but are part of what is proposed.
+**Status:** proposed 2026-11-18. The accent values were chosen by the maintainer on 2026-11-19 from side-by-side screenshots of three candidates (blue, teal, violet): teal. The structural rules take effect for iOS when the maintainer accepts this record and the implementing PRs merge; Android follows later (see "Platform scope"). Every "Superseded 2026-11-18" block and every 2026-11-18 annotation in `DESIGN.md` points here (below: "D-tap-accent"). The tracking issue for this change is still to be filed; this file is named `issue-pending-tap-accent.md` until it is, and is renamed to carry the issue number then. The two accent value pairs are ratified (maintainer decision 2026-11-19) and carry no tag; the structural rules carry no tag but are part of what is proposed.
 
 **Authority.** The maintainer, after using the iOS 1.1.1 build in the simulator on 2026-11-18:
 
@@ -21,12 +21,12 @@
 
 ## What is adopted
 
-1. **One interaction accent, one meaning: "you can tap this, now."** It is Levarac's own brand hue (OKLCH 263°, the business-card blue) at 60% of its chroma, with one value per ground:
+1. **One interaction accent, one meaning: "you can tap this, now."** It is the hue of the teal ratified on 2026-07-10 (`#18C7A7`), darkened until it reaches 4.5:1 as text, with one value per ground:
 
    | Primitive (colorset) | Value | Increase Contrast | DS token | Ground |
    | --- | --- | --- | --- | --- |
-   | `accent` | `#3765C6` | `#2A53AB` | `actionAccent` | `bg`, `tile`, white panels and sheets, OS alerts |
-   | `on-ink/accent` (`onInkAccent`) | `#5F87D7` | `#7294D9` | `actionAccentOnInk` | `ink` pages and cards, the Account sheet, ink bars |
+   | `accent` | `#077763` | `#066352` | `actionAccent` | `bg`, `tile`, white panels and sheets, OS alerts |
+   | `on-ink/accent` (`onInkAccent`) | `#059A80` | `#02A88C` | `actionAccentOnInk` | `ink` pages and cards, the Account sheet, ink bars |
 
    It colors:
    - text controls;
@@ -70,10 +70,10 @@
 ## Why this accent
 
 - **Tone.** The hue appears only as thin marks: 11 pt mono text, 1 pt outlines, small cues, the caret, a 2 pt selection rule and the selected tab. There are no new fills, shadows, gradients, icons, grays or strings.
-- **Brand.** It is Levarac's own hue, not the platform default. It is ΔE00 10.0 from iOS system blue `#007AFF`, with chroma 0.160, against 0.266 for the brand blue and 0.218 for system blue.
-- **Meaning.** It is at least ΔE00 46.9 from red, amber and green with normal vision, and at least 18.5 under simulated protanopia, deuteranopia and tritanopia. It is at least 18.3 from the gray secondary text it partly replaces.
-- **Contrast windows.** No single value reaches 4.5:1 as text on both `bg` and `ink`, so there are two values. Each reaches AA on its own ground and stays at least 3:1 lighter or darker than the body text beside it. Under Increase Contrast the light value (`#2A53AB`, 7.18:1 on `bg`) is only 2.74:1 against `ink` text, so the underline carries the separation there.
-- **Considered and not taken.** The 2026-07-10 ratification rejected the Figma Minimal v4 blue (`#007AFF`). This is a different, brand-derived blue, which is why its values stay PROPOSAL until the maintainer sees them. Alternatives prepared for the screenshot review: the brand blue as is (`#014EFE` / `#4D86FF`), and a violet-blue on the hue cast the Flat 2b grays already share (`#7246FB` / `#8772FE`). The old teal (`#18C7A7`) is 2.15:1 on white, and darkened it reads as gray to deuteranopes. Ink plus shapes alone would not answer "monotone may be the problem".
+- **Hue.** It is the hue of the teal ratified on 2026-07-10 (`#18C7A7`), darkened until it reaches 4.5:1 as text; `#18C7A7` itself is 2.15:1 on white. It is named and explicit, never the implicit platform default.
+- **Accepted consequences.** At these values the teal reads as a dark green, close to the semantic green used for "on" status (`semanticGreen` `#30D158`), so a stop action drawn in the accent (for example "Stop broadcasting") shows in a green-looking color. Under deuteranopia simulation the teal is ΔE00 6.5 from the gray secondary text (`sub`), against 21.2 for the blue candidate and 23.2 for the violet candidate. The maintainer accepted both on 2026-11-19; they are recorded as follow-ups (open item 1), not as reasons the choice is wrong.
+- **Contrast windows.** No single value reaches 4.5:1 as text on both `bg` and `ink`, so there are two values. Each reaches AA on its own ground and stays at least 3:1 lighter or darker than the body text beside it. Under Increase Contrast the light value (`#066352`, 7.21:1 on `bg`) is only 2.73:1 against `ink` text, so the underline carries the separation there.
+- **Considered and not taken.** The 2026-07-10 ratification rejected the Figma Minimal v4 blue (`#007AFF`). Alternatives prepared for the screenshot review: the brand-derived blue (`#3765C6` / `#5F87D7`, the Levarac brand hue at 60% of its chroma), a violet (`#7043F8` / `#8873FE`), the brand blue as is (`#014EFE` / `#4D86FF`), and a violet-blue on the hue cast the Flat 2b grays already share (`#7246FB` / `#8772FE`). Ink plus shapes alone would not answer "monotone may be the problem".
 
 ## Changed rules
 
@@ -96,34 +96,34 @@ Commits come from `git log -S` on `DESIGN.md`. Authors are omitted because this 
 
 ## Preserved rules
 
-- §1's tone thesis and its "MUST NOT feel like" list. §3's four motifs, including the DON'T on a system blue accent (`DESIGN.md:470-474`, kept by the D-627 annotation at `:487-494`): this accent is named, explicit and brand-derived, never the implicit platform default, and §3 gets a 2026-11-18 annotation saying so.
+- §1's tone thesis and its "MUST NOT feel like" list. §3's four motifs, including the DON'T on a system blue accent (`DESIGN.md:470-474`, kept by the D-627 annotation at `:487-494`): this accent is named, explicit and in the ratified teal hue, never the implicit platform default, and §3 gets a 2026-11-18 annotation saying so.
 - Black is "what is happening now". The primary CTA is an `ink` fill with a `bg` label (§5), one per screen, with Tone=Inverse on `ink`.
 - Red, amber and green keep one meaning each, as indicators: dots on `bg`, text only on `ink`. Stop and "off" actions are not red.
 - No per-event hue. Single appearance (§14). No glass, materials, blur, shadows or gradients on app-drawn surfaces. OS-standard bars, with no suppressed glass.
 - Hit regions of at least 44×44 pt. Never color alone. Dynamic Type with minimum heights. §15 copy, with no string added or changed. Token names describe roles. `DESIGN.md` holds no values.
 
-## Measured contrast (WCAG 2.x, sRGB, 2026-11-18)
+## Measured contrast (WCAG 2.x, sRGB, 2026-11-19)
 
 | Pair | Ratio |
 | --- | --- |
-| `actionAccent` on `bg` / `tile` | 5.47 / 4.89 |
-| `actionAccent` vs `ink` body text | 3.59 |
-| `bg` glyph on an `actionAccent` fill | 5.47 |
-| `actionAccentOnInk` on `ink` / on `on-ink/line` | 5.55 / 4.03 |
+| `actionAccent` on `bg` / `tile` | 5.49 / 4.91 |
+| `actionAccent` vs `ink` body text | 3.58 |
+| `bg` glyph on an `actionAccent` fill | 5.49 |
+| `actionAccentOnInk` on `ink` / on `on-ink/line` | 5.56 / 4.03 |
 | `actionAccentOnInk` vs `bg` text; `bg` glyph on it | 3.54 / 3.54 |
-| Increase Contrast `#2A53AB` on `bg` / `tile`; vs `ink` text | 7.18 / 6.42; 2.74 |
-| Increase Contrast `#7294D9` on `ink`; vs `bg` text and `bg` glyph on it | 6.50 / 3.02 |
+| Increase Contrast `#066352` on `bg` / `tile`; vs `ink` text | 7.21 / 6.44; 2.73 |
+| Increase Contrast `#02A88C` on `ink`; vs `bg` text and `bg` glyph on it | 6.53 / 3.01 |
 | `labelDisabled` on `bg`; vs `actionAccent` (lightness) | 3.25 / 1.68 |
 | `labelDisabledOnInk` on `ink`; vs `actionAccentOnInk` | 2.97 / 1.87 |
 | `labelOnActionDisabled` on `actionDisabled` | 4.51 |
 | `labelOnActionDisabledOnInk` on `actionDisabledOnInk` | 4.38 |
 | Pressed ink capsule (`#3C3C3F`) with `bg` label, the control faded as one composited layer over `bg` | 10.99 |
 | Pressed white capsule (`#CECECF`) with `ink` label, over `ink` | 12.49 |
-| Selected chart bar (`ink`) vs unselected (`#92929A`); selection rule on `bg` | 6.36 / 5.47 |
+| Selected chart bar (`ink`) vs unselected (`#92929A`); selection rule on `bg` | 6.36 / 5.49 |
 
 ## Open items
 
-1. Ratify the hex pairs from side-by-side screenshots: the recommendation, the brand blue as is, and the violet-blue. If the 11 pt accent reads gray on white, use `#2C62D7` (Increase Contrast `#1E4FBD`, same luminance) and keep the on-ink value.
+1. Follow-ups from the accepted consequences of the teal (see "Why this accent"; no new rule is added here): a stop action drawn in the accent reads as green, near `semanticGreen`; and under deuteranopia the accent is hard to tell from the gray secondary text (ΔE00 6.5). Check both on a device with the teal in place.
 2. #24 (capitalization) stays open. Capsules show their strings as written. "I’ve turned it on", "Try again" and "Enter event code instead" appear in sentence case. "STOP SENSING", "KEEP SENSING", "OPEN DETAILS", "ENTER EVENT CODE" and "JOIN" appear in uppercase.
 3. Existing strings in new places: "JOIN" as the cue on the Sensing nearby cards, and "Rejoin" as the cue on Past events rows.
 4. Figma Library sync: add `accent`, `on-ink/accent`, `Button/Secondary` (outline, three sizes), the pressed, disabled and busy states, and the row cue.
@@ -147,10 +147,10 @@ Commits come from `git log -S` on `DESIGN.md`. Authors are omitted because this 
 
 The styles and shared controls land before the screens that use them. Until those screens migrate, these states are visible. This package does not ship ahead of the screen packages that migrate the Now page (package 1), the pre-join inset (package 2) and the event card badge (the screen change that replaces it).
 
-- On the ink Now page, default-colored text controls draw the canvas accent `#3765C6` on ink at 3.59:1, below 4.5:1 for 11 pt text; before, they were ink on ink. This covers FIX → and VIEW RECORD → / WHAT WAS SENT → (`CollectionHomeView.swift`). Package 1 declares the ink ground there.
+- On the ink Now page, default-colored text controls draw the canvas accent `#077763` on ink at 3.58:1, below 4.5:1 for 11 pt text; before, they were ink on ink. This covers FIX → and VIEW RECORD → / WHAT WAS SENT → (`CollectionHomeView.swift`). Package 1 declares the ink ground there.
 - The pre-join "Enter event code" `.bordered` inset (`SensingView.swift`) sits outside the screen's own tint and picks up the root accent. Package 2 replaces it.
 - The `EventCardView` badge keeps `.foregroundStyle(.tint)` and `.tint.opacity`. Because `BeidPanel` leaves the tint alone, it keeps the tint of its screen (the ink-colored `actionPrimary` on Signal lost). It becomes dot plus text with the screen change that replaces it.
-- The Account toolbar item and the selected tab on the ink Now bar are drawn in the canvas accent (`#3765C6`) on ink until package 1 declares the ink ground there.
+- The Account toolbar item and the selected tab on the ink Now bar are drawn in the canvas accent (`#077763`) on ink until package 1 declares the ink ground there.
 - Until the global accent in `ios/project.yml` is set (open item 11), UIKit-drawn alerts, the share sheet and any sheet the tint does not reach stay system blue.
 
 ## Implementing work

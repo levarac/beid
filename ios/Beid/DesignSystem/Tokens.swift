@@ -74,20 +74,19 @@ enum DS {
     // MARK: Interaction accent and control states (2026-11-18)
     //
     // Code-first additions recorded in docs/decisions/issue-pending-tap-accent.md.
-    // The two accent values are a PROPOSAL awaiting the maintainer's choice
-    // from side-by-side screenshots; only the two colorsets change if another
-    // hue is picked. The Figma library follows the code later.
+    // The two accent values are the teal ratified by the maintainer on
+    // 2026-11-19 from side-by-side screenshots; only the two colorsets change
+    // if another hue is picked. The Figma library follows the code later.
 
     /// The one interaction color on `bg`, `tile` and white surfaces: text
     /// controls, row cues, secondary outlines, focus, the app and alert tint.
     /// It means only "you can tap this, now" and never marks status, data or
     /// decoration, never fills a button, and never appears on ink. Code-first
     /// primitive `accent` (Increase Contrast appearance included).
-    /// PROPOSAL, maintainer ratification pending.
     static let actionAccent = SwiftUI.Color(.accent)
     /// `actionAccent` on an ink ground. Never on `bg` or an OS alert surface.
     /// Code-first primitive `on-ink/accent` (Increase Contrast appearance
-    /// included). PROPOSAL, maintainer ratification pending.
+    /// included).
     static let actionAccentOnInk = SwiftUI.Color(.onInkAccent)
     /// The black "what is happening now" surface: screen grounds, ink cards,
     /// ink bar backgrounds, sheet rows and footers, the radar canvas. Use it

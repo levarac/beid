@@ -29,7 +29,8 @@ hex values, CTA sentence-case grandfathering). Structural and enforcement
 rules carry no tag and are not pending. From 2026-11-18, new tags in this
 public repository read `PROPOSAL — maintainer ratification pending` (no
 personal names); existing tags keep their wording. The two accent value
-pairs in §5 carry this tag until they are ratified from device screenshots.
+pairs in §5 were ratified by a maintainer decision on 2026-11-19 and carry no
+tag.
 
 > **Annotation 2026-09-22 (owner decision, beid#627).** Flat 2b was
 > adopted ([decision record](docs/decisions/issue-627-flat-2b.md)). The
@@ -526,8 +527,9 @@ share this grandfathered string; see #24's treatment in
 > radar/sonar clichés"; that is open, not settled (#634).
 >
 > **Annotation 2026-11-18 (D-tap-accent).** The interaction accent
-> (`accent` / `on-ink/accent`, §5) is a named, brand-derived token (Levarac
-> hue 263°), not the platform's implicit system blue. This DON'T still
+> (`accent` / `on-ink/accent`, §5) is a named token in the teal hue ratified
+> on 2026-07-10 (darkened until it reads as text, ratified again on
+> 2026-11-19), not the platform's implicit system blue. This DON'T still
 > forbids `.tint(.blue)`, falling back to the system default tint, and
 > #007AFF.
 
@@ -673,8 +675,8 @@ are named by role (§4), so one variable may back several tokens (#628).
 | `semantic/red` | `#FF453A` | Destructive / off | Disconnect wallet; Bluetooth OFF dot | Any other meaning; text on `bg` | `statusOff` |
 | `semantic/amber` | `#FF9F0A` | Verifying / pending | Report VERIFYING dot | Any other meaning; text on `bg` | `statusPending` |
 | `semantic/green` | `#30D158` | Active / on | Bluetooth ACTIVE dot | Any other meaning; text on `bg` | `statusOn` |
-| `accent` — code-first, `PROPOSAL — maintainer ratification pending` | `#3765C6` (Increase Contrast `#2A53AB`) | Interaction on `bg`, `tile` and white surfaces | Text controls, row and card cues, secondary outline and label, focus caret and rule, selection mark of a tappable set, app tint, alert tint and global accent | Status, headings, data, artwork, decoration, primary fills, static text; any use on `ink` (3.59:1) | `actionAccent` |
-| `on-ink/accent` — code-first, `PROPOSAL — maintainer ratification pending` | `#5F87D7` (Increase Contrast `#7294D9`) | Interaction on `ink` | The same list, except alerts | The same, plus any use on `bg` or an OS alert surface (3.54:1) and text on `on-ink/line` | `actionAccentOnInk` |
+| `accent` — code-first, ratified 2026-11-19 | `#077763` (Increase Contrast `#066352`) | Interaction on `bg`, `tile` and white surfaces | Text controls, row and card cues, secondary outline and label, focus caret and rule, selection mark of a tappable set, app tint, alert tint and global accent | Status, headings, data, artwork, decoration, primary fills, static text; any use on `ink` (3.58:1) | `actionAccent` |
+| `on-ink/accent` — code-first, ratified 2026-11-19 | `#059A80` (Increase Contrast `#02A88C`) | Interaction on `ink` | The same list, except alerts | The same, plus any use on `bg` or an OS alert surface (3.54:1) and text on `on-ink/line` | `actionAccentOnInk` |
 
 That is 17 `DS.Color` tokens over 13 primitives. `surfaceCanvas`,
 `textPrimary`, `textSecondary`, `strokeHairline` and `actionPrimary` kept
@@ -732,11 +734,11 @@ Added 2026-11-18 (measured, WCAG 2.x, [D-tap-accent](docs/decisions/issue-pendin
 
 | Pair | Ratio |
 | --- | --- |
-| `accent` on `bg` / on `tile` / vs `ink` text | 5.47:1 / 4.89:1 / 3.59:1 |
-| `on-ink/accent` on `ink` / vs `bg` text on ink / on `on-ink/line` | 5.55:1 / 3.54:1 / 4.03:1 |
-| `bg` glyph on `accent` / on `on-ink/accent` | 5.47:1 / 3.54:1 |
-| Increase Contrast `accent` on `bg` / on `tile` / vs `ink` text | 7.18:1 / 6.42:1 / 2.74:1 (below 3:1, hence the Increase Contrast underline, §13) |
-| Increase Contrast `on-ink/accent` on `ink` / vs `bg` text / `bg` glyph on it | 6.50:1 / 3.02:1 / 3.02:1 |
+| `accent` on `bg` / on `tile` / vs `ink` text | 5.49:1 / 4.91:1 / 3.58:1 |
+| `on-ink/accent` on `ink` / vs `bg` text on ink / on `on-ink/line` | 5.56:1 / 3.54:1 / 4.03:1 |
+| `bg` glyph on `accent` / on `on-ink/accent` | 5.49:1 / 3.54:1 |
+| Increase Contrast `accent` on `bg` / on `tile` / vs `ink` text | 7.21:1 / 6.44:1 / 2.73:1 (below 3:1, hence the Increase Contrast underline, §13) |
+| Increase Contrast `on-ink/accent` on `ink` / vs `bg` text / `bg` glyph on it | 6.53:1 / 3.01:1 / 3.01:1 |
 | `on-ink/sub` on `bg` (disabled labels) / `on-ink/idle` on `ink` (disabled labels) / `on-ink/sub` on `on-ink/line` | 3.25:1 / 2.97:1 / 4.38:1 |
 | Pressed ink capsule `#3C3C3F` with `bg` label / pressed white capsule `#CECECF` with `ink` label (the control fades as one layer, composited over its ground) | 10.99:1 / 12.49:1 |
 
@@ -2509,7 +2511,7 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 >   3:1 against its ground.
 > - MUST: Accent text differs from adjacent body text by at least 3:1 in
 >   lightness, or carries a non-color cue. Under Increase Contrast `accent` is
->   2.74:1 against `ink` text, so enabled text controls and the glyphless COPY
+>   2.73:1 against `ink` text, so enabled text controls and the glyphless COPY
 >   are underlined then.
 > - MUST: Disabled controls are exempt from the AA text MUST (WCAG 1.4.3
 >   inactive components) but keep at least 2.5:1 and differ from enabled in
@@ -2630,8 +2632,8 @@ Kept unchanged:
   not-yet-added state — not a platform gap, a shared one.]**
 
 > **Update 2026-11-18 ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)).** The first Increase Contrast
-> appearances exist: `accent` `#2A53AB` (7.18:1 on `bg`; 2.74:1 against `ink`
-> text, covered by the §13 underline) and `onInkAccent` `#7294D9` (6.50:1 on
+> appearances exist: `accent` `#066352` (7.21:1 on `bg`; 2.73:1 against `ink`
+> text, covered by the §13 underline) and `onInkAccent` `#02A88C` (6.53:1 on
 > `ink`; a white glyph on it stays at least 3:1). Other colorsets are
 > unchanged.
 
@@ -3038,8 +3040,8 @@ to.]**
 | `color.chart.detected` | `DS.Color.chartDetected` | `chart-muted` `#D9D9DE` | "Detected" bars in charts |
 | `color.graph.node.idle` | `DS.Color.graphNodeIdle` | `on-ink/idle` `#5C5C66` | Detected-only (idle) graph nodes on `ink` |
 | `color.action.primary` | `DS.Color.actionPrimary` | `ink` `#0B0B0F` | `Button/Primary` Tone=Primary fill (no longer the app tint, 2026-11-18) |
-| `color.action.accent` | `DS.Color.actionAccent` | `accent` `#3765C6` (Increase Contrast `#2A53AB`) | The interaction accent on `bg`, `tile` and white surfaces. PROPOSAL — maintainer ratification pending |
-| `color.action.accent.onInk` | `DS.Color.actionAccentOnInk` | `on-ink/accent` `#5F87D7` (Increase Contrast `#7294D9`) | The interaction accent on `ink`. PROPOSAL — maintainer ratification pending |
+| `color.action.accent` | `DS.Color.actionAccent` | `accent` `#077763` (Increase Contrast `#066352`) | The interaction accent on `bg`, `tile` and white surfaces. Ratified 2026-11-19 |
+| `color.action.accent.onInk` | `DS.Color.actionAccentOnInk` | `on-ink/accent` `#059A80` (Increase Contrast `#02A88C`) | The interaction accent on `ink`. Ratified 2026-11-19 |
 | `color.surface.now` | `DS.Color.surfaceNow` | `ink` `#0B0B0F` | The "now" surface: grounds, ink cards, ink bar backgrounds, sheet rows, radar canvas |
 | `color.label.disabled` | `DS.Color.labelDisabled` | `on-ink/sub` `#8E8E96` | Label, outline and cue of a disabled control on the page ground |
 | `color.label.disabled.onInk` | `DS.Color.labelDisabledOnInk` | `on-ink/idle` `#5C5C66` | Label, outline and cue of a disabled control on `ink` |
@@ -3217,7 +3219,7 @@ inventory evidence. Naming remains governed by §12.
 | 2026-09-23 | **Flat 2b tokens landed** (beid#628): `DS.Color` is 17 tokens named by role over 13 single-appearance primitive colorsets named after the Library variables (§4, §5); several roles may share a primitive. Of the 8 old tokens with no Flat 2b counterpart, `signalActive`, `signalWarning`, `proofSeal`, `statusCaution`, `labelOnWarning` and `labelOnSeal` were removed (tints → `actionPrimary`; text and icons → `textPrimary`; dots → `statusOn`/`statusPending`/`statusOff`), and `statusOn`/`statusOff` were mapped to `semantic/green`/`semantic/red`; `surfaceRaised` was also removed (→ `surfaceCanvas`). `Button/Primary` tone pairs: `actionPrimary`/`labelOnActionPrimary` (Tone=Primary) and `actionInverse`/`labelOnActionInverse` (Tone=Inverse). `DS.Space.pageMargin` 32 → 24, new `emptyBlockVertical`, `DS.Radius.glyph`/`emptyBlock`/`nowCard`, new row/button minimum sizes and `DS.Motion.screenTransition`. `BeidDesign`'s duplicate scales folded into `DS` (content spacing 14 → 16, card radius 18 → 16, control radius 14 → 12); only `haptic(_:)` remains in `BeidDesign` | Adopted — token naming delegated to #628 by D-627 |
 | 2026-09-23 | **Flat 2b surfaces landed** (beid#630): `beidSurface` is a `surfaceCanvas` fill plus a 1px `strokeHairline` border (glass path, `Material` fallback and its `interactive:`/`fallback:` parameters removed); `BeidGlassGroup` and its 7 wrappers deleted; the glass button styles replaced (`BeidPrimaryButton` `.borderedProminent`, `BeidSecondaryButton` `.bordered`, both a `DS.Radius.control` rounded rectangle; Home's icon Scan button a `.borderedProminent` circle); all 5 `#available(iOS 26, *)` branches removed (deployment target still iOS 17); the scan-flow cover's `.regularMaterial` and the Home/Sensing insets' `.background(.bar)` → opaque `surfaceCanvas` (insets with a top `strokeHairline` rule); new `BeidEmptyBlock` (`Block/Empty`, `DS.Size.emptyBlockDash` 4 from the 2026-09-23 Figma read) replaces `BeidPanel` at the 04b and empty-day states; new lint rule `no_glass_or_material` (six custom rules). Open gaps named, not fixed: the primary button is not yet a pill (`Button/Primary` unassigned), and `.bordered` is a system tint fill, not `bg` + `line`. The Account sheet's background is `surfaceCanvas` as an interim value replacing the OS-default sheet glass; #642 takes it to `ink`. Left as is: the OS-drawn toolbar/navigation-bar glass (#631), `EventCardView`'s `.tint.opacity` badge, `DS.Artwork.proofCardGradient` (#633) | Adopted — implements the 2026-09-22 §8/§8a decision |
 | 2026-09-23 | **Flat 2b type ramp landed** (beid#629): the three OFL families (Bricolage Grotesque ExtraBold, DM Sans Bold/Regular, DM Mono Medium) are bundled, and `DS.Font` becomes two tiers — `DS.Font.Library`, the 17 Library text styles as `DS.Font.Style` values, and the 8 role tokens Views use, re-pointed onto them with no call site changed (§6). `ceremonyTitle` removed (no Swift call site). Text styles: nearest-default-size per style, `.largeTitle` for all five Display styles — `UIFontMetrics` applies one constant multiplier per (text style, content size category), quantised to 1/3 pt, and that multiplier is not the style's own size ratio; measured at AX3 on iOS 26.5, `.largeTitle` is about 1.49 against `.body`'s 2.18 and `.caption2`'s 2.69, so Display/60 reaches 89.33 pt at AX3 and 102.33 pt at AX5, versus 131.0 pt and 169.0 pt on `.body`'s curve. Uppercase: the three mono *label* styles only — the mono *value* styles stay mixed-case because EIP-55 addresses carry their checksum in letter case. Tabular figures: `Display/Number 40` only. `beidTextStyle(_:)` in `Tokens.swift` applies a whole style (tracking and line height scaled with Dynamic Type, case); plain `.font(DS.Font.x)` call sites still get family/size/Dynamic Type only — a named transitional gap. Display's 100% line height is **not** applied: `lineSpacing` is additive and nonnegative and `View.lineHeight(_:)` is iOS 26+, above the iOS 17 deployment target — also a named gap. #24 (button capitalization) untouched: #629 uppercases no existing string | Adopted — text-style, uppercase-scope and tabular-figure choices delegated to #629 by §6/D-627 |
-| 2026-11-18 | One interaction accent (`accent` #3765C6 / `on-ink/accent` #5F87D7; Increase Contrast #2A53AB / #7294D9) meaning only "you can tap this, now"; three button tiers in one capsule family plus row cues and typed-glyph meanings; pressed, disabled and busy states; grounds in the environment; status chips, badges and look-alike fills de-buttonized; app tint, alert tint → `accent` (the target's global accent color is a follow-up); Increase Contrast underline on text controls; copy-event-ID haptic; §0 Library authority relaxed to "reference; deviations recorded" ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)) | Structural rules adopted — maintainer decision 2026-11-18; accent hex values PROPOSAL — maintainer ratification pending |
+| 2026-11-18 | One interaction accent (`accent` #077763 / `on-ink/accent` #059A80; Increase Contrast #066352 / #02A88C) meaning only "you can tap this, now"; three button tiers in one capsule family plus row cues and typed-glyph meanings; pressed, disabled and busy states; grounds in the environment; status chips, badges and look-alike fills de-buttonized; app tint, alert tint → `accent` (the target's global accent color is a follow-up); Increase Contrast underline on text controls; copy-event-ID haptic; §0 Library authority relaxed to "reference; deviations recorded" ([D-tap-accent](docs/decisions/issue-pending-tap-accent.md)) | Structural rules adopted — maintainer decision 2026-11-18; accent hex values (teal, chosen from side-by-side screenshots) ratified — maintainer decision 2026-11-19 |
 | 2026-10-15 | **Flat 2b v2 navigation** (Figma `333:73`, beid#730 / #731): §12's no-icons rule is narrowed to content. Navigation-bar and toolbar items are OS-standard — the `NavigationStack` back button, the system `.close` / `.done` items, and SF Symbol + title for screen-specific actions (Rejoin `arrow.clockwise`, Copy `doc.on.doc`, Account `person.crop.circle`) — rendered by the OS, Liquid Glass on iOS 26. The 2026-09-25 suppression of that glass (#631) is withdrawn (§8). `Bar/Nav` is not built. Content keeps no icons and no app-drawn glass, materials, blur, shadows or gradients | Adopted — owner decision 2026-10-15 (A2) |
 
 ### D. Deprecated patterns

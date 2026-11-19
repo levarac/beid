@@ -11,9 +11,9 @@ import XCTest
 /// expected value is a literal from the Flat 2b Library, never read back
 /// from `Tokens.swift` or `Colors.xcassets`: a test that compares a token
 /// with itself cannot fail. The exception is the 2026-11-18 interaction accent:
-/// its two pairs (#3765C6 / #2A53AB and #5F87D7 / #7294D9) are values from the
-/// decision record in docs/decisions/, a proposal until the maintainer ratifies
-/// them; if another hue is chosen, only those literals change. The disabled
+/// its two pairs (#077763 / #066352 and #059A80 / #02A88C) are values from the
+/// decision record in docs/decisions/ (maintainer decision 2026-11-19), pinned
+/// here as literals so a change to either colorset fails a test. The disabled
 /// roles are Library primitives (#8E8E96, #5C5C66, #F2F2F4, #6E6E78, #2A2A31).
 final class DesignTokensTests: XCTestCase {
   /// Every `DS.Color` token and the Library hex it must resolve to. Library
@@ -36,8 +36,8 @@ final class DesignTokensTests: XCTestCase {
     ("statusOn", DS.Color.statusOn, "#30D158"),
     ("statusPending", DS.Color.statusPending, "#FF9F0A"),
     ("statusOff", DS.Color.statusOff, "#FF453A"),
-    ("actionAccent", DS.Color.actionAccent, "#3765C6"),
-    ("actionAccentOnInk", DS.Color.actionAccentOnInk, "#5F87D7"),
+    ("actionAccent", DS.Color.actionAccent, "#077763"),
+    ("actionAccentOnInk", DS.Color.actionAccentOnInk, "#059A80"),
     ("surfaceNow", DS.Color.surfaceNow, "#0B0B0F"),
     ("labelDisabled", DS.Color.labelDisabled, "#8E8E96"),
     ("labelDisabledOnInk", DS.Color.labelDisabledOnInk, "#5C5C66"),
@@ -72,8 +72,8 @@ final class DesignTokensTests: XCTestCase {
   /// dark variant (the app has one appearance, DESIGN.md §14).
   func testAccentTokensSwitchOnlyWithTheIncreaseContrastTrait() {
     let cases: [(name: String, color: Color, normal: String, increased: String)] = [
-      ("actionAccent", DS.Color.actionAccent, "#3765C6", "#2A53AB"),
-      ("actionAccentOnInk", DS.Color.actionAccentOnInk, "#5F87D7", "#7294D9"),
+      ("actionAccent", DS.Color.actionAccent, "#077763", "#066352"),
+      ("actionAccentOnInk", DS.Color.actionAccentOnInk, "#059A80", "#02A88C"),
     ]
     for style in [UIUserInterfaceStyle.light, .dark] {
       for token in cases {
@@ -111,8 +111,8 @@ final class DesignTokensTests: XCTestCase {
   /// (ground, enabled) -> the interaction color, as hex literals.
   func testInteractivePaletteResolvesPerGroundAndState() {
     let table: [(BeidGround, Bool, String)] = [
-      (.canvas, true, "#3765C6"),
-      (.ink, true, "#5F87D7"),
+      (.canvas, true, "#077763"),
+      (.ink, true, "#059A80"),
       (.canvas, false, "#8E8E96"),
       (.ink, false, "#5C5C66"),
     ]
@@ -133,8 +133,8 @@ final class DesignTokensTests: XCTestCase {
   func testTextControlForegroundDropsAnExplicitColorWhileDisabled() {
     let explicit = DS.Color.statusOff
     let table: [(BeidGround, Bool, Color?, String)] = [
-      (.canvas, true, nil, "#3765C6"),
-      (.ink, true, nil, "#5F87D7"),
+      (.canvas, true, nil, "#077763"),
+      (.ink, true, nil, "#059A80"),
       (.canvas, true, explicit, "#FF453A"),
       (.ink, true, explicit, "#FF453A"),
       (.canvas, false, nil, "#8E8E96"),

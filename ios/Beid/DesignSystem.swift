@@ -372,8 +372,8 @@ extension View {
 // One interaction accent with one meaning ("you can tap this, now"), three
 // capsule tiers, row cues, and real pressed, disabled and busy states. Screens
 // declare the ground they sit on; controls resolve their colors from it, so
-// call sites no longer pass label colors. The two accent values are a
-// PROPOSAL awaiting the maintainer's choice.
+// call sites no longer pass label colors. The two accent values are the teal
+// pair ratified by the maintainer on 2026-11-19.
 
 /// The surface a control sits on: the white page ground or the black
 /// "what is happening now" ground. It picks the accent value (`actionAccent`
