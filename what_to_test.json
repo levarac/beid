@@ -1,6 +1,10 @@
 [
   {
     "language": "en-US",
-    "text": "This build sends your signed attendance observations to the event's server while you take part, as Android already does. Join the test event from the nearby card, keep the app in front and the screen unlocked for about ten minutes next to the other test phones, and check that Recording starts and the record grows. Tell us if the app says it could not send, or if anything looks different from the last build."
+    "text": "This build tries teal for things you can tap. Text links and smaller buttons turn teal while large main buttons stay black, and some screens still mix the old and new look. Tell us where it is still hard to tell what you can tap, or where the teal looks like an \"on\" status color."
+  },
+  {
+    "language": "ja",
+    "text": "押せるものをティール（青緑）で示す見た目を試すビルドです。文字リンクや小さなボタンがティールになり、大きな主ボタンは黒のままで、画面によっては新旧の見た目が混ざります。押せるか分かりにくい所や、ティールが「オン」の状態の色に見える所があれば教えてください。"
   }
 ]
