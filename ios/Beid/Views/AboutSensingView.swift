@@ -118,7 +118,6 @@ struct AboutSensingView: View {
     .toolbarBackground(.hidden, for: .navigationBar)
     .toolbarColorScheme(.light, for: .navigationBar)
     .navigationTitle("About sensing")
-    .environment(\.colorScheme, .light)
   }
 
   private var sendingStatus: String {
@@ -209,7 +208,6 @@ struct WhatWeSendView: View {
     .toolbarBackground(.hidden, for: .navigationBar)
     .toolbarColorScheme(.light, for: .navigationBar)
     .navigationTitle("What we send")
-    .environment(\.colorScheme, .light)
   }
 }
 
