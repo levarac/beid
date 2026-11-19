@@ -25,7 +25,17 @@ internal class FakeEventJoinSession(
         mutableSearchOutcome.asStateFlow()
     private val mutableNearbyEventsOmitted = MutableStateFlow(nearbyEventsOmitted)
     override val nearbyEventsOmitted: StateFlow<Boolean> = mutableNearbyEventsOmitted.asStateFlow()
-    override val bluetoothPermissionState: BluetoothPermissionState = initialBluetoothPermissionState
+    /** Settable so a test can change the runtime answer the next refresh reads. */
+    override var bluetoothPermissionState: BluetoothPermissionState = initialBluetoothPermissionState
+
+    /** Every radio state the host forwarded, in order. */
+    val bluetoothRadioChanges = mutableListOf<Boolean>()
+
+    override fun refreshBluetoothPermissionState(): BluetoothPermissionState = bluetoothPermissionState
+
+    override fun onBluetoothRadioChanged(isOn: Boolean) {
+        bluetoothRadioChanges += isOn
+    }
 
     var joinedCode: String? = null
         private set
@@ -65,6 +75,13 @@ internal class FakeEventJoinSession(
 
     override fun startNearbyEventDiscovery() {
         nearbyEventDiscoveryStartCalls += 1
+    }
+
+    var nearbyEventDiscoveryStopCalls: Int = 0
+        private set
+
+    override fun stopNearbyEventDiscovery() {
+        nearbyEventDiscoveryStopCalls += 1
     }
 
     override fun simulateSignalLost() {

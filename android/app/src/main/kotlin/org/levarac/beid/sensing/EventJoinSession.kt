@@ -135,6 +135,14 @@ interface EventJoinSession {
     /** Starts passive nearby-event discovery when the EventJoin surface becomes active. */
     fun startNearbyEventDiscovery()
 
+    /**
+     * Ends passive nearby-event discovery when Now stops being the visible,
+     * active surface (iOS #795 `stopNearbyEventDiscovery()` from
+     * `updateHomeStandby`). Never stops a joined session's scan: the caller
+     * only invokes it while no join is in flight and nothing is sensing.
+     */
+    fun stopNearbyEventDiscovery()
+
     fun joinEvent(code: String)
 
     /**
@@ -167,6 +175,15 @@ interface EventJoinSession {
 
     /** Replaces the current permission UI after recreation; null releases that UI. */
     fun bindBluetoothPermissionResult(onResult: ((BluetoothPermissionState) -> Unit)?) = Unit
+
+    /**
+     * Re-reads the runtime permission (Settings may have changed it while the
+     * app was away) and returns the new [bluetoothPermissionState].
+     */
+    fun refreshBluetoothPermissionState(): BluetoothPermissionState = bluetoothPermissionState
+
+    /** The host's live radio power state, forwarded on every change. */
+    fun onBluetoothRadioChanged(isOn: Boolean) = Unit
 
     /**
      * Manual trigger for `RECORDING -> SIGNAL_LOST` (beid#120) — Android has

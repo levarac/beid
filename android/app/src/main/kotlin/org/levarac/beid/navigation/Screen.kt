@@ -4,8 +4,9 @@ import java.util.UUID
 
 /**
  * Navigation destinations — the Compose-Navigation equivalent of iOS's
- * `AppScreen` enum (`ios/Beid/Navigation/AppScreen.swift`). Home combines
- * nearby participation with the participant's collected event groups.
+ * `AppScreen` enum (`ios/Beid/Navigation/AppScreen.swift`). Home is the
+ * Now / Records tab shell of iOS #795; its tabs are not routes (see
+ * `HomeRoute`), the screens pushed over it are.
  */
 sealed class Screen(val route: String) {
     data object Welcome : Screen("welcome")
@@ -16,7 +17,16 @@ sealed class Screen(val route: String) {
     /** Compatibility route for restored navigation state targeting the former home. */
     data object EventJoin : Screen("event_join")
     data object Account : Screen("account")
+    /** Account's event-code entry. */
     data object ManualEventCode : Screen("manual_event_code")
+
+    /**
+     * Now's event-code entry, offered after 30 s of empty discovery (iOS #795
+     * `HomeEventCodeEntrySheet`). A separate route from [ManualEventCode] for
+     * the same reason iOS keeps a separate sheet flag: only this one returns
+     * to Home once the code starts sensing.
+     */
+    data object HomeEventCode : Screen("home_event_code")
 
     /**
      * Flat, reverse-chronological list of collected proofs (beid#121) — see
@@ -30,6 +40,9 @@ sealed class Screen(val route: String) {
         fun route(anchorId: UUID): String = "event_records/$anchorId"
     }
     data object TodaySummary : Screen("today_summary")
+
+    /** The Records tab's BY EVENT page (iOS #795 `eventList`). */
+    data object RecordsByEvent : Screen("records_by_event")
 
     /**
      * Detail screen for one collected proof (beid#122), reached by tapping a
