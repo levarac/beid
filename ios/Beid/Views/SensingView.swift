@@ -570,6 +570,7 @@ struct SensingSessionSurface: View {
         let layoutWidth = horizontalSizeClass == .regular
           ? min(geometry.size.width, DS.Layout.stateContentMaxWidth) : geometry.size.width
         let contentWidth = max(0, layoutWidth - 2 * DS.Space.pageMargin)
+        let radarSize = min(DS.Size.radarField, contentWidth)
         ScrollView {
           BeidAdaptiveContent {
             VStack(alignment: .leading, spacing: 0) {
@@ -591,7 +592,8 @@ struct SensingSessionSurface: View {
                 mutualDeviceCount: 0,
                 observedWindowCount: observedWindowCount ?? 0,
                 showsEdges: false,
-                size: min(DS.Size.radarField, contentWidth)
+                size: radarSize,
+                recordedWindowMarkDiameter: recordedWindowMarkDiameter(at: now, size: radarSize)
               )
               // Keep the measured radar centered without widening the inset content.
               .frame(width: contentWidth)
@@ -671,6 +673,25 @@ struct SensingSessionSurface: View {
     sensing.detectedDisplayIDs.sorted().map { id in
       SensingRadarPeer(id: id, signalStrength: sensing.signalStrength(forNodeId: id))
     }
+  }
+
+  private func recordedWindowMarkDiameter(at now: Date, size: CGFloat) -> CGFloat? {
+    guard let aggregate = sensing.sessionAggregate, aggregate.windowCount > 0,
+      let lastObservedWindow = aggregate.windowAt(index: aggregate.windowCount - 1)
+    else { return nil }
+
+    let duration = TimeInterval(ClockPreflightController.barnardEngineEninSeconds)
+    let seconds = now.timeIntervalSince1970
+    var index = lastObservedWindow.windowIndex
+    #if DEBUG
+    // Screenshot fixtures use synthetic window IDs alongside their frozen clock.
+    if sensing.sensingScreenshotFixture != nil {
+      index = Int64(floor(seconds / duration))
+    }
+    #endif
+    return SensingRadarProjection.recordedWindowMarkDiameter(
+      observedWindowIndex: index, secondsSince1970: seconds, windowDuration: duration, size: size
+    )
   }
 
   private func metrics(at now: Date) -> some View {
