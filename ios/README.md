@@ -1,6 +1,6 @@
-# beid — native iOS (first slice)
+# beid — native iOS
 
-First slice of the native (Flutter-free) beid iOS app. SwiftUI, XcodeGen,
+The native beid iOS app uses SwiftUI and XcodeGen, and
 consumes the [levarac/barnard](https://github.com/levarac/barnard) BLE SDK.
 
 ## Build & run
@@ -19,17 +19,17 @@ curl -sSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
 unzip -q "$XCODEGEN_TMP/xcodegen.zip" -d "$XCODEGEN_TMP"
 export PATH="$XCODEGEN_TMP/xcodegen/bin:$PATH"
 test "$(xcodegen --version | awk '{print $2}')" = "$XCODEGEN_VERSION"
-cd ios
-xcodegen generate
-open Beid.xcodeproj
-cd ..
+bash scripts/xcodegen_generate_checked.sh
+open ios/Beid.xcodeproj
 ```
 
 `project.yml` is the source of truth, but `Beid.xcodeproj` is committed for
 local-development convenience. Xcode Cloud regenerates it with the version in
 `ci_scripts/XCODEGEN_VERSION` and fails if the committed project drifts, so
 regenerate and commit `Beid.xcodeproj` whenever `project.yml` changes. Never
-hand-edit the generated project.
+hand-edit the generated project. Use `scripts/xcodegen_generate_checked.sh`
+for generation: it rejects the wrong XcodeGen version and missing setting
+presets, both of which can otherwise produce an incorrect project.
 
 Or from the CLI:
 
@@ -126,9 +126,10 @@ Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 
 `project.yml` consumes
 [`levarac/barnard`](https://github.com/levarac/barnard) as a remote SwiftPM
-package pinned to the exact `0.3.0` release. The committed
+package pinned to the exact `0.9.2` release. The committed
 `Package.resolved` records the release's precise revision for reproducible
-builds. Verified 2026-08-07 against `project.yml` and `Package.resolved`.
+builds. The pin and resolved revision agree in `project.yml` and
+`Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.
 
 Historically, beid copied barnard's Swift package into the repository because
 barnard did not have a root `Package.swift`, which SwiftPM requires for a
@@ -138,7 +139,8 @@ manifest and published the `v0.1.0` tag.
 
 For local barnard development, drag a local `barnard` checkout into Xcode to
 create a package override, or temporarily point `project.yml` at a local
-`path:` and re-run `xcodegen generate`; do not commit the override.
+`path:` and re-run `scripts/xcodegen_generate_checked.sh` from the repository
+root; do not commit the override.
 
 ## Onboarding flag
 
@@ -398,7 +400,7 @@ pause-and-resume scenario. It remains reachable manually through
 `SensingCoordinator.simulateSignalLost()`, exposed as a "Simulate Signal
 Lost" button on the Recording screen while in DemoEvent mode.
 
-## What's stubbed / out of scope for this slice
+## Runtime boundaries and remaining gaps
 
 - **Wallet**: direct app-to-app connect/sign for MetaMask is wired (see
   "WalletConnect" above). Its real-device round trip has never been
@@ -413,10 +415,13 @@ Lost" button on the Recording screen while in DemoEvent mode.
   `ProofSignature.swift`: it is not the protocol's self-proof, does not
   prove physical attendance by itself, and no backend or verifier may
   depend on its payload.
-- **Chain**: no on-chain calls anywhere (`BarnardIdentity.proveRpidOwnership`
-  is available in the barnard SDK but not called from the app in this
-  slice).
-- **Server**: no backend calls. Proofs are local-only.
+- **Registry and reporting**: joining uses the configured registry and
+  operator lookup services. `ReportSubmissionRuntime` queues eligible signed
+  observations, submits them to the event's operator, and retains submission
+  state locally. It is constructed only when `BeidReportSubmissionEnabled`
+  is enabled and a definition provider exists; the `Beid` target enables it
+  in `project.yml`, while `BeidLab` disables it. A saved record does not by
+  itself establish receipt, inclusion, or third-party verification.
 - **Event-specific verification policy**: distinct-device counting and the
   app-wide `BeidConfig.eventConfirmThreshold` gate run on-device, but an
   organizer-provided per-event threshold is not wired yet.
@@ -430,7 +435,8 @@ Lost" button on the Recording screen while in DemoEvent mode.
 
 ## Local persistence
 
-The iOS app currently has five on-disk stores in its Documents directory:
+The iOS app uses native JSON files and the shared ledger snapshot rather
+than SwiftData. Its Documents stores include:
 
 - `proofs.json` — collected `Proof` values (`ProofStore`).
 - `window-reports.json` — durable native observations written before a
@@ -440,15 +446,24 @@ The iOS app currently has five on-disk stores in its Documents directory:
 - `binding-records-v2.json` — wallet/event binding records
   (`BindingRecordStore`).
 - `self-proofs.json` — owner-key-signed self-proofs (`SelfProofStore`).
+- `self-proof-checkpoint.json` — recoverable self-proof state
+  (`SelfProofCheckpointStore`).
+- `report-submissions.json` — durable submission records and exclusions
+  (`ReportSubmissionStore`).
+- `session-aggregate-snapshots.json` — saved session aggregates
+  (`SessionAggregateSnapshotStore`).
 
-These flat files are used instead of SwiftData. The proof model is still a
-single unordered array with no relationships or migrations; revisit SwiftData
-when queries or relationships grow beyond "show them all, newest first".
+`SigilPresenceStore` separately stores `SigilPresence/sigil-presence.json`
+under Application Support, with that directory excluded from backup. This
+display data is not a submission input.
+
 The shared ledger owns its state transitions and snapshot format, while native
 iOS owns the file location and atomic write. The production
-`SensingCoordinator` uses this runtime. Android has a matching native snapshot
-store and portable-codec tests, but its production flow is still deferred to
-Issue #121.
+`SensingCoordinator` uses this runtime. Android also uses its native
+`UnsentWindowLedgerStore` in production: `WindowObservationAccumulator` writes
+windows and `WindowObservationSubmissionDrain` submits closed windows. The
+records list reads its separate `ProofRecordStore`; it is not a view of the
+unsent ledger.
 
 ## Screens
 
