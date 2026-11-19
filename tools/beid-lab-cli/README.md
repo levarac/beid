@@ -127,30 +127,32 @@ Serves a signed event-info container and advertises.
 beid-lab-cli venue --container ~/event-05.container --timeout 900
 ```
 
-The container must be hop-zero: the signed envelope preceded by a 4-byte
-header, `[3, relayHopCount (0), length >> 8, length & 255]` (what
+`--container` takes a hop-zero B005 delivery container (the name the B005 v2
+specification gives it; Barnard's API calls it a container): the signed
+envelope preceded by a 4-byte header,
+`[3, relayHopCount (0), length >> 8, length & 255]` (what
 `BarnardB005EnvelopeV2.encodeContainer(relayHopCount: 0, signedEnvelope:)`
 produces). A bare envelope is rejected with `container_structure` /
-`formatVersion`. A container is valid only for its lease window of about one
-hour, so a long event needs a fresh container, passed to a new run, about
-hourly.
+`formatVersion`. The time window belongs to the envelope inside, and phones
+accept it for about one hour, so a long event needs a fresh delivery
+container, passed to a new run, about hourly.
 
-The container arrives already signed. `configureOwnEventInfoEnvelopeV2`
+The delivery container arrives already signed. `configureOwnEventInfoEnvelopeV2`
 serves those bytes verbatim — the SDK does not sign, re-encode or re-verify
 them — so this subcommand supplies bytes and performs **no venue policy**: it
 does not choose a slice from a schedule, extend a deadline, or treat reading
 a file as permission to serve.
 
 `configure(eventCode:)` is never called and `--event-code` is refused here. A
-signed container is served without the engine knowing any code, exactly as
+signed delivery container is served without the engine knowing any code, exactly as
 `BarnardVenueSignedContainerBroadcasting` does on iOS; joining one would put
 a participant B004 on the air beside real participants.
 
-The `venue_ready` line reports what the container claims about itself —
+The `venue_ready` line reports what the delivery container claims about itself —
 event id, display name, ENIN window, and the same window in Unix seconds
 next to the host's clock — so an operator who copied the wrong file finds out
 before the phones do. `receiverState` checks the signature at the
-container's own first ENIN, so it says whether the container is genuine, not
+envelope's own first ENIN, so it says whether the delivery container is genuine, not
 whether its window is open now; compare `nowUnix` with `validFromUnix` and
 `acceptedThroughUnix` for that. Phones stop accepting the envelope when the
 clock reaches its `relayExpiresAtEnin`, so `acceptedThroughUnix` is the last
@@ -160,7 +162,7 @@ Whether to serve is deliberately not this tool's call.
 
 | Option | Meaning |
 | --- | --- |
-| `--container <path>` | File holding the signed hop-zero B005 v2 container. |
+| `--container <path>` | File holding the signed hop-zero B005 v2 delivery container. |
 | `--container-hex <hex>` | The same bytes, pasted. |
 
 **Bundles are not supported, on purpose.** A venue *bundle* is CBOR and
@@ -169,9 +171,9 @@ selecting its current slice is lease logic; both live in
 here would be a second implementation of a shared decision, which
 `AGENTS.md`'s ownership boundary forbids, and issue #588's own scope says
 this CLI is Barnard-only with no shared macOS build. Extract the envelope
-with the tooling that owns bundle decoding and pass the container:
-`tools/event-occurrence/container.mjs` in levarac/parallax writes the
-container for the current time from a published bundle.
+with the tooling that owns bundle decoding and pass the delivery container:
+`tools/event-occurrence/delivery-container.mjs` in levarac/parallax writes
+the delivery container phones accept now from a published bundle.
 
 ### `participate`
 
