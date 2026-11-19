@@ -5,9 +5,13 @@ import android.content.ActivityNotFoundException
 import android.widget.Toast
 import android.provider.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -17,6 +21,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import java.util.UUID
@@ -25,6 +30,12 @@ import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
 import org.levarac.beid.sensing.BluetoothPermissionState
 import org.levarac.beid.sensing.BluetoothRadioMonitor
+import org.levarac.beid.sensing.BluetoothRouteScreen
+import org.levarac.beid.sensing.BluetoothRouteTarget
+import org.levarac.beid.sensing.BluetoothStateMonitor
+import org.levarac.beid.sensing.HomeBluetoothStatus
+import org.levarac.beid.sensing.LocalHomeBluetoothStatus
+import org.levarac.beid.sensing.bluetoothRouteFor
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.WalletConnectorState
 import org.levarac.beid.ui.screens.AccountRoute
@@ -101,6 +112,39 @@ fun AppNavHost(
         onDispose { session.bindBluetoothPermissionResult(null) }
     }
 
+    // Live Bluetooth state after onboarding. The decision is
+    // `bluetoothRouteFor`; this only feeds it and performs the route.
+    val currentSession by rememberUpdatedState(session)
+    val bluetoothState = remember { BluetoothStateMonitor(context) { currentSession.refreshBluetoothPermissionState() } }
+    DisposableEffect(bluetoothState) {
+        bluetoothState.start()
+        onDispose { bluetoothState.stop() }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { bluetoothState.refresh() }
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    val availability by bluetoothState.availability.collectAsState()
+    LaunchedEffect(currentRoute, availability) {
+        val screen = bluetoothRouteScreenOf(currentRoute) ?: return@LaunchedEffect
+        // A restored back stack or a route change may predate the last read.
+        bluetoothState.refresh()
+        val target = bluetoothRouteFor(screen, bluetoothState.availability.value) ?: return@LaunchedEffect
+        navigateClearingOnboarding(navController, target.route)
+    }
+    val radioOn = bluetoothState.state.collectAsState().value.radioOn
+    LaunchedEffect(session, radioOn) { session.onBluetoothRadioChanged(radioOn) }
+
+    val openBluetoothSettings: () -> Unit = {
+        context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+    }
+    val homeBluetoothStatus = remember(bluetoothState) {
+        HomeBluetoothStatus(
+            isRadioOff = bluetoothState.isRadioOff,
+            onFix = { navigateClearingOnboarding(navController, Screen.BluetoothOff.route) },
+            onOpenSettings = openBluetoothSettings,
+        )
+    }
+
+    CompositionLocalProvider(LocalHomeBluetoothStatus provides homeBluetoothStatus) {
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Screen.Welcome.route) {
             WelcomeScreen(
@@ -127,9 +171,7 @@ fun AppNavHost(
 
         composable(Screen.BluetoothOff.route) {
             BluetoothOffScreen(
-                onOpenSettings = {
-                    context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                },
+                onOpenSettings = openBluetoothSettings,
                 onTurnedOn = {
                     if (radioMonitor.isOn) {
                         navigateClearingOnboarding(navController, Screen.Home.route)
@@ -230,7 +272,23 @@ fun AppNavHost(
             )
         }
     }
+    }
 }
+
+private fun bluetoothRouteScreenOf(route: String?): BluetoothRouteScreen? = when (route) {
+    null -> null
+    Screen.Welcome.route, Screen.BluetoothPermission.route -> BluetoothRouteScreen.Onboarding
+    Screen.BluetoothDenied.route -> BluetoothRouteScreen.BluetoothDenied
+    Screen.BluetoothOff.route -> BluetoothRouteScreen.BluetoothOff
+    else -> BluetoothRouteScreen.App
+}
+
+private val BluetoothRouteTarget.route: String
+    get() = when (this) {
+        BluetoothRouteTarget.Home -> Screen.Home.route
+        BluetoothRouteTarget.BluetoothOff -> Screen.BluetoothOff.route
+        BluetoothRouteTarget.BluetoothDenied -> Screen.BluetoothDenied.route
+    }
 
 /**
  * Clears the *entire* back stack on the way to a terminal onboarding screen

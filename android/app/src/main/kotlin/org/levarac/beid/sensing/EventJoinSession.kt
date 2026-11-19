@@ -169,6 +169,15 @@ interface EventJoinSession {
     fun bindBluetoothPermissionResult(onResult: ((BluetoothPermissionState) -> Unit)?) = Unit
 
     /**
+     * Re-reads the runtime permission (Settings may have changed it while the
+     * app was away) and returns the new [bluetoothPermissionState].
+     */
+    fun refreshBluetoothPermissionState(): BluetoothPermissionState = bluetoothPermissionState
+
+    /** The host's live radio power state, forwarded on every change. */
+    fun onBluetoothRadioChanged(isOn: Boolean) = Unit
+
+    /**
      * Manual trigger for `RECORDING -> SIGNAL_LOST` (beid#120) — Android has
      * no real BLE signal-loss *detection* yet, only this explicit action,
      * mirroring iOS's `SensingCoordinator.simulateSignalLost()`. A no-op
