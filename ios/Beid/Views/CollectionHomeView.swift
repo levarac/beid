@@ -105,13 +105,12 @@ private struct NowHomeView: View {
           }
         }
         .accessibilityIdentifier("home.now")
-        .background((usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas).ignoresSafeArea())
+        .background(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, ignoresSafeAreaEdges: .bottom)
       }
-      .background((usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas).ignoresSafeArea())
+      .background(DS.Color.surfaceCanvas.ignoresSafeArea())
       .modifier(HomeAccountToolbar(title: "home.now.title", iconColor: DS.Color.textPrimary))
       .toolbarBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, for: .tabBar)
-      .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
-      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.light, for: .navigationBar)
       .toolbarColorScheme(usesInk ? .dark : .light, for: .tabBar)
       .navigationDestination(isPresented: $showAboutSensing) { AboutSensingView() }
