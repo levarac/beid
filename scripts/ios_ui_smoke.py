@@ -19,6 +19,7 @@ DEFAULT_LIST = Path("ios/ci/ui-smoke-tests.txt")
 DEFAULT_DURATIONS = Path("scripts/ios-ui-durations.json")
 IPHONE_SKIPS = Path("scripts/ios-ui-iphone-skips.txt")
 UNIT_SKIPS = Path("scripts/ios-unit-debug-simulator-skips.txt")
+UI_SHARD_COUNTS = (2, 3, 4)
 
 
 def unique_tests(tests, bundle):
@@ -63,8 +64,8 @@ def parse_enumeration(payload):
 def shard_tests(tests, durations, count):
     """Longest-first scheduling, with identifier and shard index as tie breakers."""
     tests = unique_tests(tests, "BeidUITests")
-    if isinstance(count, bool) or count not in (2, 3):
-        raise ValueError("UI shard count must be 2 or 3 (at most four test jobs)")
+    if isinstance(count, bool) or count not in UI_SHARD_COUNTS:
+        raise ValueError("UI shard count must be 2, 3, or 4")
     weights = {}
     for test in tests:
         # New methods always get a positive weight and exactly one assignment.
@@ -178,7 +179,7 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
         lanes = {"build": unit + manifest["smoke"]}
     else:
         shards = manifest.get("shards", [])
-        if not isinstance(shards, list) or len(shards) not in (2, 3) or any(not shard for shard in shards):
+        if not isinstance(shards, list) or len(shards) not in UI_SHARD_COUNTS or any(not shard for shard in shards):
             raise ValueError("missing UI shards")
         if Counter(test for shard in shards for test in shard) != Counter(ui):
             raise ValueError("UI shard union has a gap or duplicate")
@@ -400,7 +401,7 @@ def main() -> int:
                 arguments = selection_arguments("smoke", manifest["smoke"])
             elif args.lane == "unit" and manifest["mode"] == "full":
                 selected, arguments = manifest["unit"], ["-only-testing:BeidTests"]
-            elif re.fullmatch(r"ui-[1-3]", args.lane) and manifest["mode"] == "full":
+            elif re.fullmatch(r"ui-[1-4]", args.lane) and manifest["mode"] == "full":
                 selected = manifest["shards"][int(args.lane[-1]) - 1]
                 arguments = [f"-only-testing:{test}" for test in selected]
             else:

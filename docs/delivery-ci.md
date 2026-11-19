@@ -175,9 +175,10 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     extraction, SHA, full Xcode version/build, SDK and architecture must match;
     absolute DerivedData/checkout references in `.xctestrun` are relocated.
     The matrix starts only after build finishes, has `fail-fast: false` and
-    `max-parallel: 4`, and all macOS jobs use the free standard `macos-26` label.
-    Change only workflow `env.IOS_UI_SHARDS` from `3` to `2` to reduce the matrix
-    from four macOS jobs to three. Values outside 2/3 fail planning.
+    `max-parallel: 5`, and all macOS jobs use the free standard `macos-26` label.
+    Change only workflow `env.IOS_UI_SHARDS` from `4` to `3` or `2` to reduce the
+    matrix from five macOS jobs to four or three. Values outside 2/3/4 fail
+    planning.
 
     `scripts/ios_ui_smoke.py shards` balances methods longest-first using
     `scripts/ios-ui-durations.json`. Its initial measured values are from a
