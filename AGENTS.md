@@ -474,8 +474,8 @@ runs all `BeidTests` plus the checked-in UI smoke list in that same macOS job.
 In full mode it uploads a tar of `Build/Products` (including `.xctestrun`), then
 **iOS full tests (${{ matrix.lane }})** runs a unit lane and duration-balanced UI
 lanes via `test-without-building`, each with fresh simulator/DerivedData/results.
-`IOS_UI_SHARDS` in the workflow is the single count setting: 3 by default, 2
-supported. At most four macOS jobs run together. Product SHA, Xcode build, SDK
+`IOS_UI_SHARDS` in the workflow is the single count setting: 4 by default, 2
+and 3 supported. At most five macOS jobs run together. Product SHA, Xcode build, SDK
 and architecture must match before extraction; permissions/symlinks survive tar.
 The aggregate requires every needed job to succeed, the UI shard union to equal
 the runtime enumeration without duplicates, and every enumerated test to be

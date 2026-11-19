@@ -28,11 +28,11 @@ class ShardContractTest(unittest.TestCase):
         self.assertTrue(hasattr(self.tool, "shard_tests"), "duration-based sharding is missing")
         tests = [f"BeidUITests/FlowTests/test{i}" for i in range(12)]
         durations = {test: 10.0 for test in tests[:-1]}
-        shards = self.tool.shard_tests(tests, durations, 3)
-        self.assertEqual(shards, self.tool.shard_tests(list(reversed(tests)), durations, 3))
+        shards = self.tool.shard_tests(tests, durations, 4)
+        self.assertEqual(shards, self.tool.shard_tests(list(reversed(tests)), durations, 4))
         self.assertEqual(sorted(sum(shards, [])), sorted(tests))
         self.assertLessEqual(max(map(len, shards)) - min(map(len, shards)), 1)
-        for count in (0, 1, 4):
+        for count in (0, 1, 5):
             with self.assertRaises(ValueError):
                 self.tool.shard_tests(tests, durations, count)
         with self.assertRaises(ValueError):
@@ -73,7 +73,7 @@ class ShardContractTest(unittest.TestCase):
             root = Path(temporary)
             enum, manifest = root / "enumerated.json", root / "manifest.json"
             enum.write_text(json.dumps(payload))
-            for count in (2, 3):
+            for count in (2, 3, 4):
                 result = subprocess.run([sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
                     "--enumeration", str(enum), "--output", str(manifest), "--count", str(count),
                     "--mode", "full", "--sha", "a" * 40], cwd=ROOT, capture_output=True, text=True)
