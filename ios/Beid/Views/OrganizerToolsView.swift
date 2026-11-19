@@ -208,7 +208,6 @@ struct OrganizerToolsView: View {
     .navigationBarTitleDisplayMode(.inline)
     .navigationDestination(isPresented: $showVenueBroadcast) {
       VenueSignedServingView(viewModel: serving)
-        .accountLargeDetent(.venueBroadcast)
     }
     .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
     .toolbarColorScheme(.light, for: .navigationBar)

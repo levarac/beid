@@ -4,54 +4,6 @@
 import SwiftUI
 import UIKit
 
-private enum AccountSheetDetent {
-  static let compact: PresentationDetent = .fraction(0.575)
-}
-
-/// Destinations request the large Account sheet while they are in its stack.
-/// Separate keys let future Account routes (About sensing / What we send)
-/// register without coupling their navigation state to Organizer tools.
-@MainActor
-final class AccountLargeDetentRequests: ObservableObject {
-  enum Destination: Hashable {
-    case organizerTools
-    case venueBroadcast
-    case aboutSensing
-    case whatWeSend
-  }
-
-  @Published private(set) var active: Set<Destination> = []
-
-  func set(_ destination: Destination, active isActive: Bool) {
-    var updated = active
-    if isActive {
-      updated.insert(destination)
-    } else {
-      updated.remove(destination)
-    }
-    if updated != active { active = updated }
-  }
-}
-
-/// Add one line to an Account destination, including a nested destination,
-/// to hold the sheet at its large detent for that view's visible lifetime.
-private struct AccountLargeDetentModifier: ViewModifier {
-  @EnvironmentObject private var requests: AccountLargeDetentRequests
-  let destination: AccountLargeDetentRequests.Destination
-
-  func body(content: Content) -> some View {
-    content
-      .onAppear { requests.set(destination, active: true) }
-      .onDisappear { requests.set(destination, active: false) }
-  }
-}
-
-extension View {
-  func accountLargeDetent(_ destination: AccountLargeDetentRequests.Destination) -> some View {
-    modifier(AccountLargeDetentModifier(destination: destination))
-  }
-}
-
 /// Flat 2b screen 10. H1 removes all wallet rows in v1.1; Bluetooth,
 /// Organizer tools, privacy, support and the existing sensing routes remain.
 struct AccountSheetView: View {
@@ -61,8 +13,6 @@ struct AccountSheetView: View {
   @State private var showPastEvents = false
   @State private var showAboutSensing = false
   @State private var supportShareItem: SupportShareItem?
-  @StateObject private var largeDetentRequests = AccountLargeDetentRequests()
-  @State private var selectedDetent: PresentationDetent = AccountSheetDetent.compact
 
   var body: some View {
     NavigationStack {
@@ -72,8 +22,6 @@ struct AccountSheetView: View {
         }
         AccountSheetRow {
           Button {
-            largeDetentRequests.set(.organizerTools, active: true)
-            selectedDetent = .large
             showOrganizerTools = true
           } label: {
             HStack {
@@ -114,8 +62,6 @@ struct AccountSheetView: View {
         }
         AccountSheetRow {
           Button {
-            largeDetentRequests.set(.aboutSensing, active: true)
-            selectedDetent = .large
             showAboutSensing = true
           } label: {
             HStack {
@@ -171,7 +117,7 @@ struct AccountSheetView: View {
         }
       }
       .listStyle(.plain)
-      // Keep Done clear of the first row at the compact detent.
+      // Keep Done clear of the first row.
       .contentMargins(.top, DS.Space.l + DS.Space.xs, for: .scrollContent)
       .scrollContentBackground(.hidden)
       .background(DS.Color.textPrimary)
@@ -203,9 +149,6 @@ struct AccountSheetView: View {
         OrganizerToolsView()
           .toolbar(.visible, for: .navigationBar)
       }
-      .onChange(of: showOrganizerTools) { _, isShown in
-        largeDetentRequests.set(.organizerTools, active: isShown)
-      }
       .navigationDestination(isPresented: $showPastEvents) {
         PastEventsView(
           sensingCoordinator: coordinator.sensingCoordinator,
@@ -222,19 +165,8 @@ struct AccountSheetView: View {
         AboutSensingView()
           .toolbar(.visible, for: .navigationBar)
       }
-      .onChange(of: showAboutSensing) { _, isShown in
-        // 15 (and 16 pushed from it) stay at .large while 15 is in the stack.
-        largeDetentRequests.set(.aboutSensing, active: isShown)
-      }
     }
-    .environmentObject(largeDetentRequests)
-    .presentationDetents(
-      largeDetentRequests.active.isEmpty ? [AccountSheetDetent.compact] : [.large],
-      selection: $selectedDetent
-    )
-    .onChange(of: largeDetentRequests.active) { _, active in
-      selectedDetent = active.isEmpty ? AccountSheetDetent.compact : .large
-    }
+    .presentationDetents([.large])
     .sheet(item: $supportShareItem) { item in
       SupportShareSheet(item: item)
     }
