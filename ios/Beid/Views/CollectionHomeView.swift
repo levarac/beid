@@ -110,7 +110,8 @@ private struct NowHomeView: View {
       .background((usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas).ignoresSafeArea())
       .modifier(HomeAccountToolbar(title: "home.now.title", iconColor: foreground))
       .toolbarBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, for: .tabBar)
-      .toolbarBackground(.hidden, for: .navigationBar)
+      .toolbarBackground(DS.Color.textPrimary, for: .navigationBar)
+      .toolbarBackground(usesInk ? .visible : .hidden, for: .navigationBar)
       .toolbarColorScheme(usesInk ? .dark : .light, for: .navigationBar, .tabBar)
       .navigationDestination(isPresented: $showAboutSensing) { AboutSensingView() }
       .navigationDestination(isPresented: $showWhatWeSend) { WhatWeSendView() }
@@ -134,7 +135,6 @@ private struct NowHomeView: View {
         }
       }
     }
-    .environment(\.colorScheme, usesInk ? .dark : .light)
     .onChange(of: scenePhase) { _, phase in
       if !coordinator.scanPresented {
         if phase == .background { sensing.checkpointOpenWindowForBackgrounding() }
