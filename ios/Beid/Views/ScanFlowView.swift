@@ -47,25 +47,25 @@ struct ScanFlowView: View {
               Text("Stop sensing")
                 .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
             }
-            .font(.body.weight(.medium))
+            .font(DS.Font.Library.title16.font)
             .buttonStyle(.bordered)
             .tint(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
             .accessibilityIdentifier("scan.stop-sensing")
-            .alert(
-              "Stop sensing?",
-              isPresented: stopConfirmationPresented,
-              presenting: coordinator.stopConfirmSnapshot
-            ) { snapshot in
-              Button(LocalizedStringKey(snapshot.copy.stopTitle)) {
-                coordinator.confirmStopSensing()
-              }
-              Button("Cancel", role: .cancel) {
-                coordinator.keepSensing()
-              }
-            } message: { snapshot in
-              Text(verbatim: snapshot.copy.body)
-            }
             .padding(.horizontal, DS.Space.pageMargin)
+          }
+          .alert(
+            "Stop sensing?",
+            isPresented: stopConfirmationPresented,
+            presenting: coordinator.stopConfirmSnapshot
+          ) { snapshot in
+            Button(LocalizedStringKey(snapshot.copy.stopTitle)) {
+              coordinator.confirmStopSensing()
+            }
+            Button("Cancel", role: .cancel) {
+              coordinator.keepSensing()
+            }
+          } message: { snapshot in
+            Text(verbatim: snapshot.copy.body)
           }
           .padding(.vertical, DS.Space.s)
           .background(usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
@@ -84,7 +84,6 @@ struct ScanFlowView: View {
         if newPhase == .background { sensing.checkpointOpenWindowForBackgrounding() }
         if newPhase == .active { sensing.retryPendingSubmissionsOnForeground() }
       }
-      .environment(\.colorScheme, usesInkGround ? .dark : .light)
   }
 
   @ViewBuilder private var doneButton: some View {

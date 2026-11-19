@@ -462,7 +462,7 @@ private struct NowHomeView: View {
       }
       .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget, alignment: .leading)
     }
-    .font(.body.weight(.semibold))
+    .font(DS.Font.Library.title16.font)
     .buttonStyle(.bordered)
     .tint(foreground)
     .accessibilityIdentifier("home.open-details")
