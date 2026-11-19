@@ -148,6 +148,8 @@ class EventJoinCoordinator internal constructor(
     joinRegistry: EventJoinRegistry? = null,
     private val joinDiagnostics: (String) -> Unit = ::logRuntimeDiagnostic,
     initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.NotDetermined,
+    /** Re-reads the runtime permission for [refreshBluetoothPermissionState]; null keeps the cached answer. */
+    private val readBluetoothPermissionState: (() -> BluetoothPermissionState)? = null,
     checkpointDispatcher: CoroutineDispatcher = Dispatchers.IO,
     checkpointPersistence: ((SessionCheckpoint) -> Unit)? = null,
     private val checkpointRuntimeOwner: SessionCheckpointRuntimeOwner = ProcessSessionCheckpointRuntimeOwner,
@@ -165,6 +167,7 @@ class EventJoinCoordinator internal constructor(
         ledgerFilesDir = context.filesDir,
         windowObservationRuntimeOwner = ProcessWindowObservationRuntimeOwner,
         initialBluetoothPermissionState = currentBluetoothPermissionState(context),
+        readBluetoothPermissionState = context.applicationContext.let { app -> { currentBluetoothPermissionState(app) } },
     )
 
     private val selfProofRecordStore = checkpointRuntimeOwner.selfProofStore(selfProofRecordStore.file, selfProofRecordStore)
@@ -218,6 +221,10 @@ class EventJoinCoordinator internal constructor(
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
     private var currentBluetoothPermissionState = initialBluetoothPermissionState
+
+    /** Assumed on until the host reports otherwise; see [onBluetoothRadioChanged]. */
+    private var bluetoothRadioOn = true
+    private var standbyPausedForRadio = false
     private var bluetoothPermissionResultHandler: ((BluetoothPermissionState) -> Unit)? = null
     private var undeliveredBluetoothPermissionResult: BluetoothPermissionState? = null
     override val bluetoothPermissionState: BluetoothPermissionState
@@ -1437,10 +1444,48 @@ class EventJoinCoordinator internal constructor(
         }
     }
 
+    override fun refreshBluetoothPermissionState(): BluetoothPermissionState {
+        if (!disposed) readBluetoothPermissionState?.let { currentBluetoothPermissionState = it() }
+        return currentBluetoothPermissionState
+    }
+
+    /**
+     * Pauses standby discovery while the radio is off and resumes it when the
+     * radio is back. Mirrors integration/ios-1.1.1: `AppCoordinator.updateHomeStandby`
+     * (`ios/Beid/Navigation/AppCoordinator.swift:941-958`) gates standby on `!homeBluetoothIsOff` and,
+     * when the gate closes, stops discovery only while idle;
+     * `SensingCoordinator.handle(.state)` (`ios/Beid/Sensing/SensingCoordinator.swift:1849-1856`)
+     * restarts a requested standby scan once scanning is possible again.
+     *
+     * A joined session is never touched: the radio does not change
+     * EventFound / Recording / SignalLost, and its transport is Barnard's.
+     * Stopping also withdraws the rescue countdown, so a dead radio is never
+     * reported as "no joinable event nearby".
+     */
+    override fun onBluetoothRadioChanged(isOn: Boolean) {
+        if (disposed || isOn == bluetoothRadioOn) return
+        bluetoothRadioOn = isOn
+        if (!isOn) {
+            val standbyActive = discoveryOnlyScanOwned || nearbyDiscoveryStartedAtEpochMillis != null
+            if (scanPhase == ScanPhase.Idle && standbyActive) {
+                standbyPausedForRadio = true
+                stopNearbyEventDiscovery()
+            }
+        } else if (standbyPausedForRadio) {
+            standbyPausedForRadio = false
+            startNearbyEventDiscoveryIfIdle()
+        }
+    }
+
     override fun startNearbyEventDiscovery() = startNearbyEventDiscoveryIfIdle()
 
     private fun startNearbyEventDiscoveryIfIdle() {
         if (disposed || scanPhase != ScanPhase.Idle) return
+        if (!bluetoothRadioOn) {
+            // Requested while off: remember it, start nothing, run no rescue clock.
+            standbyPausedForRadio = true
+            return
+        }
         // Before the scan-ownership checks below, deliberately. The rescue
         // countdown is about the participant standing on the join surface
         // waiting for an event to appear, which is true whether or not this

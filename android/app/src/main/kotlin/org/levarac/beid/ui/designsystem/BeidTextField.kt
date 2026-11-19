@@ -34,10 +34,12 @@ fun BeidTextField(
     isError: Boolean,
     modifier: Modifier = Modifier,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    enabled: Boolean = true,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
+        enabled = enabled,
         placeholder = { Text(placeholder) },
         isError = isError,
         singleLine = true,

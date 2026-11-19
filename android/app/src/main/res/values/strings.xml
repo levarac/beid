@@ -263,4 +263,8 @@
     <string name="venue_bluetooth_permission">Bluetooth permission is needed to broadcast.</string>
     <string name="venue_radio_failed">The radio could not start.</string>
     <string name="venue_stopped">Broadcast stopped.</string>
+    <!-- Small uppercase caption above the "Venue broadcast" title, naming the area of the app this screen belongs to. iOS VenueSignedServingView's eyebrow without its "· iOS only" suffix, which would be false on Android. -->
+    <string name="venue_eyebrow">Organizer tools</string>
+    <!-- Supporting sentence under the "Venue broadcast" title, explaining what the screen is for. Copied from iOS VenueSignedServingView on main; draft PR #824's version asks the user to scan a QR code, which Android cannot do yet. -->
+    <string name="venue_subtitle">Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.</string>
 </resources>
