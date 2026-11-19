@@ -22,8 +22,8 @@ final class BeidBackNavigationUITests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
-    let detailHeading = app.staticTexts["proof.detail.title"]
-    let backButton = app.navigationBars["ETHGlobal Tokyo"].buttons.firstMatch
+    let detailHeading = app.scrollViews["proof.detail.content"]
+    let backButton = app.navigationBars.firstMatch.buttons.firstMatch
     let collection = app.collectionViews["records.events"]
     swipeFromLeadingEdge {
       detailHeading.exists && detailHeading.isHittable
@@ -32,7 +32,7 @@ final class BeidBackNavigationUITests: XCTestCase {
     }
 
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
-    XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
+    XCTAssertFalse(detailHeading.exists)
     let eventHeading = app.staticTexts["event-detail.heading"]
     let eventBack = app.navigationBars.buttons["By event"]
     swipeFromLeadingEdge {
@@ -47,14 +47,15 @@ final class BeidBackNavigationUITests: XCTestCase {
     )
     let byEventNavigation = app.navigationBars["By event"]
     let byEventHeading = byEventNavigation.staticTexts["By event"]
-    let byEventBack = byEventNavigation.buttons["Back"]
+    // The system may label the back button with the parent title (Records).
+    let byEventBack = byEventNavigation.buttons.firstMatch
     swipeFromLeadingEdge {
       byEventHeading.exists && byEventHeading.isHittable
         && byEventBack.exists && byEventBack.isHittable
         && (!eventHeading.exists || !eventHeading.isHittable)
     }
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
-    XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
+    XCTAssertFalse(app.scrollViews["proof.detail.content"].exists)
   }
 
   /// A leading-edge drag on Collection leaves the current standard
@@ -158,6 +159,6 @@ final class BeidBackNavigationUITests: XCTestCase {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
   }
 }

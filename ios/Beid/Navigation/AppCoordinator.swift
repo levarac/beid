@@ -361,12 +361,15 @@ final class AppCoordinator: ObservableObject {
     guard hasReport || noReports || observationDetail else { return }
 
     let eventCode = "ETHTOKYO2026"
+    let fixtureEventName = arguments.contains("-beid-long-record-name-fixture")
+      ? "International Community Gathering and Technology Festival Tokyo 2026"
+      : "ETH Tokyo 2026"
     let starts: [TimeInterval] = [1_774_486_920, 1_774_498_500, 1_774_510_200]
     let deviceCounts = [23, 18, 31]
     for (index, start) in starts.enumerated() {
       let proof = Proof(
         id: UUID(uuidString: "00000000-0000-4000-8000-00000000063\(index + 1)")!,
-        eventName: "ETH Tokyo 2026", date: Date(timeIntervalSince1970: start),
+        eventName: fixtureEventName, date: Date(timeIntervalSince1970: start),
         peersVerified: 0, eventCode: eventCode
       )
       proofStore.add(proof)

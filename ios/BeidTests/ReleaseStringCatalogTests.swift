@@ -49,6 +49,33 @@ final class ReleaseStringCatalogTests: XCTestCase {
     }
   }
 
+  func testEnglishCatalogDoesNotDescribeSupportedDevicesAsPhones() throws {
+    let phone = try NSRegularExpression(pattern: "\\bphones?\\b", options: .caseInsensitive)
+    for (key, entry) in try catalog() {
+      let item = entry as? [String: Any]
+      let localizations = item?["localizations"] as? [String: Any]
+      let english = localizations?["en"] as? [String: Any]
+      let stringUnit = english?["stringUnit"] as? [String: Any]
+      let values = [key, stringUnit?["value"] as? String].compactMap { $0 }
+      for value in values {
+        XCTAssertNil(phone.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)),
+                     "Use device terminology in user-facing copy: \(key)")
+      }
+    }
+  }
+
+  func testSensingAndBluetoothDeviceCopyIsInCatalog() throws {
+    let strings = try catalog()
+    for key in [
+      "Listening for nearby devices…",
+      "Keep the app open. Sensing starts when beid hears another device at this event.",
+      "Keep the app open nearby to help devices observe each other and keep signed records.",
+      "beid uses Bluetooth to find nearby events and hear nearby devices. Turn it on for beid in Settings."
+    ] {
+      XCTAssertNotNil(strings[key], "Missing catalog entry: \(key)")
+    }
+  }
+
   private func stringValues(in value: Any) -> [String] {
     if let dictionary = value as? [String: Any] {
       return dictionary.flatMap { key, value in

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import XCTest
+import UIKit
 
 /// Deterministic Home frames for PM's Figma side-by-side review. Each launch
 /// passes -beid-ui-test before its frame fixture so the production app never
@@ -16,6 +17,11 @@ final class FlatScreenshotTourB: XCTestCase {
   func testShot_04_Events() {
     launchHome(arguments: ["-beid-home-frame-04"])
     XCTAssertTrue(app.otherElements["home.active-event"].waitForExistence(timeout: 5))
+    assertNavigationTitleDrawn("Now", onDarkBackground: true)
+    let title = app.navigationBars.staticTexts["Now"]
+    let activeContent = app.otherElements["home.active-event"]
+    XCTAssertEqual(activeContent.frame.minX, title.frame.minX, accuracy: 1.0,
+                   "The active content should align with the navigation title")
     XCTAssertFalse(
       app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETH Tokyo 2026")).firstMatch.exists,
       "The active Proof must not also appear as a PAST row"
@@ -122,6 +128,20 @@ final class FlatScreenshotTourB: XCTestCase {
     }
   }
 
+  func testHomeTabsUseNavigationTitles() {
+    launchHome(arguments: ["-beid-home-frame-04b"])
+    XCTAssertTrue(app.navigationBars.staticTexts["Now"].waitForExistence(timeout: 5))
+    assertNavigationTitleDrawn("Now", onDarkBackground: false)
+    XCTAssertTrue(app.buttons["home.account"].isHittable)
+    capture("now-navigation")
+    app.tabButton("Records").tap()
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].waitForExistence(timeout: 5))
+    assertNavigationTitleDrawn("Records", onDarkBackground: false)
+    XCTAssertTrue(app.buttons["records.by-event"].isHittable)
+    XCTAssertTrue(app.buttons["home.account"].isHittable)
+    capture("records-navigation")
+  }
+
   func testShot_08_EventDetail() {
     launchHome(arguments: ["-beid-event-detail-frame-08"])
     app.openRecordsByEvent()
@@ -129,6 +149,7 @@ final class FlatScreenshotTourB: XCTestCase {
     XCTAssertTrue(event.waitForExistence(timeout: 5))
     event.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Event"].exists)
     XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "event-detail.report.")).firstMatch.exists)
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "receipt stored")).firstMatch.exists)
     capture("08")
@@ -137,7 +158,7 @@ final class FlatScreenshotTourB: XCTestCase {
     if !proof.isHittable { app.swipeUp() }
     XCTAssertTrue(proof.waitForExistence(timeout: 5))
     proof.tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
   }
 
   func testShot_08c_NoReports() {
@@ -171,5 +192,31 @@ final class FlatScreenshotTourB: XCTestCase {
     attachment.name = name
     attachment.lifetime = .keepAlways
     add(attachment)
+  }
+
+  private func assertNavigationTitleDrawn(_ title: String, onDarkBackground: Bool, file: StaticString = #filePath, line: UInt = #line) {
+    let label = app.navigationBars.staticTexts[title]
+    XCTAssertTrue(label.waitForExistence(timeout: 5), file: file, line: line)
+    let window = app.windows.firstMatch
+    guard let image = window.screenshot().image.cgImage else {
+      return XCTFail("Cannot inspect navigation title", file: file, line: line)
+    }
+    let scale = CGFloat(image.width) / window.frame.width
+    let frame = label.frame.offsetBy(dx: -window.frame.minX, dy: -window.frame.minY)
+      .applying(CGAffineTransform(scaleX: scale, y: scale)).integral
+    guard let crop = image.cropping(to: frame), crop.width > 0, crop.height > 0 else {
+      return XCTFail("Navigation title has no screenshot area", file: file, line: line)
+    }
+    var pixels = [UInt8](repeating: 0, count: crop.width * crop.height)
+    let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
+      guard let context = CGContext(data: buffer.baseAddress, width: crop.width, height: crop.height,
+                                    bitsPerComponent: 8, bytesPerRow: crop.width,
+                                    space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+      context.draw(crop, in: CGRect(x: 0, y: 0, width: crop.width, height: crop.height))
+      return true
+    }
+    XCTAssertTrue(rendered, file: file, line: line)
+    let contrastingPixels = pixels.filter { onDarkBackground ? $0 > 160 : $0 < 160 }.count
+    XCTAssertGreaterThan(contrastingPixels, 10, "Navigation title must be visible against its background", file: file, line: line)
   }
 }

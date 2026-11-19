@@ -189,12 +189,12 @@
         }
       }
     },
-    "Kept on this phone": {
+    "Kept on this device": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kept on this phone"
+            "value": "Kept on this device"
           }
         }
       }
@@ -329,12 +329,12 @@
         }
       }
     },
-    "EVENT WINDOWS ON THIS PHONE": {
+    "EVENT WINDOWS ON THIS DEVICE": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "EVENT WINDOWS ON THIS PHONE"
+            "value": "EVENT WINDOWS ON THIS DEVICE"
           }
         }
       }
@@ -499,12 +499,12 @@
         }
       }
     },
-    "PREPARED ON THIS PHONE": {
+    "PREPARED ON THIS DEVICE": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "PREPARED ON THIS PHONE"
+            "value": "PREPARED ON THIS DEVICE"
           }
         }
       }
@@ -529,22 +529,22 @@
         }
       }
     },
-    "SEALED ON THIS PHONE": {
+    "SEALED ON THIS DEVICE": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "SEALED ON THIS PHONE"
+            "value": "SEALED ON THIS DEVICE"
           }
         }
       }
     },
-    "RECORDED ON THIS PHONE": {
+    "RECORDED ON THIS DEVICE": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "RECORDED ON THIS PHONE"
+            "value": "RECORDED ON THIS DEVICE"
           }
         }
       }
@@ -1035,7 +1035,7 @@
       }
     },
     "detail.devicesSensed.label": {
-      "comment": "Metric row label on Proof Detail and Signal Lost, paired with a number. \"Devices\", not people: it counts distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual or reciprocal confirmation — this device cannot tell whether a peer also observed it back. Use your language's word for a phone or handset, not a word for a person or a peer.",
+      "comment": "Metric row label on Proof Detail and Signal Lost, paired with a number. \"Devices\", not people: it counts distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual or reciprocal confirmation — this device cannot tell whether a peer also observed it back. Use your language's word for a device, not a word for a person or a peer.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -1340,6 +1340,7 @@
     "Sense Event": {},
     "Sensing": {},
     "Sensing details": {},
+    "Event name": {},
     "Any record created will be saved on this device.": {},
     "Your record will be saved on this device.": {},
     "Your record is saved on this device. You'll find it in Records.": {},
@@ -2466,6 +2467,9 @@
       "comment": "Button: copies the full, unshortened event identifier to the system clipboard."
     },
     "Event": {},
+    "Record": {
+      "comment": "Navigation title for a saved participation record."
+    },
     "Event ID": {},
     "Fetching the pack took too long. Check the network and try again.": {},
     "Getting pack": {},
@@ -2474,7 +2478,7 @@
     "Link": {},
     "Link names no source": {},
     "Load a signed pack, check it, then broadcast it.": {},
-    "Load the signed pack the organizer gave you. Once it checks out, this phone broadcasts it.": {},
+    "Load the signed pack the organizer gave you. Once it checks out, this device broadcasts it.": {},
     "No camera access": {},
     "No pack yet. Paste the link the organizer gave you, or scan its QR code.": {},
     "Not a venue link": {},
@@ -2781,7 +2785,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "RECORDED ON THIS PHONE"
+            "value": "RECORDED ON THIS DEVICE"
           }
         }
       }
@@ -2992,7 +2996,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "PREPARED ON THIS PHONE"
+            "value": "PREPARED ON THIS DEVICE"
           }
         }
       }
@@ -3091,7 +3095,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "RECORDED ON THIS PHONE"
+            "value": "RECORDED ON THIS DEVICE"
           }
         }
       }
@@ -3245,7 +3249,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "PREPARED ON THIS PHONE · %@"
+            "value": "PREPARED ON THIS DEVICE · %@"
           }
         }
       }
@@ -3939,7 +3943,7 @@
     "Events find you": {},
     "Get Started": {},
     "Join Event": {},
-    "Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.": {},
+    "Load the signed pack the organiser gave you. Once it checks out, this device broadcasts it.": {},
     "No pack yet. Paste the link the organiser gave you, or scan its QR code.": {},
     "Not submittable (count-only record)": {
       "comment": "Sub-state row under \"Participation record\": windows recorded with only a device count and no reporter RPID can never be submitted to a report server. This row makes that exclusion explicit instead of silently dropping those windows (levarac/dispatch#3).",
@@ -3984,7 +3988,7 @@
         }
       }
     },
-    "Records stay on this phone until sending is turned on for this build.": {},
+    "Records stay on this device until sending is turned on for this build.": {},
     "SENDING STATUS · ALL SAVED OBSERVATIONS": {},
     "Sensing runs quietly in the background. Nothing to tap.": {},
     "Signal Lost": {},

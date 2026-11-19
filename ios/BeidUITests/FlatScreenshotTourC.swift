@@ -130,7 +130,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let reportID = app.descendants(matching: .any)["report-detail.record-id"]
     reportID.assertExists()
     XCTAssertTrue(reportID.label.contains(Self.linkedReportID), reportID.label)
-    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS PHONE"))
+    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS DEVICE"))
     XCTAssertTrue(app.descendants(matching: .any)["report-detail.delivery"].label.contains("NOT SENT"))
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.staticTexts["observation-detail.title"].assertExists()
@@ -171,16 +171,15 @@ final class FlatScreenshotTourC: XCTestCase {
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
-    let title = app.staticTexts["proof.detail.title"]
-    title.assertExists()
-    XCTAssertTrue(app.staticTexts["RECORDED ON THIS PHONE"].exists)
+    app.scrollViews["proof.detail.content"].assertExists()
+    XCTAssertTrue(app.navigationBars["ETH Tokyo 2026"].exists)
+    XCTAssertTrue(app.staticTexts["RECORDED ON THIS DEVICE"].exists)
     XCTAssertFalse(app.staticTexts["STATUS"].exists)
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
     XCTAssertFalse(app.buttons["Connect wallet"].exists)
     XCTAssertFalse(app.staticTexts["VERIFIED"].exists)
-    XCTAssertEqual(title.label.replacingOccurrences(of: "\n", with: " "), "Attendance Record")
 
-    let expectedTitles = ["RECORDED ON THIS PHONE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"]
+    let expectedTitles = ["RECORDED ON THIS DEVICE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"]
     for (index, expected) in expectedTitles.enumerated() {
       // Match the exposed row identifier and title, excluding its detail text.
       let rung = app.staticTexts.matching(identifier: "record.ladder.\(index + 1)")
@@ -194,12 +193,62 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertGreaterThanOrEqual(unavailableResults.count, 2)
   }
 
+  func testRecordDetailKeepsLongEventNameAvailable() {
+    let eventName = "International Community Gathering and Technology Festival Tokyo 2026"
+    let app = launchEventDetailFixture(extraArguments: ["-beid-long-record-name-fixture"])
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars[eventName].exists)
+    let disclosure = app.buttons["record.event-name.disclosure"]
+    disclosure.scrollToHittable(in: app)
+    disclosure.tap()
+    let fullName = app.staticTexts.matching(identifier: "record.event-name.disclosure")
+      .matching(NSPredicate(format: "label == %@", eventName)).firstMatch
+    XCTAssertTrue(fullName.waitForExistence(timeout: 5))
+    XCTAssertEqual(fullName.label, eventName)
+    XCTAssertGreaterThan(fullName.frame.height, 40)
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "record-detail-long-event-name"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    app.swipeUp()
+    XCTAssertTrue(app.navigationBars[eventName].exists)
+  }
+
+  func testRecordDetailDoesNotRepeatEventNameAsHeading() {
+    let app = launchEventDetailFixture(extraArguments: [])
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    XCTAssertTrue(app.navigationBars["ETH Tokyo 2026"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["proof.detail.title"].exists,
+                   "The event name should not appear as a second heading")
+    XCTAssertTrue(app.buttons["record.event-name.disclosure"].exists)
+  }
+
+  func testSessionOpenedFromRecordHasNoParentRecordLink() {
+    let app = launchEventDetailFixture(extraArguments: [])
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "record.session.")).firstMatch
+    session.scrollToHittable(in: app)
+    session.tap()
+    XCTAssertTrue(app.staticTexts["observation-detail.title"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["View this session's record"].exists,
+                   "Back already returns to the parent record")
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(app.navigationBars["ETH Tokyo 2026"].waitForExistence(timeout: 5))
+  }
+
   func testSelectingObservedWindowExposesThatSelection() {
     let app = launchObservationFixture()
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     let fullSigil = app.descendants(matching: .any).matching(
       NSPredicate(format: "label == %@", "Devices heard: 23. Window 6. Mutual check not available yet.")
     ).firstMatch
@@ -258,7 +307,7 @@ final class FlatScreenshotTourC: XCTestCase {
     app.staticTexts["event-detail.heading"].assertExists()
     record.scrollToHittable(in: app)
     record.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     fullSigil.assertExists()
   }
 
@@ -267,7 +316,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     let artwork = app.descendants(matching: .any).matching(
       NSPredicate(format: "label == %@", "Devices heard: 23. Window 6. Mutual check not available yet.")
     ).firstMatch
@@ -286,7 +335,7 @@ final class FlatScreenshotTourC: XCTestCase {
     app.descendants(matching: .any)["whatWeSend.firstRow"].assertExists()
     let scroll = app.scrollViews["whatWeSend.scroll"]
     scroll.assertExists()
-    let signatureTitle = "A signature from this phone"
+    let signatureTitle = "A signature from this device"
     let signature = app.descendants(matching: .any).matching(
       NSPredicate(format: "label BEGINSWITH %@ AND label != %@", signatureTitle, signatureTitle)
     ).firstMatch
@@ -361,7 +410,7 @@ final class FlatScreenshotTourC: XCTestCase {
     attachScreenshot("12-linked")
 
     proofRow.tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
     assertFromReportsListsTheLinkedReport(app)
   }
 
@@ -403,7 +452,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let proof = app.buttons["event-detail.proof.1"]
     proof.scrollToHittable(in: app)
     proof.tap()
-    app.staticTexts["proof.detail.title"].assertHittable()
+    app.scrollViews["proof.detail.content"].assertHittable()
     app.staticTexts["FROM REPORTS"].scrollToHittable(in: app)
     let report = app.buttons["proof-detail.report.\(Self.linkedReportID)"]
     XCTAssertTrue(report.exists)
@@ -430,7 +479,7 @@ final class FlatScreenshotTourC: XCTestCase {
     for _ in 0..<5 where !proof.isHittable { app.swipeUp() }
     XCTAssertTrue(proof.waitForExistence(timeout: 5))
     proof.tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
     for _ in 0..<3 { app.swipeUp() }
     XCTAssertFalse(app.staticTexts["FROM REPORTS"].exists)
   }
@@ -564,7 +613,7 @@ final class FlatScreenshotTourC: XCTestCase {
       XCTAssertGreaterThan(recordID.frame.width, 100, file: file, line: line)
       XCTAssertEqual(app.staticTexts["proof-collected.status"].label, "SEALED", file: file, line: line)
     } else if code == "09" {
-      XCTAssertTrue(app.staticTexts["proof.detail.title"].exists, file: file, line: line)
+      XCTAssertTrue(app.scrollViews["proof.detail.content"].exists, file: file, line: line)
       XCTAssertTrue(app.staticTexts["Bound to wallet"].exists, file: file, line: line)
       XCTAssertFalse(app.buttons["Transparency"].exists, file: file, line: line)
       XCTAssertFalse(app.buttons["View participation summary"].exists, file: file, line: line)

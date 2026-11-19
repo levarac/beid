@@ -59,7 +59,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     let expectedTitles = Dictionary(uniqueKeysWithValues: titles.map { ("Record for \($0)", $0) })
     let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record."))
     captureRecordState("records-\(name)-initial")
-    let heading = grid.staticTexts["Records"]
+    let heading = app.navigationBars.staticTexts["Records"]
     assertVisibleInWindow(heading)
 
     // Observe two distinct, simultaneously visible cards before any scrolling.
@@ -67,6 +67,10 @@ final class BeidIPadLayoutTests: XCTestCase {
       $0.isHittable && window.frame.contains($0.frame) && !$0.frame.isEmpty
     }
     XCTAssertGreaterThanOrEqual(visibleCards.count, 2)
+    if let firstCard = visibleCards.first {
+      XCTAssertEqual(firstCard.frame.minX, heading.frame.minX, accuracy: 1.0,
+                     "The grid should align with the navigation title")
+    }
     let selectedCards = Array(visibleCards.prefix(2)).map { ($0.identifier, $0.label) }
     XCTAssertEqual(Set(selectedCards.map { $0.0 }).count, 2)
     XCTAssertEqual(Set(selectedCards.map { $0.1 }).count, 2)
@@ -100,8 +104,9 @@ final class BeidIPadLayoutTests: XCTestCase {
       assertVisibleInWindow(card)
       card.tap()
       let navigation = app.navigationBars[title]
-      XCTAssertTrue(navigation.waitForExistence(timeout: 5), "Expected event title \(title)")
-      XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+      XCTAssertTrue(navigation.waitForExistence(timeout: 5))
+      XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
+      XCTAssertEqual(navigation.staticTexts[title].label, title)
       let fullID = app.staticTexts["Record ID \(recordID)"]
       fullID.scrollToHittable(in: app)
       XCTAssertEqual(fullID.label, "Record ID \(recordID)")
@@ -224,7 +229,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
     capture(named: "proof-detail-\(orientation)")
     app.navigationBars.buttons.firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
@@ -253,8 +258,8 @@ final class BeidIPadLayoutTests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
-    app.staticTexts["SEALED ON THIS PHONE"].scrollToHittable(in: app)
-    XCTAssertTrue(app.staticTexts["SEALED ON THIS PHONE"].exists)
+    app.staticTexts["SEALED ON THIS DEVICE"].scrollToHittable(in: app)
+    XCTAssertTrue(app.staticTexts["SEALED ON THIS DEVICE"].exists)
     XCTAssertTrue(app.staticTexts["Self-signed on device"].exists)
     XCTAssertFalse(app.staticTexts["Verified"].exists)
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
@@ -266,7 +271,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
-    assertRecordDetailHidesNumericMutualCount(firstRung: "SEALED ON THIS PHONE")
+    assertRecordDetailHidesNumericMutualCount(firstRung: "SEALED ON THIS DEVICE")
   }
 
   func testRecordDetailHidesNumericMutualCountWithMeasuredSnapshot() {
@@ -283,14 +288,14 @@ final class BeidIPadLayoutTests: XCTestCase {
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
 
     // This is a real stored aggregate (23 devices, six observed windows),
     // not a missing snapshot that could hide a fabricated measured zero.
     app.descendants(matching: .any).matching(NSPredicate(
       format: "label == %@", "Devices heard: 23. Window 6. Mutual check not available yet."
     )).firstMatch.assertExists()
-    assertRecordDetailHidesNumericMutualCount(firstRung: "RECORDED ON THIS PHONE")
+    assertRecordDetailHidesNumericMutualCount(firstRung: "RECORDED ON THIS DEVICE")
   }
 
   private func assertRecordDetailHidesNumericMutualCount(
@@ -379,7 +384,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     sessions.firstMatch.tap()
     XCTAssertTrue(app.staticTexts["observation-detail.title"].waitForExistence(timeout: 5))
     app.navigationBars.buttons.firstMatch.tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
   }
 
   /// beid#218, DECISIONS 2026-08-20: the Recording screen must show a
@@ -485,7 +490,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()
     XCTAssertTrue(
-      app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5),
+      app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5),
       "Expected Proof Detail after opening the DemoEvent proof.\n\(app.debugDescription)"
     )
   }

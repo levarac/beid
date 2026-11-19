@@ -31,7 +31,7 @@ struct VenueSignedServingView: View {
           .beidTextStyle(DS.Font.Library.display52)
           .foregroundStyle(DS.Color.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
-        Text("Load the signed pack the organizer gave you. Once it checks out, this phone broadcasts it.")
+        Text("Load the signed pack the organizer gave you. Once it checks out, this device broadcasts it.")
           .beidTextStyle(DS.Font.Library.body15)
           .foregroundStyle(DS.Color.textSecondary)
           .padding(.top, DS.Space.m)

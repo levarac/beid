@@ -40,7 +40,7 @@ struct EventDetailView: View {
             .beidTextStyle(DS.Font.Library.display46)
             .foregroundStyle(DS.Color.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: 220, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("event-detail.heading")
 
@@ -60,7 +60,7 @@ struct EventDetailView: View {
       }
     }
     .background(DS.Color.surfaceCanvas)
-    .navigationTitle("")
+    .navigationTitle("Event")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       if let eventCode {
@@ -117,7 +117,7 @@ struct EventDetailView: View {
   private func sessionRow(index: Int, proof: Proof) -> some View {
     let aggregate = sensing.sessionAggregateSnapshot(forProofId: proof.id)
     return NavigationLink {
-      ObservationDetailView(proof: proof, sessionNumber: index, aggregate: aggregate)
+      ObservationDetailView(proof: proof, sessionNumber: index, aggregate: aggregate, showsSessionRecordLink: true)
     } label: {
       VStack(alignment: .leading, spacing: DS.Space.xs) {
         HStack(alignment: .firstTextBaseline) {
@@ -178,7 +178,7 @@ struct EventDetailView: View {
           HStack(spacing: DS.Space.m) {
             RecordSigilSlot(input: sensing.sigilInput(forProofId: anchor.id), placement: .eventDetailRow, isDeviceRecord: true)
             VStack(alignment: .leading, spacing: DS.Space.xs) {
-              Text("Attendance Record").beidTextStyle(DS.Font.Library.title15)
+              Text("Record").beidTextStyle(DS.Font.Library.title15)
               Text(String(localized: "record.event.sessions", defaultValue: "SESSIONS · \(sessions.count)"))
                 .beidTextStyle(DS.Font.Library.labelMono10)
                 .foregroundStyle(DS.Color.textSecondary)
