@@ -8,6 +8,7 @@ import UIKit
 /// The view model remains the only owner of verification, effects and teardown.
 struct VenueSignedServingView: View {
   @StateObject private var viewModel: VenueSignedServingViewModel
+  @ObservedObject private var bluetoothMonitor: BluetoothMonitor
   @Environment(\.scenePhase) private var scenePhase
   @State private var requestTask: Task<Void, Never>?
   @StateObject private var lifecycleTasks = VenueLifecycleTaskOwner()
@@ -16,8 +17,12 @@ struct VenueSignedServingView: View {
   @State private var scannerStartFailure: String?
   @State private var scannerRefusal: VenueLinkScanner.Authorization?
 
-  init(viewModel: @autoclosure @escaping () -> VenueSignedServingViewModel) {
+  init(
+    viewModel: @autoclosure @escaping () -> VenueSignedServingViewModel,
+    bluetoothMonitor: BluetoothMonitor
+  ) {
     _viewModel = StateObject(wrappedValue: viewModel())
+    self.bluetoothMonitor = bluetoothMonitor
   }
 
   var body: some View {
@@ -83,6 +88,7 @@ struct VenueSignedServingView: View {
         default: break
         }
       } else {
+        bluetoothMonitor.start()
         viewModel.beginSession(isForeground: scenePhase != .background)
       }
     }
@@ -219,14 +225,18 @@ struct VenueSignedServingView: View {
       .padding(.bottom, DS.Space.s)
       hairline
       switch effectiveStatus {
-      case .serving(let displayName, let stopAtUnixSeconds):
+      case .serving(let displayName, let stopAtUnixSeconds),
+           .waitingForBluetooth(let displayName, let stopAtUnixSeconds):
         keyValueRow("Event") {
           Text(verbatim: displayName)
             .beidTextStyle(DS.Font.Library.labelMono11Time)
         }
         if let eventId = effectiveEventId { keyValueRow("Event ID") { eventIdCopyControl(eventId) } }
         keyValueRow("Until") {
-          if fixtureCode != nil {
+          if case .waitingForBluetooth = effectiveStatus {
+            Text(verbatim: Self.instantText(stopAtUnixSeconds))
+              .beidTextStyle(DS.Font.Library.labelMono11)
+          } else if fixtureCode != nil {
             Text("Broadcasting until 18:00")
               .beidTextStyle(DS.Font.Library.labelMono11)
           } else {
@@ -392,8 +402,10 @@ struct VenueSignedServingView: View {
   }
 
   private var isBroadcasting: Bool {
-    if case .serving = effectiveStatus { return true }
-    return false
+    switch effectiveStatus {
+    case .serving, .waitingForBluetooth: return true
+    default: return false
+    }
   }
 
   private func supply(_ link: String) {
@@ -416,6 +428,7 @@ struct VenueSignedServingView: View {
     case .importing: return "Checking pack"
     case .imported, .evaluating: return "Checking permission"
     case .serving: return "Asked to broadcast"
+    case .waitingForBluetooth: return "Waiting for Bluetooth"
     case .blocked: return "Cannot broadcast"
     case .importRejected: return "Pack rejected"
     case .acquisitionFailed: return "Pack unavailable"
@@ -456,7 +469,7 @@ struct VenueSignedServingView: View {
 
   private var effectiveStatus: VenueServingStatus {
     if fixtureCode != nil { return .serving(displayName: "ETH Tokyo 2026", stopAtUnixSeconds: 0) }
-    return viewModel.status
+    return viewModel.displayStatus(isBluetoothPoweredOff: bluetoothMonitor.isPoweredOff)
   }
 
   private var effectiveEventId: String? {

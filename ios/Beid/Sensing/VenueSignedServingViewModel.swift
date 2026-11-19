@@ -103,6 +103,8 @@ enum VenueServingStatus: Equatable {
   /// The only state that means bytes were handed to the radio. Its facts are
   /// copied from the permit and never recomputed.
   case serving(displayName: String, stopAtUnixSeconds: Int64)
+  /// Presentation only: the permit remains installed while Bluetooth is off.
+  case waitingForBluetooth(displayName: String, stopAtUnixSeconds: Int64)
   case blocked(VenueServingRejection)
   case importRejected(VenueImportFailure)
   case acquisitionFailed(VenueAcquisitionFailure)
@@ -199,6 +201,15 @@ final class VenueSignedServingViewModel: ObservableObject {
   var canonicalEventIdHexForAcquisition: String? { canonicalEventIdHex }
 
   private var eligible: Bool { sessionActive && !isBackgrounded }
+
+  /// Power off can disprove serving; power on cannot confirm advertising.
+  /// Keep the lease and SDK state intact so their existing callbacks and
+  /// deadline remain authoritative.
+  func displayStatus(isBluetoothPoweredOff: Bool) -> VenueServingStatus {
+    guard isBluetoothPoweredOff,
+      case .serving(let displayName, let stopAtUnixSeconds) = status else { return status }
+    return .waitingForBluetooth(displayName: displayName, stopAtUnixSeconds: stopAtUnixSeconds)
+  }
 
   init(
     verifier: any VenueBundleVerifying,

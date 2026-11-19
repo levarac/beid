@@ -124,6 +124,7 @@ final class OrganizerToolsObjects: ObservableObject {
 /// pack import and signed broadcast workflow; the Saved pack area below it only
 /// reports what is stored and has no controls.
 struct OrganizerToolsView: View {
+  @EnvironmentObject private var coordinator: AppCoordinator
   @StateObject private var tools: OrganizerToolsObjects
   @State private var showVenueBroadcast = false
 
@@ -207,7 +208,7 @@ struct OrganizerToolsView: View {
     .background(DS.Color.surfaceCanvas)
     .navigationBarTitleDisplayMode(.inline)
     .navigationDestination(isPresented: $showVenueBroadcast) {
-      VenueSignedServingView(viewModel: serving)
+      VenueSignedServingView(viewModel: serving, bluetoothMonitor: coordinator.bluetoothMonitor)
         .accountLargeDetent(.venueBroadcast)
     }
     .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)

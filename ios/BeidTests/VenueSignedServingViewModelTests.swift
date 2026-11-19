@@ -69,6 +69,46 @@ final class VenueSignedServingViewModelTests: XCTestCase {
 
   // MARK: - Scenario 1 — every import rejection
 
+  func testBluetoothOffDemotesTheDisplayedServingStatusWithoutStoppingTheLease() async throws {
+    let model = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(model)
+    let callsBefore = ports.calls
+
+    XCTAssertEqual(
+      model.displayStatus(isBluetoothPoweredOff: true),
+      .waitingForBluetooth(displayName: fixture.permit().displayName,
+                           stopAtUnixSeconds: fixture.permit().stopAtUnixSeconds)
+    )
+    XCTAssertEqual(model.status, .serving(displayName: fixture.permit().displayName,
+                                        stopAtUnixSeconds: fixture.permit().stopAtUnixSeconds))
+    XCTAssertEqual(ports.calls, callsBefore, "power observation must only change presentation")
+    XCTAssertNotNil(ports.installedPermit)
+    XCTAssertTrue(expiry.isScheduled)
+  }
+
+  func testBluetoothOnPreservesEveryExistingStatusWithoutInventingRadioSuccess() async throws {
+    let model = makeViewModel()
+    XCTAssertEqual(model.displayStatus(isBluetoothPoweredOff: false), .idle)
+    XCTAssertEqual(model.displayStatus(isBluetoothPoweredOff: true), .idle)
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(model)
+    let original = model.status
+    let radioBefore = model.radio
+
+    _ = model.displayStatus(isBluetoothPoweredOff: true)
+
+    XCTAssertEqual(model.displayStatus(isBluetoothPoweredOff: false), original)
+    XCTAssertEqual(model.radio, radioBefore, "powered on is not an advertising confirmation")
+    ports.emit(VenueRadioUpdate(state: .failed, failure: .bluetoothUnavailable)!)
+    XCTAssertEqual(model.displayStatus(isBluetoothPoweredOff: false), .radioRefused(.bluetoothUnavailable))
+    XCTAssertEqual(model.displayStatus(isBluetoothPoweredOff: true), .radioRefused(.bluetoothUnavailable))
+    model.stop()
+    XCTAssertEqual(model.displayStatus(isBluetoothPoweredOff: true), .idle)
+  }
+
   func testEveryImportRejectionIsSurfacedAndNothingIsInstalled() async throws {
     for failure in VenueImportFailure.allCases {
       ports = ScriptedVenuePorts()
