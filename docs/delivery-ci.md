@@ -181,10 +181,10 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     planning.
 
     `scripts/ios_ui_smoke.py shards` balances methods longest-first using
-    `scripts/ios-ui-durations.json`. Its initial measured values are from a
-    local iPad run; replace them with hosted iPhone `test-tree.json` case
-    durations after the first runs. Missing/new methods get a 20-second weight;
-    identifier ordering and the lowest shard index break ties, so every new
+    `scripts/ios-ui-durations.json`. The weights combine hosted iPhone
+    `test-tree.json` case durations with projections for changed and new tests.
+    Methods missing from the table get a 20-second weight. Identifier ordering
+    and the lowest shard index break ties, so every new
     test is assigned exactly once. Runtime UI enumeration must also equal the
     current Swift source inventory. The two tablet-only methods in
     `scripts/ios-ui-iphone-skips.txt` remain selected and must have result nodes;

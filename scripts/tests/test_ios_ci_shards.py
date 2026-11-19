@@ -128,6 +128,29 @@ class AggregateContractTest(unittest.TestCase):
     def test_happy_path(self):
         self.verify()
 
+    def add_two_ui_shards(self):
+        for index, method in enumerate(("testThree", "testFour"), start=3):
+            case_identifier = f"FlowTests/{method}"
+            test = f"BeidUITests/{case_identifier}"
+            self.manifest["ui"].append(test)
+            self.manifest["shards"].append([test])
+            self.evidence[f"ui-{index}"] = tree([{
+                "nodeType": "Test Case",
+                "nodeIdentifier": f"{case_identifier}()",
+                "result": "Passed",
+                "durationInSeconds": 1.25,
+            }], unit=False)
+
+    def test_full_aggregate_accepts_four_ui_shards(self):
+        self.add_two_ui_shards()
+        self.assertIn("all 5 cases accounted for", self.verify())
+
+    def test_full_aggregate_rejects_missing_fourth_ui_shard(self):
+        self.add_two_ui_shards()
+        del self.evidence["ui-4"]
+        with self.assertRaisesRegex(ValueError, "missing or extra lane artifacts"):
+            self.verify()
+
     def test_cancelled_failed_or_skipped_shard_job_fails(self):
         for result in ("cancelled", "failure", "skipped", ""):
             self.needs["tests"]["result"] = result

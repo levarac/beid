@@ -198,7 +198,7 @@ jobs:
     # never route a fork pull request back to a persistent signing host.
     runs-on: macos-26
     # The former serial full job hit 60 minutes. Full mode now builds once
-    # and fans out to <=4 macOS test jobs. Smoke retains its single job.
+    # and fans out to at most five macOS test jobs. Smoke retains its single job.
     # 45 minutes is containment for build/smoke, not a performance target.
     timeout-minutes: 45
     steps:
