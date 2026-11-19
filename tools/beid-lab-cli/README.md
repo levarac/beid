@@ -172,7 +172,7 @@ here would be a second implementation of a shared decision, which
 `AGENTS.md`'s ownership boundary forbids, and issue #588's own scope says
 this CLI is Barnard-only with no shared macOS build. Extract the envelope
 with the tooling that owns bundle decoding and pass the delivery container:
-`tools/event-occurrence/delivery-container.mjs` in levarac/parallax writes
+`tools/event-occurrence/bundle-to-delivery-container.mjs` in levarac/parallax writes
 the delivery container phones accept now from a published bundle.
 
 ### `participate`
