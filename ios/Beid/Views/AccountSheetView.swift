@@ -5,12 +5,12 @@ import SwiftUI
 import UIKit
 
 private enum AccountSheetDetent {
-  static let compact: PresentationDetent = .fraction(0.575)
+  static let compact: PresentationDetent = .medium
 }
 
 /// Destinations request the large Account sheet while they are in its stack.
-/// Separate keys let future Account routes (About sensing / What we send)
-/// register without coupling their navigation state to Organizer tools.
+/// Separate keys let each Account route (Organizer tools, About sensing,
+/// What we send) register without coupling its navigation state to another.
 @MainActor
 final class AccountLargeDetentRequests: ObservableObject {
   enum Destination: Hashable {
@@ -52,14 +52,14 @@ extension View {
   }
 }
 
-/// Flat 2b screen 10: Account sheet and its Bluetooth, copy and disconnect
-/// states. DECISIONS 2026-09-26 keeps optional wallet/Account Join and leaves
-/// Venue device placement to #647; DECISIONS 2026-09-23 removes Account Leave.
+/// Flat 2b v2 screen 10 and its states 10b (no wallet), 10c (Bluetooth off),
+/// 10d (disconnect confirm) and 10e (copied). DECISIONS 2026-10-15 sets the
+/// rows (Bluetooth / Organizer tools / Disconnect wallet), keeps Share
+/// support information and the Bluetooth relay note, and moves About to the
+/// footer; DECISIONS 2026-09-23 removes Account Leave.
 struct AccountSheetView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
-  @Environment(\.dismiss) private var dismiss
   @State private var showOrganizerTools = false
-  @State private var showPastEvents = false
   @State private var showAboutSensing = false
   @State private var showDisconnectConfirmation = false
   @State private var copied = false
@@ -70,12 +70,7 @@ struct AccountSheetView: View {
   var body: some View {
     NavigationStack {
       List {
-        // With the taller detent and top space for Done, this 116pt wallet
-        // row places its divider near Figma's y=540 without moving the text.
-        AccountSheetRow(
-          minHeight: DS.Space.xxl * 2 + DS.Space.m + DS.Space.xs,
-          hasDivider: !showDisconnectConfirmation
-        ) {
+        AccountSheetRow(hasDivider: !showDisconnectConfirmation) {
           walletContent
         }
         if showDisconnectConfirmation {
@@ -107,70 +102,35 @@ struct AccountSheetView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Organizer tools")
           }
+          if coordinator.walletAddress != nil {
+            AccountSheetRow(topGap: DS.Space.m + DS.Space.xs) {
+              Button(role: .destructive) {
+                showDisconnectConfirmation = true
+              } label: {
+                Text("Disconnect wallet")
+                  .beidTextStyle(DS.Font.Library.title17)
+                  .foregroundStyle(DS.Color.statusOff)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+                  .contentShape(Rectangle())
+              }
+              .buttonStyle(.plain)
+            }
+          } else {
+            // 10b: the note sits 20pt under the Organizer tools hairline.
+            AccountSheetRow(minHeight: 0, hasDivider: false) {
+              Text("Proofs stay on this device until a wallet is connected.")
+                .beidTextStyle(DS.Font.Library.body13)
+                .foregroundStyle(DS.Color.textSecondaryOnInk)
+                .padding(.top, DS.Space.m + DS.Space.xs)
+                .accessibilityIdentifier("account.wallet.note")
+            }
+          }
+          // beid#466 and DECISIONS 2026-10-15: a user-initiated, frozen
+          // support snapshot kept below the v2 rows. A text row (no icons in
+          // content, DESIGN.md §12); its explanation sits under the action
+          // like the Bluetooth relay note.
           AccountSheetRow(topGap: DS.Space.m + DS.Space.xs) {
-            Button(role: .destructive) {
-              showDisconnectConfirmation = true
-            } label: {
-              Text("Disconnect wallet")
-                .beidTextStyle(DS.Font.Library.title17)
-                .foregroundStyle(DS.Color.statusOff)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(coordinator.walletAddress == nil)
-          }
-          // DECISIONS 2026-09-26: keep the sole Past Events/rejoin path as an
-          // extra Account row below the three Figma menu rows.
-          AccountSheetRow(topGap: DS.Space.xxl) {
-            Button {
-              showPastEvents = true
-            } label: {
-              HStack {
-                Text(pastEventsLabel)
-                  .beidTextStyle(DS.Font.Library.title17)
-                Spacer()
-                Text(verbatim: "→")
-                  .beidTextStyle(DS.Font.Library.labelMono11)
-                  .accessibilityHidden(true)
-              }
-              .foregroundStyle(DS.Color.actionInverse)
-              .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
-              .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Past Events")
-          }
-          AccountSheetRow {
-            Button {
-              largeDetentRequests.set(.aboutSensing, active: true)
-              selectedDetent = .large
-              showAboutSensing = true
-            } label: {
-              HStack {
-                Text("About sensing")
-                  .beidTextStyle(DS.Font.Library.title17)
-                Spacer()
-                Text(verbatim: "→")
-                  .beidTextStyle(DS.Font.Library.labelMono11)
-                  .accessibilityHidden(true)
-              }
-              .foregroundStyle(DS.Color.actionInverse)
-              .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
-              .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("account.aboutSensing")
-            .accessibilityLabel("About sensing")
-          }
-          // Account Join stays with the owner decision that wallet is optional.
-          // Sensing ends through Home Stop or the scan cover's CLOSE.
-          EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
-          // beid#466: a user-initiated, frozen support snapshot. Flat 2b
-          // text row (#631 keeps icons out of controls); its explanation
-          // sits under the action like the Bluetooth relay note.
-          AccountSheetRow {
             VStack(alignment: .leading, spacing: 0) {
               Button {
                 supportShareItem = SupportShareItem(text: coordinator.supportDiagnostics.exportJson())
@@ -195,38 +155,32 @@ struct AccountSheetView: View {
       }
       .id(showDisconnectConfirmation)
       .listStyle(.plain)
-      // A taller detent restores Figma's y=400 top. This top margin keeps
-      // the measured wallet/address block aligned while giving Done its own
-      // space above Copy.
-      .contentMargins(.top, DS.Space.l + DS.Space.xs, for: .scrollContent)
+      // Figma 10 places the wallet label 48pt below the sheet's top edge,
+      // with or without the Copy item. The list runs under the untitled bar
+      // so both states share that position and the item sits beside the
+      // wallet block rather than above it.
+      .contentMargins(.top, DS.Space.xxl, for: .scrollContent)
+      .ignoresSafeArea(.container, edges: .top)
       .scrollContentBackground(.hidden)
       .background(DS.Color.textPrimary)
       .foregroundStyle(DS.Color.actionInverse)
-      // The root sheet has no navigation bar in Figma. Hiding it removes its
-      // ~44pt content offset; pushed destinations restore the stock back bar.
-      .toolbar(.hidden, for: .navigationBar)
-      .overlay(alignment: .topTrailing) {
-        // DECISIONS 2026-09-26: retain an accessible Done dismissal even
-        // though Figma 10 shows only the grabber. The overlay uses no space.
-        AccountTextControl(
-          "Done",
-          labelColor: DS.Color.actionInverse,
-          accessibilityLabel: "Done"
-        ) { dismiss() }
-        .padding(.trailing, DS.Space.m)
-        .padding(.top, DS.Space.s)
+      // Figma 10 has no title. The bar stays for the OS-standard Copy item
+      // (DESIGN.md §12) and gives pushed destinations their back button.
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbarBackground(.hidden, for: .navigationBar)
+      .toolbar {
+        if let address = coordinator.walletAddress {
+          ToolbarItem(placement: .topBarTrailing) {
+            copyItem(address: address)
+              // The sheet's inherited tint is ink, which would vanish on
+              // the ink ground behind the item.
+              .tint(DS.Color.actionInverse)
+          }
+        }
       }
       .safeAreaInset(edge: .bottom) {
         if !showDisconnectConfirmation {
-          // DECISIONS 2026-09-26: keep beid and AppVersion's complete build
-          // value (#491); the Figma ABOUT route has no adopted destination.
-          Text(verbatim: "beid \(AppVersion.displayString())")
-            .beidTextStyle(DS.Font.Library.labelMono9)
-            .foregroundStyle(DS.Color.textSecondaryOnInk)
-            .accessibilityIdentifier("account.version.value")
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, DS.Space.s)
-            .background(DS.Color.textPrimary)
+          aboutFooter
         }
       }
       .overlay(alignment: .bottom) {
@@ -238,26 +192,12 @@ struct AccountSheetView: View {
       }
       .navigationDestination(isPresented: $showOrganizerTools) {
         OrganizerToolsView()
-          .toolbar(.visible, for: .navigationBar)
       }
       .onChange(of: showOrganizerTools) { _, isShown in
         largeDetentRequests.set(.organizerTools, active: isShown)
       }
-      .navigationDestination(isPresented: $showPastEvents) {
-        PastEventsView(
-          sensingCoordinator: coordinator.sensingCoordinator,
-          proofStore: coordinator.proofStore,
-          onRejoin: { code in
-            Task { @MainActor in
-              await coordinator.rejoinPastEventResolvingCanonicalId(code: code)
-            }
-          }
-        )
-        .toolbar(.visible, for: .navigationBar)
-      }
       .navigationDestination(isPresented: $showAboutSensing) {
         AboutSensingView()
-          .toolbar(.visible, for: .navigationBar)
       }
       .onChange(of: showAboutSensing) { _, isShown in
         // 15 (and 16 pushed from it) stay at .large while 15 is in the stack.
@@ -279,28 +219,6 @@ struct AccountSheetView: View {
     .sheet(item: $supportShareItem) { item in
       SupportShareSheet(item: item)
     }
-    // A custom `Binding`, not `$coordinator.eventCodeEntrySheetPresented`
-    // directly: swipe-to-dismiss writes `false` through whatever binding
-    // `.sheet(isPresented:)` was given, and only this `set` closure runs
-    // synchronously with that exact write. An `.onChange(of:)` observing the
-    // same property instead reacts to the write *after* SwiftUI schedules
-    // it — a stale lookup resuming on the main actor in that gap would still
-    // see the old, not-yet-cancelled generation and could join anyway
-    // (beid#258 P1-1 round-3 fix; the explicit Cancel button in
-    // `EventCodeEntrySheetView` below cancels directly in its own action
-    // closure instead, since it never writes through this binding at all).
-    .sheet(isPresented: Binding(
-      get: { coordinator.eventCodeEntrySheetPresented },
-      set: { isPresented in
-        if !isPresented {
-          coordinator.cancelPendingAccountSheetJoinAttempt()
-        }
-        coordinator.eventCodeEntrySheetPresented = isPresented
-      }
-    )) {
-      EventCodeEntrySheetView()
-        .environmentObject(coordinator)
-    }
   }
 
   @ViewBuilder
@@ -310,59 +228,100 @@ struct AccountSheetView: View {
         Text(walletHeader)
           .beidTextStyle(DS.Font.Library.labelMono10)
           .foregroundStyle(DS.Color.textSecondaryOnInk)
+        // DECISIONS 2026-09-26: use Figma's Display/Address 34 typeface.
+        Text(verbatim: truncated(address))
+          .beidTextStyle(DS.Font.Library.displayAddress34)
+          .foregroundStyle(DS.Color.actionInverse)
+          .accessibilityLabel(Text(verbatim: address))
+      }
+      .padding(.bottom, DS.Space.l)
+    } else {
+      // 10b. DECISIONS 2026-09-26: wallet is optional, so voluntary connect
+      // and reconnect stay here.
+      VStack(alignment: .leading, spacing: DS.Space.s) {
+        Text("Wallet · Not connected")
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
         HStack(spacing: DS.Space.s) {
-          // DECISIONS 2026-09-26: use Figma's Display/Address 34 typeface.
-          Text(verbatim: truncated(address))
+          Text("No wallet")
             .beidTextStyle(DS.Font.Library.displayAddress34)
             .foregroundStyle(DS.Color.actionInverse)
-            .accessibilityLabel(Text(verbatim: address))
             .layoutPriority(1)
           Spacer(minLength: 0)
-          if copied {
-            Button {
-              UIPasteboard.general.string = address
-            } label: {
-              HStack(spacing: DS.Space.xs) {
-                Circle()
-                  .fill(DS.Color.statusOn)
-                  .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
-                  .accessibilityHidden(true)
-                BeidTextControlLabel("Copied", labelColor: DS.Color.actionInverse)
-              }
-              .frame(
-                minWidth: AccountSheetHitTarget.minimum,
-                minHeight: AccountSheetHitTarget.minimum
-              )
-              .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Copied address")
-            .accessibilityIdentifier("account.copy.feedback")
-          } else {
-            AccountTextControl("Copy", labelColor: DS.Color.actionInverse, accessibilityLabel: "Copy address") {
-              UIPasteboard.general.string = address
-              copied = true
-            }
+          Button {
+            BeidDesign.haptic()
+            coordinator.connectWalletFromAccountSheet()
+          } label: {
+            BeidTextControlLabel(
+              "Connect",
+              glyph: .trailing("→", announcing: "Connect Wallet"),
+              labelColor: DS.Color.actionInverse
+            )
+            .frame(minWidth: AccountSheetHitTarget.minimum, minHeight: AccountSheetHitTarget.minimum)
+            .contentShape(Rectangle())
           }
+          .buttonStyle(.plain)
+          .accessibilityIdentifier("account.wallet.connect")
         }
       }
-      .padding(.top, DS.Space.xs)
+      .padding(.bottom, DS.Space.m)
+    }
+  }
+
+  /// DESIGN.md §12: an OS-standard toolbar item with an SF Symbol and a
+  /// title; the OS draws its glass. 10e swaps it for the copied state.
+  @ViewBuilder
+  private func copyItem(address: String) -> some View {
+    if copied {
+      Button {
+        UIPasteboard.general.string = address
+      } label: {
+        Label("Copied", systemImage: "checkmark")
+      }
+      .accessibilityLabel("Copied address")
+      .accessibilityIdentifier("account.copy.feedback")
     } else {
-      // DECISIONS 2026-09-26: wallet is optional, so keep voluntary connect
-      // and reconnect here although Figma 10 only depicts a connected wallet.
       Button {
         BeidDesign.haptic()
-        coordinator.connectWalletFromAccountSheet()
+        UIPasteboard.general.string = address
+        copied = true
       } label: {
-        Text("Connect Wallet")
-          .beidTextStyle(DS.Font.Library.title17)
-          .foregroundStyle(DS.Color.actionInverse)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .frame(minHeight: DS.Size.minHitTarget)
-          .contentShape(Rectangle())
+        Label("Copy", systemImage: "doc.on.doc")
       }
-      .buttonStyle(.plain)
+      .accessibilityLabel("Copy address")
+      .accessibilityIdentifier("account.copy")
     }
+  }
+
+  /// Figma's footer with beid as the product name (DECISIONS 2026-10-15)
+  /// and AppVersion's complete build value (#491). It opens About sensing
+  /// (15), which holds the sheet at its large detent like Organizer tools.
+  private var aboutFooter: some View {
+    Button {
+      largeDetentRequests.set(.aboutSensing, active: true)
+      selectedDetent = .large
+      showAboutSensing = true
+    } label: {
+      Text(verbatim: footerText)
+        .beidTextStyle(DS.Font.Library.labelMono9)
+        .foregroundStyle(DS.Color.textSecondaryOnInk)
+        .frame(maxWidth: .infinity, minHeight: AccountSheetHitTarget.minimum)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("About sensing")
+        .accessibilityValue(Text(verbatim: "beid \(AppVersion.displayString())"))
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("account.version.value")
+    .background(DS.Color.textPrimary)
+  }
+
+  private var footerText: String {
+    String(
+      localized: "account.footer.about",
+      defaultValue: "beid \(AppVersion.displayString()) · About →",
+      comment: "Account sheet footer: product name and build, then a link to About sensing. The argument is the app version and build."
+    )
   }
 
   private var walletHeader: String {
@@ -372,14 +331,6 @@ struct AccountSheetView: View {
       localized: "account.wallet.header",
       defaultValue: "Wallet · Connected via \(connectorDisplayName)",
       comment: "Account sheet label naming the connected wallet provider."
-    )
-  }
-
-  private var pastEventsLabel: String {
-    String(
-      localized: "account.pastEvents.label",
-      defaultValue: "Past Events",
-      comment: "Account row opening previously joined events, including the rejoin action."
     )
   }
 
@@ -668,7 +619,6 @@ private struct WalletConnectSheetView: View {
             coordinator.walletConnectSheetPresented = false
           }
         }
-        .beidWithoutSharedBackground()
       }
     }
     // Sheets don't inherit the presenter's .tint (unlike push navigation),
@@ -676,73 +626,6 @@ private struct WalletConnectSheetView: View {
     // §5 MUST-NOT violation (see WalletConnectView's doc comment).
     .tint(DS.Color.actionPrimary)
   }
-}
-
-/// Sheet wrapper around `EventCodeEntryView` (in `.accountSheet` mode) for
-/// the Account sheet's "Join Event" action. Unlike `EventCodeEntryView`'s
-/// onboarding usage, success here just dismisses the sheet — it does not
-/// advance `coordinator.screen`. No secondary action; Cancel in the toolbar
-/// is the escape hatch instead. No `navigationTitle`: the hero header inside
-/// `EventCodeEntryView` already states "Enter Event Code", so a nav bar
-/// title would just repeat it.
-private struct EventCodeEntrySheetView: View {
-  @EnvironmentObject private var coordinator: AppCoordinator
-
-  var body: some View {
-    NavigationStack {
-      EventCodeEntryView(mode: .accountSheet)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-          ToolbarItem(placement: .cancellationAction) {
-            BeidTextControl("Cancel", accessibilityLabel: "Cancel", role: .cancel) {
-              // Direct property write, not through AccountSheetView's
-              // custom cancelling `Binding` — cancel synchronously here too
-              // (beid#258 P1-1 round-3 fix).
-              coordinator.cancelPendingAccountSheetJoinAttempt()
-              coordinator.eventCodeEntrySheetPresented = false
-            }
-          }
-          .beidWithoutSharedBackground()
-        }
-    }
-    .tint(DS.Color.actionPrimary)
-  }
-}
-
-/// "Join Event" row for `AccountSheetView`. `AppCoordinator` holds its
-/// sensing coordinator as a plain `let` and does not re-publish changes to
-/// `joinedEventCode`. Observe it here so the row disables as soon as a manual
-/// join succeeds, without republishing frequent sensing updates from AppCoordinator.
-private struct EventMembershipSections: View {
-  @EnvironmentObject private var coordinator: AppCoordinator
-  @ObservedObject var sensingCoordinator: SensingCoordinator
-
-  var body: some View {
-    AccountSheetRow {
-      Button {
-        BeidDesign.haptic()
-        coordinator.openEventCodeEntryFromAccountSheet()
-      } label: {
-        Text(joinEventLabel)
-          .beidTextStyle(DS.Font.Library.title17)
-          .foregroundStyle(DS.Color.actionInverse)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .disabled(sensingCoordinator.joinedEventCode != nil)
-    }
-  }
-
-  private var joinEventLabel: String {
-    String(
-      localized: "account.joinEvent.label",
-      defaultValue: "Join Event",
-      comment: "Menu row in the Account sheet that opens the manual event-code entry form. Distinct from that form's own submit button, which is also labeled \"Join Event\" in English but is a separate translation unit and may need different wording in other languages."
-    )
-  }
-
 }
 
 #Preview("No wallet") {
