@@ -1,6 +1,39 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "stop.outcome.action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to Now"
+          }
+        }
+      }
+    },
+    "stop.outcome.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Record could not be saved for this session. Return to Now to join again."
+          }
+        }
+      }
+    },
+    "stop.outcome.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record not saved"
+          }
+        }
+      }
+    },
     "FIRST TIME? HOW THIS WORKS": {
       "extractionState": "manual",
       "localizations": {
@@ -949,7 +982,17 @@
     "Allow Bluetooth": {},
     "Ask the event organizer for the code. This joins the event directly, without connecting a wallet.": {},
     "Automatic": {},
-    "Bluetooth": {},
+    "Bluetooth": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth"
+          }
+        }
+      }
+    },
     "Bluetooth is off": {},
     "Cancel": {
       "comment": "Dismisses the Home event-code entry sheet without joining an event. Also used for other cancellation actions.",
@@ -2231,8 +2274,19 @@
         }
       }
     },
+    "proofDetail.incompleteReason": {
+      "comment": "Reason for an incomplete stored record after signing-key continuity failed. The record and its session/report evidence are retained.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone."
+          }
+        }
+      }
+    },
     "proofDetail.status.incomplete": {
-      "comment": "Status for a recording whose unsigned session record could not be saved and was discarded.",
+      "comment": "Status for a retained recording whose self-signature could not be completed after signing-key continuity failed.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2253,19 +2307,19 @@
         }
       }
     },
-    "proofDetail.signature.bound": {
-      "comment": "Proof Detail signature value shown only when a wallet BindingRecord belongs to this exact Proof.",
+    "proofDetail.signature.unavailable": {
+      "comment": "Record Detail signature value when no matching on-device self-signature is available, including a discarded self-proof or a legacy binding alone. This does not imply a key change unless the record is flagged incomplete.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bound to wallet"
+            "value": "NOT AVAILABLE"
           }
         }
       }
     },
     "proofDetail.signature.selfSigned": {
-      "comment": "Proof Detail signature value when a matching owner-key SelfProofRecord exists, but no wallet binding exists. This does not mean third-party verification.",
+      "comment": "Record Detail signature value only when a matching on-device SelfProofRecord exists. This does not mean third-party verification.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2344,7 +2398,7 @@
       }
     },
     "proofDetail.value.unavailable": {
-      "comment": "Proof Detail value when no matching signature record or session aggregate snapshot exists. No missing count should appear as zero.",
+      "comment": "Proof Detail value when no session aggregate snapshot exists. No missing count should appear as zero.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2361,17 +2415,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Record ID %@"
-          }
-        }
-      }
-    },
-    "venue.serving.servingUntil": {
-      "comment": "The value is a time of day. This instant is fixed by the permit and is exclusive - broadcasting stops at it, it does not continue through it. \"Broadcasting\" is the word the venue screen uses throughout; it is not a claim that the radio is confirmed on air, which the radio section states separately.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Broadcasting until %@."
           }
         }
       }
@@ -2446,7 +2489,6 @@
     "Asked to broadcast. The system has not confirmed it is on air.": {},
     "beid does not have camera access, so it cannot scan. Turn it on in Settings, or paste the link instead.": {},
     "Broadcasting could not start.": {},
-    "Broadcasting until 18:00": {},
     "Camera access is on, but scanning is unavailable on this device — a Screen Time restriction can do this. Paste the link instead.": {},
     "Camera could not start": {},
     "Camera ready": {},
@@ -2467,7 +2509,6 @@
     "Link": {},
     "Link names no source": {},
     "Load a signed pack, check it, then broadcast it.": {},
-    "Load the signed pack the organizer gave you. Once it checks out, this phone broadcasts it.": {},
     "No camera access": {},
     "No pack yet. Paste the link the organizer gave you, or scan its QR code.": {},
     "Not a venue link": {},
@@ -2510,22 +2551,18 @@
     "The link carries the event's details itself. Use one the event's organizer gave you.": {},
     "The pack could not be fetched.": {},
     "The pack is not for the event this link named.": {},
-    "The part of this pack covering right now did not check out.": {},
     "The radio refused this pack and nothing is going out.": {},
     "This device cannot scan QR codes. Paste the link instead.": {},
     "This device's clock is unavailable, so broadcasting cannot be scheduled.": {},
     "This event has been updated. Ask the organizer for a current link.": {},
     "This event isn't in the event registration list.": {},
     "This event needs an entry code. Broadcasting those is not supported yet.": {},
-    "This event's details were rejected.": {},
     "This link names an event but does not say where to get its pack.": {},
     "This link points somewhere this app cannot fetch from.": {},
     "This pack came from a different event record than the one this app is set up for.": {},
     "This pack could not be read.": {},
     "This pack could not be saved. It stays on this device only until the app closes.": {},
-    "This pack covers no part of right now.": {},
     "This pack is for a network this app does not support.": {},
-    "This pack's current period has ended. Refresh it.": {},
     "Tools for the venue side. Attendees never need these.": {},
     "Until": {},
     "Use this link": {},
@@ -3628,6 +3665,39 @@
         }
       }
     },
+    "ALL RECORDS": {
+      "comment": "Returns from the event list to the saved record grid.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ALL RECORDS"
+          }
+        }
+      }
+    },
+    "LOOKING FOR PEERS · STAY NEARBY": {
+      "comment": "State caption after joining an event while no other phone has been heard yet.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LOOKING FOR PEERS · STAY NEARBY"
+          }
+        }
+      }
+    },
+    "All records": {
+      "comment": "VoiceOver label for the arrow control returning to the saved record grid.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All records"
+          }
+        }
+      }
+    },
     "By event": {
       "comment": "Title of the saved event list.",
       "localizations": {
@@ -3703,8 +3773,8 @@
         }
       }
     },
-    "records.event.sessionAction": {
-      "comment": "Count of saved recording sessions for an event; the arrow opens event details.",
+    "records.event.recordAction": {
+      "comment": "Count of participation records for an event, independent of its stored sessions; opens event details.",
       "localizations": {
         "en": {
           "variations": {
@@ -3712,13 +3782,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld session →"
+                  "value": "%lld record →"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld sessions →"
+                  "value": "%lld records →"
                 }
               }
             }
@@ -3835,6 +3905,17 @@
         }
       }
     },
+    "eventCode.lookup.pending": {
+      "comment": "Visible status and VoiceOver announcement while an explicit event-code lookup is pending. Does not mean the event has been joined.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looking up event code…"
+          }
+        }
+      }
+    },
     "eventCode.input.placeholder": {
       "comment": "Placeholder for the organizer-supplied event code. The user can paste it without typing a long identifier.",
       "localizations": {
@@ -3928,7 +4009,6 @@
     "Events find you": {},
     "Get Started": {},
     "Join Event": {},
-    "Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.": {},
     "No pack yet. Paste the link the organiser gave you, or scan its QR code.": {},
     "Not submittable (count-only record)": {
       "comment": "Sub-state row under \"Participation record\": windows recorded with only a device count and no reporter RPID can never be submitted to a report server. This row makes that exclusion explicit instead of silently dropping those windows (levarac/dispatch#3).",
@@ -3991,6 +4071,303 @@
     "beid can't trust event times while the clock is wrong. Turn on automatic date and time in Settings, then check again.": {},
     "e.g. ETHTOKYO2026": {
       "comment": "Placeholder shown in the empty event-code text field. Keep the invented example code (ETHTOKYO2026) as-is; translate only the localized equivalent of \"e.g.\"."
+    },
+    "Pack refresh failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pack refresh failed"
+          }
+        }
+      }
+    },
+    "The pack could not be refreshed. Broadcasting can continue only until the time shown.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The pack could not be refreshed. Broadcasting can continue only until the time shown."
+          }
+        }
+      }
+    },
+    "The lease ended and the pack could not be refreshed. Broadcasting stopped. Load a current pack.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The lease ended and the pack could not be refreshed. Broadcasting stopped. Load a current pack."
+          }
+        }
+      }
+    },
+    "Or paste a link": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Or paste a link"
+          }
+        }
+      }
+    },
+    "Registrar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrar"
+          }
+        }
+      }
+    },
+    "Remaining": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remaining"
+          }
+        }
+      }
+    },
+    "Scan the organizer's QR code, then check the event before starting this phone's broadcast.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan the organizer's QR code, then check the event before starting this phone's broadcast."
+          }
+        }
+      }
+    },
+    "venue.remaining": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ left"
+          }
+        }
+      }
+    },
+    "Pack digest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pack digest"
+          }
+        }
+      }
+    },
+    "Ready to broadcast": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready to broadcast"
+          }
+        }
+      }
+    },
+    "Load saved pack": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load saved pack"
+          }
+        }
+      }
+    },
+    "Battery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Battery"
+          }
+        }
+      }
+    },
+    "Delivery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delivery"
+          }
+        }
+      }
+    },
+    "Not yet available": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not yet available"
+          }
+        }
+      }
+    },
+    "venue.delivery.direct": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direct · hop 0"
+          }
+        }
+      }
+    },
+    "venue.delivery.relayed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relayed · hop %lld"
+          }
+        }
+      }
+    },
+    "The pack could not be refreshed. Load a current pack before restarting.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The pack could not be refreshed. Load a current pack before restarting."
+          }
+        }
+      }
+    },
+    "Refreshing the pack. The current valid announcement stays in use until its end.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refreshing the pack. The current valid announcement stays in use until its end."
+          }
+        }
+      }
+    },
+    "The refreshed pack is for another event. The loaded pack was kept.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The refreshed pack is for another event. The loaded pack was kept."
+          }
+        }
+      }
+    },
+    "The refreshed pack has no valid announcement for right now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The refreshed pack has no valid announcement for right now."
+          }
+        }
+      }
+    },
+    "Lease ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lease ended"
+          }
+        }
+      }
+    },
+    "No valid announcements": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No valid announcements"
+          }
+        }
+      }
+    },
+    "Announcement rejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Announcement rejected"
+          }
+        }
+      }
+    },
+    "This pack's signature or event details did not check out.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This pack's signature or event details did not check out."
+          }
+        }
+      }
+    },
+    "The lease ended. Broadcasting stopped. Load a current pack.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The lease ended. Broadcasting stopped. Load a current pack."
+          }
+        }
+      }
+    },
+    "No valid announcements remain. Broadcasting stopped. Load a current pack.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No valid announcements remain. Broadcasting stopped. Load a current pack."
+          }
+        }
+      }
+    },
+    "This announcement's signature or event details did not check out. Broadcasting stopped.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This announcement's signature or event details did not check out. Broadcasting stopped."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

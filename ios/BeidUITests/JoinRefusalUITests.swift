@@ -21,6 +21,14 @@ final class JoinRefusalUITests: XCTestCase {
   }
 
   func testStorageRefusalShowsItsOwnReasonAndRetryAction() {
+    addTeardownBlock { [weak self, app = self.app] in
+      guard let self, let run = self.testRun, run.totalFailureCount > 0 else { return }
+      let hierarchy = XCTAttachment(string: app.debugDescription)
+      hierarchy.name = "Storage refusal failure accessibility tree"
+      hierarchy.lifetime = .keepAlways
+      self.add(hierarchy)
+    }
+
     app.launchArguments = ["-beid-ui-test", "-beid-join-refusal-fixture", "-beid-storage-refusal-fixture"]
     app.launch()
     app.buttons["Continue"].assertHittable()
@@ -29,15 +37,16 @@ final class JoinRefusalUITests: XCTestCase {
     app.buttons["Allow Bluetooth"].tap()
     app.buttons["home.demo.join"].assertHittable()
     app.buttons["home.demo.join"].tap()
-    app.scrollViews["scan.cant-join"].assertHittable()
-    app.staticTexts["Saved records unavailable"].scrollToHittable(in: app)
+    let title = app.staticTexts["scan.join-refusal"]
+    title.assertHittable()
+    XCTAssertEqual(title.label, "Saved records unavailable")
     app.staticTexts["beid couldn't access saved records. Try again before joining another event."]
       .scrollToHittable(in: app)
     XCTAssertFalse(app.buttons["scan.manual-entry"].exists)
     let retry = app.buttons["scan.storage-retry"]
     retry.scrollToHittable(in: app)
     retry.tap()
-    app.scrollViews["scan.cant-join"].assertDisappears()
+    title.assertDisappears()
     app.scrollViews["scan.sensing"].assertHittable()
   }
 
