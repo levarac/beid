@@ -370,9 +370,12 @@ the same name shadows them.
   `scripts/ci_change_filter.py` defines it), which skips macOS work and reports
   an explicit classifier skip in the successful aggregate. Renames, deletions and unsafe metadata run
   it even under those paths; a failed classification also runs it. It checks out the PR head explicitly and
-  builds both bundles on a clean owned simulator. Ordinary PR runs execute all
-  `BeidTests` plus `ios/ci/ui-smoke-tests.txt`; a `ci:full-ui` label in the event
-  payload selects the full UI suite. All other events run full, including
+  builds both bundles on a clean owned simulator. Smoke runs `ios/ci/ui-smoke-tests.txt`
+  and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`.
+  PRs keep smoke only when every iOS-affecting changed path is a UI or CI-selection
+  path defined by `scripts/ci_change_filter.py`. Other iOS-affecting paths or failed
+  classification select full mode. A `ci:full-ui` label in the event payload
+  selects the full UI suite. All other events run full, including
   `merge_group`, main pushes, nightly and manual dispatch. With the main merge
   queue enabled, the merge step is to add the PR to the queue; the queue's
   completed full-mode `iOS simulator` pass on the exact merge result satisfies

@@ -1,7 +1,8 @@
 # Environment: hosted CI Debug build, iOS 26.5 Simulator, guestFirst onboarding,
 # with the local reference-operator integration opt-in unset (full and smoke).
-# Keep every test selected: each identifier must exist and report Skipped.
-# A Passed result means this list is stale; every unlisted test must pass.
+# Full mode selects every listed test. Smoke checks entries outside its deferred suites.
+# Each selected entry must exist and report Skipped.
+# A Passed result means this list is stale. Every other selected test must pass.
 
 # OnboardingMode.current is .guestFirst; this test only applies to .walletFirst.
 BeidTests/OnboardingFlagTests/testWalletFirstOrderReachesBluetoothPermissionAfterConnect
