@@ -94,13 +94,13 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
         self.assertIn('- cron: "23 3 * * *"', section)
         self.assertNotIn("unlabeled", trigger_block(workflow_text()))
 
-    def test_run_name_displays_payload_mode(self) -> None:
+    def test_run_name_displays_automatic_mode_for_unlabeled_prs(self) -> None:
         self.assertIn("\nrun-name:", workflow_text())
         line = next(line for line in workflow_text().splitlines() if line.startswith("run-name:"))
         self.assertIn("github.event_name == 'pull_request'", line)
         self.assertIn("github.event.pull_request.labels.*.name", line)
         self.assertIn("ci:full-ui", line)
-        self.assertIn("'smoke' || 'full'", line)
+        self.assertIn("'auto' || 'full'", line)
 
     def test_concurrency_still_cancels_superseded_runs(self) -> None:
         text = workflow_text()

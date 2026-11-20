@@ -97,7 +97,7 @@ class MergeGroupWorkflowTest(unittest.TestCase):
         for event, labels, expected in (
             ("merge_group", None, "full"),
             ("merge_group", [], "full"),
-            ("pull_request", [], "smoke"),
+            ("pull_request", [], "auto"),
             ("pull_request", [{"name": "ci:full-ui"}], "full"),
             ("schedule", None, "full"),
         ):
