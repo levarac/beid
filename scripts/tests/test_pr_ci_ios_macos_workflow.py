@@ -142,6 +142,11 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertIn("id: test-mode", mode)
         self.assertIn('python3 -m scripts.ios_ui_smoke mode', mode)
         self.assertIn('"$GITHUB_EVENT_PATH"', mode)
+        self.assertIn("ios_full: ${{ steps.classify.outputs.ios_full }}", text)
+        self.assertIn("needs.changes.result == 'success'", mode)
+        self.assertIn("needs.changes.outputs.error == 'false'", mode)
+        self.assertIn("needs.changes.outputs.ios_full == 'false'", mode)
+        self.assertIn("mode=full", mode)
         self.assertNotIn("if:", mode)
         self.assertEqual(text.count("scripts.ios_ui_smoke mode"), 1)
         run = step_block(text, "Test without rebuilding")
@@ -155,6 +160,29 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertIn('xcresulttool get test-results tests', check)
         self.assertIn('scripts.ios_ui_smoke verify-lane --lane build', check)
         self.assertNotIn("continue-on-error", text)
+
+    def test_plan_runs_full_when_changed_path_output_affects_deferred_coverage(self):
+        block = step_block(workflow_text(), "Determine test mode")
+        command = textwrap.dedent(block.split("        run: |\n", 1)[1])
+        root = WORKFLOW_PATH.parents[2]
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            event = folder / "event.json"
+            output = folder / "output.txt"
+            for allow_smoke, labels, expected in (
+                ("true", [], "smoke"),
+                ("false", [], "full"),
+                ("", [], "full"),
+                ("true", [{"name": "ci:full-ui"}], "full"),
+            ):
+                with self.subTest(allow_smoke=allow_smoke, labels=labels):
+                    event.write_text(json.dumps({"pull_request": {"labels": labels}}))
+                    output.write_text("")
+                    subprocess.run(["bash", "-c", command], cwd=root, check=True,
+                        env={**os.environ, "ALLOW_SMOKE": allow_smoke, "EVENT_NAME": "pull_request",
+                             "GITHUB_EVENT_PATH": str(event), "GITHUB_OUTPUT": str(output)},
+                        capture_output=True, text=True)
+                    self.assertEqual(output.read_text(), f"mode={expected}\n")
 
     def test_selection_shell_passes_exact_arguments_in_both_modes(self):
         block = step_block(workflow_text(), "Test without rebuilding")
@@ -183,6 +211,12 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
                 listed = parse_smoke_list((root / "ios/ci/ui-smoke-tests.txt").read_text())
                 self.assertEqual(selections, (["-only-testing:BeidTests"] +
                     [f"-only-testing:{test}" for test in listed]) if mode == "smoke" else [])
+                exclusions = [item for item in argv if item.startswith("-skip-testing:")]
+                self.assertEqual(exclusions, [
+                    "-skip-testing:BeidTests/ReportSubmissionOperatorIntegrationTests",
+                    "-skip-testing:BeidTests/ProductionVenueBundleVerifierTests",
+                    "-skip-testing:BeidTests/ReportProofLinkContainmentTests",
+                ] if mode == "smoke" else [])
 
 
 class MainIosReleaseBuildWorkflowTest(unittest.TestCase):

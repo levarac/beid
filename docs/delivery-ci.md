@@ -141,18 +141,16 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     requires the iOS 26.5 runtime. `scripts/ci_simulator.py` creates a new
     simulator for each job and returns its UDID; only that device is booted,
     tested and deleted, even on failure. Build-for-testing uses
-    `SWIFT_OPTIMIZATION_LEVEL=-O`. Every completed workflow run covers all `BeidTests`.
-    Ordinary `pull_request` events also execute only
-    `ios/ci/ui-smoke-tests.txt`; when the event payload's labels include
-    `ci:full-ui`, the complete `BeidUITests` suite runs. Merge groups, push,
+    `SWIFT_OPTIMIZATION_LEVEL=-O`. Smoke runs the checked-in UI list and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`; full runs both complete bundles.
+    Deferred coverage paths, uncertain classifications, and the `ci:full-ui` label
+    select full mode. Merge groups, push,
     nightly and manual events always run full. On `merge_group`, the optional
     classifier is skipped and the required iOS job always executes, including
     documentation-only changes. This reuses the existing non-PR condition and
     guarantees full-suite evidence for the merge result. The existing run-name
     expression also displays full because only PR events can select smoke.
-    Mode is selected once from the event file,
-    never the live API; a re-run therefore retains the original mode. The run
-    name displays mode, and the summary records mode, per-bundle counts and
+    Mode is selected once from the event and its SHA-pinned changed paths.
+    The summary records the selected mode, per-bundle counts and
     summed xcresult Test Case durations (numeric `durationInSeconds` or the
     human-readable `duration`, excluding suite totals, not elapsed wall time).
     Missing duration evidence fails verification rather than reporting zero.
@@ -161,8 +159,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Smoke selection includes `-only-testing:BeidTests` and one exact UI method
     argument per entry. The structured xcresult summary must contain nonzero
     tests, consistent counts and a passing result. The execution ledger must
-    contain every enumerated unit case, and exactly the smoke UI list in smoke
-    mode or the complete UI enumeration in full mode.
+    match the selected unit and UI case IDs and their expected skips.
 
     Job graph: the optional classifier feeds `Plan iOS test jobs` (Ubuntu),
     then `Build iOS test bundles` (`macos-26`). Smoke builds and runs its tests

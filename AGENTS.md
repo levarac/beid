@@ -470,7 +470,7 @@ The separate `.github/workflows/pr-ci-ios-macos.yml` reports **iOS simulator**
 from an always-running aggregate on `ubuntu-24.04-arm`. **Plan iOS test jobs**
 selects mode once from the event. **Build iOS test bundles** runs
 `build-for-testing` once, enumerates both compiled bundles, and in smoke mode
-runs all `BeidTests` plus the checked-in UI smoke list in that same macOS job.
+runs the checked-in UI list and `BeidTests` minus the three deferred suites in that macOS job. Deferred coverage and uncertain changed paths select full mode.
 In full mode it uploads a tar of `Build/Products` (including `.xctestrun`), then
 **iOS full tests (${{ matrix.lane }})** runs a unit lane and duration-balanced UI
 lanes via `test-without-building`, each with fresh simulator/DerivedData/results.

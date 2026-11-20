@@ -1,3 +1,8 @@
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 from scripts.ci_change_filter import classify
@@ -9,6 +14,40 @@ class CIChangeFilterTests(unittest.TestCase):
             classify(["README.md", "docs/ci.md"]),
             {"android": False, "lint": False, "labcli": False, "sanity": True, "error": False, "ios": False},
         )
+
+    def test_ios_full_mode_output_preserves_deferred_coverage(self):
+        script = Path(__file__).resolve().parents[1] / "ci_change_filter.py"
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "changes.json"
+            full_paths = (
+                "ios/BeidTests/ReportSubmissionOperatorIntegrationTests.swift",
+                "ios/BeidTests/ProductionVenueBundleVerifierTests.swift",
+                "ios/BeidTests/ReportProofLinkContainmentTests.swift",
+                "ios/BeidTests/Support/ReportProofLinkTestSupport.swift",
+                "ios/Beid/Sensing/VenueBundleVerification.swift",
+                "ios/Beid/Persistence/ReportProofLinkStore.swift",
+                "ios/Beid/Navigation/AppCoordinator.swift",
+                "ios/Package.resolved",
+                "shared/src/commonMain/kotlin/org/levarac/parallax/submission/Report.kt",
+            )
+            inputs = [({"files": [name]}, "true") for name in full_paths]
+            inputs.extend([
+                ({"files": ["ios/Beid/Views/WelcomeView.swift"]}, "false"),
+                ({"files": ["ios/BeidUITests/WelcomeUITests.swift"]}, "false"),
+                ({"files": [".github/workflows/pr-ci-ios-macos.yml"]}, "false"),
+                ({"files": ["README.md"]}, "false"),
+                ({"files": ["ios/BeidUITests/WelcomeUITests.swift"], "ios_force_run": True}, "true"),
+                ({"files": ["ios/Beid/Views/../Sensing/Report.swift"]}, "true"),
+                ({"files": []}, "true"),
+                ({"error": "compare failed"}, "true"),
+            ])
+            for payload, expected in inputs:
+                with self.subTest(payload=payload):
+                    source.write_text(json.dumps(payload))
+                    completed = subprocess.run([sys.executable, str(script), "--input", str(source)],
+                                               check=True, capture_output=True, text=True)
+                    outputs = dict(line.split("=", 1) for line in completed.stdout.splitlines())
+                    self.assertEqual(outputs.get("ios_full"), expected)
 
     def test_android_change_runs_android_only(self):
         result = classify(["android/app/src/main/Foo.kt"])
