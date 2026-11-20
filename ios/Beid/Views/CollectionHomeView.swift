@@ -609,6 +609,14 @@ private struct RecordsHomeView: View {
       .listRowSeparator(.hidden)
       .listRowBackground(DS.Color.surfaceCanvas)
 
+      if eventGroups.isEmpty {
+        ContentUnavailableView(
+          "records.title",
+          systemImage: "square.grid.2x2",
+          description: Text("Saved records appear here after sensing.")
+        )
+      }
+
       ForEach(eventGroups, id: \.first?.id) { group in
         if let proof = group.first {
           // v1.1 has one Attendance record per event, with multiple stored sessions.
