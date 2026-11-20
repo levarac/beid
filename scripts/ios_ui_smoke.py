@@ -20,6 +20,11 @@ DEFAULT_DURATIONS = Path("scripts/ios-ui-durations.json")
 IPHONE_SKIPS = Path("scripts/ios-ui-iphone-skips.txt")
 UNIT_SKIPS = Path("scripts/ios-unit-debug-simulator-skips.txt")
 UI_SHARD_COUNTS = (2, 3, 4)
+SMOKE_DEFERRED_UNIT_SUITES = (
+    "ReportSubmissionOperatorIntegrationTests",
+    "ProductionVenueBundleVerifierTests",
+    "ReportProofLinkContainmentTests",
+)
 
 
 def unique_tests(tests, bundle):
@@ -143,6 +148,13 @@ def validate_unit_skips(skips, unit):
     return skips
 
 
+def smoke_unit_tests(unit):
+    selected = [test for test in unit if test.split("/")[1] not in SMOKE_DEFERRED_UNIT_SUITES]
+    if not selected:
+        raise ValueError("smoke must select unit tests")
+    return selected
+
+
 def classifier_skip(event, needs):
     changes = needs.get("changes", {})
     outputs = changes.get("outputs", {})
@@ -176,6 +188,8 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
     if not isinstance(skips, list) or len(set(skips)) != len(skips) or not set(skips) <= set(ui):
         raise ValueError("invalid explicit iPhone skip list")
     if mode == "smoke":
+        unit = smoke_unit_tests(unit)
+        unit_skips = [test for test in unit_skips if test in unit]
         lanes = {"build": unit + manifest["smoke"]}
     else:
         shards = manifest.get("shards", [])
@@ -230,8 +244,13 @@ def selection_arguments(mode: str, tests: list[str]) -> list[str]:
     if mode not in {"smoke", "full"}:
         raise ValueError(f"invalid test mode: {mode!r}")
     parse_smoke_list("\n".join(tests))
-    return (["-only-testing:BeidTests"] + [f"-only-testing:{test}" for test in tests]
-            if mode == "smoke" else [])
+    if mode == "full":
+        return []
+    return [
+        "-only-testing:BeidTests",
+        *(f"-skip-testing:BeidTests/{suite}" for suite in SMOKE_DEFERRED_UNIT_SUITES),
+        *(f"-only-testing:{test}" for test in tests),
+    ]
 
 
 def source_tests(source_root: Path, bundle="BeidUITests") -> list[str]:
@@ -385,6 +404,11 @@ def main() -> int:
                 if (identifier := line.partition("#")[0].strip())
             ], "BeidTests")
             validate_unit_skips(unit_skips, enumerated["BeidTests"])
+            if args.mode == "smoke":
+                unit_suites = {test.split("/")[1] for test in enumerated["BeidTests"]}
+                missing = set(SMOKE_DEFERRED_UNIT_SUITES) - unit_suites
+                if missing:
+                    raise ValueError(f"stale smoke unit suite exclusions: {sorted(missing)}")
             smoke = parse_smoke_list(DEFAULT_LIST.read_text())
             validate_sources(smoke, Path("ios/BeidUITests"))
             duration_data = json.loads(args.durations.read_text())
@@ -397,7 +421,7 @@ def main() -> int:
         if args.command in ("lane-arguments", "verify-lane"):
             manifest = json.loads(args.manifest.read_text())
             if args.lane == "build" and manifest["mode"] == "smoke":
-                selected = manifest["unit"] + manifest["smoke"]
+                selected = smoke_unit_tests(manifest["unit"]) + manifest["smoke"]
                 arguments = selection_arguments("smoke", manifest["smoke"])
             elif args.lane == "unit" and manifest["mode"] == "full":
                 selected, arguments = manifest["unit"], ["-only-testing:BeidTests"]

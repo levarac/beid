@@ -1,6 +1,6 @@
 name: PR iOS CI
-# Display only: execution mode is selected once below from the immutable event file.
-run-name: "iOS simulator (${{ github.event_name == 'pull_request' && github.event.pull_request.labels != null && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui') && 'smoke' || 'full' }}) — ${{ github.event_name }} — ${{ github.ref_name }}"
+# Execution mode is selected below from the event and its changed paths.
+run-name: "iOS simulator (${{ github.event_name == 'pull_request' && github.event.pull_request.labels != null && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui') && 'auto' || 'full' }}) — ${{ github.event_name }} — ${{ github.ref_name }}"
 
 on:
   # Always report a status for every PR head, including drafts. Workflow-level
@@ -71,6 +71,7 @@ jobs:
       pull-requests: read
     outputs:
       ios: ${{ steps.classify.outputs.ios }}
+      ios_full: ${{ steps.classify.outputs.ios_full }}
       error: ${{ steps.classify.outputs.error }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -164,10 +165,15 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          ALLOW_SMOKE: ${{ needs.changes.result == 'success' && needs.changes.outputs.error == 'false' && needs.changes.outputs.ios_full == 'false' }}
         run: |
           set -euo pipefail
-          python3 -m scripts.ios_ui_smoke mode \
-            --event-name "$EVENT_NAME" --event-path "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+          if [[ "$ALLOW_SMOKE" != true ]]; then
+            printf 'mode=full\n' >> "$GITHUB_OUTPUT"
+          else
+            python3 -m scripts.ios_ui_smoke mode \
+              --event-name "$EVENT_NAME" --event-path "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Plan bounded test matrix
         id: plan

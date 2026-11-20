@@ -90,6 +90,19 @@ class ShardContractTest(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     selected.extend(line.removeprefix("-only-testing:") for line in result.stdout.splitlines())
                 self.assertEqual(sorted(selected), inventory)
+            smoke_command = [sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
+                             "--enumeration", str(enum), "--output", str(manifest), "--count", "4",
+                             "--mode", "smoke", "--sha", "a" * 40]
+            result = subprocess.run(smoke_command, cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("stale smoke unit suite exclusions", result.stderr)
+            for suite in ("ReportSubmissionOperatorIntegrationTests",
+                          "ProductionVenueBundleVerifierTests", "ReportProofLinkContainmentTests"):
+                unit_suites.append({"name": suite, "children": [{"name": "testDeferred()"}]})
+            enum.write_text(json.dumps(payload))
+            result = subprocess.run(smoke_command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            del unit_suites[-3:]
             unit_suites.pop()
             enum.write_text(json.dumps(payload))
             result = subprocess.run([sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
@@ -239,6 +252,8 @@ class AggregateContractTest(unittest.TestCase):
         for mode, lane in (("full", "unit"), ("smoke", "build")):
             case = self.unit_case(mode)
             case["result"] = "Skipped"
+            if mode == "smoke":
+                self.manifest["unit"].append("BeidTests/ReportProofLinkContainmentTests/testDeferred")
             payload = self.evidence[lane]
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -306,14 +321,30 @@ class AggregateContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.verify()
 
-    def test_smoke_keeps_full_units_and_exact_smoke_ui_in_one_lane(self):
+    def test_smoke_checks_only_selected_units_and_exact_ui_in_one_lane(self):
+        deferred = "BeidTests/ReportSubmissionOperatorIntegrationTests/testDeferred"
+        self.manifest["unit"].append(deferred)
+        self.manifest["unit_skips"].append(deferred)
         self.needs["plan"]["outputs"]["mode"] = self.manifest["mode"] = "smoke"
         self.needs["tests"]["result"] = "skipped"
         self.manifest["smoke"] = [ONE, TWO]
         self.evidence = {"build": tree()}
-        self.verify()
+        self.assertIn("BeidTests: 1 passed, 0 skipped", self.verify())
+        unit_cases = self.evidence["build"]["testNodes"][0]["children"][0]["children"]
+        deferred_case = dict(unit_cases[0],
+                             nodeIdentifier=deferred.removeprefix("BeidTests/") + "()",
+                             result="Skipped")
+        unit_cases.append(deferred_case)
+        with self.assertRaisesRegex(ValueError, "extra/duplicate"):
+            self.verify()
+        unit_cases.clear()
+        with self.assertRaisesRegex(ValueError, "missing="):
+            self.verify()
         self.evidence["build"] = tree([])
         with self.assertRaises(ValueError):
+            self.verify()
+        self.manifest["unit"] = [deferred]
+        with self.assertRaisesRegex(ValueError, "smoke must select unit tests"):
             self.verify()
 
     def test_aggregate_cli_rejects_missing_artifact_and_writes_summary(self):
