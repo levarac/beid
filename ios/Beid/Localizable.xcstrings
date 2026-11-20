@@ -3823,7 +3823,11 @@
     "beid uses Bluetooth to find nearby events and hear nearby devices. Turn it on for beid in Settings.": {},
     "Continue": {},
     "beid uses Bluetooth Low Energy to find nearby events and hear nearby devices.": {},
+    "Allow Bluetooth access": {},
+    "beid needs Bluetooth to find your event and exchange signals with nearby devices. These observations help create your Record.": {},
+    "Your device may ask for permission.": {},
     "beid can’t find nearby events or record observations while Bluetooth is off.": {},
+    "Turn on Bluetooth in Settings > Bluetooth, then return to beid.": {},
     "If your event is not listed, ask the organizer for its event code and paste it here.": {},
     "Continue without a code": {
       "comment": "Continues to Bluetooth setup without entering a code."

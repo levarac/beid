@@ -49,6 +49,7 @@ final class FlatScreenshotTourA: XCTestCase {
     let continueButton = app.buttons["bluetooth.permission.continue"]
     XCTAssertTrue(continueButton.exists)
     XCTAssertEqual(continueButton.label, "Continue")
+    assertBluetoothPrimaryAction(continueButton)
     capture("02 Bluetooth")
     continueButton.tap()
     XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
@@ -62,6 +63,7 @@ final class FlatScreenshotTourA: XCTestCase {
     let checkAgain = app.buttons["bluetooth.off.check-again"]
     XCTAssertTrue(checkAgain.isHittable)
     XCTAssertEqual(checkAgain.label, "Check again")
+    assertBluetoothPrimaryAction(checkAgain)
     assertExactText("Turn on Bluetooth in Settings > Bluetooth, then return to beid.")
     assertExactText("beid can’t find nearby events or record observations while Bluetooth is off.")
     capture("03 Bluetooth Off")
@@ -386,5 +388,19 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(control.exists)
     XCTAssertGreaterThanOrEqual(control.frame.width, 44)
     XCTAssertGreaterThanOrEqual(control.frame.height, 44)
+  }
+
+  private func assertBluetoothPrimaryAction(_ control: XCUIElement) {
+    control.assertHittable()
+    assertMinimumHitTarget(control)
+    let window = app.windows.firstMatch.frame
+    XCTAssertTrue(window.contains(control.frame))
+    let actionInScrollView = app.scrollViews.firstMatch.buttons[control.identifier]
+    if UIDevice.current.userInterfaceIdiom == .phone {
+      XCTAssertFalse(actionInScrollView.exists, "The compact-width action belongs in the footer.")
+      XCTAssertLessThan(window.maxY - control.frame.maxY, 72, "The action must sit near the bottom safe area.")
+    } else {
+      XCTAssertTrue(actionInScrollView.exists, "The regular-width action belongs with its explanation.")
+    }
   }
 }
