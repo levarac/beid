@@ -225,13 +225,6 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(app.buttons["account.aboutSensing"].waitForExistence(timeout: 5))
   }
 
-  func testWelcomeExplanationDescribesJoinAndForegroundSensing() {
-    launch()
-    app.buttons["welcome.howItWorks"].tap()
-    XCTAssertTrue(app.buttons["aboutSensing.whatWeSend"].waitForExistence(timeout: 5))
-    assertExplainerCopy()
-  }
-
   func testWelcomeExplanationReportsUnavailableSendingDetails() {
     launch()
     app.buttons["welcome.howItWorks"].tap()
@@ -310,6 +303,7 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(app.navigationBars["About sensing"].waitForExistence(timeout: 5))
     let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
     XCTAssertTrue(whatWeSend.waitForExistence(timeout: 5))
+    assertExplainerCopy()
     whatWeSend.tap()
     XCTAssertTrue(app.descendants(matching: .any)["whatWeSend.firstRow"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.navigationBars["What we send"].waitForExistence(timeout: 5))
@@ -319,21 +313,17 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(howItWorks.waitForExistence(timeout: 5))
   }
 
-  func testShot_15_AboutSensing() {
+  func testShot_16_WhatWeSend() {
     openAboutSensing()
-    let title = app.navigationBars.staticTexts["About sensing"]
-    XCTAssertTrue(title.waitForExistence(timeout: 5) && title.isHittable)
-    assertVisibleDarkText(title)
-    let firstSection = app.staticTexts["HOW IT WORKS"]
-    XCTAssertEqual(firstSection.frame.minX, title.frame.minX, accuracy: 1.0,
+    let aboutTitle = app.navigationBars.staticTexts["About sensing"]
+    XCTAssertTrue(aboutTitle.waitForExistence(timeout: 5) && aboutTitle.isHittable)
+    assertVisibleDarkText(aboutTitle)
+    let aboutSection = app.staticTexts["HOW IT WORKS"]
+    XCTAssertEqual(aboutSection.frame.minX, aboutTitle.frame.minX, accuracy: 1.0,
                    "The first section should align with the navigation title")
     keepScreenshot(named: "15")
     assertMinimumHitTarget(app.buttons["aboutSensing.whatWeSend"])
     assertMinimumHitTarget(app.navigationBars.buttons.firstMatch)
-  }
-
-  func testShot_16_WhatWeSend() {
-    openAboutSensing()
     let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
     assertMinimumHitTarget(whatWeSend)
     whatWeSend.tap()

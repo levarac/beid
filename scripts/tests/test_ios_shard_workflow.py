@@ -7,17 +7,17 @@ from scripts.tests.test_pr_ci_lane_skip import IOS, job_block
 
 
 class ShardWorkflowTest(unittest.TestCase):
-    def test_full_build_precedes_at_most_four_test_jobs(self):
+    def test_full_build_precedes_one_wave_of_test_jobs(self):
         text = IOS.read_text()
         self.assertIn("  tests:\n", text, "missing full-mode matrix")
         build, tests = job_block(IOS, "build"), job_block(IOS, "tests")
         self.assertIn("needs: [plan, build]", tests)
         self.assertIn("needs.plan.outputs.mode == 'full'", tests)
-        self.assertIn("max-parallel: 4", tests)
+        self.assertIn("max-parallel: 5", tests)
         self.assertIn("fail-fast: false", tests)
         self.assertIn("fromJSON(needs.plan.outputs.matrix)", tests)
         self.assertEqual(text.count("    runs-on: macos-26\n"), 2)
-        self.assertIn("IOS_UI_SHARDS: '3'", text)
+        self.assertIn("IOS_UI_SHARDS: '4'", text)
         self.assertIn("build-for-testing", build)
         self.assertNotIn("build-for-testing", tests)
 

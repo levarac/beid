@@ -28,11 +28,11 @@ class ShardContractTest(unittest.TestCase):
         self.assertTrue(hasattr(self.tool, "shard_tests"), "duration-based sharding is missing")
         tests = [f"BeidUITests/FlowTests/test{i}" for i in range(12)]
         durations = {test: 10.0 for test in tests[:-1]}
-        shards = self.tool.shard_tests(tests, durations, 3)
-        self.assertEqual(shards, self.tool.shard_tests(list(reversed(tests)), durations, 3))
+        shards = self.tool.shard_tests(tests, durations, 4)
+        self.assertEqual(shards, self.tool.shard_tests(list(reversed(tests)), durations, 4))
         self.assertEqual(sorted(sum(shards, [])), sorted(tests))
         self.assertLessEqual(max(map(len, shards)) - min(map(len, shards)), 1)
-        for count in (0, 1, 4):
+        for count in (0, 1, 5):
             with self.assertRaises(ValueError):
                 self.tool.shard_tests(tests, durations, count)
         with self.assertRaises(ValueError):
@@ -73,7 +73,7 @@ class ShardContractTest(unittest.TestCase):
             root = Path(temporary)
             enum, manifest = root / "enumerated.json", root / "manifest.json"
             enum.write_text(json.dumps(payload))
-            for count in (2, 3):
+            for count in (2, 3, 4):
                 result = subprocess.run([sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
                     "--enumeration", str(enum), "--output", str(manifest), "--count", str(count),
                     "--mode", "full", "--sha", "a" * 40], cwd=ROOT, capture_output=True, text=True)
@@ -90,6 +90,19 @@ class ShardContractTest(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     selected.extend(line.removeprefix("-only-testing:") for line in result.stdout.splitlines())
                 self.assertEqual(sorted(selected), inventory)
+            smoke_command = [sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
+                             "--enumeration", str(enum), "--output", str(manifest), "--count", "4",
+                             "--mode", "smoke", "--sha", "a" * 40]
+            result = subprocess.run(smoke_command, cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("stale smoke unit suite exclusions", result.stderr)
+            for suite in ("ReportSubmissionOperatorIntegrationTests",
+                          "ProductionVenueBundleVerifierTests", "ReportProofLinkContainmentTests"):
+                unit_suites.append({"name": suite, "children": [{"name": "testDeferred()"}]})
+            enum.write_text(json.dumps(payload))
+            result = subprocess.run(smoke_command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            del unit_suites[-3:]
             unit_suites.pop()
             enum.write_text(json.dumps(payload))
             result = subprocess.run([sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
@@ -127,6 +140,29 @@ class AggregateContractTest(unittest.TestCase):
 
     def test_happy_path(self):
         self.verify()
+
+    def add_two_ui_shards(self):
+        for index, method in enumerate(("testThree", "testFour"), start=3):
+            case_identifier = f"FlowTests/{method}"
+            test = f"BeidUITests/{case_identifier}"
+            self.manifest["ui"].append(test)
+            self.manifest["shards"].append([test])
+            self.evidence[f"ui-{index}"] = tree([{
+                "nodeType": "Test Case",
+                "nodeIdentifier": f"{case_identifier}()",
+                "result": "Passed",
+                "durationInSeconds": 1.25,
+            }], unit=False)
+
+    def test_full_aggregate_accepts_four_ui_shards(self):
+        self.add_two_ui_shards()
+        self.assertIn("all 5 cases accounted for", self.verify())
+
+    def test_full_aggregate_rejects_missing_fourth_ui_shard(self):
+        self.add_two_ui_shards()
+        del self.evidence["ui-4"]
+        with self.assertRaisesRegex(ValueError, "missing or extra lane artifacts"):
+            self.verify()
 
     def test_cancelled_failed_or_skipped_shard_job_fails(self):
         for result in ("cancelled", "failure", "skipped", ""):
@@ -216,6 +252,8 @@ class AggregateContractTest(unittest.TestCase):
         for mode, lane in (("full", "unit"), ("smoke", "build")):
             case = self.unit_case(mode)
             case["result"] = "Skipped"
+            if mode == "smoke":
+                self.manifest["unit"].append("BeidTests/ReportProofLinkContainmentTests/testDeferred")
             payload = self.evidence[lane]
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -283,14 +321,30 @@ class AggregateContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.verify()
 
-    def test_smoke_keeps_full_units_and_exact_smoke_ui_in_one_lane(self):
+    def test_smoke_checks_only_selected_units_and_exact_ui_in_one_lane(self):
+        deferred = "BeidTests/ReportSubmissionOperatorIntegrationTests/testDeferred"
+        self.manifest["unit"].append(deferred)
+        self.manifest["unit_skips"].append(deferred)
         self.needs["plan"]["outputs"]["mode"] = self.manifest["mode"] = "smoke"
         self.needs["tests"]["result"] = "skipped"
         self.manifest["smoke"] = [ONE, TWO]
         self.evidence = {"build": tree()}
-        self.verify()
+        self.assertIn("BeidTests: 1 passed, 0 skipped", self.verify())
+        unit_cases = self.evidence["build"]["testNodes"][0]["children"][0]["children"]
+        deferred_case = dict(unit_cases[0],
+                             nodeIdentifier=deferred.removeprefix("BeidTests/") + "()",
+                             result="Skipped")
+        unit_cases.append(deferred_case)
+        with self.assertRaisesRegex(ValueError, "extra/duplicate"):
+            self.verify()
+        unit_cases.clear()
+        with self.assertRaisesRegex(ValueError, "missing="):
+            self.verify()
         self.evidence["build"] = tree([])
         with self.assertRaises(ValueError):
+            self.verify()
+        self.manifest["unit"] = [deferred]
+        with self.assertRaisesRegex(ValueError, "smoke must select unit tests"):
             self.verify()
 
     def test_aggregate_cli_rejects_missing_artifact_and_writes_summary(self):

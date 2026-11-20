@@ -156,6 +156,15 @@ final class SensingCoordinatorTests: XCTestCase {
     #endif
   }
 
+  func testControlledDemoLaunchGateCannotBeEnabledInRelease() {
+    let arguments = ["-beid-ui-test", "-beid-controlled-demo", "-beid-demo-event"]
+    #if DEBUG
+    XCTAssertTrue(SensingCoordinator.demoAdvanceIsEnabled(arguments: arguments))
+    #else
+    XCTAssertFalse(SensingCoordinator.demoAdvanceIsEnabled(arguments: arguments))
+    #endif
+  }
+
   func testEngineOnEventIsWired() {
     // Smoke test: constructing the coordinator wires BarnardEngine's
     // onEvent callback without crashing (barnard#56 engine integration).

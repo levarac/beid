@@ -33,6 +33,24 @@ LAB_CLI_PREFIX = "tools/beid-lab-cli/"
 # resource root, alongside shared/src/commonTest/fixtures (already shared/).
 ANDROID_VENUE_FIXTURE_PREFIX = "ios/BeidTests/Fixtures/venue-bundle-conformance/"
 
+# The deferred unit suites exercise native and shared sensing, report
+# submission, proof persistence, and venue verification. Only known UI and
+# CI-selection paths may retain smoke for an iOS-affecting PR.
+IOS_SMOKE_PREFIXES = (
+    "ios/Beid/Assets.xcassets/",
+    "ios/Beid/DesignSystem/",
+    "ios/Beid/Views/",
+    "ios/BeidUITests/",
+    "scripts/tests/",
+)
+IOS_SMOKE_FILES = {
+    ".github/workflows/pr-ci-ios-macos.yml",
+    "ios/Beid/DesignSystem.swift",
+    "ios/ci/ui-smoke-tests.txt",
+    "scripts/ci_change_filter.py",
+    "scripts/ios_ui_smoke.py",
+}
+
 
 def _is_lab_cli(path: str) -> bool:
     normalized = path[2:] if path.startswith("./") else path
@@ -117,11 +135,15 @@ def classify(files: Iterable[str]) -> dict[str, bool]:
     return result
 
 
+def _malformed_path(path: str) -> bool:
+    return (not path or path.startswith("/")
+            or any(part in {"", ".", ".."} for part in path.split("/"))
+            or any(ord(char) < 32 for char in path))
+
+
 def _affects_ios(path: str) -> bool:
     normalized = path[2:] if path.startswith("./") else path
-    if (not normalized or normalized.startswith("/")
-            or any(part in {"", ".", ".."} for part in normalized.split("/"))
-            or any(ord(char) < 32 for char in normalized)):
+    if _malformed_path(normalized):
         return True
     if _is_force_all(normalized):
         return True
@@ -132,6 +154,15 @@ def _affects_ios(path: str) -> bool:
     if _is_documentation(normalized) or _is_lab_cli(normalized):
         return False
     return True
+
+
+def _requires_full_ios(path: str) -> bool:
+    normalized = path[2:] if path.startswith("./") else path
+    if _malformed_path(normalized):
+        return True
+    if not _affects_ios(normalized) or normalized in IOS_SMOKE_FILES:
+        return False
+    return not normalized.startswith(IOS_SMOKE_PREFIXES)
 
 
 def main() -> int:
@@ -145,11 +176,14 @@ def main() -> int:
         if not isinstance(files, list) or not all(isinstance(path, str) for path in files):
             raise ValueError("files must be a list of strings")
         result = classify(files)
+        result["ios_full"] = result["error"] or any(_requires_full_ios(path) for path in files)
         if payload.get("ios_force_run", False) is not False:
             result["ios"] = True
+            result["ios_full"] = True
     except Exception as error:  # fail closed if the detector input is unavailable/corrupt
         print(f"warning: CI change classification failed: {error}", file=sys.stderr)
-        result = {"android": True, "lint": True, "labcli": True, "ios": True, "sanity": True, "error": True}
+        result = {"android": True, "lint": True, "labcli": True, "ios": True,
+                  "ios_full": True, "sanity": True, "error": True}
 
     for key, value in result.items():
         print(f"{key}={str(value).lower()}")
