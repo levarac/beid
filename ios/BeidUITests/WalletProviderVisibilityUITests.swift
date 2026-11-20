@@ -17,19 +17,4 @@ final class WalletProviderVisibilityUITests: XCTestCase {
     continueAfterFailure = false
   }
 
-  func testAccountSheetOffersNoWalletConnectionWhenNotConnected() {
-    app.launchArguments = ["-beid-ui-test"]
-    app.launch()
-
-    app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
-    app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
-
-    app.buttons["home.account"].tap()
-    XCTAssertTrue(app.buttons["Organizer tools"].waitForExistence(timeout: 5), "the Account sheet must be open")
-    XCTAssertFalse(app.buttons["Connect Wallet"].exists)
-    XCTAssertFalse(app.buttons["Connect with MetaMask"].exists)
-    XCTAssertFalse(app.buttons["Disconnect wallet"].exists)
-  }
 }

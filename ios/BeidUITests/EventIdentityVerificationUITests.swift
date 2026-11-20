@@ -14,8 +14,7 @@ final class EventIdentityVerificationUITests: XCTestCase {
   }
 
   func testDemoEventSuppressesIdentityVerificationRow() {
-    app.launchArguments = ["-beid-ui-test"]
-    app.launch()
+    app.launchControlledDemo()
 
     app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
@@ -23,11 +22,20 @@ final class EventIdentityVerificationUITests: XCTestCase {
 
     let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
+    XCTAssertFalse(app.descendants(matching: .any)["scan.sensing"].exists, "the fixture must still require JOIN")
+    XCTAssertEqual(app.buttons.matching(NSPredicate(
+      format: "identifier BEGINSWITH %@", "demo.advance."
+    )).count, 0)
     senseEvent.tap()
 
+    app.advanceDemo(to: .sensing)
+    XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].exists)
+    XCTAssertFalse(app.staticTexts["scan.event-found"].exists)
+    app.advanceDemo(to: .eventFound)
     XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
     XCTAssertFalse(identityVerificationRow.exists)
 
+    app.advanceDemo(to: .recording)
     let simulateSignalLost = app.buttons["Simulate Signal Lost"]
     XCTAssertTrue(simulateSignalLost.waitForExistence(timeout: 30))
     XCTAssertFalse(identityVerificationRow.exists)

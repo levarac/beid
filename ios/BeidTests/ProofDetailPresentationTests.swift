@@ -5,10 +5,10 @@ import XCTest
 @testable import Beid
 
 final class ProofDetailPresentationTests: XCTestCase {
-  func testOnlyAMatchingSelfProofCanSealAndOnlyABindingCanClaimWallet() {
+  func testOnlyAMatchingSelfProofDeterminesOnDeviceSignatureEvidence() {
     let recorded = makePresentation(selfProof: false, binding: false)
     XCTAssertEqual(recorded.status, "Recorded on device")
-    XCTAssertEqual(recorded.signature, "Not yet available")
+    XCTAssertEqual(recorded.signature, "NOT AVAILABLE")
 
     let selfSigned = makePresentation(selfProof: true, binding: false)
     XCTAssertEqual(selfSigned.status, "Sealed")
@@ -16,22 +16,45 @@ final class ProofDetailPresentationTests: XCTestCase {
 
     let bound = makePresentation(selfProof: true, binding: true)
     XCTAssertEqual(bound.status, "Sealed")
-    XCTAssertEqual(bound.signature, "Bound to wallet")
+    XCTAssertEqual(bound.signature, "Self-signed on device")
 
     // A binding is not itself a SelfProofRecord. These are deliberately
     // independent lookups, even when historical data is incomplete.
     let bindingOnly = makePresentation(selfProof: false, binding: true)
     XCTAssertEqual(bindingOnly.status, "Recorded on device")
-    XCTAssertEqual(bindingOnly.signature, "Bound to wallet")
+    XCTAssertEqual(bindingOnly.signature, "NOT AVAILABLE")
+    for value in [recorded, selfSigned, bound, bindingOnly] {
+      XCTAssertFalse(value.signature.localizedCaseInsensitiveContains("wallet"))
+      XCTAssertFalse(value.signature.localizedCaseInsensitiveContains("bind"))
+      XCTAssertFalse(value.signature.localizedCaseInsensitiveContains("bound"))
+      XCTAssertNil(value.incompleteReason)
+    }
   }
 
   func testDiscardedSelfProofShowsAnIncompleteRecording() {
-    let value = ProofDetailPresentation(
-      method: "Bluetooth Sensing", hasSelfProof: false, hasBinding: false,
-      deviceCount: nil, windowCount: nil, sessionCount: 1, selfProofDiscardedForKeyChange: true
-    )
-    XCTAssertEqual(value.status, "Recording incomplete")
-    XCTAssertEqual(value.signature, "Not yet available")
+    for selfProof in [false, true] {
+      for binding in [false, true] {
+        let value = makePresentation(selfProof: selfProof, binding: binding, incomplete: true)
+        XCTAssertEqual(value.status, "Recording incomplete")
+        XCTAssertEqual(value.incompleteReason,
+                       "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
+        XCTAssertEqual(value.signature, "NOT AVAILABLE")
+        XCTAssertFalse(value.isSealedOnDevice)
+        let ladder = RecordSendingLadderPresentation(hasSelfProof: value.isSealedOnDevice, records: nil)
+        XCTAssertEqual(ladder.rungs[0].title, "RECORDED ON THIS PHONE")
+        XCTAssertFalse(ladder.rungs[0].reached)
+      }
+    }
+  }
+
+  func testOrdinarySignedAndUnsignedRecordsHaveNoIncompleteWarning() {
+    for selfProof in [false, true] {
+      for binding in [false, true] {
+        let value = makePresentation(selfProof: selfProof, binding: binding)
+        XCTAssertNil(value.incompleteReason)
+        XCTAssertEqual(value.isSealedOnDevice, selfProof)
+      }
+    }
   }
 
   func testMissingAggregateIsUnavailableRatherThanZero() {
@@ -39,6 +62,7 @@ final class ProofDetailPresentationTests: XCTestCase {
       selfProof: false, binding: false, devices: nil, windows: nil
     )
     XCTAssertEqual(value.withValue, "Not yet available")
+    XCTAssertEqual(value.signature, "NOT AVAILABLE")
     XCTAssertFalse(value.withValue.contains("0 devices"))
     XCTAssertFalse(value.withValue.contains("0 windows"))
   }
@@ -83,7 +107,8 @@ final class ProofDetailPresentationTests: XCTestCase {
     binding: Bool,
     devices: Int? = nil,
     windows: Int? = nil,
-    sessions: Int = 1
+    sessions: Int = 1,
+    incomplete: Bool = false
   ) -> ProofDetailPresentation {
     ProofDetailPresentation(
       method: "Bluetooth Sensing",
@@ -91,7 +116,8 @@ final class ProofDetailPresentationTests: XCTestCase {
       hasBinding: binding,
       deviceCount: devices,
       windowCount: windows,
-      sessionCount: sessions
+      sessionCount: sessions,
+      selfProofDiscardedForKeyChange: incomplete
     )
   }
 }

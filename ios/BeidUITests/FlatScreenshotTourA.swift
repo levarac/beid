@@ -181,13 +181,6 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(app.buttons["account.aboutSensing"].waitForExistence(timeout: 5))
   }
 
-  func testWelcomeExplanationDescribesJoinAndForegroundSensing() {
-    launch()
-    app.buttons["welcome.howItWorks"].tap()
-    XCTAssertTrue(app.buttons["aboutSensing.whatWeSend"].waitForExistence(timeout: 5))
-    assertExplainerCopy()
-  }
-
   func testWelcomeExplanationReportsUnavailableSendingDetails() {
     launch()
     app.buttons["welcome.howItWorks"].tap()
@@ -265,19 +258,16 @@ final class FlatScreenshotTourA: XCTestCase {
     howItWorks.tap()
     let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
     XCTAssertTrue(whatWeSend.waitForExistence(timeout: 5))
+    assertExplainerCopy()
     whatWeSend.tap()
     XCTAssertTrue(app.descendants(matching: .any)["whatWeSend.firstRow"].waitForExistence(timeout: 5))
   }
 
-  func testShot_15_AboutSensing() {
+  func testShot_16_WhatWeSend() {
     openAboutSensing()
     keepScreenshot(named: "15")
     assertMinimumHitTarget(app.buttons["aboutSensing.whatWeSend"])
     assertMinimumHitTarget(app.navigationBars.buttons.firstMatch)
-  }
-
-  func testShot_16_WhatWeSend() {
-    openAboutSensing()
     let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
     assertMinimumHitTarget(whatWeSend)
     whatWeSend.tap()

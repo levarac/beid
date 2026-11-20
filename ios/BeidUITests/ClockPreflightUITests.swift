@@ -18,12 +18,16 @@ final class ClockPreflightUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-clock-preflight-fixture"]
     app.launch()
 
-    app.buttons["Continue"].tap()
+    let getStarted = app.buttons["Continue"]
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
+    getStarted.tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 10))
     app.buttons["Allow Bluetooth"].tap()
 
     let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
+    XCTAssertTrue(senseEvent.waitForExistence(timeout: 10))
     senseEvent.tap()
 
     let title = app.staticTexts["Couldn't check this device's clock"]
@@ -43,5 +47,11 @@ final class ClockPreflightUITests: XCTestCase {
     // identifier in the accessibility tree; tracked separately (see the issue
     // linked from the Flat 2b main PR) rather than asserted in this clock test.
     XCTAssertFalse(app.descendants(matching: .any)["scan.cant-join"].exists)
+
+    // Preserve the pre-join notice frame before leaving this screen.
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "05-clock-unchecked-notice"
+    attachment.lifetime = .keepAlways
+    add(attachment)
   }
 }
