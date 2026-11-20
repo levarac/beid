@@ -91,6 +91,14 @@ final class FlatScreenshotTourC: XCTestCase {
 
   func testProductionFirstSensingHintPersistsAcrossRelaunch() {
     let app = XCUIApplication()
+    addTeardownBlock { [weak self] in
+      guard let self, let run = self.testRun, run.totalFailureCount > 0 else { return }
+      let hierarchy = XCTAttachment(string: app.debugDescription)
+      hierarchy.name = "First sensing hint failure accessibility tree"
+      hierarchy.lifetime = .keepAlways
+      self.add(hierarchy)
+    }
+
     for firstLaunch in [true, false] {
       app.launchArguments = ["-beid-ui-test"]
       if firstLaunch {
@@ -111,7 +119,11 @@ final class FlatScreenshotTourC: XCTestCase {
         // The glyph-bearing control supplies a spoken label for VoiceOver.
         XCTAssertEqual(hint.label, "How sensing works")
         hint.tap()
-        app.staticTexts["HOW IT WORKS"].assertExists()
+        let about = app.scrollViews["aboutSensing.scroll"]
+        about.assertHittable()
+        let heading = about.staticTexts["HOW IT WORKS"]
+        for _ in 0..<5 where !heading.exists || !heading.isHittable { about.swipeUp() }
+        heading.assertHittable()
         app.navigationBars.buttons.firstMatch.tap()
         hint.scrollToHittable(in: app)
       } else {
