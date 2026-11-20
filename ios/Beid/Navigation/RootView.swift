@@ -30,7 +30,7 @@ struct RootView: View {
     .modifier(OwnerKeyFailurePresenter(sensingCoordinator: coordinator.sensingCoordinator))
     .modifier(EventSigningKeyFailurePresenter(
       sensingCoordinator: coordinator.sensingCoordinator,
-      isActive: !coordinator.scanPresented
+      isActive: coordinator.canPresentRootEventSigningKeyFailure
     ))
     .tint(DS.Color.actionPrimary)
     .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: coordinator.screen)

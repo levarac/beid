@@ -370,9 +370,12 @@ the same name shadows them.
   `scripts/ci_change_filter.py` defines it), which skips macOS work and reports
   an explicit classifier skip in the successful aggregate. Renames, deletions and unsafe metadata run
   it even under those paths; a failed classification also runs it. It checks out the PR head explicitly and
-  builds both bundles on a clean owned simulator. Ordinary PR runs execute all
-  `BeidTests` plus `ios/ci/ui-smoke-tests.txt`; a `ci:full-ui` label in the event
-  payload selects the full UI suite. All other events run full, including
+  builds both bundles on a clean owned simulator. Smoke runs `ios/ci/ui-smoke-tests.txt`
+  and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`.
+  PRs keep smoke only when every iOS-affecting changed path is a UI or CI-selection
+  path defined by `scripts/ci_change_filter.py`. Other iOS-affecting paths or failed
+  classification select full mode. A `ci:full-ui` label in the event payload
+  selects the full UI suite. All other events run full, including
   `merge_group`, main pushes, nightly and manual dispatch. With the main merge
   queue enabled, the merge step is to add the PR to the queue; the queue's
   completed full-mode `iOS simulator` pass on the exact merge result satisfies
@@ -470,12 +473,12 @@ The separate `.github/workflows/pr-ci-ios-macos.yml` reports **iOS simulator**
 from an always-running aggregate on `ubuntu-24.04-arm`. **Plan iOS test jobs**
 selects mode once from the event. **Build iOS test bundles** runs
 `build-for-testing` once, enumerates both compiled bundles, and in smoke mode
-runs all `BeidTests` plus the checked-in UI smoke list in that same macOS job.
+runs the checked-in UI list and `BeidTests` minus the three deferred suites in that macOS job. Deferred coverage and uncertain changed paths select full mode.
 In full mode it uploads a tar of `Build/Products` (including `.xctestrun`), then
 **iOS full tests (${{ matrix.lane }})** runs a unit lane and duration-balanced UI
 lanes via `test-without-building`, each with fresh simulator/DerivedData/results.
-`IOS_UI_SHARDS` in the workflow is the single count setting: 3 by default, 2
-supported. At most four macOS jobs run together. Product SHA, Xcode build, SDK
+`IOS_UI_SHARDS` in the workflow is the single count setting: 4 by default, 2
+and 3 supported. At most five macOS jobs run together. Product SHA, Xcode build, SDK
 and architecture must match before extraction; permissions/symlinks survive tar.
 The aggregate requires every needed job to succeed, the UI shard union to equal
 the runtime enumeration without duplicates, and every enumerated test to be

@@ -486,9 +486,21 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
                               detectedDisplayId: DetectionFixture.displayId(device: index))
     }
     let proofID = try XCTUnwrap(sensing.currentProofID)
+    guard case .recording(let event, _) = sensing.phase else {
+      return XCTFail("Expected active participation before requesting STOP")
+    }
     XCTAssertNil(proofStore.proof(withId: proofID))
     XCTAssertNotNil(proofStore.lastPersistenceError)
     app.requestScanClose()
+    let confirmation = try XCTUnwrap(app.stopConfirmSnapshot)
+    XCTAssertTrue(app.scanPresented)
+    XCTAssertEqual(confirmation.proofID, proofID)
+    XCTAssertEqual(confirmation.event.sessionID, event.sessionID)
+    XCTAssertEqual(sensing.currentProofID, proofID)
+    XCTAssertNil(app.sealedSnapshot)
+    XCTAssertNil(app.proofCollectedSnapshot)
+    app.confirmStopSensing()
+    XCTAssertNil(app.stopConfirmSnapshot)
     XCTAssertFalse(app.scanPresented)
     XCTAssertNil(app.sealedSnapshot)
     XCTAssertNil(app.proofCollectedSnapshot)

@@ -19,6 +19,12 @@ DEFAULT_LIST = Path("ios/ci/ui-smoke-tests.txt")
 DEFAULT_DURATIONS = Path("scripts/ios-ui-durations.json")
 IPHONE_SKIPS = Path("scripts/ios-ui-iphone-skips.txt")
 UNIT_SKIPS = Path("scripts/ios-unit-debug-simulator-skips.txt")
+UI_SHARD_COUNTS = (2, 3, 4)
+SMOKE_DEFERRED_UNIT_SUITES = (
+    "ReportSubmissionOperatorIntegrationTests",
+    "ProductionVenueBundleVerifierTests",
+    "ReportProofLinkContainmentTests",
+)
 
 
 def unique_tests(tests, bundle):
@@ -63,8 +69,8 @@ def parse_enumeration(payload):
 def shard_tests(tests, durations, count):
     """Longest-first scheduling, with identifier and shard index as tie breakers."""
     tests = unique_tests(tests, "BeidUITests")
-    if isinstance(count, bool) or count not in (2, 3):
-        raise ValueError("UI shard count must be 2 or 3 (at most four test jobs)")
+    if isinstance(count, bool) or count not in UI_SHARD_COUNTS:
+        raise ValueError("UI shard count must be 2, 3, or 4")
     weights = {}
     for test in tests:
         # New methods always get a positive weight and exactly one assignment.
@@ -142,6 +148,13 @@ def validate_unit_skips(skips, unit):
     return skips
 
 
+def smoke_unit_tests(unit):
+    selected = [test for test in unit if test.split("/")[1] not in SMOKE_DEFERRED_UNIT_SUITES]
+    if not selected:
+        raise ValueError("smoke must select unit tests")
+    return selected
+
+
 def classifier_skip(event, needs):
     changes = needs.get("changes", {})
     outputs = changes.get("outputs", {})
@@ -175,10 +188,12 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
     if not isinstance(skips, list) or len(set(skips)) != len(skips) or not set(skips) <= set(ui):
         raise ValueError("invalid explicit iPhone skip list")
     if mode == "smoke":
+        unit = smoke_unit_tests(unit)
+        unit_skips = [test for test in unit_skips if test in unit]
         lanes = {"build": unit + manifest["smoke"]}
     else:
         shards = manifest.get("shards", [])
-        if not isinstance(shards, list) or len(shards) not in (2, 3) or any(not shard for shard in shards):
+        if not isinstance(shards, list) or len(shards) not in UI_SHARD_COUNTS or any(not shard for shard in shards):
             raise ValueError("missing UI shards")
         if Counter(test for shard in shards for test in shard) != Counter(ui):
             raise ValueError("UI shard union has a gap or duplicate")
@@ -229,8 +244,13 @@ def selection_arguments(mode: str, tests: list[str]) -> list[str]:
     if mode not in {"smoke", "full"}:
         raise ValueError(f"invalid test mode: {mode!r}")
     parse_smoke_list("\n".join(tests))
-    return (["-only-testing:BeidTests"] + [f"-only-testing:{test}" for test in tests]
-            if mode == "smoke" else [])
+    if mode == "full":
+        return []
+    return [
+        "-only-testing:BeidTests",
+        *(f"-skip-testing:BeidTests/{suite}" for suite in SMOKE_DEFERRED_UNIT_SUITES),
+        *(f"-only-testing:{test}" for test in tests),
+    ]
 
 
 def source_tests(source_root: Path, bundle="BeidUITests") -> list[str]:
@@ -384,6 +404,11 @@ def main() -> int:
                 if (identifier := line.partition("#")[0].strip())
             ], "BeidTests")
             validate_unit_skips(unit_skips, enumerated["BeidTests"])
+            if args.mode == "smoke":
+                unit_suites = {test.split("/")[1] for test in enumerated["BeidTests"]}
+                missing = set(SMOKE_DEFERRED_UNIT_SUITES) - unit_suites
+                if missing:
+                    raise ValueError(f"stale smoke unit suite exclusions: {sorted(missing)}")
             smoke = parse_smoke_list(DEFAULT_LIST.read_text())
             validate_sources(smoke, Path("ios/BeidUITests"))
             duration_data = json.loads(args.durations.read_text())
@@ -396,11 +421,11 @@ def main() -> int:
         if args.command in ("lane-arguments", "verify-lane"):
             manifest = json.loads(args.manifest.read_text())
             if args.lane == "build" and manifest["mode"] == "smoke":
-                selected = manifest["unit"] + manifest["smoke"]
+                selected = smoke_unit_tests(manifest["unit"]) + manifest["smoke"]
                 arguments = selection_arguments("smoke", manifest["smoke"])
             elif args.lane == "unit" and manifest["mode"] == "full":
                 selected, arguments = manifest["unit"], ["-only-testing:BeidTests"]
-            elif re.fullmatch(r"ui-[1-3]", args.lane) and manifest["mode"] == "full":
+            elif re.fullmatch(r"ui-[1-4]", args.lane) and manifest["mode"] == "full":
                 selected = manifest["shards"][int(args.lane[-1]) - 1]
                 arguments = [f"-only-testing:{test}" for test in selected]
             else:
