@@ -178,8 +178,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     planning.
 
     `scripts/ios_ui_smoke.py shards` balances methods longest-first using
-    `scripts/ios-ui-durations.json`. The weights combine hosted iPhone
-    `test-tree.json` case durations with projections for changed and new tests.
+    `scripts/ios-ui-durations.json`. The weights use hosted iPhone
+    `test-tree.json` case durations. A new or changed test may use a projected
+    weight until a hosted run measures it.
     Methods missing from the table get a 20-second weight. Identifier ordering
     and the lowest shard index break ties, so every new
     test is assigned exactly once. Runtime UI enumeration must also equal the
