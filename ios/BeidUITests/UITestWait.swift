@@ -24,26 +24,38 @@ extension XCUIElement {
   }
 
   func assertHittable(file: StaticString = #filePath, line: UInt = #line) {
-    let visible = XCTNSPredicateExpectation(
-      predicate: NSPredicate { _, _ in self.exists && self.isHittable }, object: nil
-    )
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [visible], timeout: UITestWait.timeout), .completed,
-      "Element did not become hittable within \(UITestWait.timeout)s: \(exists ? identifier : "<absent>"); " +
-        "exists=\(exists), hittable=\(exists && isHittable)",
+    let state = waitForState { $0 && isHittable }
+    XCTAssertTrue(
+      state.satisfied,
+      "Element did not become hittable within \(UITestWait.timeout)s; " +
+        "exists=\(state.exists), hittable=\(state.satisfied)",
       file: file, line: line
     )
   }
 
   func assertDisappears(file: StaticString = #filePath, line: UInt = #line) {
-    let absent = XCTNSPredicateExpectation(
-      predicate: NSPredicate { _, _ in !self.exists }, object: nil
-    )
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [absent], timeout: UITestWait.timeout), .completed,
-      "Element remained present after \(UITestWait.timeout)s: \(exists ? identifier : "<absent>")",
+    let state = waitForState { !$0 }
+    XCTAssertTrue(
+      state.satisfied,
+      "Element remained present after \(UITestWait.timeout)s; exists=\(state.exists)",
       file: file, line: line
     )
+  }
+
+  private func waitForState(_ condition: (Bool) -> Bool) -> (exists: Bool, satisfied: Bool) {
+    func capture() -> (exists: Bool, satisfied: Bool) {
+      let present = exists
+      return (present, condition(present))
+    }
+
+    let deadline = ProcessInfo.processInfo.systemUptime + UITestWait.timeout
+    while ProcessInfo.processInfo.systemUptime < deadline {
+      let state = capture()
+      if state.satisfied { return state }
+      let delay = min(0.25, deadline - ProcessInfo.processInfo.systemUptime)
+      if delay > 0 { Thread.sleep(forTimeInterval: delay) }
+    }
+    return capture()
   }
 
   /// Wait for the destination's scroll view before querying or scrolling its
@@ -51,15 +63,50 @@ extension XCUIElement {
   func scrollToHittable(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
     let scrollView = app.scrollViews.firstMatch
     scrollView.assertHittable(file: file, line: line)
-    for _ in 0..<5 {
-      if exists && isHittable { break }
-      scrollView.swipeUp()
+    for _ in 0..<8 {
+      let targetExists = exists
+      if targetExists && isHittable { return }
+      let scrollFrame = scrollView.frame
+      let visible = app.visibleScrollFrame(for: scrollFrame)
+      guard !visible.isEmpty else { break }
+
+      let target = targetExists ? frame : .null
+      // Continue toward later rows when a lazy container has not created the target.
+      let targetAbove = !target.isEmpty && target.midY.isFinite && target.midY < visible.midY
+      let quarter = visible.height * 0.25
+      let dragOffset = targetAbove ? -quarter : quarter
+      let center = scrollView.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+        dx: visible.midX - scrollFrame.minX, dy: visible.midY - scrollFrame.minY
+      ))
+      let start = center.withOffset(CGVector(dx: 0, dy: dragOffset))
+      let end = center.withOffset(CGVector(dx: 0, dy: -dragOffset))
+      start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
     }
     assertHittable(file: file, line: line)
   }
 }
 
 extension XCUIApplication {
+  fileprivate func visibleScrollFrame(for scrollFrame: CGRect) -> CGRect {
+    let window = windows.firstMatch
+    let viewport = scrollFrame.intersection(window.frame)
+    guard !viewport.isEmpty else { return .null }
+    let navigationBar = window.navigationBars.firstMatch
+    let tabBar = window.tabBars.firstMatch
+    let navigationFrame = navigationBar.exists ? navigationBar.frame : .null
+    let tabFrame = tabBar.exists ? tabBar.frame : .null
+
+    // Only bars on the corresponding edge can cover the central drag path.
+    let top = navigationFrame.intersects(viewport) && navigationFrame.midY < viewport.midY &&
+      navigationFrame.minX <= viewport.midX && navigationFrame.maxX >= viewport.midX
+      ? max(viewport.minY, navigationFrame.maxY) : viewport.minY
+    let bottom = tabFrame.intersects(viewport) && tabFrame.midY > viewport.midY &&
+      tabFrame.minX <= viewport.midX && tabFrame.maxX >= viewport.midX
+      ? min(viewport.maxY, tabFrame.minY) : viewport.maxY
+    guard top < bottom else { return .null }
+    return CGRect(x: viewport.minX, y: top, width: viewport.width, height: bottom - top)
+  }
+
   /// Exercise the native interactive-pop recognizer on either idiom.
   /// A middle-of-screen swipe drives scrolling instead of navigation.
   func swipeFromLeadingEdge() {
