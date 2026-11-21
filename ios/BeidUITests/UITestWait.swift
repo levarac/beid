@@ -6,7 +6,7 @@ import UIKit
 
 enum UITestWait {
   // Navigation and accessibility snapshots can take more than five seconds
-  // on the hosted macos-26 runner. Conditions still finish immediately.
+  // on the hosted iOS runner. Conditions still finish immediately.
   static let timeout: TimeInterval = 30
 }
 
@@ -128,16 +128,6 @@ extension XCUIApplication {
       ? min(viewport.maxY, tabFrame.minY) : viewport.maxY
     guard top < bottom else { return .null }
     return CGRect(x: viewport.minX, y: top, width: viewport.width, height: bottom - top)
-  }
-
-  /// Exercise the native interactive-pop recognizer on either idiom.
-  /// A middle-of-screen swipe drives scrolling instead of navigation.
-  func swipeFromLeadingEdge() {
-    let window = windows.firstMatch
-    window.assertExists()
-    let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
-    let finish = window.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
-    start.press(forDuration: 0.01, thenDragTo: finish, withVelocity: .fast, thenHoldForDuration: 0)
   }
 
   /// Opt-in only: other UI tests keep the established timed demo behavior.

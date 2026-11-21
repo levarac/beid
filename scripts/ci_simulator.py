@@ -72,7 +72,7 @@ def create_simulator(name: str, runtime_name: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--name", required=True, help="CI run/job name prefix")
-    parser.add_argument("--runtime", default="iOS 26.5")
+    parser.add_argument("--runtime", default="iOS 27.0")
     args = parser.parse_args()
     try:
         print(create_simulator(args.name, args.runtime))

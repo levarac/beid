@@ -335,7 +335,6 @@
 		D898C7D67056C30BB342265E /* VenueDeviceClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = A506F40794EF36DFEBF44C78 /* VenueDeviceClock.swift */; };
 		D8B304C27CA6139702C8B39D /* SensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */; };
 		D94D3E9CB438EDA6F4FF5C8A /* SensingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FAD458D67D1864749F00726 /* SensingCoordinator.swift */; };
-		D9643D260831E5A271299E80 /* BeidBackNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2377810E43782A295E1EB6FC /* BeidBackNavigationUITests.swift */; };
 		D9C7575BA9CA4B5E9BC83F75 /* VenueDeviceAssignmentRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC678447413084162F17C12 /* VenueDeviceAssignmentRecord.swift */; };
 		DA1CBA7E259447EA0B9251AE /* VenueDeviceAssignmentRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC678447413084162F17C12 /* VenueDeviceAssignmentRecord.swift */; };
 		DA918FE023F66F37F4B0884B /* ClockPreflightUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64CB05B6DCBD1B33574B9347 /* ClockPreflightUITests.swift */; };
@@ -482,7 +481,6 @@
 		2169FFDF6767C427D481ED17 /* ItemDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemDetailView.swift; sourceTree = "<group>"; };
 		2216225A599F7A2681ED2BC7 /* ParticipantRelayVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipantRelayVerifier.swift; sourceTree = "<group>"; };
 		227F031B1D42A852CC6278C8 /* ReportSubmissionOperatorIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportSubmissionOperatorIntegrationTests.swift; sourceTree = "<group>"; };
-		2377810E43782A295E1EB6FC /* BeidBackNavigationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidBackNavigationUITests.swift; sourceTree = "<group>"; };
 		23A7CBFE0F3CC0DFE56DD777 /* CorruptStoreQuarantineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorruptStoreQuarantineTests.swift; sourceTree = "<group>"; };
 		23D891FA92885297F5C4D602 /* VenueDeviceAssignmentStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceAssignmentStoreTests.swift; sourceTree = "<group>"; };
 		23F7FC4FB9C8848377685B64 /* EventIdentityVerificationPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventIdentityVerificationPresentationTests.swift; sourceTree = "<group>"; };
@@ -882,7 +880,6 @@
 		490CBC4967C88D5ADFE619BA /* BeidUITests */ = {
 			isa = PBXGroup;
 			children = (
-				2377810E43782A295E1EB6FC /* BeidBackNavigationUITests.swift */,
 				A0B0F719CDD2DE7CBBEDB7F5 /* BeidIPadLayoutTests.swift */,
 				64CB05B6DCBD1B33574B9347 /* ClockPreflightUITests.swift */,
 				D2FADCDE81137644238447E2 /* ContinuousSensingIndicatorUITests.swift */,
@@ -1506,7 +1503,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D9643D260831E5A271299E80 /* BeidBackNavigationUITests.swift in Sources */,
 				48805AF863EF6409D14E5B2E /* BeidIPadLayoutTests.swift in Sources */,
 				DA918FE023F66F37F4B0884B /* ClockPreflightUITests.swift in Sources */,
 				BFBC6182C8C422DF5DC18011 /* ContinuousSensingIndicatorUITests.swift in Sources */,

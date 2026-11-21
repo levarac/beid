@@ -10,7 +10,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-27-0"
 IPHONE = "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro"
 PREFERRED_IPHONE = "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro"
 FALLBACK_IPHONE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro"
@@ -19,7 +19,7 @@ OWNED_UDID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
 
 def runtime(**overrides):
     return {
-        "name": "iOS 26.5",
+        "name": "iOS 27.0",
         "identifier": RUNTIME,
         "isAvailable": True,
         "supportedDeviceTypes": [{"identifier": IPHONE, "name": "iPhone 17 Pro"}],
@@ -118,7 +118,7 @@ class CiSimulatorTests(unittest.TestCase):
             with self.subTest(runtimes=runtimes):
                 result, calls = self.create(runtimes)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("no available iOS 26.5 runtime", result.stderr)
+                self.assertIn("no available iOS 27.0 runtime", result.stderr)
                 self.assertEqual(result.stdout, "")
                 self.assertEqual(len(calls), 1)
 

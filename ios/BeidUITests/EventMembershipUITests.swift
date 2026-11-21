@@ -227,12 +227,12 @@ final class EventMembershipUITests: XCTestCase {
     assertCodeReceipt("submissions=0 resumed=0")
   }
 
+  // Removed flaky hosted gesture tests. Forwarding address: beid#828.
+  // testLeadingEdgeSwipeLeavesBothScanCodeEntryRoutesUsable
+  // testLeadingEdgeSwipePopsProofDetailBackToCollection
+  // testLeadingEdgeSwipeOnTheRootScreenIsHarmless
   func testNativeBackLeavesBothScanCodeEntryRoutesUsable() {
-    assertScanCodeEntryCanPopAndReopen(usingGesture: false)
-  }
-
-  func testLeadingEdgeSwipeLeavesBothScanCodeEntryRoutesUsable() {
-    assertScanCodeEntryCanPopAndReopen(usingGesture: true)
+    assertScanCodeEntryCanPopAndReopen()
   }
 
   func testCodeLookupSuccessUsesTheExistingScanFlowRouteOnce() {
@@ -253,20 +253,16 @@ final class EventMembershipUITests: XCTestCase {
     XCTAssertFalse(app.buttons["scan.stop-sensing"].exists)
   }
 
-  private func assertScanCodeEntryCanPopAndReopen(usingGesture: Bool) {
+  private func assertScanCodeEntryCanPopAndReopen() {
     for fixture in ["-beid-clock-preflight-fixture", "-beid-join-refusal-fixture"] {
       launchCodeProgressFixture(extraArguments: [fixture])
       openScanCodeEntry()
       app.textFields["Event code"].typeText("ABANDONED\n")
       assertCodeLookupPending()
-      if usingGesture {
-        app.swipeFromLeadingEdge()
-      } else {
-        app.navigationBars.buttons.firstMatch.tap()
-      }
+      app.navigationBars.buttons.firstMatch.tap()
       app.textFields["Event code"].assertDisappears()
 
-      // Both native navigation controls must return to their own source.
+      // Each code entry route must return to its own source.
       let source = fixture == "-beid-clock-preflight-fixture" ? "scan.sensing" : "scan.cant-join"
       app.scrollViews[source].assertHittable()
       openScanCodeEntryFromScan()

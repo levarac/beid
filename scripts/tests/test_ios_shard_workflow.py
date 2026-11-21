@@ -16,7 +16,11 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertIn("max-parallel: 5", tests)
         self.assertIn("fail-fast: false", tests)
         self.assertIn("fromJSON(needs.plan.outputs.matrix)", tests)
-        self.assertEqual(text.count("    runs-on: macos-26\n"), 2)
+        self.assertEqual(text.count("    runs-on: xcode-27\n"), 2)
+        for job in (build, tests):
+            self.assertIn("runs-on: xcode-27", job)
+            self.assertIn('= "Xcode 27.2"', job)
+        self.assertIn('item.get("name") == "iOS 27.0"', build)
         self.assertIn("IOS_UI_SHARDS: '4'", text)
         self.assertIn("build-for-testing", build)
         self.assertNotIn("build-for-testing", tests)
