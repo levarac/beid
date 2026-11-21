@@ -1140,6 +1140,10 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   (no regular-width/tablet layout class in this codebase), so the "regular
   width" deviation clause has no Android instance yet — not a violation,
   just an unexercised case.]**
+- MUST: The iOS Sensing screen reserves the fixed Stop footer's measured
+  height outside the scrolling content at every width and Dynamic Type
+  size. The last line and its controls scroll fully into view above the
+  footer. Footer controls stay visible while the content scrolls.
 - MUST: Respect safe areas; content never hides behind home indicator or
   notch. Keyboard avoidance uses standard SwiftUI behavior. **[Android
   counterpart: respect system window insets (status bar, navigation bar,

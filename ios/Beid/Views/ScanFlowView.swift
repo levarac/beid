@@ -19,7 +19,13 @@ struct ScanFlowView: View {
   }
 
   var body: some View {
-    content
+    VStack(spacing: 0) {
+      content
+      if showsStopControl {
+        stopFooter
+          .layoutPriority(1)
+      }
+    }
       .environment(\.showsFirstSensingHint, showsFirstTimeHint ?? false)
       .onAppear {
         if showsFirstTimeHint == nil { showsFirstTimeHint = !hasShownFirstTimeHint }
@@ -49,39 +55,6 @@ struct ScanFlowView: View {
           #endif
         }
       }
-      .safeAreaInset(edge: .bottom) {
-        if showsStopControl {
-          BeidAdaptiveContent {
-            Button {
-              coordinator.requestScanClose()
-            } label: {
-              Text("Stop sensing")
-                .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
-            }
-            .font(DS.Font.Library.title16.font)
-            .buttonStyle(.bordered)
-            .tint(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
-            .accessibilityIdentifier("scan.stop-sensing")
-            .padding(.horizontal, DS.Space.pageMargin)
-          }
-          .alert(
-            "Stop sensing?",
-            isPresented: stopConfirmationPresented,
-            presenting: coordinator.stopConfirmSnapshot
-          ) { snapshot in
-            Button(LocalizedStringKey(snapshot.copy.stopTitle)) {
-              coordinator.confirmStopSensing()
-            }
-            Button("Cancel", role: .cancel) {
-              coordinator.keepSensing()
-            }
-          } message: { snapshot in
-            Text(verbatim: snapshot.copy.body)
-          }
-          .padding(.vertical, DS.Space.s)
-          .background(usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
-        }
-      }
       #if DEBUG
       .safeAreaInset(edge: .top) {
         if NearbyJoinUITestFixture.isEnabled { NearbyJoinUITestReceipt() }
@@ -101,6 +74,38 @@ struct ScanFlowView: View {
         if newPhase == .background { sensing.checkpointOpenWindowForBackgrounding() }
         if newPhase == .active { sensing.retryPendingSubmissionsOnForeground() }
       }
+  }
+
+  private var stopFooter: some View {
+    BeidAdaptiveContent {
+      Button {
+        coordinator.requestScanClose()
+      } label: {
+        Text("Stop sensing")
+          .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
+      }
+      .font(DS.Font.Library.title16.font)
+      .buttonStyle(.bordered)
+      .tint(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
+      .accessibilityIdentifier("scan.stop-sensing")
+      .padding(.horizontal, DS.Space.pageMargin)
+    }
+    .alert(
+      "Stop sensing?",
+      isPresented: stopConfirmationPresented,
+      presenting: coordinator.stopConfirmSnapshot
+    ) { snapshot in
+      Button(LocalizedStringKey(snapshot.copy.stopTitle)) {
+        coordinator.confirmStopSensing()
+      }
+      Button("Cancel", role: .cancel) {
+        coordinator.keepSensing()
+      }
+    } message: { snapshot in
+      Text(verbatim: snapshot.copy.body)
+    }
+    .padding(.vertical, DS.Space.s)
+    .background(usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
   }
 
   @ViewBuilder private var doneButton: some View {
