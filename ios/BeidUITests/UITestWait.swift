@@ -24,38 +24,49 @@ extension XCUIElement {
   }
 
   func assertHittable(file: StaticString = #filePath, line: UInt = #line) {
-    let state = waitForState { $0 && isHittable }
+    let (state, passed, target) = waitForState { $0 && self.isHittable }
     XCTAssertTrue(
-      state.satisfied,
+      passed,
       "Element did not become hittable within \(UITestWait.timeout)s; " +
-        "exists=\(state.exists), hittable=\(state.satisfied)",
+        "exists=\(state.exists), hittable=\(state.satisfied)\n\(target)",
       file: file, line: line
     )
   }
 
   func assertDisappears(file: StaticString = #filePath, line: UInt = #line) {
-    let state = waitForState { !$0 }
+    let (state, passed, target) = waitForState { !$0 }
     XCTAssertTrue(
-      state.satisfied,
-      "Element remained present after \(UITestWait.timeout)s; exists=\(state.exists)",
+      passed,
+      "Element remained present after \(UITestWait.timeout)s; exists=\(state.exists)\n\(target)",
       file: file, line: line
     )
   }
 
-  private func waitForState(_ condition: (Bool) -> Bool) -> (exists: Bool, satisfied: Bool) {
+  private func waitForState(
+    _ condition: @escaping (Bool) -> Bool
+  ) -> (state: (exists: Bool, satisfied: Bool), passed: Bool, target: String) {
     func capture() -> (exists: Bool, satisfied: Bool) {
       let present = exists
       return (present, condition(present))
     }
 
-    let deadline = ProcessInfo.processInfo.systemUptime + UITestWait.timeout
-    while ProcessInfo.processInfo.systemUptime < deadline {
-      let state = capture()
-      if state.satisfied { return state }
-      let delay = min(0.25, deadline - ProcessInfo.processInfo.systemUptime)
-      if delay > 0 { Thread.sleep(forTimeInterval: delay) }
+    var state = (exists: false, satisfied: false)
+    let expectation = XCTNSPredicateExpectation(
+      predicate: NSPredicate { _, _ in
+        state = capture()
+        return state.satisfied
+      },
+      object: nil
+    )
+    let outcome = XCTWaiter.wait(for: [expectation], timeout: UITestWait.timeout)
+    if outcome == .timedOut {
+      state = capture()
     }
-    return capture()
+    let passed = state.satisfied && (outcome == .completed || outcome == .timedOut)
+    // Preserve the last evaluation and read the query only for a failure.
+    // Resolving identifier while views transition can fail on duplicate matches.
+    let target = passed ? "" : String(debugDescription.suffix(2048))
+    return (state, passed, target)
   }
 
   /// Wait for the destination's scroll view before querying or scrolling its
@@ -65,7 +76,7 @@ extension XCUIElement {
     scrollView.assertHittable(file: file, line: line)
     for _ in 0..<8 {
       let targetExists = exists
-      if targetExists && isHittable { return }
+      if targetExists && isHittable { break }
       let scrollFrame = scrollView.frame
       let visible = app.visibleScrollFrame(for: scrollFrame)
       guard !visible.isEmpty else { break }
