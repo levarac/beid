@@ -7,8 +7,9 @@ dates). The contract every agent must know before touching delivery files:
 ## PR CI
 
 All pull-request jobs use literal GitHub-hosted labels: `ubuntu-24.04-arm`
-for classification/sanity, `ubuntu-24.04` for Android, and `macos-26` for
-SwiftLint, iOS and the lab CLI (Xcode 26.5). No pull-request workflow receives secrets, including same-repository PRs.
+for classification/sanity, `ubuntu-24.04` for Android, `macos-26` for
+SwiftLint and the lab CLI (Xcode 26.5), and `xcode-27` for iOS simulator
+builds and tests (Xcode 27.2). No pull-request workflow receives secrets, including same-repository PRs.
 Removing persistent runner access before public cutover is a separate operator
 step; workflow edits alone cannot prevent a modified fork workflow from
 requesting a runner that remains registered. All Actions references use reviewed full commit SHA pins with tag comments.
@@ -137,11 +138,13 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     as its ref, so the existing checkout expression builds the merge result
     rather than a PR head. See [GitHub's event reference](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#merge_group).
 
-    The standard `macos-26` image uses `/Applications/Xcode_26.5.app` and
-    requires the iOS 26.5 runtime. `scripts/ci_simulator.py` creates a new
+    The `xcode-27` image uses `/Applications/Xcode_27.2.app` and
+    requires the iOS 27.0 runtime. `scripts/ci_simulator.py` creates a new
     simulator for each job and returns its UDID; only that device is booted,
-    tested and deleted, even on failure. Build-for-testing uses
-    `SWIFT_OPTIMIZATION_LEVEL=-O`. Smoke runs the checked-in UI list and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`; full runs both complete bundles.
+    tested and deleted, even on failure. Build-for-testing keeps Swift in
+    Debug with `SWIFT_OPTIMIZATION_LEVEL=-O` and selects Release Kotlin/Native
+    with `BEID_KMP_BUILD_TYPE=Release` for the Beid target's Gradle invocation.
+    Smoke runs the checked-in UI list and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`; full runs both complete bundles.
     Deferred coverage paths, uncertain classifications, and the `ci:full-ui` label
     select full mode. Merge groups, push,
     nightly and manual events always run full. On `merge_group`, the optional
@@ -162,7 +165,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     match the selected unit and UI case IDs and their expected skips.
 
     Job graph: the optional classifier feeds `Plan iOS test jobs` (Ubuntu),
-    then `Build iOS test bundles` (`macos-26`). Smoke builds and runs its tests
+    then `Build iOS test bundles` (`xcode-27`). Smoke builds and runs its tests
     in that one macOS job. Full builds both bundles once, enumerates them with
     `xcodebuild -enumerate-tests`, then transfers a tar containing `Build/Products`
     and its `.xctestrun` to a matrix: one `unit` job and `ui-1` through `ui-N`.
@@ -172,7 +175,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     extraction, SHA, full Xcode version/build, SDK and architecture must match;
     absolute DerivedData/checkout references in `.xctestrun` are relocated.
     The matrix starts only after build finishes, has `fail-fast: false` and
-    `max-parallel: 5`, and all macOS jobs use the free standard `macos-26` label.
+    `max-parallel: 5`, and the iOS macOS jobs use the `xcode-27` label.
     Change only workflow `env.IOS_UI_SHARDS` from `4` to `3` or `2` to reduce the
     matrix from five macOS jobs to four or three. Values outside 2/3/4 fail
     planning.
@@ -213,9 +216,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     attempt boundaries. `scripts/ios_ci_timing.py` timestamps SPM resolution,
     KMP script start/end, and the observed Swift compile window. That window
     includes overlapping/link work; `-showBuildTimingSummary` in `build.log`
-    gives actual task durations. Job timeouts are 45 minutes for build/smoke and
-    35 per test lane. Step timeouts are 25 minutes for build, 10 for smoke tests,
-    and 25 for each full-mode test lane, leaving time for evidence and cleanup.
+    gives actual task durations. Job timeouts are 50 minutes for build/smoke and
+    35 per test lane. Step timeouts are 35 minutes for build (the Release Kotlin
+    framework alone takes about 12 minutes on `xcode-27`), 10 for smoke tests,
+    and 30 for each full-mode test lane (UI shards take 21-25 minutes on
+    `xcode-27`), leaving time for evidence and cleanup.
     These are containment, not claimed speed; hosted full and smoke timing and
     artifact portability still need measurement on the final SHA.
 

@@ -48,7 +48,9 @@ targets:
           echo "Using KMP JDK: $JAVA_HOME"
           "$JAVA_HOME/bin/java" -version
           cd "$SRCROOT/../android"
-          ./gradlew :shared:embedSwiftExportForXcode --no-daemon
+          # Select the Kotlin build type without changing Swift's Xcode configuration.
+          CONFIGURATION="${BEID_KMP_BUILD_TYPE:-$CONFIGURATION}" \
+            ./gradlew :shared:embedSwiftExportForXcode --no-daemon
     dependencies:
       - package: Barnard
         product: Barnard

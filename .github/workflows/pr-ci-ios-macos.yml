@@ -48,7 +48,7 @@ permissions:
   contents: read
 
 env:
-  DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
   # Change only this value to select two, three, or four UI shards.
   IOS_UI_SHARDS: '4'
 
@@ -202,11 +202,11 @@ jobs:
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' }}
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
-    runs-on: macos-26
+    runs-on: xcode-27
     # The former serial full job hit 60 minutes. Full mode now builds once
     # and fans out to at most five macOS test jobs. Smoke retains its single job.
-    # 45 minutes is containment for build/smoke, not a performance target.
-    timeout-minutes: 45
+    # 50 minutes is containment for build/smoke, not a performance target.
+    timeout-minutes: 50
     steps:
       - name: Initialize CI output path
         shell: bash
@@ -233,15 +233,15 @@ jobs:
           set -euo pipefail
           printf 'KMP_JAVA_HOME=%s\n' "$JAVA_HOME" >> "$GITHUB_ENV"
 
-      - name: Resolve Xcode and JDK with the iOS 26.5 runtime
+      - name: Resolve Xcode and JDK with the iOS 27.0 runtime
         id: toolchain
         shell: bash
         run: |
           set -euo pipefail
           test -x "$DEVELOPER_DIR/usr/bin/xcodebuild"
-          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.5"
+          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 27.2"
           xcrun simctl list runtimes --json \
-            | python3 -c 'import json, sys; runtimes = json.load(sys.stdin)["runtimes"]; raise SystemExit(0 if any(item.get("isAvailable") and item.get("name") == "iOS 26.5" for item in runtimes) else "iOS 26.5 runtime is unavailable")'
+            | python3 -c 'import json, sys; runtimes = json.load(sys.stdin)["runtimes"]; raise SystemExit(0 if any(item.get("isAvailable") and item.get("name") == "iOS 27.0" for item in runtimes) else "iOS 27.0 runtime is unavailable")'
 
           kmp_java_home="$(scripts/resolve_kmp_java_home.sh)"
           "$kmp_java_home/bin/java" -version
@@ -334,7 +334,8 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: Build for testing
-        timeout-minutes: 25
+        # Release Kotlin takes about 12 minutes on xcode-27 (Debug: about 7).
+        timeout-minutes: 35
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
@@ -357,6 +358,7 @@ jobs:
             -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" \
             -disableAutomaticPackageResolution \
             SWIFT_OPTIMIZATION_LEVEL=-O \
+            BEID_KMP_BUILD_TYPE=Release \
             build-for-testing
 
       - name: Enumerate built tests and compute shards
@@ -532,7 +534,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$CI_OUTPUT_ROOT"
-          # Inspect Xcode 26.5's per-node fields; retain the schema with the JSON.
+          # Inspect Xcode 27.2's per-node fields; retain the schema with the JSON.
           xcrun xcresulttool get test-results tests --schema \
             --path "$CI_OUTPUT_ROOT/Tests.xcresult" > "$CI_OUTPUT_ROOT/test-tree-schema.json"
           xcrun xcresulttool get test-results tests \
@@ -569,7 +571,7 @@ jobs:
     name: iOS full tests (${{ matrix.lane }})
     needs: [plan, build]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.plan.outputs.mode == 'full' }}
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -605,7 +607,7 @@ jobs:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.5"
+          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 27.2"
           xctestrun="$(python3 -m scripts.ios_ci_products unpack \
             --archive "$CI_OUTPUT_ROOT/products.tar" --derived-data "$CI_OUTPUT_ROOT/DerivedData" \
             --sha "$EXPECTED_SHA" --xcode "$(xcodebuild -version)" \
@@ -632,7 +634,8 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: Execute full-mode test lane
-        timeout-minutes: 25
+        # UI shards take 21-25 minutes on xcode-27; 30 is containment.
+        timeout-minutes: 30
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}

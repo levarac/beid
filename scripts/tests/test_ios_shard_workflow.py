@@ -16,10 +16,23 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertIn("max-parallel: 5", tests)
         self.assertIn("fail-fast: false", tests)
         self.assertIn("fromJSON(needs.plan.outputs.matrix)", tests)
-        self.assertEqual(text.count("    runs-on: macos-26\n"), 2)
+        self.assertEqual(text.count("    runs-on: xcode-27\n"), 2)
+        for job in (build, tests):
+            self.assertIn("runs-on: xcode-27", job)
+            self.assertIn('= "Xcode 27.2"', job)
+        self.assertIn('item.get("name") == "iOS 27.0"', build)
         self.assertIn("IOS_UI_SHARDS: '4'", text)
         self.assertIn("build-for-testing", build)
         self.assertNotIn("build-for-testing", tests)
+
+    def test_release_kmp_is_scoped_to_the_debug_test_build(self):
+        build = job_block(IOS, "build")
+        build_step = build.split("      - name: Build for testing\n", 1)[1].split("      - name:", 1)[0]
+        self.assertRegex(
+            build_step,
+            r"(?s)-configuration Debug.*SWIFT_OPTIMIZATION_LEVEL=-O.*BEID_KMP_BUILD_TYPE=Release.*build-for-testing",
+        )
+        self.assertEqual(IOS.read_text().count("BEID_KMP_BUILD_TYPE"), 1)
 
     def test_aggregate_is_always_created_with_exact_required_name(self):
         text = IOS.read_text()

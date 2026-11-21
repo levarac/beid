@@ -426,6 +426,16 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   /// death before the receipt write.
   var receiptPersistenceGate: (() -> Bool)?
   var activeSubmissionCountForTesting: Int { inFlight.count }
+
+  enum PostStageForTesting: String, CaseIterable, Sendable {
+    case beforePost
+    // The Kotlin client invokes its completion with the result of verification.
+    case verifiedReceiptResult
+    case clientResultWithoutVerifiedReceipt
+    case mainActorCallback
+  }
+
+  var postStageObserverForTesting: (@Sendable (PostStageForTesting) -> Void)?
   #endif
 
   private init(
@@ -863,8 +873,21 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     stored: ExportedKotlinPackages.org.levarac.parallax.submission.StoredObservationV1,
     configuration: ExportedKotlinPackages.org.levarac.parallax.submission.SubmissionOperatorConfiguration
   ) {
+    #if DEBUG
+    let observePostStage = postStageObserverForTesting
+    observePostStage?(.beforePost)
+    #endif
     client.submit(observation: stored, configuration: configuration) { [weak self] result in
+      #if DEBUG
+      if let observePostStage {
+        let hasVerifiedReceipt = result.isSuccess && result.receipt != nil
+        observePostStage(hasVerifiedReceipt ? .verifiedReceiptResult : .clientResultWithoutVerifiedReceipt)
+      }
+      #endif
       Task { @MainActor [weak self] in
+        #if DEBUG
+        observePostStage?(.mainActorCallback)
+        #endif
         guard let self, !self.retryController.isStopped else { return }
         guard result.isSuccess, let receipt = result.receipt else {
           self.finishFailedSubmission(result, for: record)
