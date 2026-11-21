@@ -23,8 +23,8 @@ final class FlatScreenshotTourC: XCTestCase {
     app.launch()
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
     app.tabButton("Now").assertExists()
     XCTAssertFalse(app.staticTexts["scan.detecting.caption"].exists)
 
@@ -107,8 +107,8 @@ final class FlatScreenshotTourC: XCTestCase {
       app.launch()
       app.buttons["Continue"].assertHittable()
       app.buttons["Continue"].tap()
-      app.buttons["Allow Bluetooth"].assertHittable()
-      app.buttons["Allow Bluetooth"].tap()
+      app.buttons["bluetooth.permission.continue"].assertHittable()
+      app.buttons["bluetooth.permission.continue"].tap()
       app.tabButton("Now").assertHittable()
       app.buttons["home.demo.join"].assertHittable()
       app.buttons["home.demo.join"].tap()
@@ -445,7 +445,7 @@ final class FlatScreenshotTourC: XCTestCase {
     app.descendants(matching: .any)["whatWeSend.firstRow"].assertExists()
     let scroll = app.scrollViews["whatWeSend.scroll"]
     scroll.assertExists()
-    let signatureTitle = "A signature from this phone"
+    let signatureTitle = "A signature from this device"
     let signature = app.descendants(matching: .any).matching(
       NSPredicate(format: "label BEGINSWITH %@ AND label != %@", signatureTitle, signatureTitle)
     ).firstMatch
@@ -550,7 +550,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let getStarted = app.buttons["Continue"]
     getStarted.assertExists()
     getStarted.tap()
-    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    let allowBluetooth = app.buttons["bluetooth.permission.continue"]
     allowBluetooth.assertExists()
     allowBluetooth.tap()
     app.openRecordsByEvent()
@@ -600,8 +600,8 @@ final class FlatScreenshotTourC: XCTestCase {
     app.launch()
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
     app.buttons["home.demo.join"].assertHittable()
     app.buttons["home.demo.join"].tap()
     app.staticTexts["proof-collected.record-id"].assertExists()
@@ -659,7 +659,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
     getStarted.tap()
-    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    let allowBluetooth = app.buttons["bluetooth.permission.continue"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
     allowBluetooth.tap()
     XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 10))
@@ -689,7 +689,7 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertTrue(getStarted.waitForExistence(timeout: 10), file: file, line: line)
     getStarted.tap()
 
-    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    let allowBluetooth = app.buttons["bluetooth.permission.continue"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10), file: file, line: line)
     allowBluetooth.tap()
 

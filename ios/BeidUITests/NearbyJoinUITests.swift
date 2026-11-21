@@ -9,8 +9,8 @@ final class NearbyJoinUITests: XCTestCase {
     app.launch()
 
     app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
-    app.buttons["Allow Bluetooth"].tap()
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    app.buttons["bluetooth.permission.continue"].tap()
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
     XCTAssertTrue(receipt.waitForExistence(timeout: 5))
     XCTAssertEqual(receipt.label, "joins=0 event=none")
@@ -157,7 +157,7 @@ final class NowNavigationUITests: XCTestCase {
     XCTAssertFalse(app.staticTexts["home.listening"].exists)
     XCTAssertFalse(app.buttons["home.enter-code"].exists)
     app.buttons["home.bluetooth.fix"].tap()
-    XCTAssertTrue(app.buttons["Open Settings"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.off.check-again"].waitForExistence(timeout: 5))
     capture("now-bluetooth-off")
   }
 
@@ -193,8 +193,8 @@ final class NowNavigationUITests: XCTestCase {
     app.launch()
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
     XCTAssertTrue(app.tabButton("Now").waitForExistence(timeout: 5))
   }
 

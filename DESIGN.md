@@ -332,6 +332,7 @@ document enforces nothing.
    enforces this on Android today — see §16.]**
 2. MUST: All fonts in Views come from `DS.Font.*`. FORBIDDEN: `Font.system(`,
    `.font(.title3...)` shorthand, `.font(.custom(` outside `DesignSystem/`.
+   The two native Bluetooth primary actions use system typography (§10).
    **[Android counterpart: fonts come from `MaterialTheme.typography.*` as
    configured by `BeidTypography` (`ui/theme/Type.kt`); FORBIDDEN would be
    a literal `fontSize = N.sp`/`TextStyle(...)` constructed inline outside
@@ -1000,7 +1001,7 @@ superseded SF Pro ramp; #629 re-pointed them, so no View changed:
 | `DS.Font.supporting` | `body13` | Supporting copy | Pair with `textSecondary` |
 | `DS.Font.meta` | `body13` | Dates, counts, fine print | Deliberately not a mono label style — see below |
 | `DS.Font.ledgerMono` | `labelMono13Value` | Addresses, hashes, proof IDs | Ledger Trace motif only; never uppercased |
-| `DS.Font.cta` | `title16` (the Library's `Button/Primary` label) | Primary CTA labels | Label color per §5's CTA-label rule (never the style default white) |
+| `DS.Font.cta` | `title16` (the Library's `Button/Primary` label) | Primary CTA labels, with the native Bluetooth exception in §10 | Label color per §5's CTA-label rule (never the style default white) |
 
 `meta` is `Body/13`, not a mono label style, on purpose: the Library's mono
 labels are uppercase, and `meta`'s 44 call sites carry sentence-case copy
@@ -1766,7 +1767,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   and `SignalLostView`.
 - Required tokens: `DS.Space.l` stack spacing, `DS.Space.pageMargin`
   margins, `DS.Font.sectionTitle` + `DS.Font.supporting`, bottom CTA with
-  `DS.Font.cta`. (#629 removed `DS.Font.ceremonyTitle`, which this slot
+  `DS.Font.cta` or the native Bluetooth styling below. (#629 removed
+  `DS.Font.ceremonyTitle`, which this slot
   also named; it had no call site — §6.) **[Android counterpart, verified in
   `BeidStateScreen.kt`/`BeidScreen.kt`: `BeidSpacing.l` stack spacing,
   `BeidSpacing.pageMargin` margins, `MaterialTheme.typography.titleLarge`/
@@ -1888,6 +1890,15 @@ Real components in this codebase. Each entry is the contract for reuse.
   > §5 accent map exactly: `signalActive` on sensing screens, `proofSeal` at
   > ceremony, `signalWarning` on recovery screens, `DS.Color.actionPrimary`
   > everywhere else.
+
+- **Native Bluetooth actions (#864).** The iOS Bluetooth permission and
+  off screens use SwiftUI's large bordered-prominent capsule button with
+  system label typography and at least a 44 pt hit target. Use
+  `DS.Color.actionPrimary` for the tint and `DS.Color.labelOnActionPrimary`
+  for the label. At compact width the action stays in the bottom safe-area
+  footer while its instructions scroll. At regular width the button sits
+  with the instructions in a centered column to keep both within the
+  same reading area.
 
 ## 11. Screen Patterns
 
@@ -2057,12 +2068,18 @@ visual language).
 > in violation until an Android follow-up is scheduled (none exists as of
 > 2026-09-22).
 
-**Flat 2b: no icons in content; navigation bars, toolbars and the Now /
-Records tab bar are OS-standard controls (the 1.1 screen specification).**
+**Flat 2b: text controls in content and OS-standard navigation bars,
+toolbars and Now / Records tabs (the 1.1 screen specification).**
 
-- MUST: The app draws no icons in content. Controls inside a screen are
+- MUST: App-drawn content uses text and the existing Sigil artwork, with
+  the Bluetooth illustration exception below. Controls inside a screen are
   monospaced uppercase text in DM Mono (§6): `COPY`, `PASTE`, `OPEN →`,
-  `ENTER EVENT CODE →`.
+  `ENTER EVENT CODE →`. Native Bluetooth primary actions follow §10.
+- **Bluetooth illustrations (#864).** The permission and off screens may
+  pair two device symbols with a signal or blocked-state symbol to show
+  the role of Bluetooth. The illustration is noninteractive and hidden
+  from accessibility because the adjacent text conveys the same
+  information. The symbols stay within the 32 pt decorative cap (§12).
 - MUST: The Now / Records tab bar uses `TabView` with system symbols and
   titles. Its labels use the system font and its appearance belongs to the OS.
 - MUST: Navigation-bar and toolbar items are OS-standard items, not
@@ -2084,18 +2101,17 @@ Records tab bar are OS-standard controls (the 1.1 screen specification).**
   bar items (`sharedBackgroundVisibility(.hidden)`,
   `UIBarButtonItem.hidesSharedBackground`). The 2026-09-25 decision that
   suppressed it is withdrawn (§8).
-- Beyond the navigation bar, toolbar and tab bar, the only exception is the OS
-  status bar. OS-drawn chrome the app does not draw itself (system alerts
-  and confirmation dialogs, the keyboard, permission dialogs, sheets) is
-  outside this rule. There are no other exceptions.
+- The OS status bar is also standard chrome. System alerts and
+  confirmation dialogs, keyboards, permission dialogs and sheets use
+  their system-drawn appearance.
 - MUST: Every text control meets §2 rule 5's 44×44pt hit region; an 11pt
   label needs its hit region widened.
 - MUST: A text control whose visible text reads badly aloud (e.g. "←")
   carries a VoiceOver label. This applies §13's existing VoiceOver MUST;
   it is not a new rule.
 - Status dots are shapes paired with text (§5, §2 rule 9), not icons.
-- Illustrations are gone. The Welcome hero is a line-drawn Sigil from
-  sample data (#633, #643); empty states use the dashed `Block/Empty`
+- The Welcome hero is a line-drawn Sigil from sample data (#633, #643).
+  Empty states use the dashed `Block/Empty`
   (§8). A proof's artwork is its Sigil (§5).
 - **SHARE is not part of this contract** (owner decision 2026-09-22,
   settled item C in D-627). The 2026-07-28 rejection (§C, Item Detail
@@ -2794,12 +2810,14 @@ to.]**
 | `type.screen.title` | `DS.Font.screenTitle` | `Library.display46` — Bricolage Grotesque ExtraBold 46 / `.largeTitle` | Screen titles |
 | `type.section.title` | `DS.Font.sectionTitle` | `Library.title19` — DM Sans Bold 19 / `.title3` | State and section titles |
 | `type.ledger.mono` | `DS.Font.ledgerMono` | `Library.labelMono13Value` — DM Mono Medium 13 / `.footnote` | Addresses, hashes, proof IDs |
+| `type.bluetooth.endpoint` | `DS.Font.bluetoothEndpointSymbol` | System symbol, 32 pt | The paired devices in Bluetooth state illustrations |
+| `type.bluetooth.state` | `DS.Font.bluetoothStateSymbol` | System symbol, 28 pt medium | The signal or blocked-state symbol between the devices |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 | `motion.screen.transition` | `DS.Motion.screenTransition` | spring 0.36/1.0 | Root screen and scan-flow phase switches (from `BeidDesign.Animation.soft`) |
 
 (Full set: 17 color tokens, 8 space, 7 radius, 18 size, 4 layout, 8 font
 roles over 17 `DS.Font.Library` styles (§6; #629 removed `ceremonyTitle`,
-which had no call site, taking the roles from 9 to 8),
+which had no call site, taking the roles from 9 to 8), 2 Bluetooth symbol fonts,
 7 motion, plus 1 artwork generator — see
 `ios/Beid/DesignSystem/Tokens.swift`. Hex values are the primitive
 colorset's Library variable (§4, §5); illustrative only, §0. The

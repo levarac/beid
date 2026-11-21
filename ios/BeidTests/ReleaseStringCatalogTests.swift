@@ -49,6 +49,18 @@ final class ReleaseStringCatalogTests: XCTestCase {
     }
   }
 
+  func testBluetoothOnboardingInstructionsAreInCatalog() throws {
+    let strings = try catalog()
+    for key in [
+      "Allow Bluetooth access",
+      "beid needs Bluetooth to find your event and exchange signals with nearby devices. These observations help create your Record.",
+      "Your device may ask for permission.",
+      "Turn on Bluetooth in Settings > Bluetooth, then return to beid."
+    ] {
+      XCTAssertNotNil(strings[key], "Missing catalog entry: \(key)")
+    }
+  }
+
   private func stringValues(in value: Any) -> [String] {
     if let dictionary = value as? [String: Any] {
       return dictionary.flatMap { key, value in

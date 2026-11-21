@@ -3,8 +3,7 @@
 
 import SwiftUI
 
-/// Flat 2b frame 15. This destination is shared by the Account route and
-/// the pending Welcome, Home, and first-time sensing routes.
+/// Shared explanation presented from Welcome, Home, Account, and sensing.
 struct AboutSensingView: View {
   private let submissionEnabled: Bool
 
@@ -44,14 +43,8 @@ struct AboutSensingView: View {
 
   var body: some View {
     ScrollView {
-      BeidAdaptiveContent {
+      BeidLargeTitleContent {
         VStack(alignment: .leading, spacing: 0) {
-          Text("About\nsensing")
-            .beidTextStyle(DS.Font.Library.display52)
-            .foregroundStyle(DS.Color.textPrimary)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityAddTraits(.isHeader)
-
           SensingExplainerSectionLabel("HOW IT WORKS")
             .padding(.top, DS.Space.l)
           SensingExplainerRule()
@@ -65,7 +58,7 @@ struct AboutSensingView: View {
           SensingExplainerStep(
             number: "02",
             title: "Private by design",
-            detail: "Phones exchange rotating anonymous IDs, not names or wallet addresses."
+            detail: "Devices exchange rotating anonymous IDs, not names or wallet addresses."
           )
           SensingExplainerRule()
           SensingExplainerStep(
@@ -115,15 +108,16 @@ struct AboutSensingView: View {
           .accessibilityElement(children: .combine)
           SensingExplainerRule()
         }
-        .padding(.horizontal, DS.Space.pageMargin)
         .padding(.bottom, DS.Space.xxl)
       }
     }
     .accessibilityIdentifier("aboutSensing.scroll")
-    .background(DS.Color.surfaceCanvas)
-    .navigationTitle("")
-    .navigationBarTitleDisplayMode(.inline)
+    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+    .navigationBarTitleDisplayMode(.large)
     .toolbar(.visible, for: .navigationBar)
+    .toolbarBackground(.hidden, for: .navigationBar)
+    .toolbarColorScheme(.light, for: .navigationBar)
+    .navigationTitle("About sensing")
   }
 
   private var sendingStatus: String {
@@ -139,14 +133,8 @@ struct AboutSensingView: View {
 struct WhatWeSendView: View {
   var body: some View {
     ScrollView {
-      BeidAdaptiveContent {
+      BeidLargeTitleContent {
         VStack(alignment: .leading, spacing: 0) {
-          Text("What\nwe send")
-            .beidTextStyle(DS.Font.Library.display52)
-            .foregroundStyle(DS.Color.textPrimary)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityAddTraits(.isHeader)
-
           SensingExplainerSectionLabel("WHAT WE SEND")
             .padding(.top, DS.Space.l)
           SensingExplainerRule()
@@ -162,13 +150,13 @@ struct WhatWeSendView: View {
           )
           SensingExplainerRule()
           SensingExplainerDetail(
-            title: "The anonymous IDs of the phones near you",
-            detail: "Each phone announces an ID that changes on its own schedule. It is not a name, an account, or a device serial."
+            title: "The anonymous IDs of the devices near you",
+            detail: "Each device announces an ID that changes on its own schedule. It is not a name, an account, or a device serial."
           )
           SensingExplainerRule()
           SensingExplainerDetail(
             title: "Your own anonymous ID for that window",
-            detail: "The same kind of rotating ID, so the phones around you can be matched with this record."
+            detail: "The same kind of rotating ID, so the devices around you can be matched with this record."
           )
           SensingExplainerRule()
           SensingExplainerDetail(
@@ -177,7 +165,7 @@ struct WhatWeSendView: View {
           )
           SensingExplainerRule()
           SensingExplainerDetail(
-            title: "A signature from this phone",
+            title: "A signature from this device",
             detail: "A signature lets a reader check whether the signed record has changed."
           )
           SensingExplainerRule()
@@ -204,21 +192,22 @@ struct WhatWeSendView: View {
           } else {
             SensingExplainerDetail(
               title: "Anything you have not recorded",
-              detail: "Sending is off in this version. Records stay on this phone.",
+              detail: "Sending is off in this version. Records stay on this device.",
               identifier: "whatWeSend.finalRow"
             )
           }
           SensingExplainerRule()
         }
-        .padding(.horizontal, DS.Space.pageMargin)
         .padding(.bottom, DS.Space.xxl)
       }
     }
     .accessibilityIdentifier("whatWeSend.scroll")
-    .background(DS.Color.surfaceCanvas)
-    .navigationTitle("")
-    .navigationBarTitleDisplayMode(.inline)
+    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+    .navigationBarTitleDisplayMode(.large)
     .toolbar(.visible, for: .navigationBar)
+    .toolbarBackground(.hidden, for: .navigationBar)
+    .toolbarColorScheme(.light, for: .navigationBar)
+    .navigationTitle("What we send")
   }
 }
 

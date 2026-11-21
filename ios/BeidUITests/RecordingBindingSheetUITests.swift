@@ -185,8 +185,8 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.launch()
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
     app.tabButton("Now").assertHittable()
     let join = app.buttons["home.demo.join"]
     join.scrollToHittable(in: app)
@@ -236,8 +236,8 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-threshold-override", "1"]
     app.launch()
     app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
-    app.buttons["Allow Bluetooth"].tap()
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    app.buttons["bluetooth.permission.continue"].tap()
     XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
     app.buttons["home.demo.join"].tap()
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
