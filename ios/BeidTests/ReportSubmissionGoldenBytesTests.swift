@@ -151,13 +151,12 @@ enum ReportSubmissionGoldenScenario {
       allowInsecureLoopbackForTests: true
     ))
 
+    #if DEBUG
+    server.observePostStages(from: runtime)
+    #endif
     runtime.submitPending()
     try await server.waitFor(postCount: 1, timeout: hostedWaits ? SubmissionTestWait.timeout : nil)
-    if hostedWaits {
-      try await waitForStoredSubmissionState(.accepted, at: fileURL, server: server)
-    } else {
-      try await waitForAcceptedRecord(at: fileURL, server: server)
-    }
+    try await waitForStoredSubmissionState(.accepted, at: fileURL, server: server)
     // The runtime's own callbacks hold it weakly; keep it alive until its
     // receipt write has landed.
     withExtendedLifetime(runtime) {}
@@ -172,20 +171,6 @@ enum ReportSubmissionGoldenScenario {
       signatureInputHex: goldenHex(signatureInput),
       signedObservationHex: record.signedObservationHex.lowercased(),
       postBodyHex: goldenHex(postBody)
-    )
-  }
-
-  private static func waitForAcceptedRecord(at fileURL: URL, server: StubOperatorServer) async throws {
-    for _ in 0..<1_000 {
-      if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == .accepted {
-        return
-      }
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
-    let actual = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState.rawValue
-    throw StubOperatorError.submissionStateTimedOut(
-      expected: ReportSubmissionState.accepted.rawValue,
-      diagnostics: "last state \(actual ?? "nil"); \(server.timeoutDiagnostics)"
     )
   }
 
