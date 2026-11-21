@@ -23,12 +23,14 @@ extension XCUIElement {
     )
   }
 
-  func assertHittable(file: StaticString = #filePath, line: UInt = #line) {
+  func assertHittable(
+    file: StaticString = #filePath, line: UInt = #line, failureContext: @autoclosure () -> String = ""
+  ) {
     let (state, passed, target) = waitForState { $0 && self.isHittable }
     XCTAssertTrue(
       passed,
       "Element did not become hittable within \(UITestWait.timeout)s; " +
-        "exists=\(state.exists), hittable=\(state.satisfied)\n\(target)",
+        "exists=\(state.exists), hittable=\(state.satisfied)\(failureContext())\n\(target)",
       file: file, line: line
     )
   }
@@ -72,96 +74,38 @@ extension XCUIElement {
   /// Wait for the destination's scroll view before querying or scrolling its
   /// children. Existence alone does not mean a row can safely be tapped.
   func scrollToHittable(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
-    let (scrollView, selection) = scrollViewForTarget(in: app)
+    let scrollView = app.scrollViews.firstMatch
     scrollView.assertHittable(file: file, line: line)
-    XCTContext.runActivity(named: "Scroll view selection: \(selection), identifier=\(scrollView.identifier)") { _ in }
-    for _ in 0..<8 {
-      let targetExists = exists
-      if targetExists && isHittable {
-        XCTContext.runActivity(named: "Scroll step: target already hittable") { _ in }
-        break
-      }
+    var swipes = 0
+    for _ in 0..<5 {
+      if exists && isHittable { break }
+      scrollView.swipeUp()
+      swipes += 1
+    }
+
+    // A swipe can leave an existing row above the visible scroll area.
+    var drags = 0
+    for _ in 0..<3 {
+      guard exists, !isHittable else { break }
       let scrollFrame = scrollView.frame
       let visible = app.visibleScrollFrame(for: scrollFrame)
-      guard !visible.isEmpty, visible.width.isFinite, visible.height.isFinite, visible.height > 2 else {
-        XCTContext.runActivity(named: "Scroll fallback: swipe up without a usable viewport") { _ in
-          scrollView.swipeUp()
-        }
-        continue
-      }
+      let target = frame
+      guard !visible.isEmpty, !target.isEmpty, target.maxY <= visible.minY else { break }
 
-      let target = targetExists ? frame : .null
-      let contentBefore = targetExists ? nil : scrollView.scrollContentPosition
-      // Continue toward later rows when a lazy container has not created the target.
-      let targetAbove = !target.isEmpty && target.midY.isFinite && target.midY < visible.midY
       let quarter = visible.height * 0.25
-      let dragOffset = targetAbove ? -quarter : quarter
       let center = scrollView.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
         dx: visible.midX - scrollFrame.minX, dy: visible.midY - scrollFrame.minY
       ))
-      let start = center.withOffset(CGVector(dx: 0, dy: dragOffset))
-      let end = center.withOffset(CGVector(dx: 0, dy: -dragOffset))
-      let direction = targetAbove ? "down" : "up"
-      XCTContext.runActivity(named: "Scroll step: drag \(direction)") { _ in
-        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
-      }
-
-      let targetExistsAfterDrag = exists
-      if targetExistsAfterDrag && isHittable { break }
-      guard targetExists == targetExistsAfterDrag else { continue }
-      let stalled = targetExists
-        ? abs(frame.minY - target.minY) <= 1
-        : scrollView.scrollContentStayedAt(contentBefore)
-      guard stalled else { continue }
-      XCTContext.runActivity(named: "Scroll fallback: swipe \(direction) after stalled drag") { _ in
-        if targetAbove {
-          scrollView.swipeDown()
-        } else {
-          scrollView.swipeUp()
-        }
-      }
+      let start = center.withOffset(CGVector(dx: 0, dy: -quarter))
+      let end = center.withOffset(CGVector(dx: 0, dy: quarter))
+      start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+      drags += 1
     }
-    assertHittable(file: file, line: line)
-  }
-
-  private func scrollViewForTarget(in app: XCUIApplication) -> (XCUIElement, String) {
-    let scrollViews = app.scrollViews
-    let candidates = scrollViews.allElementsBoundByIndex
-    guard candidates.count > 1, exists, let target = try? snapshot() else {
-      return (scrollViews.firstMatch, "first match")
-    }
-
-    // An offscreen target can still be a descendant of the correct scroll view.
-    if !target.identifier.isEmpty {
-      let containing = scrollViews.containing(target.elementType, identifier: target.identifier).allElementsBoundByIndex
-      if containing.count == 1 {
-        return (containing[0], "target descendant")
-      }
-      if !target.frame.isEmpty, let owner = containing.first(where: { $0.frame.contains(target.frame) }) {
-        return (owner, "target descendant and frame")
-      }
-    }
-    if !target.frame.isEmpty, let owner = candidates.first(where: { $0.frame.contains(target.frame) }) {
-      return (owner, "target frame")
-    }
-    return (scrollViews.firstMatch, "first match")
-  }
-
-  // A lazy target can remain absent while content moves. Follow a descendant
-  // because the scroll view's own frame does not move with its content.
-  private var scrollContentPosition: (identifier: String, label: String, minY: CGFloat)? {
-    let text = staticTexts.firstMatch
-    let item = text.exists ? text : buttons.firstMatch
-    guard item.exists else { return nil }
-    let position = item.frame
-    guard !position.isEmpty, position.minY.isFinite else { return nil }
-    return (item.identifier, item.label, position.minY)
-  }
-
-  private func scrollContentStayedAt(_ before: (identifier: String, label: String, minY: CGFloat)?) -> Bool {
-    let after = scrollContentPosition
-    return before?.identifier == after?.identifier && before?.label == after?.label &&
-      abs((before?.minY ?? 0) - (after?.minY ?? 0)) <= 1
+    assertHittable(
+      file: file, line: line,
+      failureContext: "\nScroll gestures: swipes=\(swipes) drags=\(drags) " +
+        "lastFrame=\(exists ? String(describing: frame) : "<absent>")"
+    )
   }
 }
 
