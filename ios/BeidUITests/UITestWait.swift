@@ -82,6 +82,7 @@ extension XCUIElement {
       guard !visible.isEmpty else { break }
 
       let target = targetExists ? frame : .null
+      let contentBefore = targetExists ? nil : scrollView.scrollContentPosition
       // Continue toward later rows when a lazy container has not created the target.
       let targetAbove = !target.isEmpty && target.midY.isFinite && target.midY < visible.midY
       let quarter = visible.height * 0.25
@@ -92,8 +93,41 @@ extension XCUIElement {
       let start = center.withOffset(CGVector(dx: 0, dy: dragOffset))
       let end = center.withOffset(CGVector(dx: 0, dy: -dragOffset))
       start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+
+      let targetExistsAfterDrag = exists
+      if targetExistsAfterDrag && isHittable { break }
+      guard targetExists == targetExistsAfterDrag else { continue }
+      let stalled = targetExists
+        ? abs(frame.minY - target.minY) <= 1
+        : scrollView.scrollContentStayedAt(contentBefore)
+      guard stalled else { continue }
+      let direction = targetAbove ? "down" : "up"
+      XCTContext.runActivity(named: "Scroll fallback: swipe \(direction) after stalled drag") { _ in
+        if targetAbove {
+          scrollView.swipeDown()
+        } else {
+          scrollView.swipeUp()
+        }
+      }
     }
     assertHittable(file: file, line: line)
+  }
+
+  // A lazy target can remain absent while content moves. Follow a descendant
+  // because the scroll view's own frame does not move with its content.
+  private var scrollContentPosition: (identifier: String, label: String, minY: CGFloat)? {
+    let text = staticTexts.firstMatch
+    let item = text.exists ? text : buttons.firstMatch
+    guard item.exists else { return nil }
+    let position = item.frame
+    guard !position.isEmpty, position.minY.isFinite else { return nil }
+    return (item.identifier, item.label, position.minY)
+  }
+
+  private func scrollContentStayedAt(_ before: (identifier: String, label: String, minY: CGFloat)?) -> Bool {
+    let after = scrollContentPosition
+    return before?.identifier == after?.identifier && before?.label == after?.label &&
+      abs((before?.minY ?? 0) - (after?.minY ?? 0)) <= 1
   }
 }
 
