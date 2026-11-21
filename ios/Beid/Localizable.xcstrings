@@ -1438,12 +1438,12 @@
     "You can change this anytime in Settings.": {},
     "You declined the request in your wallet.": {},
     "account.bluetooth.relayNote": {
-      "comment": "Note under the Bluetooth row on the Account sheet: while this phone is at an event it can pass that event's details on to phones nearby, so the event still reaches the edges of a venue (beid#367). Says what the phone does, not how the protocol does it.",
+      "comment": "Note under the Bluetooth row on the Account sheet: while this device is at an event it can pass that event's details on to devices nearby, so the event still reaches the edges of a venue (beid#367). Says what the device does, not how the protocol does it.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "While this phone is at an event, beid can pass the event's details on to phones nearby, so people across the venue can still find it."
+            "value": "While this device is at an event, beid can pass the event's details on to devices nearby, so people across the venue can still find it."
           }
         }
       }
@@ -2434,7 +2434,7 @@
     "Venue broadcast": {},
     "About\nsensing": {},
     "HOW IT WORKS": {},
-    "Phones exchange rotating anonymous IDs, not names or wallet addresses.": {},
+    "Devices exchange rotating anonymous IDs, not names or wallet addresses.": {},
     "What we send": {},
     "SENDING": {},
     "About sensing": {},
@@ -2455,13 +2455,13 @@
     "The event’s identifier, so the organizer knows which event this belongs to.": {},
     "The time window": {},
     "Which five-minute stretch of the event this record covers, not the moment you arrived or left.": {},
-    "The anonymous IDs of the phones near you": {},
-    "Each phone announces an ID that changes on its own schedule. It is not a name, an account, or a device serial.": {},
+    "The anonymous IDs of the devices near you": {},
+    "Each device announces an ID that changes on its own schedule. It is not a name, an account, or a device serial.": {},
     "Your own anonymous ID for that window": {},
-    "The same kind of rotating ID, so the phones around you can be matched with this record.": {},
+    "The same kind of rotating ID, so the devices around you can be matched with this record.": {},
     "A commitment for this event": {},
     "A value derived from keys for this event. It can support a later ownership check without including your wallet address.": {},
-    "A signature from this phone": {},
+    "A signature from this device": {},
     "WHAT WE SEND": {},
     "WHAT WE DON’T SEND": {},
     "Your location": {},
@@ -2469,7 +2469,7 @@
     "Your name, your account, or your wallet address": {},
     "None of them are part of a record.": {},
     "Anything you have not recorded": {},
-    "Sending is off in this version. Records stay on this phone.": {},
+    "Sending is off in this version. Records stay on this device.": {},
     "Saved observations are sent to the event operator.": {},
     "aboutSensing.submission.enabled": {
       "comment": "Status on About sensing when the report submission build flag is on. This only says the feature is enabled, not that a record was sent or accepted.",
@@ -3819,10 +3819,15 @@
       }
     },
     "Record you were there.": {},
-    "Your phones say hello to each other, and keep a note anyone can verify.": {},
+    "Nearby devices say hello to each other, and keep a note anyone can verify.": {},
+    "beid uses Bluetooth to find nearby events and hear nearby devices. Turn it on for beid in Settings.": {},
     "Continue": {},
-    "beid uses Bluetooth Low Energy to find nearby events and hear nearby phones.": {},
+    "beid uses Bluetooth Low Energy to find nearby events and hear nearby devices.": {},
+    "Allow Bluetooth access": {},
+    "beid needs Bluetooth to find your event and exchange signals with nearby devices. These observations help create your Record.": {},
+    "Your device may ask for permission.": {},
     "beid can’t find nearby events or record observations while Bluetooth is off.": {},
+    "Turn on Bluetooth in Settings > Bluetooth, then return to beid.": {},
     "If your event is not listed, ask the organizer for its event code and paste it here.": {},
     "Continue without a code": {
       "comment": "Continues to Bluetooth setup without entering a code."

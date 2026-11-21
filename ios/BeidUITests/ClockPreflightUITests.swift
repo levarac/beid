@@ -21,12 +21,11 @@ final class ClockPreflightUITests: XCTestCase {
     let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
     getStarted.tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 10))
-    app.buttons["Allow Bluetooth"].tap()
+    let allowBluetooth = app.buttons["bluetooth.permission.continue"]
+    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
+    allowBluetooth.tap()
 
     let senseEvent = app.buttons["home.demo.join"]
-    XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 10))
     senseEvent.tap()
 

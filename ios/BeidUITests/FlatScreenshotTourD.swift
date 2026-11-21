@@ -43,7 +43,7 @@ final class FlatScreenshotTourD: XCTestCase {
     let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
     getStarted.tap()
-    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    let allowBluetooth = app.buttons["bluetooth.permission.continue"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
 
@@ -249,7 +249,7 @@ final class FlatScreenshotTourD: XCTestCase {
     let getStarted = app.buttons["Continue"]
     getStarted.assertExists()
     getStarted.tap()
-    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    let allowBluetooth = app.buttons["bluetooth.permission.continue"]
     allowBluetooth.assertExists()
     allowBluetooth.tap()
     app.tabButton("Now").assertHittable()
@@ -358,8 +358,8 @@ final class FlatScreenshotTourD: XCTestCase {
     app.launch()
 
     app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
-    app.buttons["Allow Bluetooth"].tap()
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    app.buttons["bluetooth.permission.continue"].tap()
     app.tabButton("Now").assertHittable()
     let account = app.buttons["home.account"]
     XCTAssertTrue(account.waitForExistence(timeout: 5))

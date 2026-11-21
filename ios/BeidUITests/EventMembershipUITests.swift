@@ -33,8 +33,8 @@ final class EventMembershipUITests: XCTestCase {
     app.launch()
 
     app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
-    app.buttons["Allow Bluetooth"].tap()
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    app.buttons["bluetooth.permission.continue"].tap()
     XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
 
     app.buttons["home.account"].tap()
@@ -305,8 +305,8 @@ final class EventMembershipUITests: XCTestCase {
     app.launch()
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
     app.tabButton("Records").assertHittable()
     app.tabButton("Records").tap()
     app.tabButton("Now").tap()
