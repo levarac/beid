@@ -357,6 +357,7 @@ jobs:
             -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" \
             -disableAutomaticPackageResolution \
             SWIFT_OPTIMIZATION_LEVEL=-O \
+            BEID_KMP_BUILD_TYPE=Release \
             build-for-testing
 
       - name: Enumerate built tests and compute shards

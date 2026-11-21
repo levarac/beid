@@ -25,6 +25,15 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertIn("build-for-testing", build)
         self.assertNotIn("build-for-testing", tests)
 
+    def test_release_kmp_is_scoped_to_the_debug_test_build(self):
+        build = job_block(IOS, "build")
+        build_step = build.split("      - name: Build for testing\n", 1)[1].split("      - name:", 1)[0]
+        self.assertRegex(
+            build_step,
+            r"(?s)-configuration Debug.*SWIFT_OPTIMIZATION_LEVEL=-O.*BEID_KMP_BUILD_TYPE=Release.*build-for-testing",
+        )
+        self.assertEqual(IOS.read_text().count("BEID_KMP_BUILD_TYPE"), 1)
+
     def test_aggregate_is_always_created_with_exact_required_name(self):
         text = IOS.read_text()
         aggregate = job_block(IOS, "ios-simulator")
