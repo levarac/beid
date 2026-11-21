@@ -16,16 +16,35 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertFalse(app.buttons["Cancel"].exists)
     XCTAssertFalse(app.buttons["Connect wallet"].exists)
     XCTAssertTrue(app.buttons["scan.stop-sensing"].isHittable)
+    XCTAssertEqual(app.buttons["scan.stop-sensing"].label, "Stop sensing")
+    XCTAssertGreaterThanOrEqual(app.buttons["scan.stop-sensing"].frame.height, 44)
     XCTAssertFalse(app.staticTexts["MUTUAL"].exists)
     XCTAssertTrue(app.staticTexts["DEVICES HEARD"].exists)
     XCTAssertTrue(app.staticTexts["ELAPSED"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
     app.buttons["scan.stop-sensing"].tap()
-    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
-    app.buttons["Keep sensing"].tap()
-    XCTAssertTrue(app.buttons["scan.stop-sensing"].waitForExistence(timeout: 5))
+    let alert = app.alerts["Stop sensing?"]
+    alert.assertExists()
+    XCTAssertTrue(app.navigationBars["Sensing"].exists)
+    XCTAssertTrue(alert.buttons["Stop and keep record"].exists)
+    alert.buttons["Cancel"].tap()
+    app.buttons["scan.stop-sensing"].assertHittable()
     XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
     XCTAssertFalse(app.buttons["Cancel"].exists)
+    XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
+  }
+
+  func testCancelStopThenGoBackKeepsSensing() {
+    reachRecording()
+    app.buttons["scan.stop-sensing"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.alerts.buttons["Cancel"].tap()
+    app.navigationBars.buttons.firstMatch.tap()
+    let details = app.buttons["home.open-details"]
+    XCTAssertTrue(details.waitForExistence(timeout: 5))
+    details.tap()
+    XCTAssertTrue(app.buttons["scan.stop-sensing"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
   }
 
@@ -35,7 +54,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts["Your record is saved on this phone. You'll find it in Records."].exists)
+    XCTAssertTrue(app.staticTexts["Your record is saved on this device. You'll find it in Records."].exists)
     XCTAssertTrue(app.staticTexts[SensingVisualOracle.savedCaption].waitForExistence(timeout: 5))
     SensingVisualOracle.assertSavedCaption(in: app, test: self, name: "saved-live")
     app.buttons["Done"].tap()
@@ -44,6 +63,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     app.tabButton("Now").tap()
     XCTAssertTrue(app.staticTexts["You’re done."].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Your record is saved on this device. You can close the app."].exists)
     XCTAssertTrue(app.buttons["home.saved.view-record"].exists)
     XCTAssertTrue(app.staticTexts["home.listening"].exists)
     let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -197,17 +217,21 @@ final class RecordingBindingSheetUITests: XCTestCase {
 
   private func confirmStop() {
     app.buttons["scan.stop-sensing"].tap()
-    let stop = app.buttons["scan.stop-confirm.stop"]
+    let alert = app.alerts["Stop sensing?"]
+    alert.assertExists()
+    let stop = alert.buttons.matching(
+      NSPredicate(format: "label IN %@", ["Stop and keep record", "Stop sensing"])
+    ).firstMatch
     stop.assertHittable()
     stop.tap()
-    stop.assertDisappears()
+    alert.assertDisappears()
   }
 
   private func assertNoSealedOrCollectedClaim() {
     XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.proof-collected"].exists)
     XCTAssertFalse(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].exists)
-    XCTAssertFalse(app.staticTexts["Your record is saved on this phone. You'll find it in Records."].exists)
+    XCTAssertFalse(app.staticTexts["Your record is saved on this device. You'll find it in Records."].exists)
   }
 
   private func assertUnsignedLocalRecordIsAccessible() {
@@ -248,7 +272,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
 /// Initial checks never scroll. Post-scroll checks retain their own initial evidence.
 enum SensingVisualOracle {
   static let savedCaption = "DONE · YOU CAN CLOSE THE APP"
-  private static let guidance = "Keep the app open nearby to help phones observe each other and keep signed records."
+  private static let guidance = "Keep the app open nearby to help devices observe each other and keep signed records."
 
   static func assertInitialMetrics(
     in app: XCUIApplication, test: XCTestCase, name: String,

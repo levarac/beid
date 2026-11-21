@@ -28,11 +28,16 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
 
     let indicator = app.buttons["home.open-details"]
     XCTAssertTrue(indicator.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Sensing continues"].exists)
+    XCTAssertFalse(app.staticTexts["SENSING"].exists)
+    XCTAssertFalse(app.staticTexts["DO THIS NOW"].exists)
+    XCTAssertEqual(indicator.label, "Sensing details")
     XCTAssertFalse(app.buttons["collection.stop-sensing"].exists)
     let details = app.buttons["home.open-details"]
     XCTAssertTrue(details.isHittable)
     details.tap()
     XCTAssertTrue(app.scrollViews["scan.sensing"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Sensing"].staticTexts["Sensing"].exists)
     XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
     app.navigationBars.buttons.element(boundBy: 0).tap()

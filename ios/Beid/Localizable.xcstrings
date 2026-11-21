@@ -1382,6 +1382,13 @@
     },
     "Sense Event": {},
     "Sensing": {},
+    "Sensing details": {},
+    "Any record created will be saved on this device.": {},
+    "Your record will be saved on this device.": {},
+    "Your record is saved on this device. You'll find it in Records.": {},
+    "Your record is saved on this device. You can close the app.": {},
+    "Record saved": {},
+    "Can't join": {},
     "Sensing paused": {
       "comment": "Status pill label: sensing is temporarily paused because the event signal was lost."
     },
@@ -3577,19 +3584,19 @@
         }
       }
     },
-    "Nearby phones can keep observing each other.": {
+    "Nearby devices can keep observing each other.": {
       "comment": "Encourages keeping the app open while sensing continues.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nearby phones can keep observing each other."
+            "value": "Nearby devices can keep observing each other."
           }
         }
       }
     },
     "DEVICES HEARD": {
-      "comment": "Number of nearby devices this phone has observed, not a mutual count.",
+      "comment": "Number of nearby devices this device has observed, not a mutual count.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3610,13 +3617,13 @@
         }
       }
     },
-    "Keeping beid open helps nearby phones observe each other and keep signed records.": {
+    "Keeping beid open helps nearby devices observe each other and keep signed records.": {
       "comment": "Does not claim that a person was present or that the record is verified.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keeping beid open helps nearby phones observe each other and keep signed records."
+            "value": "Keeping beid open helps nearby devices observe each other and keep signed records."
           }
         }
       }
@@ -3820,6 +3827,9 @@
     },
     "Record you were there.": {},
     "Nearby devices say hello to each other, and keep a note anyone can verify.": {},
+    "Listening for nearby devices…": {},
+    "Keep the app open. Sensing starts when beid hears another device at this event.": {},
+    "Keep the app open nearby to help devices observe each other and keep signed records.": {},
     "beid uses Bluetooth to find nearby events and hear nearby devices. Turn it on for beid in Settings.": {},
     "Continue": {},
     "beid uses Bluetooth Low Energy to find nearby events and hear nearby devices.": {},

@@ -21,8 +21,70 @@ final class FlatScreenshotTourB: XCTestCase {
       "The active Proof must not also appear as a PAST row"
     )
     XCTAssertFalse(app.buttons["collection.stop-sensing"].exists)
-    XCTAssertTrue(app.buttons["home.open-details"].isHittable)
+    XCTAssertFalse(app.staticTexts["DO THIS NOW"].exists)
+    let details = app.buttons["home.open-details"]
+    XCTAssertTrue(details.isHittable)
+    XCTAssertEqual(details.label, "Sensing details")
+    XCTAssertGreaterThanOrEqual(details.frame.height, 44)
     capture("04")
+  }
+
+  func testLongEventNameWrapsInSensingAndStopConfirmation() {
+    let eventName = "International Community Gathering and Technology Festival Tokyo 2026"
+    launchHome(arguments: ["-beid-home-frame-04", "-beid-long-event-name-fixture"])
+    app.buttons["home.open-details"].scrollToHittable(in: app)
+    app.buttons["home.open-details"].tap()
+
+    let heading = app.staticTexts[eventName]
+    XCTAssertTrue(heading.waitForExistence(timeout: 5))
+    XCTAssertGreaterThan(heading.frame.height, 40, "The event name should wrap without truncation")
+    XCTAssertLessThan(heading.frame.height, 180, "A long event name should not dominate the sensing screen")
+    XCTAssertLessThanOrEqual(heading.frame.maxX, app.windows.firstMatch.frame.maxX)
+    SensingVisualOracle.assertInitialMetrics(in: app, test: self, name: "long-event-name")
+    capture("sensing-long-event-name")
+
+    app.buttons["scan.stop-sensing"].tap()
+    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
+    capture("stop-confirm-long-event-name")
+    XCTAssertTrue(app.alerts.firstMatch.buttons["Stop sensing"].isHittable)
+  }
+
+  func testLongJapaneseEventNameWithAccessibilityTextSize() {
+    let eventName = "国際コミュニティ交流とテクノロジーフェスティバル東京二千二十六"
+    launchHome(arguments: [
+      "-beid-home-frame-04", "-beid-long-japanese-event-name-fixture",
+      "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+    ])
+    app.buttons["home.open-details"].scrollToHittable(in: app)
+    app.buttons["home.open-details"].tap()
+    let heading = app.staticTexts[eventName]
+    XCTAssertTrue(heading.waitForExistence(timeout: 5))
+    XCTAssertLessThanOrEqual(heading.frame.maxX, app.windows.firstMatch.frame.maxX)
+    XCTAssertTrue(app.buttons["scan.stop-sensing"].isHittable)
+    capture("sensing-japanese-accessibility")
+    app.buttons["scan.stop-sensing"].tap()
+    let alert = app.alerts["Stop sensing?"]
+    XCTAssertTrue(alert.waitForExistence(timeout: 5))
+    XCTAssertTrue(alert.buttons["Cancel"].isHittable)
+    XCTAssertTrue(alert.buttons["Stop sensing"].isHittable)
+    capture("sensing-japanese-accessibility-alert")
+    alert.buttons["Cancel"].tap()
+    let heard = app.staticTexts["DEVICES HEARD"]
+    let elapsed = app.staticTexts["ELAPSED"]
+    heard.scrollToHittable(in: app)
+    capture("sensing-japanese-accessibility-metrics")
+    XCTAssertGreaterThanOrEqual(elapsed.frame.minY, heard.frame.maxY, "Metrics should stack at accessibility text sizes")
+  }
+
+  func testHomeMetricsStackAtAccessibilityTextSize() {
+    launchHome(arguments: [
+      "-beid-home-frame-04", "-beid-long-japanese-event-name-fixture",
+      "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+    ])
+    let heard = app.staticTexts["DEVICES HEARD"]
+    let elapsed = app.staticTexts["ELAPSED"]
+    heard.scrollToHittable(in: app)
+    XCTAssertGreaterThanOrEqual(elapsed.frame.minY, heard.frame.maxY, "Home metrics should stack at accessibility text sizes")
   }
 
   func testShot_04b_Empty() {

@@ -3480,7 +3480,15 @@ final class SensingCoordinator: ObservableObject {
     guard arguments.contains("-beid-ui-test"),
       arguments.contains("-beid-home-frame-04")
     else { return }
-    let event = EventSession(id: "ACTIVE-EVENT", name: "ETH Tokyo 2026", venue: nil)
+    let eventName: String
+    if arguments.contains("-beid-long-japanese-event-name-fixture") {
+      eventName = "国際コミュニティ交流とテクノロジーフェスティバル東京二千二十六"
+    } else if arguments.contains("-beid-long-event-name-fixture") {
+      eventName = "International Community Gathering and Technology Festival Tokyo 2026"
+    } else {
+      eventName = "ETH Tokyo 2026"
+    }
+    let event = EventSession(id: "ACTIVE-EVENT", name: eventName, venue: nil)
     let fixtureAggregation = AggregationRuntime()
     for window in 1...6 {
       for peer in 1...7 {

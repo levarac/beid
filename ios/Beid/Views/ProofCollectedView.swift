@@ -108,8 +108,8 @@ struct ProofCollectedView: View {
 
           // General field disclosure, without claiming a successful delivery.
           BeidTextControl(
-            "WHAT WAS SENT",
-            glyph: .trailing("→", announcing: "What was sent"),
+            "WHAT WE SEND",
+            glyph: .trailing("→", announcing: "What we send"),
             labelColor: DS.Color.textSecondary
           ) {
             showWhatWeSend = true
