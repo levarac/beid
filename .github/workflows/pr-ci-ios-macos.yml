@@ -205,8 +205,8 @@ jobs:
     runs-on: xcode-27
     # The former serial full job hit 60 minutes. Full mode now builds once
     # and fans out to at most five macOS test jobs. Smoke retains its single job.
-    # 45 minutes is containment for build/smoke, not a performance target.
-    timeout-minutes: 45
+    # 50 minutes is containment for build/smoke, not a performance target.
+    timeout-minutes: 50
     steps:
       - name: Initialize CI output path
         shell: bash
@@ -334,7 +334,8 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: Build for testing
-        timeout-minutes: 25
+        # Release Kotlin takes about 12 minutes on xcode-27 (Debug: about 7).
+        timeout-minutes: 35
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}

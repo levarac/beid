@@ -216,8 +216,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     attempt boundaries. `scripts/ios_ci_timing.py` timestamps SPM resolution,
     KMP script start/end, and the observed Swift compile window. That window
     includes overlapping/link work; `-showBuildTimingSummary` in `build.log`
-    gives actual task durations. Job timeouts are 45 minutes for build/smoke and
-    35 per test lane. Step timeouts are 25 minutes for build, 10 for smoke tests,
+    gives actual task durations. Job timeouts are 50 minutes for build/smoke and
+    35 per test lane. Step timeouts are 35 minutes for build (the Release Kotlin
+    framework alone takes about 12 minutes on `xcode-27`), 10 for smoke tests,
     and 25 for each full-mode test lane, leaving time for evidence and cleanup.
     These are containment, not claimed speed; hosted full and smoke timing and
     artifact portability still need measurement on the final SHA.
