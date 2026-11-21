@@ -72,14 +72,23 @@ extension XCUIElement {
   /// Wait for the destination's scroll view before querying or scrolling its
   /// children. Existence alone does not mean a row can safely be tapped.
   func scrollToHittable(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
-    let scrollView = app.scrollViews.firstMatch
+    let (scrollView, selection) = scrollViewForTarget(in: app)
     scrollView.assertHittable(file: file, line: line)
+    XCTContext.runActivity(named: "Scroll view selection: \(selection), identifier=\(scrollView.identifier)") { _ in }
     for _ in 0..<8 {
       let targetExists = exists
-      if targetExists && isHittable { break }
+      if targetExists && isHittable {
+        XCTContext.runActivity(named: "Scroll step: target already hittable") { _ in }
+        break
+      }
       let scrollFrame = scrollView.frame
       let visible = app.visibleScrollFrame(for: scrollFrame)
-      guard !visible.isEmpty else { break }
+      guard !visible.isEmpty, visible.width.isFinite, visible.height.isFinite, visible.height > 2 else {
+        XCTContext.runActivity(named: "Scroll fallback: swipe up without a usable viewport") { _ in
+          scrollView.swipeUp()
+        }
+        continue
+      }
 
       let target = targetExists ? frame : .null
       let contentBefore = targetExists ? nil : scrollView.scrollContentPosition
@@ -92,7 +101,10 @@ extension XCUIElement {
       ))
       let start = center.withOffset(CGVector(dx: 0, dy: dragOffset))
       let end = center.withOffset(CGVector(dx: 0, dy: -dragOffset))
-      start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+      let direction = targetAbove ? "down" : "up"
+      XCTContext.runActivity(named: "Scroll step: drag \(direction)") { _ in
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+      }
 
       let targetExistsAfterDrag = exists
       if targetExistsAfterDrag && isHittable { break }
@@ -101,7 +113,6 @@ extension XCUIElement {
         ? abs(frame.minY - target.minY) <= 1
         : scrollView.scrollContentStayedAt(contentBefore)
       guard stalled else { continue }
-      let direction = targetAbove ? "down" : "up"
       XCTContext.runActivity(named: "Scroll fallback: swipe \(direction) after stalled drag") { _ in
         if targetAbove {
           scrollView.swipeDown()
@@ -111,6 +122,29 @@ extension XCUIElement {
       }
     }
     assertHittable(file: file, line: line)
+  }
+
+  private func scrollViewForTarget(in app: XCUIApplication) -> (XCUIElement, String) {
+    let scrollViews = app.scrollViews
+    let candidates = scrollViews.allElementsBoundByIndex
+    guard candidates.count > 1, exists, let target = try? snapshot() else {
+      return (scrollViews.firstMatch, "first match")
+    }
+
+    // An offscreen target can still be a descendant of the correct scroll view.
+    if !target.identifier.isEmpty {
+      let containing = scrollViews.containing(target.elementType, identifier: target.identifier).allElementsBoundByIndex
+      if containing.count == 1 {
+        return (containing[0], "target descendant")
+      }
+      if !target.frame.isEmpty, let owner = containing.first(where: { $0.frame.contains(target.frame) }) {
+        return (owner, "target descendant and frame")
+      }
+    }
+    if !target.frame.isEmpty, let owner = candidates.first(where: { $0.frame.contains(target.frame) }) {
+      return (owner, "target frame")
+    }
+    return (scrollViews.firstMatch, "first match")
   }
 
   // A lazy target can remain absent while content moves. Follow a descendant
