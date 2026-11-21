@@ -19,7 +19,13 @@ struct ScanFlowView: View {
   }
 
   var body: some View {
-    content
+    VStack(spacing: 0) {
+      content
+      if showsStopControl {
+        stopFooter
+          .layoutPriority(1)
+      }
+    }
       .environment(\.showsFirstSensingHint, showsFirstTimeHint ?? false)
       .onAppear {
         if showsFirstTimeHint == nil { showsFirstTimeHint = !hasShownFirstTimeHint }
@@ -33,47 +39,31 @@ struct ScanFlowView: View {
       .toolbarBackground(.visible, for: .navigationBar)
       .toolbarColorScheme(usesInkGround ? .dark : .light, for: .navigationBar)
       .toolbar {
-        if proofCollectedForDisplay == nil,
-          coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
-          ToolbarItem(placement: .confirmationAction) { doneButton }
-        }
-      }
-      .safeAreaInset(edge: .bottom) {
-        if showsStopControl {
-          BeidAdaptiveContent {
-            Button {
-              coordinator.requestScanClose()
-            } label: {
-              Text("Stop sensing")
-                .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
-            }
-            .font(DS.Font.Library.title16.font)
-            .buttonStyle(.bordered)
-            .tint(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
-            .accessibilityIdentifier("scan.stop-sensing")
-            .padding(.horizontal, DS.Space.pageMargin)
+        if proofCollectedForDisplay == nil {
+          if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
+            ToolbarItem(placement: .confirmationAction) { doneButton }
           }
-          .alert(
-            "Stop sensing?",
-            isPresented: stopConfirmationPresented,
-            presenting: coordinator.stopConfirmSnapshot
-          ) { snapshot in
-            Button(LocalizedStringKey(snapshot.copy.stopTitle)) {
-              coordinator.confirmStopSensing()
+          #if DEBUG
+          if sensing.isDemoAdvanceEnabled, let token = sensing.demoAdvanceToken,
+             coordinator.stopConfirmSnapshot == nil, coordinator.sealedSnapshot == nil {
+            ToolbarItem(placement: .topBarTrailing) {
+              Button("Advance demo") { sensing.advanceDemo(token: token) }
+                .accessibilityIdentifier("demo.advance.\(token.uuidString)")
+                .accessibilityValue(String(describing: ScanFlowContent.route(for: sensing.phase)))
             }
-            Button("Cancel", role: .cancel) {
-              coordinator.keepSensing()
-            }
-          } message: { snapshot in
-            Text(verbatim: snapshot.copy.body)
           }
-          .padding(.vertical, DS.Space.s)
-          .background(usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
+          #endif
         }
       }
       #if DEBUG
       .safeAreaInset(edge: .top) {
         if NearbyJoinUITestFixture.isEnabled { NearbyJoinUITestReceipt() }
+      }
+      .safeAreaInset(edge: .bottom) {
+        if coordinator.stopOutcomeUITestFixture != nil {
+          Button("Repeat STOP confirmation") { coordinator.confirmStopSensing() }
+            .accessibilityIdentifier("stop.fixture.repeat-confirmation")
+        }
       }
       #endif
       .modifier(EventSigningKeyFailurePresenter(
@@ -84,6 +74,38 @@ struct ScanFlowView: View {
         if newPhase == .background { sensing.checkpointOpenWindowForBackgrounding() }
         if newPhase == .active { sensing.retryPendingSubmissionsOnForeground() }
       }
+  }
+
+  private var stopFooter: some View {
+    BeidAdaptiveContent {
+      Button {
+        coordinator.requestScanClose()
+      } label: {
+        Text("Stop sensing")
+          .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
+      }
+      .font(DS.Font.Library.title16.font)
+      .buttonStyle(.bordered)
+      .tint(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
+      .accessibilityIdentifier("scan.stop-sensing")
+      .padding(.horizontal, DS.Space.pageMargin)
+    }
+    .alert(
+      "Stop sensing?",
+      isPresented: stopConfirmationPresented,
+      presenting: coordinator.stopConfirmSnapshot
+    ) { snapshot in
+      Button(LocalizedStringKey(snapshot.copy.stopTitle)) {
+        coordinator.confirmStopSensing()
+      }
+      Button("Cancel", role: .cancel) {
+        coordinator.keepSensing()
+      }
+    } message: { snapshot in
+      Text(verbatim: snapshot.copy.body)
+    }
+    .padding(.vertical, DS.Space.s)
+    .background(usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
   }
 
   @ViewBuilder private var doneButton: some View {
@@ -103,8 +125,9 @@ struct ScanFlowView: View {
   }
 
   private var showsStopControl: Bool {
+    // Keep the stop control mounted while it presents its confirmation alert.
     guard coordinator.sealedSnapshot == nil,
-      proofCollectedForDisplay == nil else { return false }
+      coordinator.stopOutcome == nil, proofCollectedForDisplay == nil else { return false }
     #if DEBUG
     if let fixture = sensing.sensingScreenshotFixture {
       switch fixture {
@@ -150,6 +173,7 @@ struct ScanFlowView: View {
   }
 
   private var statusTitle: LocalizedStringKey {
+    if coordinator.stopOutcome != nil { return "stop.outcome.title" }
     if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture { return "Record saved" }
     if sensing.joinRefusalReasonKey != nil { return "Can't join" }
     #if DEBUG
@@ -175,7 +199,9 @@ struct ScanFlowView: View {
   }
 
   @ViewBuilder private var content: some View {
-    if let collected = proofCollectedForDisplay {
+    if coordinator.stopOutcome != nil {
+      stopOutcomeView
+    } else if let collected = proofCollectedForDisplay {
       ProofCollectedView(snapshot: collected, sigilInput: sensing.sigilInput(forProofId: collected.recordID)) {
         if coordinator.proofCollectedSnapshot != nil {
           coordinator.viewCollectionAfterProofCollected()
@@ -188,6 +214,26 @@ struct ScanFlowView: View {
     } else {
       ScanFlowContent.view(phase: sensing.phase, sensing: sensing, clockPreflight: coordinator.clockPreflight)
     }
+  }
+
+  private var stopOutcomeView: some View {
+    ScrollView {
+      BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
+        VStack(spacing: DS.Space.l) {
+          BeidEmptyBlock {
+            Text("stop.outcome.message")
+              .beidTextStyle(DS.Font.Library.body15)
+              .foregroundStyle(DS.Color.textPrimary)
+              .fixedSize(horizontal: false, vertical: true)
+              .accessibilityIdentifier("stop.outcome.message")
+          }
+          BeidPrimaryButton("stop.outcome.action") { coordinator.dismissStopOutcome() }
+            .accessibilityIdentifier("stop.outcome.action")
+        }
+        .padding(DS.Space.pageMargin)
+      }
+    }
+    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
   }
 }
 

@@ -4,6 +4,7 @@
 import BeidSharedKit
 import CryptoKit
 import Foundation
+import os
 import Network
 import XCTest
 @testable import Beid
@@ -217,6 +218,22 @@ final class StubOperatorServer {
   private var expectedGetAttemptCount = 0
   private var firstClientAttempt: ClientEvent?
   private var firstExpectedAttempt: ClientEvent?
+  private var firstExpectedPostCompletion: ClientEvent?
+  #if DEBUG
+  private let postStages = OSAllocatedUnfairLock(initialState: [String: TimeInterval]())
+
+  @MainActor
+  func observePostStages(from runtime: ReportSubmissionRuntime) {
+    let stages = postStages
+    stages.withLock { $0["trigger"] = ProcessInfo.processInfo.systemUptime }
+    runtime.postStageObserverForTesting = { stage in
+      let uptime = ProcessInfo.processInfo.systemUptime
+      stages.withLock { first in
+        if first[stage.rawValue] == nil { first[stage.rawValue] = uptime }
+      }
+    }
+  }
+  #endif
   private var lastExpectedEvent: ClientEvent?
   private var clientEvents: [ClientEvent] = []
 
@@ -310,6 +327,16 @@ final class StubOperatorServer {
       // endpoint. Preserve exactly what it reports; nil is not proof of IPv6
       // or IPv4 binding, and the returned URL is not the bound endpoint.
       let endpoint = listener.parameters.requiredLocalEndpoint.map { String(describing: $0) } ?? "not-reported"
+      var postTimeline = ""
+      #if DEBUG
+      postTimeline = postStages.withLock { stages in
+        guard let trigger = stages["trigger"] else { return "" }
+        let timestamps = ReportSubmissionRuntime.PostStageForTesting.allCases.map {
+          "\($0.rawValue)@\(elapsed(stages[$0.rawValue]))"
+        }.joined(separator: ", ")
+        return "; postTiming=[trigger@\(elapsed(trigger)), \(timestamps)]"
+      }
+      #endif
       return "case=\(classification); " +
         "listenerURL=\(returnedURL?.absoluteString ?? "not-returned"), " +
         "listenerEndpoint=\(endpoint), listenerPort=\(listener.port.map { String($0.rawValue) } ?? "not-reported"), " +
@@ -320,7 +347,9 @@ final class StubOperatorServer {
         "firstAttemptURL=\(firstClientAttempt?.url ?? "none"), " +
         "lastExpected={\(lastExpectedEvent?.summary(since: observationStart) ?? "none")}, clientEvents(last8)=[\(events)]; " +
         "timeline=[ready@\(elapsed(readyUptime)), firstAttempt=\(firstClientAttempt == nil ? "never" : elapsed(firstClientAttempt?.uptime)), " +
-        "firstExpectedAttempt=\(elapsed(firstExpectedAttempt?.uptime)), \(atTimeout ? "timeout" : "sample")@\(elapsed(now))]"
+        "firstExpectedAttempt=\(elapsed(firstExpectedAttempt?.uptime)), " +
+        "firstExpectedPostCompleted=\(elapsed(firstExpectedPostCompletion?.uptime)), " +
+        "\(atTimeout ? "timeout" : "sample")@\(elapsed(now))]" + postTimeline
     }
   }
 
@@ -346,7 +375,12 @@ final class StubOperatorServer {
           if firstExpectedAttempt == nil { firstExpectedAttempt = sample }
         }
       }
-      if matches { lastExpectedEvent = sample }
+      if matches {
+        lastExpectedEvent = sample
+        if sample.method == "POST", sample.phase == "completed", firstExpectedPostCompletion == nil {
+          firstExpectedPostCompletion = sample
+        }
+      }
       clientEvents.append(sample)
       if clientEvents.count > 8 { clientEvents.removeFirst(clientEvents.count - 8) }
     }

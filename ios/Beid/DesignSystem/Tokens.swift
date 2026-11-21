@@ -450,7 +450,7 @@ enum DS {
     static let body = Library.body15.font
 
     /// The decorative Bluetooth device and status glyphs are SF Symbols.
-    static let bluetoothEndpointSymbol = SwiftUI.Font.system(size: 40)
+    static let bluetoothEndpointSymbol = SwiftUI.Font.system(size: 32)
     static let bluetoothStateSymbol = SwiftUI.Font.system(size: 28, weight: .medium)
     /// Supporting copy under titles. `Body/13`.
     static let supporting = Library.body13.font

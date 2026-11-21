@@ -49,6 +49,7 @@ final class FlatScreenshotTourA: XCTestCase {
     let continueButton = app.buttons["bluetooth.permission.continue"]
     XCTAssertTrue(continueButton.exists)
     XCTAssertEqual(continueButton.label, "Continue")
+    assertBluetoothPrimaryAction(continueButton)
     capture("02 Bluetooth")
     continueButton.tap()
     XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
@@ -62,6 +63,7 @@ final class FlatScreenshotTourA: XCTestCase {
     let checkAgain = app.buttons["bluetooth.off.check-again"]
     XCTAssertTrue(checkAgain.isHittable)
     XCTAssertEqual(checkAgain.label, "Check again")
+    assertBluetoothPrimaryAction(checkAgain)
     assertExactText("Turn on Bluetooth in Settings > Bluetooth, then return to beid.")
     assertExactText("beid can’t find nearby events or record observations while Bluetooth is off.")
     capture("03 Bluetooth Off")
@@ -225,13 +227,6 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(app.buttons["account.aboutSensing"].waitForExistence(timeout: 5))
   }
 
-  func testWelcomeExplanationDescribesJoinAndForegroundSensing() {
-    launch()
-    app.buttons["welcome.howItWorks"].tap()
-    XCTAssertTrue(app.buttons["aboutSensing.whatWeSend"].waitForExistence(timeout: 5))
-    assertExplainerCopy()
-  }
-
   func testWelcomeExplanationReportsUnavailableSendingDetails() {
     launch()
     app.buttons["welcome.howItWorks"].tap()
@@ -310,6 +305,7 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(app.navigationBars["About sensing"].waitForExistence(timeout: 5))
     let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
     XCTAssertTrue(whatWeSend.waitForExistence(timeout: 5))
+    assertExplainerCopy()
     whatWeSend.tap()
     XCTAssertTrue(app.descendants(matching: .any)["whatWeSend.firstRow"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.navigationBars["What we send"].waitForExistence(timeout: 5))
@@ -319,21 +315,17 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(howItWorks.waitForExistence(timeout: 5))
   }
 
-  func testShot_15_AboutSensing() {
+  func testShot_16_WhatWeSend() {
     openAboutSensing()
-    let title = app.navigationBars.staticTexts["About sensing"]
-    XCTAssertTrue(title.waitForExistence(timeout: 5) && title.isHittable)
-    assertVisibleDarkText(title)
-    let firstSection = app.staticTexts["HOW IT WORKS"]
-    XCTAssertEqual(firstSection.frame.minX, title.frame.minX, accuracy: 1.0,
+    let aboutTitle = app.navigationBars.staticTexts["About sensing"]
+    XCTAssertTrue(aboutTitle.waitForExistence(timeout: 5) && aboutTitle.isHittable)
+    assertVisibleDarkText(aboutTitle)
+    let aboutSection = app.staticTexts["HOW IT WORKS"]
+    XCTAssertEqual(aboutSection.frame.minX, aboutTitle.frame.minX, accuracy: 1.0,
                    "The first section should align with the navigation title")
     keepScreenshot(named: "15")
     assertMinimumHitTarget(app.buttons["aboutSensing.whatWeSend"])
     assertMinimumHitTarget(app.navigationBars.buttons.firstMatch)
-  }
-
-  func testShot_16_WhatWeSend() {
-    openAboutSensing()
     let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
     assertMinimumHitTarget(whatWeSend)
     whatWeSend.tap()
@@ -396,5 +388,19 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(control.exists)
     XCTAssertGreaterThanOrEqual(control.frame.width, 44)
     XCTAssertGreaterThanOrEqual(control.frame.height, 44)
+  }
+
+  private func assertBluetoothPrimaryAction(_ control: XCUIElement) {
+    control.assertHittable()
+    assertMinimumHitTarget(control)
+    let window = app.windows.firstMatch.frame
+    XCTAssertTrue(window.contains(control.frame))
+    let actionInScrollView = app.scrollViews.firstMatch.buttons[control.identifier]
+    if UIDevice.current.userInterfaceIdiom == .phone {
+      XCTAssertFalse(actionInScrollView.exists, "The compact-width action belongs in the footer.")
+      XCTAssertLessThan(window.maxY - control.frame.maxY, 72, "The action must sit near the bottom safe area.")
+    } else {
+      XCTAssertTrue(actionInScrollView.exists, "The regular-width action belongs with its explanation.")
+    }
   }
 }

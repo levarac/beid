@@ -36,7 +36,7 @@ class ProductArchiveTest(unittest.TestCase):
             root = Path(temporary).resolve()
             source, manifest = self.fixture(root)
             archive = root / "products.tar"
-            provenance = {"xcode": "Xcode 26.5\nBuild version 17F42", "sdk": "26.5", "arch": "arm64"}
+            provenance = {"xcode": "Xcode 27.2\nBuild version 27B52", "sdk": "27.2", "arch": "arm64"}
             self.tool.pack(source, manifest, archive, provenance, root / "checkout1")
             destination = root / "other/DerivedData"
             run = self.tool.unpack(archive, destination, root / "checkout2", "a" * 40, provenance)

@@ -68,6 +68,7 @@ final class VenueDeviceSecretRecoveryTests: XCTestCase {
 
     await viewModel.supply(bundleSource: URL(string: "https://venue.example/bundle")!,
                            handoffSource: URL(string: "https://venue.example/handoff")!, sourceDescription: "venue.example")
+    await viewModel.startBroadcasting()
 
     guard case .radioRefused(let failure) = viewModel.status else { return XCTFail("expected an explicit device key failure") }
     XCTAssertEqual(failure.rawValue, "deviceKeyUnavailable")

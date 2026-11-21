@@ -8,6 +8,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
 
+BASE_HOSTED_RUNNERS = {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-26"}
+
+
+def allowed_hosted_runners(path: Path) -> set[str]:
+    if path.name == "pr-ci-ios-macos.yml":
+        return BASE_HOSTED_RUNNERS | {"xcode-27"}
+    return BASE_HOSTED_RUNNERS
+
 
 class PublicPrWorkflowTests(unittest.TestCase):
     def test_every_pr_job_uses_a_literal_hosted_runner(self):
@@ -22,7 +30,7 @@ class PublicPrWorkflowTests(unittest.TestCase):
                 with self.subTest(workflow=path.name, runner=runner):
                     self.assertIn(
                         runner,
-                        {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-26"},
+                        allowed_hosted_runners(path),
                     )
                 checked += 1
         self.assertGreaterEqual(checked, 7)
@@ -45,10 +53,18 @@ class PublicPrWorkflowTests(unittest.TestCase):
                 self.assertIn("persist-credentials: false", block)
 
     def test_macos_builds_pin_the_available_xcode(self):
-        for name in ("pr-ci-ios-macos.yml", "main-ios-release-build.yml", "pr-ci-lab-cli.yml"):
+        for name, version in (
+            ("pr-ci-ios-macos.yml", "27.2"),
+            ("main-ios-release-build.yml", "26.5"),
+            ("pr-ci-lab-cli.yml", "26.5"),
+        ):
             text = (WORKFLOWS / name).read_text()
-            self.assertIn("DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer", text)
+            self.assertIn(f"DEVELOPER_DIR: /Applications/Xcode_{version}.app/Contents/Developer", text)
             self.assertNotIn("for app in /Applications/Xcode*.app", text)
+        self.assertIn(
+            "DEVELOPER_DIR=/Applications/Xcode_26.5.app/Contents/Developer",
+            (WORKFLOWS / "pr-ci.yml").read_text(),
+        )
 
     def test_public_pr_workflows_have_no_secrets(self):
         for path in WORKFLOWS.glob("*.yml"):
@@ -67,7 +83,7 @@ class PublicPrWorkflowTests(unittest.TestCase):
     def test_every_runner_is_hosted(self):
         for path in WORKFLOWS.glob("*.yml"):
             for runner in re.findall(r"(?m)^    runs-on: (.+)$", path.read_text()):
-                self.assertIn(runner, {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-26"})
+                self.assertIn(runner, allowed_hosted_runners(path))
 
     def test_secret_lanes_are_main_only_and_environment_protected(self):
         for name, environment in (("internal-google-play.yml", "google-play-internal"),

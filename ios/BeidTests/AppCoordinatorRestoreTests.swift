@@ -1,6 +1,7 @@
 // Copyright (c) 2024-2026 Levarac Foundation
 // SPDX-License-Identifier: MIT
 
+import Combine
 import XCTest
 @testable import Beid
 
@@ -165,5 +166,164 @@ final class AppCoordinatorRestoreTests: XCTestCase {
     await coordinator.requestBluetoothPermission().value
 
     XCTAssertEqual(coordinator.screen, .home)
+  }
+}
+
+/// Drives the real monitor's post-mapping publication body and root router.
+/// This is not a hardware callback or an OS Settings authorization test.
+@MainActor
+final class BluetoothDeniedCallbackTests: XCTestCase {
+  func testLaterGrantedCallbackRoutesDeniedScreenToHome() async throws {
+    let monitor = BluetoothMonitor(makeCentralManager: { _ in nil })
+    let coordinator = try makeCoordinator(monitor: monitor)
+    await resolveInitialState(.denied, monitor: monitor, coordinator: coordinator)
+    XCTAssertEqual(coordinator.screen, .bluetoothDenied)
+
+    var published: [BluetoothAuthorizationState] = []
+    var cachedDuringPublication: [BluetoothAuthorizationState] = []
+    let observation = monitor.$state.dropFirst().sink { state in
+      published.append(state)
+      cachedDuringPublication.append(monitor.state)
+    }
+    defer { observation.cancel() }
+
+    monitor.receiveAuthorizationState(.granted)
+
+    XCTAssertEqual(published, [.granted])
+    // @Published uses willSet. A future subscriber must consume its event,
+    // rather than re-read this still-denied cache during delivery.
+    XCTAssertEqual(cachedDuringPublication, [.denied])
+    XCTAssertEqual(monitor.state, .granted)
+    XCTAssertEqual(coordinator.screen, .home, "A delivered grant must leave denied guidance via the existing home route")
+  }
+
+  func testLaterPoweredOffCallbackRoutesDeniedScreenToBluetoothOff() async throws {
+    let monitor = BluetoothMonitor(makeCentralManager: { _ in nil })
+    let coordinator = try makeCoordinator(monitor: monitor)
+    await resolveInitialState(.denied, monitor: monitor, coordinator: coordinator)
+    XCTAssertEqual(coordinator.screen, .bluetoothDenied)
+
+    var published: [BluetoothAuthorizationState] = []
+    let observation = monitor.$state.dropFirst().sink { published.append($0) }
+    defer { observation.cancel() }
+
+    // The unchanged native mapping emits poweredOff for allowedAlways +
+    // poweredOff; applyBluetoothState already routes it to bluetoothOff.
+    monitor.receiveAuthorizationState(.poweredOff)
+
+    XCTAssertEqual(published, [.poweredOff])
+    XCTAssertEqual(monitor.state, .poweredOff)
+    XCTAssertEqual(coordinator.screen, .bluetoothOff, "An authorized but off radio must use the existing Bluetooth-off route")
+  }
+
+  func testRepeatedDeniedCallbacksKeepDeniedGuidance() async throws {
+    let monitor = BluetoothMonitor(makeCentralManager: { _ in nil })
+    let coordinator = try makeCoordinator(monitor: monitor)
+    await resolveInitialState(.denied, monitor: monitor, coordinator: coordinator)
+    XCTAssertEqual(coordinator.screen, .bluetoothDenied)
+
+    var published: [BluetoothAuthorizationState] = []
+    let observation = monitor.$state.dropFirst().sink { published.append($0) }
+    defer { observation.cancel() }
+
+    monitor.receiveAuthorizationState(.denied)
+    monitor.receiveAuthorizationState(.denied)
+
+    XCTAssertEqual(published, [.denied, .denied])
+    XCTAssertEqual(monitor.state, .denied)
+    XCTAssertEqual(coordinator.screen, .bluetoothDenied)
+  }
+
+  func testUndeterminedCallbackDoesNotUnblockDeniedGuidance() async throws {
+    let monitor = BluetoothMonitor(makeCentralManager: { _ in nil })
+    let coordinator = try makeCoordinator(monitor: monitor)
+    await resolveInitialState(.denied, monitor: monitor, coordinator: coordinator)
+    XCTAssertEqual(coordinator.screen, .bluetoothDenied)
+
+    // Unknown/unsettled native states map to notDetermined. The seam is
+    // after that mapping; it makes no claim to exercise CBManager itself.
+    monitor.receiveAuthorizationState(.notDetermined)
+
+    XCTAssertEqual(monitor.state, .notDetermined)
+    XCTAssertEqual(coordinator.screen, .bluetoothDenied)
+  }
+
+  func testLaterCallbacksPreserveHome() async throws {
+    let monitor = BluetoothMonitor(makeCentralManager: { _ in nil })
+    let coordinator = try makeCoordinator(monitor: monitor)
+    await resolveInitialState(.granted, monitor: monitor, coordinator: coordinator)
+    XCTAssertEqual(coordinator.screen, .home)
+
+    let states: [BluetoothAuthorizationState] = [.denied, .poweredOff, .notDetermined, .granted]
+    for state in states {
+      monitor.receiveAuthorizationState(state)
+      XCTAssertEqual(monitor.state, state)
+      XCTAssertEqual(coordinator.screen, .home)
+    }
+  }
+
+  func testLaterCallbacksPreservePresentedEventCodeEntry() async throws {
+    let monitor = BluetoothMonitor(makeCentralManager: { _ in nil })
+    let coordinator = try makeCoordinator(monitor: monitor)
+    await resolveInitialState(.granted, monitor: monitor, coordinator: coordinator)
+    coordinator.openEventCodeEntryFromAccountSheet()
+    XCTAssertEqual(coordinator.screen, .home)
+    XCTAssertTrue(coordinator.eventCodeEntrySheetPresented)
+
+    let states: [BluetoothAuthorizationState] = [.denied, .poweredOff, .notDetermined, .granted]
+    for state in states {
+      monitor.receiveAuthorizationState(state)
+      XCTAssertEqual(monitor.state, state)
+      XCTAssertEqual(coordinator.screen, .home)
+      XCTAssertTrue(coordinator.eventCodeEntrySheetPresented)
+    }
+  }
+
+  func testLaterCallbacksDoNotAdvanceUnrequestedPermissionScreen() throws {
+    let monitor = BluetoothMonitor(makeCentralManager: { _ in nil })
+    let coordinator = try makeCoordinator(monitor: monitor)
+    coordinator.beginOnboarding()
+
+    monitor.receiveAuthorizationState(.granted)
+
+    XCTAssertEqual(monitor.state, .granted)
+    XCTAssertEqual(coordinator.screen, .bluetoothPermission)
+  }
+
+  private func resolveInitialState(
+    _ state: BluetoothAuthorizationState,
+    monitor: BluetoothMonitor,
+    coordinator: AppCoordinator
+  ) async {
+    coordinator.beginOnboarding()
+    XCTAssertEqual(coordinator.screen, .bluetoothPermission)
+    let request = coordinator.requestBluetoothPermission()
+    monitor.receiveAuthorizationState(state)
+    await request.value
+    XCTAssertEqual(monitor.state, state)
+  }
+
+  private func makeCoordinator(monitor: BluetoothMonitor) throws -> AppCoordinator {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("bluetooth-denied-callback-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+    let suiteName = "BluetoothDeniedCallbackTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+    let sensing = makeIsolatedSensingCoordinator(
+      for: self,
+      participantRelayControl: RecordingParticipantRelayControl(),
+      eventJoinControl: RecordingEventJoinControl()
+    )
+    return AppCoordinator(
+      proofStore: ProofStore(fileURL: directory.appendingPathComponent("proofs.json")),
+      sensingCoordinator: sensing,
+      reportSubmissionStore: ReportSubmissionStore(fileURL: directory.appendingPathComponent("reports.json")),
+      reportProofLinkStore: ReportProofLinkStore(fileURL: directory.appendingPathComponent("links.json")),
+      registryClient: nil,
+      userDefaults: defaults,
+      bluetoothMonitor: monitor
+    )
   }
 }

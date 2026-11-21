@@ -16,7 +16,10 @@ final class BeidIPadLayoutTests: XCTestCase {
     capturePrimaryFlow(orientation: "portrait")
   }
 
-  func testPrimaryFlowInLandscape() {
+  func testPrimaryFlowInLandscape() throws {
+    guard UIDevice.current.userInterfaceIdiom == .pad else {
+      throw XCTSkip("Requires an iPad to exercise the landscape primary flow")
+    }
     XCUIDevice.shared.orientation = .landscapeLeft
     capturePrimaryFlow(orientation: "landscape")
   }
@@ -158,8 +161,7 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   private func capturePrimaryFlow(orientation: String) {
-    app.launchArguments = ["-beid-ui-test"]
-    app.launch()
+    app.launchControlledDemo()
 
     assertWelcomeLayout(named: "welcome-\(orientation)")
     app.buttons["Continue"].tap()
@@ -183,12 +185,14 @@ final class BeidIPadLayoutTests: XCTestCase {
     let resumedSenseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
+    app.advanceDemo(to: .sensing)
     XCTAssertTrue(
       app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30),
       "Expected the transient sensing screen in \(orientation).\n\(app.debugDescription)"
     )
     capture(named: "sensing-\(orientation)")
 
+    app.advanceDemo(to: .eventFound)
     XCTAssertTrue(
       app.staticTexts["scan.event-found"].waitForExistence(timeout: 30),
       "Expected the transient event-found screen in \(orientation).\n\(app.debugDescription)"
@@ -199,6 +203,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     // confirmation auto-flips into `.recording`; the "Simulate Signal Lost"
     // affordance existing is the earliest reliable signal that happened.
     let signalLost = app.buttons["Simulate Signal Lost"]
+    app.advanceDemo(to: .recording)
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     dismissBindingSheetToReachLiveRecording()
     capture(named: "recording-\(orientation)")
@@ -241,6 +246,7 @@ final class BeidIPadLayoutTests: XCTestCase {
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
+    app.advanceDemo(to: .recording)
     // Generous timeout: re-entering the scan flow a second time in one test
     // run has been observed to take noticeably longer than the first entry
     // (accumulated simulator/accessibility-tree overhead from the
@@ -258,6 +264,8 @@ final class BeidIPadLayoutTests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
+    XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
+    XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
     app.staticTexts["SEALED ON THIS DEVICE"].scrollToHittable(in: app)
     XCTAssertTrue(app.staticTexts["SEALED ON THIS DEVICE"].exists)
     XCTAssertTrue(app.staticTexts["Self-signed on device"].exists)
@@ -424,8 +432,7 @@ final class BeidIPadLayoutTests: XCTestCase {
   /// `.recording` begins without a wallet presentation. Used by both the
   /// Recording-screen test above and `navigateToCollectionWithProof` below.
   private func reachRecordingScreen() {
-    app.launchArguments = ["-beid-ui-test"]
-    app.launch()
+    app.launchControlledDemo()
 
     app.buttons["Continue"].tap()
     XCTAssertTrue(
@@ -440,15 +447,18 @@ final class BeidIPadLayoutTests: XCTestCase {
       "Expected Home after allowing Bluetooth.\n\(app.debugDescription)"
     )
     senseEvent.tap()
+    app.advanceDemo(to: .sensing)
     XCTAssertTrue(
       app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30),
       "Expected the transient sensing screen after Scan.\n\(app.debugDescription)"
     )
+    app.advanceDemo(to: .eventFound)
     XCTAssertTrue(
       app.staticTexts["scan.event-found"].waitForExistence(timeout: 30),
       "Expected the transient event-found screen after sensing.\n\(app.debugDescription)"
     )
 
+    app.advanceDemo(to: .recording)
     XCTAssertTrue(
       app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30),
       "Expected recording after Event Found.\n\(app.debugDescription)"

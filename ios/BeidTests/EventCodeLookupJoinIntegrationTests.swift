@@ -3,6 +3,7 @@
 
 import BeidSharedKit
 import Foundation
+import SwiftUI
 import XCTest
 @testable import Beid
 
@@ -366,6 +367,125 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
 
     let resolvedOutcome = await outcome
     XCTAssertNotEqual(resolvedOutcome, .superseded)
+  }
+
+  /// Uses the same presentation binding as both scan-flow entry points.
+  /// No disappearance cleanup runs before the real lookup resumes. This
+  /// checks the binding contract, not UIKit's interactive-pop write timing.
+  func testScanCodeEntryPopIntentInvalidatesLookupBeforeDisappearance() async {
+    let coordinator = makeScanCodeEntryCoordinator()
+    let relay = ContinuationRelay()
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: await relay.suspend(), errorCode: nil)
+    }
+    let submission = EventCodeEntrySubmission()
+    var presented = true
+    let presentation = submission.presentationBinding(
+      Binding(get: { presented }, set: { presented = $0 }), coordinator: coordinator
+    )
+    var outcome: AppCoordinator.JoinAttemptOutcome?
+    submission.isSubmitting = true
+    let task = Task { @MainActor in
+      outcome = await coordinator.joinEventFromScanFlowResolvingCanonicalId(code: "abandoned")
+    }
+    submission.task = task
+    await relay.waitUntilSuspended()
+
+    presentation.wrappedValue = false
+    // Release after the pop write, deliberately before calling the fallback.
+    await relay.resume(returning: "0x" + String(repeating: "aa", count: 32))
+    await task.value
+
+    XCTAssertFalse(presented)
+    XCTAssertTrue(task.isCancelled)
+    XCTAssertFalse(submission.isSubmitting)
+    XCTAssertEqual(outcome, .superseded)
+    XCTAssertNil(coordinator.sensingCoordinator.joinedEventCode)
+    XCTAssertNil(coordinator.sensingCoordinator.joinedCanonicalEventIdHex)
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
+    submission.cancel(coordinator: coordinator)
+  }
+
+  func testScanCodeEntryPopBeforeTaskEntryPreventsLookupAndResetsControls() async {
+    let coordinator = makeScanCodeEntryCoordinator()
+    var lookups = 0
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      lookups += 1
+      return .noAnswer
+    }
+    let submission = EventCodeEntrySubmission()
+    var presented = true
+    let presentation = submission.presentationBinding(
+      Binding(get: { presented }, set: { presented = $0 }), coordinator: coordinator
+    )
+    submission.isSubmitting = true
+    let task = Task { @MainActor in
+      guard !Task.isCancelled else { return }
+      _ = await coordinator.joinEventFromScanFlowResolvingCanonicalId(code: "queued")
+    }
+    submission.task = task
+    // This actor has not yielded: the queued task cannot have entered yet.
+    presentation.wrappedValue = false
+    // A cancelled interactive transition may restore the presentation.
+    presentation.wrappedValue = true
+    await task.value
+
+    XCTAssertTrue(presented)
+    XCTAssertEqual(lookups, 0)
+    XCTAssertFalse(submission.isSubmitting)
+    XCTAssertNil(submission.task)
+    XCTAssertNil(coordinator.sensingCoordinator.joinedEventCode)
+
+    // The retained route can retry; it has no permanently disabled owner.
+    let retry = await coordinator.joinEventFromScanFlowResolvingCanonicalId(code: "retry")
+    XCTAssertEqual(retry, .completed(nil))
+    XCTAssertEqual(lookups, 1)
+    XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "retry")
+  }
+
+  func testOldScanCodeEntryDisappearanceCannotCancelANewerRouteLookup() async {
+    let coordinator = makeScanCodeEntryCoordinator()
+    let abandonedRelay = ContinuationRelay()
+    let currentRelay = ContinuationRelay()
+    coordinator.resolveCanonicalEventIdHexOverride = { code in
+      .init(eventIdHex: await (code == "abandoned" ? abandonedRelay : currentRelay).suspend(), errorCode: nil)
+    }
+    let abandoned = EventCodeEntrySubmission()
+    var presented = true
+    let presentation = abandoned.presentationBinding(
+      Binding(get: { presented }, set: { presented = $0 }), coordinator: coordinator
+    )
+    abandoned.isSubmitting = true
+    var oldOutcome: AppCoordinator.JoinAttemptOutcome?
+    let oldTask = Task { @MainActor in
+      oldOutcome = await coordinator.joinEventFromScanFlowResolvingCanonicalId(code: "abandoned")
+    }
+    abandoned.task = oldTask
+    await abandonedRelay.waitUntilSuspended()
+    presentation.wrappedValue = false
+
+    let currentTask = Task { @MainActor in
+      await coordinator.joinEventFromScanFlowResolvingCanonicalId(code: "current")
+    }
+    await currentRelay.waitUntilSuspended()
+    // The old view's late onDisappear is a no-op after the binding consumed
+    // its ownership. Repeated false writes must be harmless as well.
+    abandoned.cancel(coordinator: coordinator)
+    presentation.wrappedValue = false
+    await abandonedRelay.resume(returning: nil)
+    await oldTask.value
+    await currentRelay.resume(returning: nil)
+    let currentOutcome = await currentTask.value
+
+    XCTAssertEqual(oldOutcome, .superseded)
+    XCTAssertEqual(currentOutcome, .completed(nil))
+    XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "current")
+  }
+
+  private func makeScanCodeEntryCoordinator() -> AppCoordinator {
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: RecordingEventJoinControl())
+    sensing.useDemoEventMode = false
+    return AppCoordinator(sensingCoordinator: sensing, registryClient: nil)
   }
 
   private func makeCoordinator(

@@ -99,6 +99,10 @@ private struct NowHomeView: View {
               }
               #if DEBUG
               if coordinator.isHomeStandbyFixture { standbyFixtureControls }
+              if coordinator.stopOutcomeUITestFixture != nil {
+                Button("Repeat STOP confirmation") { coordinator.confirmStopSensing() }
+                  .accessibilityIdentifier("stop.fixture.repeat-confirmation")
+              }
               #endif
             }
             .padding(.vertical, DS.Space.s)
@@ -116,7 +120,11 @@ private struct NowHomeView: View {
       .navigationDestination(isPresented: $showAboutSensing) { AboutSensingView() }
       .navigationDestination(isPresented: $showWhatWeSend) { WhatWeSendView() }
       .navigationDestination(isPresented: $coordinator.scanPresented) {
-        ScanFlowView(sensing: sensing).environmentObject(coordinator)
+        let routeID = coordinator.scanRouteID
+        ScanFlowView(sensing: sensing)
+          .environmentObject(coordinator)
+          .onDisappear { coordinator.scanRouteDidDisappear(routeID) }
+          .id(routeID)
       }
       .navigationDestination(item: $coordinator.selectedProof) { proof in
         HomeRecordDetail(proof: proof)
@@ -607,8 +615,18 @@ private struct RecordsHomeView: View {
 
   private var eventList: some View {
     List {
+      BeidTextControl("ALL RECORDS", glyph: .trailing("→", announcing: "All records")) {
+        showsEvents = false
+      }
+      .frame(maxWidth: .infinity, alignment: .trailing)
+      .accessibilityIdentifier("records.all-records")
+      .listRowSeparator(.hidden)
+      .listRowBackground(DS.Color.surfaceCanvas)
+
       ForEach(eventGroups, id: \.first?.id) { group in
         if let proof = group.first {
+          // v1.1 has one Attendance record per event, with multiple stored sessions.
+          let recordCount = 1
           NavigationLink {
             EventDetailView(representative: proof, sensing: sensing, proofStore: proofStore,
                             submissionStore: coordinator.reportSubmissionStore)
@@ -617,17 +635,21 @@ private struct RecordsHomeView: View {
               RecordSigilSlot(input: sensing.sigilInput(forProofId: proof.id), placement: .homePastRow)
               VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text(verbatim: proof.eventName).beidTextStyle(DS.Font.Library.title17)
-                Text(proof.date.formatted(date: .abbreviated, time: .omitted))
+                Text(String(
+                  localized: "home.past.sessionCaption",
+                  defaultValue: "\(proof.date.formatted(.dateTime.month(.abbreviated).day())) · \(group.count) sessions",
+                  comment: "Latest saved session date and count of stored sessions for this event."
+                ))
                   .beidTextStyle(DS.Font.Library.labelMono10)
                   .foregroundStyle(DS.Color.textSecondary)
               }
               Spacer(minLength: 0)
               Text(String(
-                localized: "records.event.sessionAction",
-                defaultValue: "\(group.count) sessions →",
-                comment: "Number of saved recording sessions for this event; opens event details."
+                localized: "records.event.recordAction",
+                defaultValue: "\(recordCount) records →",
+                comment: "Number of participation records for this event; opens event details, including its stored sessions."
               ))
-              .beidTextStyle(DS.Font.Library.labelMono10)
+              .beidTextStyle(DS.Font.Library.labelMono10Tight)
             }
             .frame(minHeight: DS.Size.listRowMinHeight)
             .contentShape(Rectangle())
