@@ -219,7 +219,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     gives actual task durations. Job timeouts are 50 minutes for build/smoke and
     35 per test lane. Step timeouts are 35 minutes for build (the Release Kotlin
     framework alone takes about 12 minutes on `xcode-27`), 10 for smoke tests,
-    and 25 for each full-mode test lane, leaving time for evidence and cleanup.
+    and 30 for each full-mode test lane (UI shards take 21-25 minutes on
+    `xcode-27`), leaving time for evidence and cleanup.
     These are containment, not claimed speed; hosted full and smoke timing and
     artifact portability still need measurement on the final SHA.
 
