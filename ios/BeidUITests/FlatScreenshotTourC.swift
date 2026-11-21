@@ -295,7 +295,22 @@ final class FlatScreenshotTourC: XCTestCase {
     assertSignatureUnavailable(app)
     XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
     XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
-    app.staticTexts["RECORDED ON THIS PHONE"].scrollToHittable(in: app)
+    let rung = app.staticTexts["RECORDED ON THIS PHONE"]
+    rung.scrollToHittable(in: app)
+    if UIDevice.current.userInterfaceIdiom == .phone {
+      // Reproduce a fling that leaves the rung behind the navigation bar.
+      let navigationBar = app.navigationBars.firstMatch
+      let scrollView = app.scrollViews.firstMatch
+      for _ in 0..<5 {
+        if rung.frame.maxY < navigationBar.frame.maxY { break }
+        scrollView.swipeUp()
+      }
+      XCTAssertTrue(rung.exists)
+      XCTAssertFalse(rung.isHittable)
+      XCTAssertLessThan(rung.frame.maxY, navigationBar.frame.maxY, "The rung must start above the readable area.")
+      rung.scrollToHittable(in: app)
+      XCTAssertEqual(rung.label, "RECORDED ON THIS PHONE")
+    }
     attachScreenshot("09-legacy-binding")
     assertRecordKeepsSessionAndReportRoutes(app)
     XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
