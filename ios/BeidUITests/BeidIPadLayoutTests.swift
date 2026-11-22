@@ -161,7 +161,12 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   private func capturePrimaryFlow(orientation: String) {
-    app.launchControlledDemo()
+    let checksSensingFit = UIDevice.current.userInterfaceIdiom == .pad && orientation == "portrait"
+    let fitArguments = [
+      "-beid.sensing.firstTimeHintShown", "NO",
+      "-UIPreferredContentSizeCategoryName", UIContentSizeCategory.large.rawValue
+    ]
+    app.launchControlledDemo(extraArguments: checksSensingFit ? fitArguments : [])
 
     assertWelcomeLayout(named: "welcome-\(orientation)")
     app.buttons["Continue"].tap()
@@ -206,7 +211,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.advanceDemo(to: .recording)
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     dismissBindingSheetToReachLiveRecording()
-    if UIDevice.current.userInterfaceIdiom == .pad && orientation == "portrait" {
+    if checksSensingFit {
       assertSensingFooterVisibleInPortrait()
     }
     capture(named: "recording-\(orientation)")
@@ -472,19 +477,26 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   private func assertSensingFooterVisibleInPortrait() {
-    let guidance = app.staticTexts["Keep the app open nearby to help devices observe each other and keep signed records."]
+    let scroll = app.scrollViews["scan.sensing-session"]
+    let guidance = scroll.staticTexts["Keep the app open nearby to help devices observe each other and keep signed records."]
+    let help = scroll.buttons["scan.first-time.about"]
     let stop = app.buttons["scan.stop-sensing"]
-    guidance.assertHittable()
+    scroll.assertExists()
+    guidance.assertExists()
+    help.assertExists()
     stop.assertHittable()
-    let window = app.windows.firstMatch.frame
-    XCTAssertTrue(window.contains(guidance.frame))
-    XCTAssertTrue(window.contains(stop.frame))
-    XCTAssertLessThanOrEqual(guidance.frame.maxY, stop.frame.minY, "The fixed stop control must not cover the guidance.")
-    let helpButtons = [app.buttons["scan.first-time.about"], app.buttons["scan.about"]]
-    if let help = helpButtons.first(where: \.exists) {
-      help.assertHittable()
-      XCTAssertTrue(window.contains(help.frame))
-      XCTAssertLessThanOrEqual(help.frame.maxY, stop.frame.minY, "The first-time help must fit above the fixed stop control.")
+    let viewport = app.visibleScrollFrame(for: scroll.frame)
+    let stopFrame = stop.frame
+    XCTAssertTrue(app.windows.firstMatch.frame.contains(stopFrame))
+
+    for (element, label) in [(guidance, "Sensing guidance"), (help, "First-time help")] {
+      let frame = element.frame
+      XCTAssertTrue(
+        !frame.isEmpty && viewport.contains(frame),
+        "\(label) must fit in the scroll viewport without scrolling. Frame: \(frame), viewport: \(viewport)"
+      )
+      XCTAssertLessThanOrEqual(frame.maxY, stopFrame.minY, "\(label) must fit above the fixed Stop control.")
+      element.assertHittable()
     }
   }
 
