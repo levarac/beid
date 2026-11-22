@@ -35,6 +35,28 @@ final class FlatScreenshotTourB: XCTestCase {
     capture("04")
   }
 
+  func testActiveNowKeepsInlineNavigationTitleAndAccountVisibleAfterScrolling() {
+    launchHome(arguments: [
+      "-beid-home-frame-04", "-beid-long-japanese-event-name-fixture",
+      "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+    ])
+    let activeContent = app.otherElements["home.active-event"]
+    activeContent.assertExists()
+    assertNavigationTitleDrawn("Now")
+    let title = app.navigationBars.staticTexts["Now"]
+    let expandedTitleHeight = title.frame.height
+    let now = app.scrollViews["home.now"]
+    now.swipeUp()
+    let account = app.navigationBars.buttons["home.account"]
+    account.assertHittable()
+    XCTAssertLessThan(title.frame.height, expandedTitleHeight, "Now should collapse to an inline title")
+    XCTAssertEqual(title.frame.midY, account.frame.midY, accuracy: 4, "The title and Account should share the inline bar")
+    XCTAssertTrue(activeContent.exists)
+    assertNavigationTitleDrawn("Now")
+    assertNavigationForegroundDrawn(account, name: "Account", insetFraction: 0.2)
+    capture("04-collapsed")
+  }
+
   func testLongEventNameWrapsInSensingAndStopConfirmation() {
     let eventName = "International Community Gathering and Technology Festival Tokyo 2026"
     launchHome(arguments: ["-beid-home-frame-04", "-beid-long-event-name-fixture"])
@@ -231,17 +253,24 @@ final class FlatScreenshotTourB: XCTestCase {
   }
 
   private func assertNavigationTitleDrawn(_ title: String, file: StaticString = #filePath, line: UInt = #line) {
-    let label = app.navigationBars.staticTexts[title]
-    XCTAssertTrue(label.waitForExistence(timeout: 5), file: file, line: line)
+    assertNavigationForegroundDrawn(app.navigationBars.staticTexts[title], name: title, file: file, line: line)
+  }
+
+  private func assertNavigationForegroundDrawn(
+    _ element: XCUIElement, name: String, insetFraction: CGFloat = 0, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    XCTAssertTrue(element.waitForExistence(timeout: 5), file: file, line: line)
     let window = app.windows.firstMatch
     guard let image = window.screenshot().image.cgImage else {
-      return XCTFail("Cannot inspect navigation title", file: file, line: line)
+      return XCTFail("Cannot inspect \(name) in the navigation bar", file: file, line: line)
     }
     let scale = CGFloat(image.width) / window.frame.width
-    let frame = label.frame.offsetBy(dx: -window.frame.minX, dy: -window.frame.minY)
+    let bounds = element.frame
+    let frame = bounds.insetBy(dx: bounds.width * insetFraction, dy: bounds.height * insetFraction)
+      .offsetBy(dx: -window.frame.minX, dy: -window.frame.minY)
       .applying(CGAffineTransform(scaleX: scale, y: scale)).integral
     guard let crop = image.cropping(to: frame), crop.width > 0, crop.height > 0 else {
-      return XCTFail("Navigation title has no screenshot area", file: file, line: line)
+      return XCTFail("\(name) has no screenshot area", file: file, line: line)
     }
     var pixels = [UInt8](repeating: 0, count: crop.width * crop.height)
     let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
@@ -254,6 +283,6 @@ final class FlatScreenshotTourB: XCTestCase {
     XCTAssertTrue(rendered, file: file, line: line)
     let foregroundPixels = pixels.filter { $0 < 160 }.count
     XCTAssertLessThan(foregroundPixels, pixels.count / 2, "The navigation bar must have a light background", file: file, line: line)
-    XCTAssertGreaterThan(foregroundPixels, 10, "Navigation title must be visible against its background", file: file, line: line)
+    XCTAssertGreaterThan(foregroundPixels, 10, "\(name) must be visible against its background", file: file, line: line)
   }
 }
