@@ -258,7 +258,8 @@ struct ItemDetailView: View {
         NavigationLink {
           ObservationDetailView(
             proof: session, sessionNumber: index + 1,
-            aggregate: coordinator.sensingCoordinator.sessionAggregateSnapshot(forProofId: session.id)
+            aggregate: coordinator.sensingCoordinator.sessionAggregateSnapshot(forProofId: session.id),
+            showsSessionRecordLink: session.id != proof.id
           )
         } label: {
           Text(verbatim: session.date.formatted(date: .abbreviated, time: .shortened))
