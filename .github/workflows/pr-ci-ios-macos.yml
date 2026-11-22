@@ -207,6 +207,9 @@ jobs:
     # and fans out to at most six macOS test jobs. Smoke retains its single job.
     # 50 minutes is containment for build/smoke, not a performance target.
     timeout-minutes: 50
+    outputs:
+      # Retried shards may depend on a build from an earlier run attempt.
+      products_artifact_name: ${{ steps.package.outputs.artifact_name }}
     steps:
       - name: Initialize CI output path
         shell: bash
@@ -381,6 +384,7 @@ jobs:
             --sha "$EXPECTED_SHA" --output "$CI_OUTPUT_ROOT/manifest.json"
 
       - name: Package full-mode test products
+        id: package
         if: ${{ needs.plan.outputs.mode == 'full' }}
         shell: bash
         env:
@@ -391,12 +395,13 @@ jobs:
             --manifest "$CI_OUTPUT_ROOT/manifest.json" --archive "$CI_OUTPUT_ROOT/products.tar" \
             --sha "$EXPECTED_SHA" --xcode "$(xcodebuild -version)" \
             --sdk "$(xcrun --sdk iphonesimulator --show-sdk-version)" --arch "$(uname -m)"
+          printf 'artifact_name=ios-products-%s\n' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
 
       - name: Upload full-mode test products
         if: ${{ needs.plan.outputs.mode == 'full' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ios-products-${{ github.run_attempt }}
+          name: ${{ steps.package.outputs.artifact_name }}
           path: ${{ env.CI_OUTPUT_ROOT }}/products.tar
           compression-level: 1
           if-no-files-found: error
@@ -597,7 +602,7 @@ jobs:
       - name: Download full-mode test products
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: ios-products-${{ github.run_attempt }}
+          name: ${{ needs.build.outputs.products_artifact_name }}
           path: ${{ env.CI_OUTPUT_ROOT }}
 
       - name: Validate and restore test products
