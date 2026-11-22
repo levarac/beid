@@ -164,10 +164,10 @@ extension XCUIApplication {
     let recordsTab = tabButton("Records")
     recordsTab.assertHittable()
     recordsTab.tap()
-    if collectionViews["records.events"].exists { return }
-    let byEvent = buttons["records.by-event"]
+    if scrollViews["records.events"].exists { return }
+    let byEvent = buttons["By event"]
     byEvent.assertHittable()
     byEvent.tap()
-    collectionViews["records.events"].assertExists()
+    scrollViews["records.events"].assertExists()
   }
 }

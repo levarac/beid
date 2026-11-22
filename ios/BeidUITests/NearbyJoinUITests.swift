@@ -48,13 +48,31 @@ final class NowNavigationUITests: XCTestCase {
     XCTAssertTrue(app.buttons["home.account"].exists)
     app.tabButton("Records").tap()
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
-    app.buttons["records.by-event"].tap()
-    XCTAssertTrue(app.collectionViews["records.events"].waitForExistence(timeout: 5))
+    app.buttons["By event"].tap()
+    app.scrollViews["records.events"].assertExists()
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
+    XCTAssertTrue(app.buttons["home.account"].isHittable)
     XCTAssertTrue(app.buttons["home.past-event.ACTIVE-EVENT"].exists)
     app.tabButton("Now").tap()
     XCTAssertTrue(app.otherElements["home.active-event"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "mutual")).firstMatch.exists)
     capture("now-active")
+  }
+
+  func testEmptyRecordsExplainsBothGroupingsInPlace() {
+    launchHome(["-beid-home-frame-04b"])
+    app.tabButton("Records").tap()
+    let explanation = app.staticTexts["Saved records appear here after sensing."]
+    app.scrollViews["records.grid"].assertExists()
+    explanation.assertHittable()
+    app.buttons["By event"].tap()
+    app.scrollViews["records.events"].assertExists()
+    explanation.assertHittable()
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
+    XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.past-event.")).count, 0)
+    app.buttons["All records"].tap()
+    app.scrollViews["records.grid"].assertExists()
+    explanation.assertHittable()
   }
 
   func testRecordsGridHasOneAttendancePerEventAndKeepsSessions() {

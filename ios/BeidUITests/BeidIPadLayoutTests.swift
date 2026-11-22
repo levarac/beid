@@ -239,8 +239,9 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.navigationBars.buttons.firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.navigationBars.buttons.firstMatch.tap()
-    XCTAssertTrue(app.collectionViews["records.events"].waitForExistence(timeout: 5))
-    app.navigationBars.buttons.firstMatch.tap()
+    app.scrollViews["records.events"].assertExists()
+    app.buttons["All records"].assertHittable()
+    app.buttons["All records"].tap()
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     app.tabButton("Now").tap()
 

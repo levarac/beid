@@ -3741,7 +3741,7 @@
       }
     },
     "All records": {
-      "comment": "VoiceOver label for the arrow control returning to the saved record grid.",
+      "comment": "Segmented control option for the saved record grid.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3752,7 +3752,7 @@
       }
     },
     "By event": {
-      "comment": "Title of the saved event list.",
+      "comment": "Segmented control option for the saved event list.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3761,6 +3761,9 @@
           }
         }
       }
+    },
+    "Record grouping": {
+      "comment": "Accessibility label for the Records grouping control."
     },
     "Saved records appear here after sensing.": {
       "comment": "Empty Records tab.",
