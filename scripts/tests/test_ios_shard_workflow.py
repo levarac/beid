@@ -42,6 +42,8 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertIn("needs: [changes, plan, build, tests]", aggregate)
         self.assertIn("runs-on: ubuntu-24.04-arm", aggregate)
         self.assertIn("toJSON(needs)", aggregate)
+        self.assertIn("pattern: ios-evidence-*\n", aggregate)
+        self.assertIn("merge-multiple: false", aggregate)
         self.assertIn("scripts.ios_ui_smoke aggregate", aggregate)
         self.assertNotIn("continue-on-error", text)
 
@@ -70,6 +72,7 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertIn("id: package", package)
         self.assertIn('artifact_name=ios-products-%s\\n\' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"', package)
         self.assertIn("products_artifact_name: ${{ steps.package.outputs.artifact_name }}", build)
+        self.assertIn("evidence_attempt: ${{ steps.initialize.outputs.attempt }}", build)
         self.assertIn("name: ${{ steps.package.outputs.artifact_name }}", upload)
         for block in (build, tests):
             self.assertIn("ios-evidence-${{ github.run_attempt }}-", block)

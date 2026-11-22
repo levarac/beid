@@ -210,11 +210,14 @@ jobs:
     outputs:
       # Retried shards may depend on a build from an earlier run attempt.
       products_artifact_name: ${{ steps.package.outputs.artifact_name }}
+      evidence_attempt: ${{ steps.initialize.outputs.attempt }}
     steps:
       - name: Initialize CI output path
+        id: initialize
         shell: bash
         run: |
           set -euo pipefail
+          printf 'attempt=%s\n' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
           printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
           # Stable dependency-only location; never cache DerivedData/results.
           printf 'SPM_SOURCE_ROOT=%s\n' "$RUNNER_TEMP/beid-spm/SourcePackages" >> "$GITHUB_ENV"
@@ -712,7 +715,8 @@ jobs:
         if: ${{ needs.plan.outputs.run == 'true' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: ios-evidence-${{ github.run_attempt }}-*
+          pattern: ios-evidence-*
+          merge-multiple: false
           path: ${{ runner.temp }}/ios-evidence
 
       - name: Verify all job results and execution ledger

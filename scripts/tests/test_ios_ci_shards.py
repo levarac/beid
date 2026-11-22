@@ -364,26 +364,75 @@ class AggregateContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "smoke must select unit tests"):
             self.verify()
 
-    def test_aggregate_cli_rejects_missing_artifact_and_writes_summary(self):
+    def run_aggregate_cli(self, attempts, current_attempt, build_attempt=1):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             needs = root / "needs.json"
-            needs.write_text(json.dumps(self.needs))
+            needs.write_text(json.dumps({
+                **self.needs,
+                "build": {**self.needs["build"], "outputs": {"evidence_attempt": str(build_attempt)}},
+            }))
             artifacts = root / "artifacts"
-            artifacts.mkdir()
-            build = artifacts / "ios-evidence-1-build"
-            build.mkdir()
-            (build / "manifest.json").write_text(json.dumps(self.manifest))
-            for lane, payload in self.evidence.items():
-                folder = artifacts / f"ios-evidence-1-{lane}"
-                folder.mkdir()
-                (folder / "test-tree.json").write_text(json.dumps(payload))
+            for attempt, lanes in attempts.items():
+                for lane, payload in lanes.items():
+                    folder = artifacts / f"ios-evidence-{attempt}-{lane}"
+                    folder.mkdir(parents=True)
+                    if payload is not None:
+                        filename = "manifest.json" if lane == "build" else "test-tree.json"
+                        (folder / filename).write_text(json.dumps(payload))
+            summary = root / "summary.md"
             command = [sys.executable, "-m", "scripts.ios_ui_smoke", "aggregate", "--event-name", "merge_group",
-                       "--needs-json", str(needs), "--evidence-root", str(artifacts), "--attempt", "1",
-                       "--sha", "a" * 40, "--summary", str(root / "summary.md")]
+                       "--needs-json", str(needs), "--evidence-root", str(artifacts),
+                       "--attempt", str(current_attempt), "--sha", self.manifest["sha"], "--summary", str(summary)]
             result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("BeidTests: 1 passed, 0 skipped", (root / "summary.md").read_text())
-            (artifacts / "ios-evidence-1-ui-2/test-tree.json").unlink()
-            result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
-            self.assertNotEqual(result.returncode, 0)
+            return result, summary.read_text() if summary.exists() else ""
+
+    def test_aggregate_cli_combines_retried_shard_with_previous_lanes(self):
+        self.add_ui_shards(4)
+        first = {"build": self.manifest, **self.evidence}
+        retry = {"ui-4": first.pop("ui-4")}
+        result, summary = self.run_aggregate_cli({1: first, 2: retry}, current_attempt=2)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("all 5 cases accounted for; BeidTests: 1 passed, 0 skipped", summary)
+
+    def test_aggregate_cli_rejects_lane_missing_from_all_attempts(self):
+        self.add_ui_shards(4)
+        first = {"build": self.manifest, **self.evidence}
+        retry = {"ui-4": first.pop("ui-4")}
+        del first["ui-3"]
+        result, _ = self.run_aggregate_cli({1: first, 2: retry}, current_attempt=2)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("missing or extra lane artifacts", result.stderr)
+
+    def test_aggregate_cli_rejects_latest_failure_or_missing_tree_after_pass(self):
+        self.add_ui_shards(4)
+        first = {"build": self.manifest, **self.evidence}
+        failed = tree([{
+            "nodeType": "Test Case",
+            "nodeIdentifier": "FlowTests/testShard4()",
+            "result": "Failed",
+            "durationInSeconds": 1.25,
+        }], unit=False)
+        for payload, error in ((failed, "test did not pass: BeidUITests/FlowTests/testShard4: Failed"),
+                               (None, "missing or extra lane artifacts")):
+            with self.subTest(error=error):
+                result, _ = self.run_aggregate_cli({1: first, 2: {"ui-4": payload}}, current_attempt=2)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn(error, result.stderr)
+
+    def test_aggregate_cli_uses_latest_build_and_lanes_on_full_rerun(self):
+        latest = {"build": self.manifest, **self.evidence}
+        older = {**latest, "build": {**self.manifest, "sha": "b" * 40}, "ui-2": None}
+        result, summary = self.run_aggregate_cli({2: older, 10: latest}, current_attempt=10, build_attempt=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("all 3 cases accounted for", summary)
+
+    def test_aggregate_cli_rejects_stale_evidence_after_build_rerun(self):
+        first = {"build": self.manifest, **self.evidence}
+        for missing, error in (("build", "missing evidence for build attempt 2"),
+                               ("ui-2", "evidence for ui-2 predates build attempt 2")):
+            with self.subTest(missing=missing):
+                latest = {lane: payload for lane, payload in first.items() if lane != missing}
+                result, _ = self.run_aggregate_cli({1: first, 2: latest}, current_attempt=2, build_attempt=2)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn(error, result.stderr)
