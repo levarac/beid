@@ -28,11 +28,14 @@ class ShardContractTest(unittest.TestCase):
         self.assertTrue(hasattr(self.tool, "shard_tests"), "duration-based sharding is missing")
         tests = [f"BeidUITests/FlowTests/test{i}" for i in range(12)]
         durations = {test: 10.0 for test in tests[:-1]}
-        shards = self.tool.shard_tests(tests, durations, 4)
-        self.assertEqual(shards, self.tool.shard_tests(list(reversed(tests)), durations, 4))
-        self.assertEqual(sorted(sum(shards, [])), sorted(tests))
-        self.assertLessEqual(max(map(len, shards)) - min(map(len, shards)), 1)
-        for count in (0, 1, 5):
+        for count in (4, 5):
+            shards = self.tool.shard_tests(tests, durations, count)
+            self.assertEqual(len(shards), count)
+            self.assertEqual(shards, self.tool.shard_tests(list(reversed(tests)), durations, count))
+            self.assertEqual(sorted(sum(shards, [])), sorted(tests))
+            if count == 4:
+                self.assertLessEqual(max(map(len, shards)) - min(map(len, shards)), 1)
+        for count in (0, 1, 6):
             with self.assertRaises(ValueError):
                 self.tool.shard_tests(tests, durations, count)
         with self.assertRaises(ValueError):
@@ -73,7 +76,7 @@ class ShardContractTest(unittest.TestCase):
             root = Path(temporary)
             enum, manifest = root / "enumerated.json", root / "manifest.json"
             enum.write_text(json.dumps(payload))
-            for count in (2, 3, 4):
+            for count in (2, 3, 4, 5):
                 result = subprocess.run([sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
                     "--enumeration", str(enum), "--output", str(manifest), "--count", str(count),
                     "--mode", "full", "--sha", "a" * 40], cwd=ROOT, capture_output=True, text=True)
@@ -90,8 +93,12 @@ class ShardContractTest(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     selected.extend(line.removeprefix("-only-testing:") for line in result.stdout.splitlines())
                 self.assertEqual(sorted(selected), inventory)
+            invalid_lane = subprocess.run([sys.executable, "-m", "scripts.ios_ui_smoke", "lane-arguments",
+                "--manifest", str(manifest), "--lane", "ui-6"], cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(invalid_lane.returncode, 1, invalid_lane.stderr)
+            self.assertIn("invalid lane: ui-6", invalid_lane.stderr)
             smoke_command = [sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
-                             "--enumeration", str(enum), "--output", str(manifest), "--count", "4",
+                             "--enumeration", str(enum), "--output", str(manifest), "--count", "5",
                              "--mode", "smoke", "--sha", "a" * 40]
             result = subprocess.run(smoke_command, cwd=ROOT, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
@@ -141,9 +148,9 @@ class AggregateContractTest(unittest.TestCase):
     def test_happy_path(self):
         self.verify()
 
-    def add_two_ui_shards(self):
-        for index, method in enumerate(("testThree", "testFour"), start=3):
-            case_identifier = f"FlowTests/{method}"
+    def add_ui_shards(self, total_count):
+        for index in range(3, total_count + 1):
+            case_identifier = f"FlowTests/testShard{index}"
             test = f"BeidUITests/{case_identifier}"
             self.manifest["ui"].append(test)
             self.manifest["shards"].append([test])
@@ -155,12 +162,22 @@ class AggregateContractTest(unittest.TestCase):
             }], unit=False)
 
     def test_full_aggregate_accepts_four_ui_shards(self):
-        self.add_two_ui_shards()
+        self.add_ui_shards(4)
         self.assertIn("all 5 cases accounted for", self.verify())
 
+    def test_full_aggregate_accepts_five_ui_shards(self):
+        self.add_ui_shards(5)
+        self.assertIn("all 6 cases accounted for", self.verify())
+
     def test_full_aggregate_rejects_missing_fourth_ui_shard(self):
-        self.add_two_ui_shards()
+        self.add_ui_shards(4)
         del self.evidence["ui-4"]
+        with self.assertRaisesRegex(ValueError, "missing or extra lane artifacts"):
+            self.verify()
+
+    def test_full_aggregate_rejects_missing_fifth_ui_shard(self):
+        self.add_ui_shards(5)
+        del self.evidence["ui-5"]
         with self.assertRaisesRegex(ValueError, "missing or extra lane artifacts"):
             self.verify()
 
