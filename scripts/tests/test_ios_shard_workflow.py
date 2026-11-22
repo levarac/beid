@@ -42,6 +42,8 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertIn("needs: [changes, plan, build, tests]", aggregate)
         self.assertIn("runs-on: ubuntu-24.04-arm", aggregate)
         self.assertIn("toJSON(needs)", aggregate)
+        self.assertIn("pattern: ios-evidence-*\n", aggregate)
+        self.assertIn("merge-multiple: false", aggregate)
         self.assertIn("scripts.ios_ui_smoke aggregate", aggregate)
         self.assertNotIn("continue-on-error", text)
 
@@ -61,9 +63,17 @@ class ShardWorkflowTest(unittest.TestCase):
         text = IOS.read_text()
         self.assertIn("  build:\n", text, "missing build job")
         build, tests = job_block(IOS, "build"), job_block(IOS, "tests")
-        self.assertIn("scripts.ios_ci_products pack", build)
-        self.assertIn("ios-products-${{ github.run_attempt }}", build)
-        self.assertIn("ios-products-${{ github.run_attempt }}", tests)
+        package = build.split("      - name: Package full-mode test products\n", 1)[1].split("      - name:", 1)[0]
+        upload = build.split("      - name: Upload full-mode test products\n", 1)[1].split("      - name:", 1)[0]
+        download = tests.split("      - name: Download full-mode test products\n", 1)[1].split("      - name:", 1)[0]
+        self.assertIn("scripts.ios_ci_products pack", package)
+        # A shard retry can have a different run attempt from the build it needs.
+        self.assertIn("name: ${{ needs.build.outputs.products_artifact_name }}", download)
+        self.assertIn("id: package", package)
+        self.assertIn('artifact_name=ios-products-%s\\n\' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"', package)
+        self.assertIn("products_artifact_name: ${{ steps.package.outputs.artifact_name }}", build)
+        self.assertIn("evidence_attempt: ${{ steps.initialize.outputs.attempt }}", build)
+        self.assertIn("name: ${{ steps.package.outputs.artifact_name }}", upload)
         for block in (build, tests):
             self.assertIn("ios-evidence-${{ github.run_attempt }}-", block)
             self.assertIn("if-no-files-found: error", block)

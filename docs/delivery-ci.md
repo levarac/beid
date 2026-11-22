@@ -211,9 +211,13 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Both modes upload `ios-evidence-<attempt>-<lane>` artifacts: enumeration,
     manifest, xcresult tree/schema/summary, per-case durations, and build logs/
     phase timing JSONL where applicable (14 days). Full product tar is a
-    separate `ios-products-<attempt>` artifact (3 days), never a cache. Use
-    “Re-run all jobs” for a fresh attempt; artifacts intentionally do not cross
-    attempt boundaries. `scripts/ios_ci_timing.py` timestamps SPM resolution,
+    separate `ios-products-<attempt>` artifact (3 days), never a cache. A shard
+    retry uses the artifact name reported by its build job. The aggregate uses
+    the most recent evidence for each lane within the same run. It requires
+    evidence from the actual build attempt and rejects lanes older than that
+    build.
+    Use “Re-run all jobs” to recreate expired artifacts.
+    `scripts/ios_ci_timing.py` timestamps SPM resolution,
     KMP script start/end, and the observed Swift compile window. That window
     includes overlapping/link work; `-showBuildTimingSummary` in `build.log`
     gives actual task durations. Job timeouts are 50 minutes for build/smoke and

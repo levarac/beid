@@ -376,7 +376,7 @@ def main() -> int:
     aggregate.add_argument("--event-name", required=True)
     aggregate.add_argument("--needs-json", type=Path, required=True)
     aggregate.add_argument("--evidence-root", type=Path, required=True)
-    aggregate.add_argument("--attempt", required=True)
+    aggregate.add_argument("--attempt", type=int, required=True)
     aggregate.add_argument("--sha", required=True)
     aggregate.add_argument("--summary", type=Path, required=True)
     for command in ("arguments", "verify"):
@@ -457,12 +457,33 @@ def main() -> int:
             return 0
         if args.command == "aggregate":
             needs = json.loads(args.needs_json.read_text())
-            evidence, manifest = {}, None
-            prefix = f"ios-evidence-{args.attempt}-"
+            latest = {}
             for folder in args.evidence_root.iterdir():
-                if not folder.is_dir() or not folder.name.startswith(prefix):
+                match = re.fullmatch(r"ios-evidence-([1-9][0-9]*)-(build|unit|ui-[1-9][0-9]*)", folder.name)
+                if not folder.is_dir() or match is None:
                     raise ValueError(f"unexpected evidence entry: {folder.name}")
-                lane = folder.name.removeprefix(prefix)
+                attempt, lane = int(match[1]), match[2]
+                if attempt > args.attempt:
+                    raise ValueError(f"evidence is from a future attempt: {folder.name}")
+                if lane not in latest or attempt > latest[lane][0]:
+                    latest[lane] = (attempt, folder)
+
+            build = needs.get("build", {})
+            build_attempt = 0
+            if build.get("result") == "success":
+                build_attempt = int(build.get("outputs", {}).get("evidence_attempt", "0"))
+                if not 1 <= build_attempt <= args.attempt:
+                    raise ValueError("missing or invalid build attempt")
+                if "build" not in latest or latest["build"][0] != build_attempt:
+                    raise ValueError(f"missing evidence for build attempt {build_attempt}")
+
+            # Select folders before reading results so missing or failed evidence
+            # from the latest attempt cannot be replaced by an older success.
+            evidence, manifest = {}, None
+            for lane, (attempt, folder) in latest.items():
+                # Rerunning the build also reruns all jobs that depend on it.
+                if attempt < build_attempt:
+                    raise ValueError(f"evidence for {lane} predates build attempt {build_attempt}")
                 if lane == "build":
                     manifest = json.loads((folder / "manifest.json").read_text())
                 if (folder / "test-tree.json").exists():
