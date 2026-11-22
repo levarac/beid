@@ -144,7 +144,7 @@ extension XCUIElement {
 }
 
 extension XCUIApplication {
-  fileprivate func visibleScrollFrame(for scrollFrame: CGRect) -> CGRect {
+  func visibleScrollFrame(for scrollFrame: CGRect) -> CGRect {
     let window = windows.firstMatch
     let viewport = scrollFrame.intersection(window.frame)
     guard !viewport.isEmpty else { return .null }
@@ -165,8 +165,8 @@ extension XCUIApplication {
   }
 
   /// Opt-in only: other UI tests keep the established timed demo behavior.
-  func launchControlledDemo() {
-    launchArguments = ["-beid-ui-test", "-beid-controlled-demo"]
+  func launchControlledDemo(extraArguments: [String] = []) {
+    launchArguments = ["-beid-ui-test", "-beid-controlled-demo"] + extraArguments
     launch()
   }
 
