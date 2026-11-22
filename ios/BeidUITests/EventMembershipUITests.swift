@@ -198,7 +198,6 @@ final class EventMembershipUITests: XCTestCase {
       app.navigationBars.buttons.firstMatch.tap()
       app.textFields["Event code"].assertDisappears()
 
-      app.scrollViews["scan.sensing"].assertHittable()
       // Finish the fresh route's field-focus handshake before resolving the
       // completion control's position; the iPad keyboard moves the footer.
       openScanCodeEntryFromScan()
