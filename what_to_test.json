@@ -1,6 +1,10 @@
 [
   {
     "language": "en-US",
-    "text": "This build sends your signed attendance observations to the event's server while you take part, as Android already does. Join the test event from the nearby card, keep the app in front and the screen unlocked for about ten minutes next to the other test phones, and check that Recording starts and the record grows. Tell us if the app says it could not send, or if anything looks different from the last build."
+    "text": "This build brings the reworked v1.1 screens: a simpler Sensing screen that asks before it stops, plain titles on Now and Records, Records switching between all records and by event without leaving the tab, each session of an event opening its own record, and the Account sheet opening at full height. Join the test event from the nearby card, stop it, then open the record from Records. Tell us where anything is hard to find or looks wrong, on iPhone or iPad."
+  },
+  {
+    "language": "ja",
+    "text": "v1.1 の画面を整えたビルドです。センシング画面をすっきりさせて止める前に確認するようにし、Now と Records の見出しを標準の形にし、Records で「すべて」と「イベントごと」をタブのまま切り替えられるようにしました。イベントの各セッションからはそれぞれの記録が開き、アカウント画面は最初から全体の高さで開きます。近くのカードからテストイベントに参加して止め、Records から記録を開いてみてください。iPhone でも iPad でも、見つけにくい所やおかしく見える所があれば教えてください。"
   }
 ]
