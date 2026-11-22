@@ -477,12 +477,12 @@ runs the checked-in UI list and `BeidTests` minus the three deferred suites in t
 In full mode it uploads a tar of `Build/Products` (including `.xctestrun`), then
 **iOS full tests (${{ matrix.lane }})** runs a unit lane and duration-balanced UI
 lanes via `test-without-building`, each with fresh simulator/DerivedData/results.
-`IOS_UI_SHARDS` in the workflow is the single count setting: 4 by default, 2
-and 3 supported. At most five macOS jobs run together. Product SHA, Xcode build, SDK
+`IOS_UI_SHARDS` in the workflow is the single count setting: 5 by default, 2–4
+also supported. At most six macOS jobs run together. Product SHA, Xcode build, SDK
 and architecture must match before extraction; permissions/symlinks survive tar.
 The aggregate requires every needed job to succeed, the UI shard union to equal
 the runtime enumeration without duplicates, and every enumerated test to be
-checked. Anything not on the per-environment skip list must pass. The two iPhone
+checked. Anything not on the per-environment skip list must pass. The three iPhone
 UI exclusions in `scripts/ios-ui-iphone-skips.txt` and the Debug Simulator unit
 exclusions in `scripts/ios-unit-debug-simulator-skips.txt` must exist and report
 Skipped; a listed test that passes is a stale-list failure. Structured results and
