@@ -19,7 +19,7 @@ DEFAULT_LIST = Path("ios/ci/ui-smoke-tests.txt")
 DEFAULT_DURATIONS = Path("scripts/ios-ui-durations.json")
 IPHONE_SKIPS = Path("scripts/ios-ui-iphone-skips.txt")
 UNIT_SKIPS = Path("scripts/ios-unit-debug-simulator-skips.txt")
-UI_SHARD_COUNTS = (2, 3, 4)
+UI_SHARD_COUNTS = (2, 3, 4, 5)
 SMOKE_DEFERRED_UNIT_SUITES = (
     "ReportSubmissionOperatorIntegrationTests",
     "ProductionVenueBundleVerifierTests",
@@ -70,7 +70,7 @@ def shard_tests(tests, durations, count):
     """Longest-first scheduling, with identifier and shard index as tie breakers."""
     tests = unique_tests(tests, "BeidUITests")
     if isinstance(count, bool) or count not in UI_SHARD_COUNTS:
-        raise ValueError("UI shard count must be 2, 3, or 4")
+        raise ValueError("UI shard count must be 2 through 5")
     weights = {}
     for test in tests:
         # New methods always get a positive weight and exactly one assignment.
@@ -86,6 +86,12 @@ def shard_tests(tests, durations, count):
     if any(not shard for shard in shards):
         raise ValueError("empty UI shard")
     return [sorted(shard) for shard in shards]
+
+
+def ui_shard_lanes(shards):
+    if not isinstance(shards, list) or len(shards) not in UI_SHARD_COUNTS or any(not shard for shard in shards):
+        raise ValueError("missing UI shards")
+    return {f"ui-{index + 1}": shard for index, shard in enumerate(shards)}
 
 
 def result_cases(payload):
@@ -192,12 +198,10 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
         unit_skips = [test for test in unit_skips if test in unit]
         lanes = {"build": unit + manifest["smoke"]}
     else:
-        shards = manifest.get("shards", [])
-        if not isinstance(shards, list) or len(shards) not in UI_SHARD_COUNTS or any(not shard for shard in shards):
-            raise ValueError("missing UI shards")
-        if Counter(test for shard in shards for test in shard) != Counter(ui):
+        ui_lanes = ui_shard_lanes(manifest.get("shards"))
+        if Counter(test for shard in ui_lanes.values() for test in shard) != Counter(ui):
             raise ValueError("UI shard union has a gap or duplicate")
-        lanes = {"unit": unit, **{f"ui-{index + 1}": shard for index, shard in enumerate(shards)}}
+        lanes = {"unit": unit, **ui_lanes}
     if evidence.keys() != lanes.keys():
         raise ValueError(f"missing or extra lane artifacts: expected={sorted(lanes)}, actual={sorted(evidence)}")
     all_cases = []
@@ -425,8 +429,11 @@ def main() -> int:
                 arguments = selection_arguments("smoke", manifest["smoke"])
             elif args.lane == "unit" and manifest["mode"] == "full":
                 selected, arguments = manifest["unit"], ["-only-testing:BeidTests"]
-            elif re.fullmatch(r"ui-[1-4]", args.lane) and manifest["mode"] == "full":
-                selected = manifest["shards"][int(args.lane[-1]) - 1]
+            elif manifest["mode"] == "full":
+                ui_lanes = ui_shard_lanes(manifest.get("shards"))
+                if args.lane not in ui_lanes:
+                    raise ValueError(f"invalid lane: {args.lane}")
+                selected = ui_lanes[args.lane]
                 arguments = [f"-only-testing:{test}" for test in selected]
             else:
                 raise ValueError(f"invalid lane: {args.lane}")
