@@ -12,6 +12,24 @@ final class FlatScreenshotTourD: XCTestCase {
     continueAfterFailure = false
   }
 
+  func testAccountSheetKeepsItsHeightWhenOpeningOrganizerTools() {
+    openAccount()
+    let done = app.buttons["Done"]
+    done.assertHittable()
+    let accountTop = done.frame.minY
+    let viewport = app.windows.firstMatch.frame
+    XCTAssertLessThan(accountTop, viewport.minY + viewport.height / 4,
+                      "Account should open at full height")
+    let organizer = app.buttons["Organizer tools"]
+    organizer.assertHittable()
+    organizer.tap()
+    app.buttons["organizer.venueBroadcast"].assertHittable()
+    let destinationBar = app.navigationBars.firstMatch
+    XCTAssertTrue(destinationBar.exists)
+    XCTAssertEqual(destinationBar.frame.minY, accountTop, accuracy: 36,
+                   "The sheet must already be at full height before pushing Organizer tools")
+  }
+
   func testAccountRemovesWalletRowsEvenWithLegacyConnectedFixture() {
     openAccount()
     app.buttons["Organizer tools"].assertHittable()
