@@ -953,6 +953,17 @@
         }
       }
     },
+    "Stop and keep record" : {
+      "comment" : "Alert button: stops sensing and keeps the record already created for this event.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop and keep record"
+          }
+        }
+      }
+    },
     "Stop sensing": {
       "comment": "Collection Home action that stops the active sensing session.",
       "localizations": {
@@ -960,6 +971,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop sensing"
+          }
+        }
+      }
+    },
+    "Stop sensing?" : {
+      "comment" : "Title of the alert shown when the participant taps Stop sensing during a live session.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop sensing?"
           }
         }
       }
@@ -1384,8 +1406,28 @@
     "Sensing": {},
     "Sensing details": {},
     "Event name": {},
-    "Any record created will be saved on this device.": {},
-    "Your record will be saved on this device.": {},
+    "Any record created will be saved on this device." : {
+      "comment" : "Stop alert message when no record exists yet; sensing continues while the alert is open, so one may still be created.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Any record created will be saved on this device."
+          }
+        }
+      }
+    },
+    "Your record will be saved on this device." : {
+      "comment" : "Stop alert message when a record already exists for this event.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your record will be saved on this device."
+          }
+        }
+      }
+    },
     "Your record is saved on this device. You'll find it in Records.": {},
     "Your record is saved on this device. You can close the app.": {},
     "Record saved": {},
