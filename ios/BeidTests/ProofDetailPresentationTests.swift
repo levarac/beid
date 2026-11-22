@@ -37,11 +37,11 @@ final class ProofDetailPresentationTests: XCTestCase {
         let value = makePresentation(selfProof: selfProof, binding: binding, incomplete: true)
         XCTAssertEqual(value.status, "Recording incomplete")
         XCTAssertEqual(value.incompleteReason,
-                       "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
+                       "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this device.")
         XCTAssertEqual(value.signature, "NOT AVAILABLE")
         XCTAssertFalse(value.isSealedOnDevice)
         let ladder = RecordSendingLadderPresentation(hasSelfProof: value.isSealedOnDevice, records: nil)
-        XCTAssertEqual(ladder.rungs[0].title, "RECORDED ON THIS PHONE")
+        XCTAssertEqual(ladder.rungs[0].title, "RECORDED ON THIS DEVICE")
         XCTAssertFalse(ladder.rungs[0].reached)
       }
     }

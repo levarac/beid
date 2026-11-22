@@ -79,7 +79,7 @@ struct EventCardView<Caption: View>: View {
 
 #Preview("Detected") {
   EventCardView(event: .demoSample, badge: .detected) {
-    Text("Keep the app open nearby to help phones observe each other and keep signed records.")
+    Text("Keep the app open nearby to help devices observe each other and keep signed records.")
       .font(DS.Font.meta)
       .foregroundStyle(DS.Color.textSecondary)
   }

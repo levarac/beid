@@ -62,13 +62,13 @@ final class NowNavigationUITests: XCTestCase {
     app.tabButton("Records").tap()
     app.scrollViews["records.grid"].assertExists()
     let recordTiles = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record."))
-    XCTAssertEqual(recordTiles.count, 4, "Two saved sessions of one event must share one Attendance tile")
-    XCTAssertTrue(app.staticTexts["4 records · 4 events"].exists)
+    XCTAssertEqual(recordTiles.count, 4, "Two saved sessions of one event must share one record tile")
+    XCTAssertFalse(app.staticTexts["4 records · 4 events"].exists)
 
     let repeatedEvent = app.buttons.matching(NSPredicate(format: "label == %@", "Record for DevCon Bangkok 2025"))
     XCTAssertEqual(repeatedEvent.count, 1)
     repeatedEvent.firstMatch.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "record.session."))
     sessions.firstMatch.scrollToHittable(in: app)
     XCTAssertEqual(sessions.count, 2, "Both stored sessions must remain accessible from the event record")
@@ -80,17 +80,22 @@ final class NowNavigationUITests: XCTestCase {
       session.tap()
       app.staticTexts["observation-detail.title"].assertExists()
       app.staticTexts["observation-detail.unavailable"].assertExists()
-      let ownRecord = app.buttons["View this session's record"]
-      ownRecord.scrollToHittable(in: app)
-      ownRecord.tap()
-      app.staticTexts["proof.detail.title"].assertExists()
-      let recordID = String(identifier.dropFirst("record.session.".count))
-      app.staticTexts.matching(NSPredicate(format: "label == %@", "Record ID \(recordID)")).firstMatch.assertExists()
+      XCTAssertFalse(app.buttons["View this session's record"].exists)
       app.navigationBars.buttons.firstMatch.tap()
-      app.staticTexts["observation-detail.title"].assertExists()
-      app.navigationBars.buttons.firstMatch.tap()
-      app.staticTexts["proof.detail.title"].assertExists()
+      app.scrollViews["proof.detail.content"].assertExists()
     }
+    app.navigationBars.buttons.firstMatch.tap()
+    app.openRecordsByEvent()
+    app.buttons["home.past-event.DEVCON-BANGKOK"].assertHittable()
+    app.buttons["home.past-event.DEVCON-BANGKOK"].tap()
+    app.buttons["event-detail.observation.1"].assertHittable()
+    app.buttons["event-detail.observation.1"].tap()
+    let ownRecord = app.buttons["View this session's record"]
+    ownRecord.scrollToHittable(in: app)
+    ownRecord.tap()
+    app.scrollViews["proof.detail.content"].assertExists()
+    let recordID = String(identifiers[0].dropFirst("record.session.".count))
+    app.staticTexts.matching(NSPredicate(format: "label == %@", "Record ID \(recordID)")).firstMatch.assertExists()
   }
 
   func testCodeFallbackAppearsAtThirtySecondsAndResetsAfterCandidates() {

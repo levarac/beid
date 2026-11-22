@@ -242,7 +242,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
     let record = recordTiles.firstMatch
     record.scrollToHittable(in: app)
     record.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     app.staticTexts["SIGNATURE"].assertExists()
     app.staticTexts.matching(identifier: "NOT AVAILABLE").firstMatch.assertExists()
     XCTAssertFalse(app.staticTexts["Sealed"].exists)

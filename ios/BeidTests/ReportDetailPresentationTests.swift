@@ -9,7 +9,7 @@ final class ReportDetailPresentationTests: XCTestCase {
     let pending = RecordSendingLadderPresentation(hasSelfProof: true, records: [record(state: .submitting)])
     XCTAssertEqual(pending.rungs.map(\.number), [1, 2, 3, 4])
     XCTAssertEqual(pending.rungs.map(\.title), [
-      "SEALED ON THIS PHONE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"
+      "SEALED ON THIS DEVICE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"
     ])
     XCTAssertEqual(pending.rungs.map(\.reached), [true, false, false, false])
 
@@ -33,7 +33,7 @@ final class ReportDetailPresentationTests: XCTestCase {
     let mixed = RecordSendingLadderPresentation(hasSelfProof: false, records: [
       record(state: .accepted, receipt: "ab"), record(state: .prepared)
     ])
-    XCTAssertEqual(mixed.rungs[0].title, "RECORDED ON THIS PHONE")
+    XCTAssertEqual(mixed.rungs[0].title, "RECORDED ON THIS DEVICE")
     XCTAssertEqual(mixed.rungs.map(\.reached), [false, false, false, false])
     for records in [nil, []] as [[ReportSubmissionRecord]?] {
       let missing = RecordSendingLadderPresentation(hasSelfProof: false, records: records)
@@ -56,7 +56,7 @@ final class ReportDetailPresentationTests: XCTestCase {
 
   func testPreparedTimeIsOnlyShownForPreparation() {
     let presentation = ReportDetailPresentation(record: record(state: .prepared))
-    XCTAssertEqual(presentation.caption, "PREPARED ON THIS PHONE")
+    XCTAssertEqual(presentation.caption, "PREPARED ON THIS DEVICE")
     XCTAssertEqual(presentation.delivery, "NOT SENT")
     XCTAssertTrue(presentation.showsPreparedAt)
   }
@@ -92,7 +92,7 @@ final class ReportDetailPresentationTests: XCTestCase {
     let progress = ReportProgressPresentation(records: records)
     XCTAssertEqual(progress.summary, "1 OF 3 RECEIVED")
     XCTAssertEqual(progress.receivedCount, 1)
-    XCTAssertEqual(ReportProgressPresentation(records: [records[1]]).summary, "PREPARED ON THIS PHONE")
+    XCTAssertEqual(ReportProgressPresentation(records: [records[1]]).summary, "PREPARED ON THIS DEVICE")
     XCTAssertEqual(ReportProgressPresentation(records: [records[2]]).summary, "STATUS UNAVAILABLE")
     XCTAssertEqual(ReportProgressPresentation(records: []).summary, "NO LINKED REPORTS")
   }
