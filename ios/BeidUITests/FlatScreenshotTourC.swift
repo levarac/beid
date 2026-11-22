@@ -126,20 +126,20 @@ final class FlatScreenshotTourC: XCTestCase {
       app.tabButton("Now").assertHittable()
       app.buttons["home.demo.join"].assertHittable()
       app.buttons["home.demo.join"].tap()
-      app.descendants(matching: .any)["scan.sensing-session"].assertExists()
+      let sensing = app.scrollViews["scan.sensing-session"]
+      sensing.assertExists()
       let hint = app.buttons["scan.first-time.about"]
       if firstLaunch {
-        hint.scrollToHittable(in: app)
+        hint.scrollToHittable(in: app, within: sensing)
         // The glyph-bearing control supplies a spoken label for VoiceOver.
         XCTAssertEqual(hint.label, "How sensing works")
         hint.tap()
         let about = app.scrollViews["aboutSensing.scroll"]
-        about.assertHittable()
         let heading = about.staticTexts["HOW IT WORKS"]
-        for _ in 0..<5 where !heading.exists || !heading.isHittable { about.swipeUp() }
-        heading.assertHittable()
+        heading.scrollToHittable(in: app, within: about)
+        app.navigationBars.buttons.firstMatch.assertHittable()
         app.navigationBars.buttons.firstMatch.tap()
-        hint.scrollToHittable(in: app)
+        hint.scrollToHittable(in: app, within: sensing)
       } else {
         for _ in 0..<3 { app.swipeUp() }
         XCTAssertFalse(hint.exists)

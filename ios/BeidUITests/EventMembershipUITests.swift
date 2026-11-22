@@ -253,19 +253,26 @@ final class EventMembershipUITests: XCTestCase {
     XCTAssertFalse(app.buttons["scan.stop-sensing"].exists)
   }
 
+  private enum ScanCodeEntrySource: String {
+    case discovery = "scan.sensing"
+    case joinRefusal = "scan.cant-join"
+  }
+
   private func assertScanCodeEntryCanPopAndReopen() {
-    for fixture in ["-beid-clock-preflight-fixture", "-beid-join-refusal-fixture"] {
+    let routes: [(String, ScanCodeEntrySource)] = [
+      ("-beid-clock-preflight-fixture", .discovery),
+      ("-beid-join-refusal-fixture", .joinRefusal),
+    ]
+    for (fixture, source) in routes {
       launchCodeProgressFixture(extraArguments: [fixture])
-      openScanCodeEntry()
+      openScanCodeEntry(from: source)
       app.textFields["Event code"].typeText("ABANDONED\n")
       assertCodeLookupPending()
       app.navigationBars.buttons.firstMatch.tap()
       app.textFields["Event code"].assertDisappears()
 
       // Each code entry route must return to its own source.
-      let source = fixture == "-beid-clock-preflight-fixture" ? "scan.sensing" : "scan.cant-join"
-      app.scrollViews[source].assertHittable()
-      openScanCodeEntryFromScan()
+      openScanCodeEntryFromScan(source)
       app.buttons["fixture.code.fail"].tap()
       assertCodeReceipt("submissions=1 resumed=1")
       assertFreshCodeEntry()
@@ -282,15 +289,23 @@ final class EventMembershipUITests: XCTestCase {
     }
   }
 
-  private func openScanCodeEntry() {
+  private func openScanCodeEntry(from source: ScanCodeEntrySource = .discovery) {
     app.buttons["home.demo.join"].assertHittable()
     app.buttons["home.demo.join"].tap()
-    openScanCodeEntryFromScan()
+    openScanCodeEntryFromScan(source)
   }
 
-  private func openScanCodeEntryFromScan() {
+  private func openScanCodeEntryFromScan(_ source: ScanCodeEntrySource = .discovery) {
     let entry = app.buttons["scan.manual-entry"]
-    entry.scrollToHittable(in: app)
+    let scrollView = app.scrollViews[source.rawValue]
+    switch source {
+    case .discovery:
+      // The pre-join action is in the fixed bottom inset.
+      scrollView.assertExists()
+      entry.assertHittable()
+    case .joinRefusal:
+      entry.scrollToHittable(in: app, within: scrollView)
+    }
     entry.tap()
     app.textFields["Event code"].assertHittable()
     app.textFields["Event code"].tap()
