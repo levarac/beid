@@ -92,13 +92,7 @@ extension XCUIElement {
       let target = frame
       guard !visible.isEmpty, !target.isEmpty, target.maxY <= visible.minY else { break }
 
-      let quarter = visible.height * 0.25
-      let center = scrollView.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
-        dx: visible.midX - scrollFrame.minX, dy: visible.midY - scrollFrame.minY
-      ))
-      let start = center.withOffset(CGVector(dx: 0, dy: -quarter))
-      let end = center.withOffset(CGVector(dx: 0, dy: quarter))
-      start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+      scrollView.drag(in: visible, scrollFrame: scrollFrame, upward: false)
       drags += 1
     }
     assertHittable(
@@ -106,6 +100,46 @@ extension XCUIElement {
       failureContext: "\nScroll gestures: swipes=\(swipes) drags=\(drags) " +
         "lastFrame=\(exists ? String(describing: frame) : "<absent>")"
     )
+  }
+
+  /// Scroll an existing target into a specific screen's usable content area.
+  /// Check its full frame as well as the accessibility hit test.
+  func scrollToHittable(
+    in app: XCUIApplication, within scrollView: XCUIElement,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
+    scrollView.assertExists(file: file, line: line)
+    assertExists(file: file, line: line)
+
+    var drags = 0
+    for _ in 0..<5 {
+      let scrollFrame = scrollView.frame
+      let visible = app.visibleScrollFrame(for: scrollFrame)
+      let target = frame
+      guard !visible.isEmpty, !target.isEmpty, !visible.contains(target) else { break }
+      scrollView.drag(in: visible, scrollFrame: scrollFrame, upward: target.minY >= visible.minY)
+      drags += 1
+    }
+
+    let (state, passed, target) = waitForState {
+      $0 && scrollView.exists && app.visibleScrollFrame(for: scrollView.frame).contains(self.frame) && self.isHittable
+    }
+    XCTAssertTrue(
+      passed,
+      "Element did not become hittable inside the scroll viewport within \(UITestWait.timeout)s; " +
+        "exists=\(state.exists), drags=\(drags), lastFrame=\(exists ? String(describing: frame) : "<absent>")\n\(target)",
+      file: file, line: line
+    )
+  }
+
+  private func drag(in visible: CGRect, scrollFrame: CGRect, upward: Bool) {
+    let center = coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+      dx: visible.midX - scrollFrame.minX, dy: visible.midY - scrollFrame.minY
+    ))
+    let offset = visible.height * (upward ? 0.25 : -0.25)
+    let start = center.withOffset(CGVector(dx: 0, dy: offset))
+    let end = center.withOffset(CGVector(dx: 0, dy: -offset))
+    start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
   }
 }
 

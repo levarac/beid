@@ -138,7 +138,7 @@ final class FlatScreenshotTourC: XCTestCase {
     }
 
     for firstLaunch in [true, false] {
-      app.launchArguments = ["-beid-ui-test"]
+      app.launchArguments = ["-beid-ui-test", "-beid-controlled-demo"]
       if firstLaunch {
         app.launchArguments += ["-beid.sensing.firstTimeHintShown", "NO"]
       }
@@ -150,20 +150,26 @@ final class FlatScreenshotTourC: XCTestCase {
       app.tabButton("Now").assertHittable()
       app.buttons["home.demo.join"].assertHittable()
       app.buttons["home.demo.join"].tap()
-      app.descendants(matching: .any)["scan.sensing-session"].assertExists()
+      // Recording mounts its own scroll view. Drive the demo to that
+      // phase before reading or changing the scroll position.
+      app.advanceDemo(to: .recording)
+      let sensing = app.scrollViews["scan.sensing-session"]
+      sensing.assertExists()
       let hint = app.buttons["scan.first-time.about"]
       if firstLaunch {
-        hint.scrollToHittable(in: app)
+        hint.scrollToHittable(in: app, within: sensing)
+        let stop = app.buttons["scan.stop-sensing"]
+        stop.assertHittable()
+        XCTAssertLessThanOrEqual(hint.frame.maxY, stop.frame.minY, "The hint must scroll fully above Stop")
         // The glyph-bearing control supplies a spoken label for VoiceOver.
         XCTAssertEqual(hint.label, "How sensing works")
         hint.tap()
         let about = app.scrollViews["aboutSensing.scroll"]
-        about.assertHittable()
         let heading = about.staticTexts["HOW IT WORKS"]
-        for _ in 0..<5 where !heading.exists || !heading.isHittable { about.swipeUp() }
-        heading.assertHittable()
+        heading.scrollToHittable(in: app, within: about)
+        app.navigationBars.buttons.firstMatch.assertHittable()
         app.navigationBars.buttons.firstMatch.tap()
-        hint.scrollToHittable(in: app)
+        hint.scrollToHittable(in: app, within: sensing)
       } else {
         for _ in 0..<3 { app.swipeUp() }
         XCTAssertFalse(hint.exists)
