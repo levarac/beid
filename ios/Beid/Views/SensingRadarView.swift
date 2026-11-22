@@ -50,6 +50,23 @@ enum SensingRadarProjection {
       .map { $0 * scale }
   }
 
+  /// Draws progress only for an observed window, using its actual clock
+  /// boundary so a late first detection does not start a new five minutes.
+  static func recordedWindowMarkDiameter(
+    observedWindowIndex: Int64?,
+    secondsSince1970: TimeInterval,
+    windowDuration: TimeInterval,
+    size: CGFloat
+  ) -> CGFloat? {
+    guard let observedWindowIndex, windowDuration > 0 else { return nil }
+    let elapsed = secondsSince1970 - Double(observedWindowIndex) * windowDuration
+    guard elapsed >= 0, elapsed <= windowDuration else { return nil }
+    let scale = scale(for: size)
+    let inner = DS.Size.radarRingInner * scale
+    let outer = DS.Size.radarRingOuter * scale
+    return inner + (outer - inner) * CGFloat(elapsed / windowDuration)
+  }
+
   /// FNV-1a 64 over UTF-8, matching `sigilPeerHash` in shared's
   /// `SigilLayout.kt`. Swift's `hashValue` is process-seeded and would rotate
   /// every peer between launches. The caller must pass a stable normalized ID.
@@ -136,19 +153,22 @@ struct SensingRadarView: View {
   let observedWindowCount: Int
   let showsEdges: Bool
   let size: CGFloat
+  let recordedWindowMarkDiameter: CGFloat?
 
   init(
     peers: [SensingRadarPeer],
     mutualDeviceCount: Int,
     observedWindowCount: Int,
     showsEdges: Bool = true,
-    size: CGFloat = DS.Size.radarField
+    size: CGFloat = DS.Size.radarField,
+    recordedWindowMarkDiameter: CGFloat? = nil
   ) {
     self.peers = peers
     self.mutualDeviceCount = mutualDeviceCount
     self.observedWindowCount = observedWindowCount
     self.showsEdges = showsEdges
     self.size = size
+    self.recordedWindowMarkDiameter = recordedWindowMarkDiameter
   }
 
   var body: some View {
@@ -159,6 +179,12 @@ struct SensingRadarView: View {
         Circle()
           .stroke(DS.Color.strokeHairlineOnInk, lineWidth: DS.Size.hairline)
           .frame(width: diameter, height: diameter)
+      }
+
+      if let recordedWindowMarkDiameter {
+        Circle()
+          .stroke(DS.Color.labelOnActionPrimary, lineWidth: DS.Size.hairline)
+          .frame(width: recordedWindowMarkDiameter, height: recordedWindowMarkDiameter)
       }
 
       ForEach(projection.edges, id: \.peerID) { edge in

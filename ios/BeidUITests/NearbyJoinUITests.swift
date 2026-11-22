@@ -85,22 +85,38 @@ final class NowNavigationUITests: XCTestCase {
 
     let repeatedEvent = app.buttons.matching(NSPredicate(format: "label == %@", "Record for DevCon Bangkok 2025"))
     XCTAssertEqual(repeatedEvent.count, 1)
-    repeatedEvent.firstMatch.tap()
+    let tile = repeatedEvent.firstMatch
+    let parentRecordID = String(tile.identifier.dropFirst("records.record.".count))
+    tile.tap()
     app.scrollViews["proof.detail.content"].assertExists()
     let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "record.session."))
     sessions.firstMatch.scrollToHittable(in: app)
     XCTAssertEqual(sessions.count, 2, "Both stored sessions must remain accessible from the event record")
     let identifiers = sessions.allElementsBoundByIndex.map(\.identifier)
     XCTAssertEqual(Set(identifiers).count, 2)
+    XCTAssertTrue(identifiers.contains("record.session.\(parentRecordID)"))
     for identifier in identifiers {
       let session = app.buttons[identifier]
       session.scrollToHittable(in: app)
       session.tap()
       app.staticTexts["observation-detail.title"].assertExists()
       app.staticTexts["observation-detail.unavailable"].assertExists()
-      XCTAssertFalse(app.buttons["View this session's record"].exists)
+      let sessionRecordID = String(identifier.dropFirst("record.session.".count))
+      let ownRecord = app.buttons["View this session's record"]
+      if sessionRecordID == parentRecordID {
+        XCTAssertFalse(ownRecord.exists, "Back already leads to this session's record")
+      } else {
+        XCTAssertTrue(ownRecord.exists, "A different session must link to its own record")
+        ownRecord.scrollToHittable(in: app)
+        ownRecord.tap()
+        app.scrollViews["proof.detail.content"].assertExists()
+        app.staticTexts.matching(NSPredicate(format: "label == %@", "Record ID \(sessionRecordID)")).firstMatch.assertExists()
+        app.navigationBars.buttons.firstMatch.tap()
+        app.staticTexts["observation-detail.title"].assertExists()
+      }
       app.navigationBars.buttons.firstMatch.tap()
       app.scrollViews["proof.detail.content"].assertExists()
+      app.staticTexts.matching(NSPredicate(format: "label == %@", "Record ID \(parentRecordID)")).firstMatch.assertExists()
     }
     app.navigationBars.buttons.firstMatch.tap()
     app.openRecordsByEvent()
