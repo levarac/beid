@@ -222,12 +222,12 @@
         }
       }
     },
-    "Kept on this phone": {
+    "Kept on this device": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kept on this phone"
+            "value": "Kept on this device"
           }
         }
       }
@@ -362,12 +362,12 @@
         }
       }
     },
-    "EVENT WINDOWS ON THIS PHONE": {
+    "EVENT WINDOWS ON THIS DEVICE": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "EVENT WINDOWS ON THIS PHONE"
+            "value": "EVENT WINDOWS ON THIS DEVICE"
           }
         }
       }
@@ -532,12 +532,12 @@
         }
       }
     },
-    "PREPARED ON THIS PHONE": {
+    "PREPARED ON THIS DEVICE": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "PREPARED ON THIS PHONE"
+            "value": "PREPARED ON THIS DEVICE"
           }
         }
       }
@@ -562,22 +562,22 @@
         }
       }
     },
-    "SEALED ON THIS PHONE": {
+    "SEALED ON THIS DEVICE": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "SEALED ON THIS PHONE"
+            "value": "SEALED ON THIS DEVICE"
           }
         }
       }
     },
-    "RECORDED ON THIS PHONE": {
+    "RECORDED ON THIS DEVICE": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "RECORDED ON THIS PHONE"
+            "value": "RECORDED ON THIS DEVICE"
           }
         }
       }
@@ -1078,7 +1078,7 @@
       }
     },
     "detail.devicesSensed.label": {
-      "comment": "Metric row label on Proof Detail and Signal Lost, paired with a number. \"Devices\", not people: it counts distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual or reciprocal confirmation — this device cannot tell whether a peer also observed it back. Use your language's word for a phone or handset, not a word for a person or a peer.",
+      "comment": "Metric row label on Proof Detail and Signal Lost, paired with a number. \"Devices\", not people: it counts distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual or reciprocal confirmation — this device cannot tell whether a peer also observed it back. Use your language's word for a device, not a word for a person or a peer.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -1383,6 +1383,7 @@
     "Sense Event": {},
     "Sensing": {},
     "Sensing details": {},
+    "Event name": {},
     "Any record created will be saved on this device.": {},
     "Your record will be saved on this device.": {},
     "Your record is saved on this device. You'll find it in Records.": {},
@@ -2287,7 +2288,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone."
+            "value": "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this device."
           }
         }
       }
@@ -2508,6 +2509,9 @@
       "comment": "Button: copies the full, unshortened event identifier to the system clipboard."
     },
     "Event": {},
+    "Record": {
+      "comment": "Navigation title for a saved participation record."
+    },
     "Event ID": {},
     "Fetching the pack took too long. Check the network and try again.": {},
     "Getting pack": {},
@@ -2818,7 +2822,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "RECORDED ON THIS PHONE"
+            "value": "RECORDED ON THIS DEVICE"
           }
         }
       }
@@ -3029,7 +3033,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "PREPARED ON THIS PHONE"
+            "value": "PREPARED ON THIS DEVICE"
           }
         }
       }
@@ -3128,7 +3132,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "RECORDED ON THIS PHONE"
+            "value": "RECORDED ON THIS DEVICE"
           }
         }
       }
@@ -3282,7 +3286,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "PREPARED ON THIS PHONE · %@"
+            "value": "PREPARED ON THIS DEVICE · %@"
           }
         }
       }
@@ -4068,7 +4072,7 @@
         }
       }
     },
-    "Records stay on this phone until sending is turned on for this build.": {},
+    "Records stay on this device until sending is turned on for this build.": {},
     "SENDING STATUS · ALL SAVED OBSERVATIONS": {},
     "Sensing runs quietly in the background. Nothing to tap.": {},
     "Signal Lost": {},
@@ -4153,13 +4157,13 @@
         }
       }
     },
-    "Scan the organizer's QR code, then check the event before starting this phone's broadcast.": {
+    "Scan the organizer's QR code, then check the event before starting this device's broadcast.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scan the organizer's QR code, then check the event before starting this phone's broadcast."
+            "value": "Scan the organizer's QR code, then check the event before starting this device's broadcast."
           }
         }
       }

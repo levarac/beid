@@ -32,7 +32,7 @@ struct ProofDetailPresentation {
     incompleteReason = selfProofDiscardedForKeyChange
       ? String(
         localized: "proofDetail.incompleteReason",
-        defaultValue: "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.",
+        defaultValue: "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this device.",
         comment: "Reason for an incomplete stored record after signing-key continuity failed. The record and its session/report evidence are retained."
       )
       : nil
@@ -142,15 +142,7 @@ struct ItemDetailView: View {
             isDeviceRecord: true
           )
           .frame(maxWidth: .infinity)
-          .padding(.top, DS.Space.s)
-
-          Text("Attendance\nRecord")
-            .beidTextStyle(DS.Font.Library.display46)
-            .foregroundStyle(DS.Color.textPrimary)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityIdentifier("proof.detail.title")
-            .padding(.top, DS.Space.l + DS.Space.xs)
+          .padding(.top, DS.Space.l + DS.Space.xs)
 
           if let reason = presentation.incompleteReason {
             VStack(alignment: .leading, spacing: DS.Space.s) {
@@ -168,6 +160,21 @@ struct ItemDetailView: View {
           }
 
           VStack(spacing: 0) {
+            DisclosureGroup {
+              Text(verbatim: proof.eventName)
+                .beidTextStyle(DS.Font.Library.body15)
+                .foregroundStyle(DS.Color.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, DS.Space.s)
+            } label: {
+              Text("Event name")
+                .beidTextStyle(DS.Font.Library.title15)
+                .foregroundStyle(DS.Color.textPrimary)
+            }
+            .accessibilityIdentifier("record.event-name.disclosure")
+            .tint(DS.Color.textPrimary)
+            .padding(.vertical, DS.Space.m)
             keyValueRow(
               String(localized: "RECORD ID"),
               value: RecordIDDisplay.abbreviated(proof.id),
@@ -182,7 +189,7 @@ struct ItemDetailView: View {
             keyValueRow(String(localized: "SIGNATURE"), value: presentation.signature)
             keyValueRow(String(localized: "WITH"), value: presentation.withValue)
           }
-          .padding(.top, DS.Space.xs)
+          .padding(.top, DS.Space.l)
 
           LinkedReportsSection(
             heading: String(
@@ -213,8 +220,9 @@ struct ItemDetailView: View {
         .padding(.horizontal, DS.Space.pageMargin)
       }
     }
+    .accessibilityIdentifier("proof.detail.content")
     .background(DS.Color.surfaceCanvas.ignoresSafeArea())
-    .navigationTitle(proof.eventName)
+    .navigationTitle(Text(verbatim: proof.eventName))
     .navigationBarTitleDisplayMode(.inline)
   }
 
@@ -288,7 +296,7 @@ struct RecordSendingLadderPresentation {
       sentTitle = String(localized: "SENT TO ORGANIZER")
     }
     rungs = [
-      Rung(number: 1, title: String(localized: hasSelfProof ? "SEALED ON THIS PHONE" : "RECORDED ON THIS PHONE"), reached: hasSelfProof),
+      Rung(number: 1, title: String(localized: hasSelfProof ? "SEALED ON THIS DEVICE" : "RECORDED ON THIS DEVICE"), reached: hasSelfProof),
       Rung(number: 2, title: sentTitle, reached: allReceived),
       Rung(number: 3, title: String(localized: "ACCEPTED"), reached: allReceived),
       Rung(number: 4, title: String(localized: "THIRD-PARTY RESULT"), reached: false)
@@ -344,7 +352,7 @@ private struct RecordEvidenceLadder: View {
         Text("EVENT DATA").beidTextStyle(DS.Font.Library.labelMono10)
         evidence("JOIN ACTION", value: String(localized: "Joined"))
         evidence(
-          "EVENT WINDOWS ON THIS PHONE",
+          "EVENT WINDOWS ON THIS DEVICE",
           value: sensing.availableRecordedWindowCount(forEventCode: code).map { String($0) } ?? String(localized: "NOT YET AVAILABLE")
         )
         evidence(
@@ -358,7 +366,7 @@ private struct RecordEvidenceLadder: View {
 
   @ViewBuilder private func rungDetails(_ number: Int, reports: [LinkedReport]?) -> some View {
     if number == 1 {
-      Text("Kept on this phone").beidTextStyle(DS.Font.Library.body13)
+      Text("Kept on this device").beidTextStyle(DS.Font.Library.body13)
     } else if number == 4 {
       Text("NOT YET AVAILABLE").beidTextStyle(DS.Font.Library.body13)
     } else if let reports, !reports.isEmpty {

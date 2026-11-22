@@ -31,7 +31,7 @@ struct ReportDetailPresentation {
 
     switch record.submissionState {
     case .prepared:
-      caption = String(localized: "reportDetail.prepared", defaultValue: "PREPARED ON THIS PHONE")
+      caption = String(localized: "reportDetail.prepared", defaultValue: "PREPARED ON THIS DEVICE")
       delivery = String(localized: "reportDetail.notSent", defaultValue: "NOT SENT")
       receipt = String(localized: "reportDetail.notYetAvailable", defaultValue: "NOT YET AVAILABLE")
       showsPreparedAt = true
@@ -108,14 +108,14 @@ struct ReportEvidenceSection: View {
       evidenceRow("ACCEPTANCE RECEIPT", value: presentation.receipt, identifier: "\(identifierPrefix).receipt")
       evidenceRow("RECEIPT TIME", value: String(localized: "NOT YET AVAILABLE"))
       if presentation.showsPreparedAt {
-        evidenceRow("PREPARED ON THIS PHONE", value: record.createdAt.formatted(date: .abbreviated, time: .shortened))
+        evidenceRow("PREPARED ON THIS DEVICE", value: record.createdAt.formatted(date: .abbreviated, time: .shortened))
       }
       evidenceRow("OBSERVATION DIGEST", value: record.observationDigestHex)
       evidenceRow("MUTUAL OBSERVATION", value: String(localized: "NOT YET AVAILABLE"))
       evidenceRow("INCLUDED IN PUBLISHED DATA", value: String(localized: "NOT YET AVAILABLE"))
       if showsDisclosure {
         NavigationLink { WhatWeSendView() } label: {
-          BeidTextControlLabel("WHAT WAS SENT", glyph: .trailing("→", announcing: "What was sent"))
+          BeidTextControlLabel("WHAT WE SEND", glyph: .trailing("→", announcing: "What we send"))
         }
         .buttonStyle(.plain)
       }
@@ -226,7 +226,7 @@ struct ReportDetailView: View {
           WhatWeSendView()
             .toolbar(.visible, for: .navigationBar)
         } label: {
-          BeidTextControlLabel("WHAT WAS SENT", glyph: .trailing("→", announcing: "What was sent"))
+          BeidTextControlLabel("WHAT WE SEND", glyph: .trailing("→", announcing: "What we send"))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("report-detail.whatWeSend")
@@ -358,7 +358,7 @@ struct ReportDetailView: View {
     let preparedAt = formatter.string(from: record.createdAt).uppercased()
     return String(
       localized: "reportDetail.preparedAt",
-      defaultValue: "PREPARED ON THIS PHONE · \(preparedAt)",
+      defaultValue: "PREPARED ON THIS DEVICE · \(preparedAt)",
       comment: "Preparation time on this device, not a network send or operator acceptance time."
     )
   }

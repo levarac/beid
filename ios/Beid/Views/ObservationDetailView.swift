@@ -74,6 +74,7 @@ struct ObservationDetailView: View {
   let aggregate: BeidSharedKit.aggregation.SessionAggregate?
   var initialWindowIndex: Int64? = nil
   var initialReportID: UUID? = nil
+  var showsSessionRecordLink = false
   @State private var selectedWindowIndex: Int64? = nil
 
   private var selectedWindow: ObservationDetailWindow? {
@@ -134,11 +135,13 @@ struct ObservationDetailView: View {
             sensing: coordinator.sensingCoordinator
           )
           .padding(.top, DS.Space.l)
-          NavigationLink { ItemDetailView(proof: proof) } label: {
-            BeidTextControlLabel("VIEW THIS SESSION'S RECORD", glyph: .trailing("→", announcing: "View this session's record"))
+          if showsSessionRecordLink {
+            NavigationLink { ItemDetailView(proof: proof) } label: {
+              BeidTextControlLabel("VIEW THIS SESSION'S RECORD", glyph: .trailing("→", announcing: "View this session's record"))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, DS.Space.l)
           }
-          .buttonStyle(.plain)
-          .padding(.top, DS.Space.l)
         }
         .padding(.horizontal, DS.Space.pageMargin)
         .padding(.top, DS.Space.s)

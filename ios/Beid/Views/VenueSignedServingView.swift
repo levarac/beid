@@ -35,7 +35,7 @@ struct VenueSignedServingView: View {
           .beidTextStyle(DS.Font.Library.display52)
           .foregroundStyle(DS.Color.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
-        Text("Scan the organizer's QR code, then check the event before starting this phone's broadcast.")
+        Text("Scan the organizer's QR code, then check the event before starting this device's broadcast.")
           .beidTextStyle(DS.Font.Library.body15)
           .foregroundStyle(DS.Color.textSecondary)
           .padding(.top, DS.Space.m)

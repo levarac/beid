@@ -182,7 +182,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let reportID = app.descendants(matching: .any)["report-detail.record-id"]
     reportID.assertExists()
     XCTAssertTrue(reportID.label.contains(Self.linkedReportID), reportID.label)
-    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS PHONE"))
+    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS DEVICE"))
     XCTAssertTrue(app.descendants(matching: .any)["report-detail.delivery"].label.contains("NOT SENT"))
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.staticTexts["observation-detail.title"].assertExists()
@@ -223,19 +223,18 @@ final class FlatScreenshotTourC: XCTestCase {
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
-    let title = app.staticTexts["proof.detail.title"]
-    title.assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
+    XCTAssertTrue(app.navigationBars["ETH Tokyo 2026"].exists)
+    XCTAssertTrue(app.staticTexts["RECORDED ON THIS DEVICE"].exists)
     XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
     XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
     assertSignatureUnavailable(app)
-    XCTAssertTrue(app.staticTexts["RECORDED ON THIS PHONE"].exists)
     XCTAssertFalse(app.staticTexts["STATUS"].exists)
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
     XCTAssertFalse(app.buttons["Connect wallet"].exists)
     XCTAssertFalse(app.staticTexts["VERIFIED"].exists)
-    XCTAssertEqual(title.label.replacingOccurrences(of: "\n", with: " "), "Attendance Record")
 
-    let expectedTitles = ["RECORDED ON THIS PHONE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"]
+    let expectedTitles = ["RECORDED ON THIS DEVICE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"]
     for (index, expected) in expectedTitles.enumerated() {
       // Match the exposed row identifier and title, excluding its detail text.
       let rung = app.staticTexts.matching(identifier: "record.ladder.\(index + 1)")
@@ -247,6 +246,57 @@ final class FlatScreenshotTourC: XCTestCase {
       NSPredicate(format: "label == %@", "NOT YET AVAILABLE")
     )
     XCTAssertGreaterThanOrEqual(unavailableResults.count, 2)
+  }
+
+  func testRecordDetailKeepsLongEventNameAvailable() {
+    let eventName = "International Community Gathering and Technology Festival Tokyo 2026"
+    let app = launchEventDetailFixture(extraArguments: ["-beid-long-record-name-fixture"])
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars[eventName].exists)
+    let disclosure = app.buttons["record.event-name.disclosure"]
+    disclosure.scrollToHittable(in: app)
+    disclosure.tap()
+    let fullName = app.staticTexts.matching(identifier: "record.event-name.disclosure")
+      .matching(NSPredicate(format: "label == %@", eventName)).firstMatch
+    XCTAssertTrue(fullName.waitForExistence(timeout: 5))
+    XCTAssertEqual(fullName.label, eventName)
+    XCTAssertGreaterThan(fullName.frame.height, 40)
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "record-detail-long-event-name"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    app.swipeUp()
+    XCTAssertTrue(app.navigationBars[eventName].exists)
+  }
+
+  func testRecordDetailDoesNotRepeatEventNameAsHeading() {
+    let app = launchEventDetailFixture(extraArguments: [])
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    XCTAssertTrue(app.navigationBars["ETH Tokyo 2026"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["proof.detail.title"].exists,
+                   "The event name should not appear as a second heading")
+    XCTAssertTrue(app.buttons["record.event-name.disclosure"].exists)
+  }
+
+  func testSessionOpenedFromRecordHasNoParentRecordLink() {
+    let app = launchEventDetailFixture(extraArguments: [])
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "record.session.")).firstMatch
+    session.scrollToHittable(in: app)
+    session.tap()
+    XCTAssertTrue(app.staticTexts["observation-detail.title"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["View this session's record"].exists,
+                   "Back already returns to the parent record")
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(app.navigationBars["ETH Tokyo 2026"].waitForExistence(timeout: 5))
+    app.scrollViews["proof.detail.content"].assertExists()
   }
 
   func testIncompleteRecordExplainsKeyChangeAndKeepsSessionAndReportRoutes() {
@@ -264,21 +314,21 @@ final class FlatScreenshotTourC: XCTestCase {
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     let status = app.staticTexts["record.incomplete.title"]
     status.scrollToHittable(in: app)
     XCTAssertEqual(status.label, "Recording incomplete")
     let reason = app.staticTexts["record.incomplete.reason"]
     reason.scrollToHittable(in: app)
     XCTAssertEqual(reason.label,
-                   "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
+                   "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this device.")
     XCTAssertTrue(app.windows.firstMatch.frame.contains(reason.frame))
     assertSignatureUnavailable(app)
-    app.staticTexts["RECORDED ON THIS PHONE"].scrollToHittable(in: app)
+    app.staticTexts["RECORDED ON THIS DEVICE"].scrollToHittable(in: app)
     attachScreenshot(legacyBinding ? "09-incomplete-legacy-binding" : "09-incomplete-record")
     assertRecordKeepsSessionAndReportRoutes(app)
     XCTAssertEqual(reason.label,
-                   "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this phone.")
+                   "This recording could not be signed because its signing key changed or could not be verified. The record is kept on this device.")
   }
 
   func testLegacyBindingWithoutSelfProofDoesNotInventSignatureEvidence() {
@@ -291,11 +341,11 @@ final class FlatScreenshotTourC: XCTestCase {
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     assertSignatureUnavailable(app)
     XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
     XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
-    let rung = app.staticTexts["RECORDED ON THIS PHONE"]
+    let rung = app.staticTexts["RECORDED ON THIS DEVICE"]
     rung.scrollToHittable(in: app)
     if UIDevice.current.userInterfaceIdiom == .phone {
       // Reproduce a fling that leaves the rung behind the navigation bar.
@@ -309,7 +359,7 @@ final class FlatScreenshotTourC: XCTestCase {
       XCTAssertFalse(rung.isHittable)
       XCTAssertLessThan(rung.frame.maxY, navigationBar.frame.maxY, "The rung must start above the readable area.")
       rung.scrollToHittable(in: app)
-      XCTAssertEqual(rung.label, "RECORDED ON THIS PHONE")
+      XCTAssertEqual(rung.label, "RECORDED ON THIS DEVICE")
     }
     attachScreenshot("09-legacy-binding")
     assertRecordKeepsSessionAndReportRoutes(app)
@@ -322,7 +372,7 @@ final class FlatScreenshotTourC: XCTestCase {
     app.staticTexts["NOT AVAILABLE"].scrollToHittable(in: app)
     XCTAssertEqual(app.staticTexts["NOT AVAILABLE"].label, "NOT AVAILABLE")
     XCTAssertFalse(app.staticTexts["Self-signed on device"].exists)
-    XCTAssertFalse(app.staticTexts["SEALED ON THIS PHONE"].exists)
+    XCTAssertFalse(app.staticTexts["SEALED ON THIS DEVICE"].exists)
     assertNoWalletOrBindingPresentation(app)
   }
 
@@ -348,7 +398,7 @@ final class FlatScreenshotTourC: XCTestCase {
     report.tap()
     app.staticTexts["report-detail.heading"].assertExists()
     XCTAssertTrue(app.descendants(matching: .any)["report-detail.record-id"].label.contains(Self.linkedReportID))
-    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS PHONE"))
+    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS DEVICE"))
     XCTAssertTrue(app.descendants(matching: .any)["report-detail.delivery"].label.contains("NOT SENT"))
     app.navigationBars.buttons.firstMatch.tap()
     for number in 1...3 {
@@ -360,7 +410,7 @@ final class FlatScreenshotTourC: XCTestCase {
     app.staticTexts["observation-detail.title"].assertExists()
     XCTAssertFalse(app.staticTexts["observation-detail.unavailable"].exists)
     app.navigationBars.buttons.firstMatch.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     for _ in 0..<5 { app.swipeDown() }
     XCTAssertTrue(recordID.exists)
     assertSignatureUnavailable(app)
@@ -372,7 +422,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     let fullSigil = app.descendants(matching: .any).matching(
       NSPredicate(format: "label == %@", "Devices heard: 23. Window 6. Mutual check not available yet.")
     ).firstMatch
@@ -431,7 +481,7 @@ final class FlatScreenshotTourC: XCTestCase {
     app.staticTexts["event-detail.heading"].assertExists()
     record.scrollToHittable(in: app)
     record.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     fullSigil.assertExists()
   }
 
@@ -440,7 +490,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let record = app.buttons["event-detail.proof.1"]
     record.scrollToHittable(in: app)
     record.tap()
-    app.staticTexts["proof.detail.title"].assertExists()
+    app.scrollViews["proof.detail.content"].assertExists()
     let artwork = app.descendants(matching: .any).matching(
       NSPredicate(format: "label == %@", "Devices heard: 23. Window 6. Mutual check not available yet.")
     ).firstMatch
@@ -534,7 +584,7 @@ final class FlatScreenshotTourC: XCTestCase {
     attachScreenshot("12-linked")
 
     proofRow.tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
     assertFromReportsListsTheLinkedReport(app)
   }
 
@@ -576,7 +626,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let proof = app.buttons["event-detail.proof.1"]
     proof.scrollToHittable(in: app)
     proof.tap()
-    app.staticTexts["proof.detail.title"].assertHittable()
+    app.scrollViews["proof.detail.content"].assertHittable()
     app.staticTexts["FROM REPORTS"].scrollToHittable(in: app)
     let report = app.buttons["proof-detail.report.\(Self.linkedReportID)"]
     XCTAssertTrue(report.exists)
@@ -603,7 +653,7 @@ final class FlatScreenshotTourC: XCTestCase {
     for _ in 0..<5 where !proof.isHittable { app.swipeUp() }
     XCTAssertTrue(proof.waitForExistence(timeout: 5))
     proof.tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
     for _ in 0..<3 { app.swipeUp() }
     XCTAssertFalse(app.staticTexts["FROM REPORTS"].exists)
   }
@@ -737,7 +787,7 @@ final class FlatScreenshotTourC: XCTestCase {
       XCTAssertGreaterThan(recordID.frame.width, 100, file: file, line: line)
       XCTAssertEqual(app.staticTexts["proof-collected.status"].label, "SEALED", file: file, line: line)
     } else if code == "09" {
-      XCTAssertTrue(app.staticTexts["proof.detail.title"].exists, file: file, line: line)
+      XCTAssertTrue(app.scrollViews["proof.detail.content"].exists, file: file, line: line)
       XCTAssertTrue(app.staticTexts["Self-signed on device"].exists, file: file, line: line)
       assertNoWalletOrBindingPresentation(app)
       XCTAssertFalse(app.staticTexts["Bound to wallet"].exists, file: file, line: line)

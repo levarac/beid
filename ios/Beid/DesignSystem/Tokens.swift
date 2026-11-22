@@ -187,6 +187,8 @@ enum DS {
     static let stateContentMaxWidth: CGFloat = 600
     /// Maximum width for collection content in regular horizontal size classes.
     static let collectionContentMaxWidth: CGFloat = 960
+    /// Keeps the two-column records grid readable on larger screens.
+    static let recordsContentMaxWidth: CGFloat = 680
     /// Minimum proof-card width for regular-width collection grids.
     static let regularGridCardMinimumWidth: CGFloat = 260
     /// Minimum proof-card width for compact-width collection grids.

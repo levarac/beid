@@ -32,16 +32,19 @@ struct CollectionHomeView: View {
 
 private struct HomeAccountToolbar: ViewModifier {
   @EnvironmentObject private var coordinator: AppCoordinator
+  let title: LocalizedStringKey
+  let iconColor: Color
 
   func body(content: Content) -> some View {
     content
-      .navigationTitle("")
-      .navigationBarTitleDisplayMode(.inline)
+      .navigationTitle(title)
+      .navigationBarTitleDisplayMode(.large)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
           Button("home.account.title", systemImage: "person.crop.circle") {
             coordinator.accountSheetPresented = true
           }
+          .tint(iconColor)
           .accessibilityIdentifier("home.account")
         }
       }
@@ -56,7 +59,7 @@ private struct NowHomeView: View {
   @ObservedObject var bluetooth: BluetoothMonitor
   @State private var isRootVisible = false
   @State private var showAboutSensing = false
-  @State private var showWhatWasSent = false
+  @State private var showWhatWeSend = false
   @State private var showsClockInstructions = false
   @State private var clockInstructionsForNetwork = false
 
@@ -80,7 +83,7 @@ private struct NowHomeView: View {
     NavigationStack {
       TimelineView(.periodic(from: .now, by: 1)) { context in
         ScrollView {
-          BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
+          BeidLargeTitleContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
             VStack(alignment: .leading, spacing: DS.Space.l) {
               if !isIdle && coordinator.homeBluetoothIsOff { bluetoothOff }
               if let event = activeEvent {
@@ -102,20 +105,20 @@ private struct NowHomeView: View {
               }
               #endif
             }
-            .padding(.horizontal, DS.Space.pageMargin)
             .padding(.vertical, DS.Space.s)
           }
         }
         .accessibilityIdentifier("home.now")
-        .background(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
+        .background(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, ignoresSafeAreaEdges: .bottom)
       }
-      .background(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
-      .modifier(HomeAccountToolbar())
-      .toolbarBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, for: .navigationBar, .tabBar)
-      .toolbarBackground(.visible, for: .navigationBar)
-      .toolbarColorScheme(usesInk ? .dark : .light, for: .navigationBar, .tabBar)
+      .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+      .modifier(HomeAccountToolbar(title: "home.now.title", iconColor: DS.Color.textPrimary))
+      .toolbarBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, for: .tabBar)
+      .toolbarBackground(.hidden, for: .navigationBar)
+      .toolbarColorScheme(.light, for: .navigationBar)
+      .toolbarColorScheme(usesInk ? .dark : .light, for: .tabBar)
       .navigationDestination(isPresented: $showAboutSensing) { AboutSensingView() }
-      .navigationDestination(isPresented: $showWhatWasSent) { WhatWeSendView() }
+      .navigationDestination(isPresented: $showWhatWeSend) { WhatWeSendView() }
       .navigationDestination(isPresented: $coordinator.scanPresented) {
         let routeID = coordinator.scanRouteID
         ScanFlowView(sensing: sensing)
@@ -190,9 +193,6 @@ private struct NowHomeView: View {
 
   private var standbyContent: some View {
     VStack(alignment: .leading, spacing: DS.Space.l) {
-      Text("home.now.title")
-        .beidTextStyle(DS.Font.Library.display60)
-        .accessibilityAddTraits(.isHeader)
       HomeClockWarning(preflight: coordinator.clockPreflight) { stateKey in
         clockInstructionsForNetwork = stateKey != "overTolerance"
         showsClockInstructions = true
@@ -410,9 +410,6 @@ private struct NowHomeView: View {
 
   private func savedSummary(_ snapshot: SensingSealedSnapshot) -> some View {
     VStack(alignment: .leading, spacing: DS.Space.l) {
-      Text("home.now.title")
-        .beidTextStyle(DS.Font.Library.display60)
-        .accessibilityAddTraits(.isHeader)
       Text(verbatim: snapshot.event.name)
         .beidTextStyle(DS.Font.Library.labelMono11)
         .foregroundStyle(secondary)
@@ -428,8 +425,8 @@ private struct NowHomeView: View {
         }
         .accessibilityIdentifier("home.saved.view-record")
       }
-      BeidTextControl("WHAT WAS SENT", glyph: .trailing("→", announcing: "What was sent")) {
-        showWhatWasSent = true
+      BeidTextControl("WHAT WE SEND", glyph: .trailing("→", announcing: "What we send")) {
+        showWhatWeSend = true
       }
       .accessibilityIdentifier("home.saved.what-was-sent")
       if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
@@ -560,16 +557,8 @@ private struct RecordsHomeView: View {
   var body: some View {
     NavigationStack {
       ScrollView {
-        BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
+        BeidLargeTitleContent(regularMaxWidth: DS.Layout.recordsContentMaxWidth) {
           VStack(alignment: .leading, spacing: DS.Space.l) {
-            Text(String(
-              localized: "records.header.counts",
-              defaultValue: "\(eventGroups.count) records · \(eventGroups.count) events",
-              comment: "Number of saved records and number of distinct recorded events."
-            ))
-              .beidTextStyle(DS.Font.Library.labelMono10)
-              .foregroundStyle(DS.Color.textSecondary)
-            Text("records.title").beidTextStyle(DS.Font.Library.display60).accessibilityAddTraits(.isHeader)
             BeidTextControl("BY EVENT", glyph: .trailing("→", announcing: "Records by event")) {
               showsEvents = true
             }
@@ -589,13 +578,14 @@ private struct RecordsHomeView: View {
               }
             }
           }
-          .padding(.horizontal, DS.Space.pageMargin)
           .padding(.vertical, DS.Space.s)
         }
       }
       .accessibilityIdentifier("records.grid")
-      .background(DS.Color.surfaceCanvas)
-      .modifier(HomeAccountToolbar())
+      .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+      .modifier(HomeAccountToolbar(title: "records.title", iconColor: DS.Color.textPrimary))
+      .toolbarBackground(.hidden, for: .navigationBar)
+      .toolbarColorScheme(.light, for: .navigationBar)
       .navigationDestination(isPresented: $showsEvents) { eventList }
       .navigationDestination(item: $selectedRecord) { HomeRecordDetail(proof: $0) }
     }
@@ -607,10 +597,9 @@ private struct RecordsHomeView: View {
     } label: {
       VStack(alignment: .leading, spacing: DS.Space.s) {
         RecordSigilSlot(input: sensing.sigilInput(forProofId: proof.id), placement: .recordsGrid)
-        Text("Attendance").beidTextStyle(DS.Font.Library.title17)
-        Text(verbatim: proof.eventName.uppercased())
-          .beidTextStyle(DS.Font.Library.labelMono10)
-          .foregroundStyle(DS.Color.textSecondary)
+        Text(verbatim: proof.eventName)
+          .beidTextStyle(DS.Font.Library.title17)
+          .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .contentShape(Rectangle())
