@@ -236,8 +236,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     runner architecture; SPM keys include `Package.resolved`, Xcode build and
     architecture. There are no prefix restore keys. SPM resolution uses the
     resolved file, and build-for-testing disables automatic package resolution.
-    Build products move only through the current attempt's artifact. Test
-    results, DerivedData and execution ledgers are never cached.
+    Build products move only through the artifact of the run's latest build
+    attempt. Test results, DerivedData and execution ledgers are never cached.
     With the main merge queue enabled, the merge step is to add the PR to
     the queue after its required PR checks pass. A completed full-mode pass of
     `iOS simulator` on the queue's exact merge result satisfies the full-suite
