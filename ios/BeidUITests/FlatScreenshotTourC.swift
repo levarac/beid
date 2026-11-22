@@ -656,8 +656,8 @@ final class FlatScreenshotTourC: XCTestCase {
     let proof = app.buttons["event-detail.proof.1"]
     proof.scrollToHittable(in: app)
     proof.tap()
-    app.scrollViews["proof.detail.content"].assertHittable()
-    app.staticTexts["FROM REPORTS"].scrollToHittable(in: app)
+    let detail = app.scrollViews["proof.detail.content"]
+    detail.staticTexts["FROM REPORTS"].scrollToHittable(in: app, within: detail)
     let report = app.buttons["proof-detail.report.\(Self.linkedReportID)"]
     XCTAssertTrue(report.exists)
     XCTAssertTrue(report.label.contains("Report #1"), report.label)

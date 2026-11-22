@@ -314,8 +314,9 @@ final class BeidIPadLayoutTests: XCTestCase {
     firstRung: String, file: StaticString = #filePath, line: UInt = #line
   ) {
     let titles = [firstRung, "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"]
-    let scroll = app.scrollViews.firstMatch
-    scroll.assertHittable(file: file, line: line)
+    let scroll = app.scrollViews["proof.detail.content"]
+    scroll.assertExists(file: file, line: line)
+    scroll.buttons["record.event-name.disclosure"].assertHittable(file: file, line: line)
     let window = app.windows.firstMatch
     let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "record.session."))
     guard sessions.count > 0 else {

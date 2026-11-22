@@ -37,17 +37,20 @@ final class JoinRefusalUITests: XCTestCase {
     app.buttons["bluetooth.permission.continue"].tap()
     app.buttons["home.demo.join"].assertHittable()
     app.buttons["home.demo.join"].tap()
+    let panel = app.scrollViews["scan.cant-join"]
+    panel.assertExists()
     let title = app.staticTexts["scan.join-refusal"]
     title.assertHittable()
     XCTAssertEqual(title.label, "Saved records unavailable")
-    app.staticTexts["beid couldn't access saved records. Try again before joining another event."]
-      .scrollToHittable(in: app)
+    panel.staticTexts["beid couldn't access saved records. Try again before joining another event."]
+      .scrollToHittable(in: app, within: panel)
     XCTAssertFalse(app.buttons["scan.manual-entry"].exists)
-    let retry = app.buttons["scan.storage-retry"]
-    retry.scrollToHittable(in: app)
+    let retry = panel.buttons["scan.storage-retry"]
+    retry.scrollToHittable(in: app, within: panel)
     retry.tap()
     title.assertDisappears()
-    app.scrollViews["scan.sensing"].assertHittable()
+    app.scrollViews["scan.sensing"].assertExists()
+    app.buttons["scan.manual-entry"].assertHittable()
   }
 
   func testDeviceKeyFailureDismissesOnceAcrossHomeAndScanFlow() {
@@ -71,7 +74,7 @@ final class JoinRefusalUITests: XCTestCase {
     alert.assertDisappears()
 
     let home = app.scrollViews["home.now"]
-    home.assertHittable()
+    home.assertExists()
     let homeReceipt = home.staticTexts["fixture.nearby-join.receipt"]
     // This diagnostic text is below the fold on iPhone. Read its value;
     // prove Home is interactive by tapping the actual JOIN control.
@@ -79,27 +82,26 @@ final class JoinRefusalUITests: XCTestCase {
     XCTAssertEqual(homeReceipt.label, "joins=0 event=none")
     XCTAssertEqual(app.alerts.count, 0)
     let card = home.buttons["home.nearby.join.9adc61d60dda843e"]
-    card.scrollToHittable(in: app)
+    card.scrollToHittable(in: app, within: home)
     card.tap()
 
     let panel = app.scrollViews["scan.cant-join"]
-    panel.assertHittable()
+    panel.assertExists()
     XCTAssertEqual(app.alerts.count, 0, "JOIN must not repeat the acknowledged device-key failure")
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
     receipt.assertHittable()
     XCTAssertEqual(receipt.label, "joins=0 event=none")
     let title = panel.staticTexts["scan.join-refusal"]
-    title.scrollToHittable(in: app)
+    title.scrollToHittable(in: app, within: panel)
     XCTAssertEqual(title.label, "Recording unavailable")
-    panel.staticTexts[message].scrollToHittable(in: app)
+    panel.staticTexts[message].scrollToHittable(in: app, within: panel)
     XCTAssertFalse(app.staticTexts["beid couldn't join that event. Check the code and try again."].exists)
     app.navigationBars.buttons.firstMatch.assertHittable()
     app.navigationBars.buttons.firstMatch.tap()
     panel.assertDisappears()
     // Leaving Home stops standby discovery and clears its transient cards.
     // Scroll to the receipt before checking visibility on either idiom.
-    home.assertHittable()
-    homeReceipt.scrollToHittable(in: app)
+    homeReceipt.scrollToHittable(in: app, within: home)
     XCTAssertEqual(homeReceipt.label, "joins=0 event=none")
     XCTAssertEqual(app.alerts.count, 0, "Back must not repeat the acknowledged device-key failure")
 
@@ -110,8 +112,7 @@ final class JoinRefusalUITests: XCTestCase {
     home.assertDisappears()
     app.tabButton("Now").assertHittable()
     app.tabButton("Now").tap()
-    home.assertHittable()
-    homeReceipt.scrollToHittable(in: app)
+    homeReceipt.scrollToHittable(in: app, within: home)
     XCTAssertEqual(homeReceipt.label, "joins=0 event=none")
     XCTAssertEqual(app.alerts.count, 0, "Home discovery must not repeat the acknowledged device-key failure")
   }
@@ -138,8 +139,7 @@ final class JoinRefusalUITests: XCTestCase {
     ]
     // A refusal replaces the sensing screen; it is not a panel inside it.
     let refusalPanel = app.scrollViews["scan.cant-join"]
-    refusalPanel.assertHittable()
-    refusalTitle.scrollToHittable(in: app)
+    refusalTitle.scrollToHittable(in: app, within: refusalPanel)
 
     app.navigationBars.buttons.element(boundBy: 0).assertHittable()
     app.navigationBars.buttons.element(boundBy: 0).tap()
@@ -150,7 +150,6 @@ final class JoinRefusalUITests: XCTestCase {
     // this proves the user-visible refusal was cleared rather than left stale.
     senseEvent.assertHittable()
     senseEvent.tap()
-    refusalPanel.assertHittable()
-    refusalTitle.scrollToHittable(in: app)
+    refusalTitle.scrollToHittable(in: app, within: refusalPanel)
   }
 }
