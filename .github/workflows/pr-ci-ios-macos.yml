@@ -49,8 +49,8 @@ permissions:
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
-  # Change only this value to select two, three, or four UI shards.
-  IOS_UI_SHARDS: '4'
+  # Change only this value to select two through five UI shards.
+  IOS_UI_SHARDS: '5'
 
 concurrency:
   # Event and ref/PR identity isolate queue entries from PR updates and main pushes.
@@ -188,7 +188,7 @@ jobs:
           from scripts.ios_ui_smoke import UI_SHARD_COUNTS, classifier_skip
           count = int(os.environ['IOS_UI_SHARDS'])
           if count not in UI_SHARD_COUNTS:
-              raise SystemExit('IOS_UI_SHARDS must be 2, 3, or 4')
+              raise SystemExit('IOS_UI_SHARDS must be 2 through 5')
           skip = classifier_skip(os.environ['EVENT_NAME'], {'changes': json.loads(os.environ['CHANGES_JSON'])})
           print(f'run={str(not skip).lower()}')
           print('matrix=' + json.dumps({'lane': ['unit'] + [f'ui-{i + 1}' for i in range(count)]}))
@@ -204,7 +204,7 @@ jobs:
     # never route a fork pull request back to a persistent signing host.
     runs-on: xcode-27
     # The former serial full job hit 60 minutes. Full mode now builds once
-    # and fans out to at most five macOS test jobs. Smoke retains its single job.
+    # and fans out to at most six macOS test jobs. Smoke retains its single job.
     # 50 minutes is containment for build/smoke, not a performance target.
     timeout-minutes: 50
     steps:
@@ -575,8 +575,8 @@ jobs:
     timeout-minutes: 35
     strategy:
       fail-fast: false
-      # One unit job plus at most four UI shards start after the build.
-      max-parallel: 5
+      # One unit job plus at most five UI shards start after the build.
+      max-parallel: 6
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       TEST_LANE: ${{ matrix.lane }}
