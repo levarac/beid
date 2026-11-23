@@ -201,15 +201,21 @@ private struct NowHomeView: View {
         bluetoothOff
       } else {
         listeningStrip
-        instructionTile(
-          title: "Keep the app open and head to the venue.",
-          body: "beid listens for nearby events over Bluetooth. Tap JOIN when your event appears."
-        )
         if coordinator.homeHasDemoCandidate {
+          instructionTile(
+            title: "Try sensing with a demo event.",
+            body: "Tap JOIN to start the demo."
+          )
           demoCandidate
-        } else if let first = nearby.cards.first {
-          candidateCard(first)
-          if nearby.cards.count > 1 { additionalCandidates }
+        } else {
+          instructionTile(
+            title: "Keep the app open and head to the venue.",
+            body: "beid listens for nearby events over Bluetooth. Tap your event’s card or row to join."
+          )
+          if let first = nearby.cards.first {
+            candidateCard(first)
+            if nearby.cards.count > 1 { additionalCandidates }
+          }
         }
         if nearby.hasOmittedEvents {
           Text("Some nearby events are not shown.")
@@ -279,29 +285,33 @@ private struct NowHomeView: View {
   }
 
   private func candidateCard(_ card: NearbyEventCard) -> some View {
-    VStack(alignment: .leading, spacing: DS.Space.s) {
-      Text("FOUND NEARBY")
-        .beidTextStyle(DS.Font.Library.labelMono10)
-        .foregroundStyle(DS.Color.textSecondaryOnInk)
-      Text("NAME ANNOUNCED NEARBY")
-        .beidTextStyle(DS.Font.Library.labelMono10)
-        .foregroundStyle(DS.Color.textSecondaryOnInk)
-      Text(verbatim: candidateName(card))
-        .beidTextStyle(DS.Font.Library.title19)
-        .accessibilityIdentifier("home.nearby.primary-name")
-      Text(candidateRegistrationStatus(card))
-        .beidTextStyle(DS.Font.Library.labelMono10)
-        .foregroundStyle(DS.Color.textSecondaryOnInk)
-      BeidTextControl("now.join.action", labelColor: DS.Color.labelOnActionPrimary, haptic: true) {
-        coordinator.joinNearbyEventFromHome(card)
+    Button {
+      BeidDesign.haptic()
+      coordinator.joinNearbyEventFromHome(card)
+    } label: {
+      VStack(alignment: .leading, spacing: DS.Space.s) {
+        Text("FOUND NEARBY")
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
+        Text("NAME ANNOUNCED NEARBY")
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
+        Text(verbatim: candidateName(card))
+          .beidTextStyle(DS.Font.Library.title19)
+        Text(candidateRegistrationStatus(card))
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
       }
-      .disabled(card.joinActionEventCodeHashHex == nil)
-      .accessibilityIdentifier("home.nearby.join.\(card.eventCodeHashHex)")
+      .foregroundStyle(DS.Color.labelOnActionPrimary)
+      .padding(DS.Space.l)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(DS.Color.textPrimary, in: RoundedRectangle(cornerRadius: DS.Radius.nowCard))
+      .contentShape(Rectangle())
     }
-    .foregroundStyle(DS.Color.labelOnActionPrimary)
-    .padding(DS.Space.l)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(DS.Color.textPrimary, in: RoundedRectangle(cornerRadius: DS.Radius.nowCard))
+    .buttonStyle(.plain)
+    .disabled(card.joinActionEventCodeHashHex == nil)
+    .accessibilityLabel(candidateAccessibilityLabel(card))
+    .accessibilityIdentifier("home.nearby.join.\(card.eventCodeHashHex)")
   }
 
   private var additionalCandidates: some View {
@@ -328,7 +338,7 @@ private struct NowHomeView: View {
         }
         .buttonStyle(.plain)
         .disabled(card.joinActionEventCodeHashHex == nil)
-        .accessibilityLabel(Text(verbatim: "Join \(candidateName(card)), ") + Text(candidateRegistrationStatus(card)))
+        .accessibilityLabel(candidateAccessibilityLabel(card))
         .accessibilityIdentifier("home.nearby.additional.\(card.eventCodeHashHex)")
         Divider()
       }
@@ -501,7 +511,18 @@ private struct NowHomeView: View {
                 in: RoundedRectangle(cornerRadius: DS.Radius.control))
   }
 
-  private func candidateRegistrationStatus(_ card: NearbyEventCard) -> LocalizedStringKey {
+  private func candidateAccessibilityLabel(_ card: NearbyEventCard) -> String {
+    let format = String(
+      localized: "now.nearby.event.accessibilityLabel",
+      defaultValue: "%1$@, name announced nearby %2$@, %3$@",
+      comment: "VoiceOver label for a nearby event. %1$@ is the localized join action and comes first, %2$@ is the name announced by Bluetooth, and %3$@ is the registration status."
+    )
+    let action = String(localized: "now.join.action", defaultValue: "JOIN")
+    let status = String(localized: candidateRegistrationStatus(card))
+    return String(format: format, locale: Locale.current, arguments: [action, candidateName(card), status])
+  }
+
+  private func candidateRegistrationStatus(_ card: NearbyEventCard) -> LocalizedStringResource {
     if card.joinActionEventCodeHashHex != nil { return "EVENT REGISTRATION CHECKED" }
     let candidates = sensing.nearbyEventCandidates
     for index in 0..<candidates.candidateCount {

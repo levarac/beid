@@ -18,7 +18,12 @@ final class NearbyJoinUITests: XCTestCase {
     XCTAssertTrue(card.waitForExistence(timeout: 5))
     XCTAssertTrue(card.isEnabled)
     XCTAssertTrue(card.isHittable)
-    card.tap()
+    XCTAssertGreaterThan(card.frame.width, 180, "The button must span the card, including the trailing padding")
+    XCTAssertTrue(card.label.hasPrefix("JOIN"))
+    XCTAssertTrue(card.label.contains("name announced nearby"))
+    XCTAssertTrue(card.label.contains("Sample gathering"))
+    XCTAssertTrue(card.label.contains("EVENT REGISTRATION CHECKED"))
+    card.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.30)).tap()
 
     // This value changes only when the native engine seam receives a capability.
     // Entering .sensing before permissions complete is not a successful join.
@@ -28,6 +33,33 @@ final class NearbyJoinUITests: XCTestCase {
     )
     XCTAssertEqual(XCTWaiter.wait(for: [joined], timeout: 5), .completed)
     XCTAssertFalse(card.exists, "the production pre-join cards disappear after admission")
+  }
+
+  func testUnverifiedNearbyCardIsVisibleButCannotJoin() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["-beid-ui-test", "-beid-nearby-join-fixture", "-beid-nearby-unverified-fixture"]
+    app.launch()
+
+    app.buttons["Continue"].tap()
+    let permission = app.buttons["bluetooth.permission.continue"]
+    permission.assertHittable()
+    permission.tap()
+
+    let card = app.buttons["home.nearby.join.9adc61d60dda843e"]
+    card.assertHittable()
+    XCTAssertTrue(card.label.contains("Sample gathering"))
+    XCTAssertFalse(card.isEnabled)
+    XCTAssertTrue(card.label.contains("Checking event registration…"))
+
+    let receipt = app.staticTexts["fixture.nearby-join.receipt"]
+    receipt.assertExists()
+    let originalReceipt = receipt.label
+    XCTAssertEqual(originalReceipt, "joins=0 event=none")
+    // Send an actual touch even though SwiftUI exposes the Button as disabled.
+    card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    XCTAssertTrue(card.exists)
+    XCTAssertEqual(receipt.label, originalReceipt)
   }
 }
 
@@ -174,16 +206,18 @@ final class NowNavigationUITests: XCTestCase {
 
   func testNearbyJoinIsExplicitAndAdditionalCandidatesKeepTheirOrder() {
     launchHome(["-beid-nearby-join-fixture", "-beid-nearby-multiple-fixture"])
+    app.staticTexts["beid listens for nearby events over Bluetooth. Tap your event’s card or row to join."].assertExists()
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
     XCTAssertEqual(receipt.label, "joins=0 event=none")
-    XCTAssertEqual(app.staticTexts["home.nearby.primary-name"].label, "Sample gathering")
+    let card = app.buttons["home.nearby.join.9adc61d60dda843e"]
+    card.assertExists()
+    XCTAssertTrue(card.label.contains("Sample gathering"))
     XCTAssertTrue(app.staticTexts["ALSO NEARBY"].exists)
     XCTAssertTrue(app.buttons["home.nearby.additional.ffffffffffffffff"].exists)
-    let join = app.buttons["home.nearby.join.9adc61d60dda843e"]
-    XCTAssertTrue(join.isEnabled)
+    XCTAssertTrue(card.isEnabled)
     XCTAssertFalse(app.otherElements["home.active-event"].exists)
     capture("now-candidates")
-    join.tap()
+    card.tap()
     let joined = XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "label BEGINSWITH %@", "joins=1 event="), object: receipt
     )
@@ -202,6 +236,7 @@ final class NowNavigationUITests: XCTestCase {
 
   func testDemoStartsOnlyAfterJoinAndSavesARecordInRecords() {
     launchHome([])
+    app.staticTexts["Tap JOIN to start the demo."].assertExists()
     XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.otherElements["home.active-event"].exists)
     XCTAssertTrue(

@@ -149,7 +149,10 @@ struct SensingView: View {
               if isListeningAfterJoin {
                 Text("Keep the app open. Sensing starts when beid hears another device at this event.")
               } else {
-                Text("Nearby events appear here. Tap JOIN to begin sensing.")
+                Text(
+                  "Nearby events appear here. Tap your event’s card to join.",
+                  comment: "Pre-join guidance. An available event's entire card is the join action."
+                )
               }
             }
               .font(DS.Font.body)
@@ -200,9 +203,9 @@ struct SensingView: View {
     }
   }
 
-  /// True once JOIN was tapped (or an event code accepted) and no other
+  /// True once the participant chose an event (or an event code was accepted) and no other
   /// phone has been heard yet: the phase is `.sensing`, so telling the
-  /// participant to tap JOIN again would be wrong.
+  /// participant to join again would be wrong.
   var isListeningAfterJoin: Bool {
     if case .sensing = sensing.phase { return true }
     return false

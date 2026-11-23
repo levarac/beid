@@ -23,6 +23,7 @@ enum NearbyJoinUITestFixture {
   static let hash = "9adc61d60dda843e"
 
   static func makeCoordinator() -> SensingCoordinator {
+    let arguments = ProcessInfo.processInfo.arguments
     let now = Int64(Date().timeIntervalSince1970)
     let store = ExportedKotlinPackages.org.levarac.parallax.discovery.createNearbyEventDiscoveryStore()
     _ = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
@@ -30,20 +31,22 @@ enum NearbyJoinUITestFixture {
       eventCodeHashHex: hash, rawContainerHex: "03000004", agreesWithRegistry: false,
       additionalNamesOmitted: false, additionalEventsOmitted: false, observedAtEpochMillis: now * 1_000
     )
-    guard let attempt = ExportedKotlinPackages.org.levarac.parallax.discovery
-      .beginNearbyEventRegistryResolutionFromHex(store: store, eventCodeHashHex: hash)
-    else { preconditionFailure("Expected fixture registry resolution") }
-    _ = ExportedKotlinPackages.org.levarac.parallax.discovery.completeNearbyEventRegistryResolutionFromHex(
-      store: store, attempt: attempt, result: .VERIFIED,
-      resolvedEventIdHex: eventId, verifiedDefinitionJoinMode: .OPEN,
-      verifiedDefinitionEventIdHex: eventId, verifiedDefinitionEventCodeHashHex: hash,
-      envelopeAgreesWithRegistry: true,
-      verifiedDefinitionHashHex: String(repeating: "ab", count: 32),
-      registryBlockHashHex: String(repeating: "cd", count: 32),
-      verifiedDefinitionValidFromEpochSeconds: now - 60,
-      verifiedDefinitionValidUntilEpochSeconds: now + 3_600
-    )
-    if ProcessInfo.processInfo.arguments.contains("-beid-nearby-multiple-fixture") {
+    if !arguments.contains("-beid-nearby-unverified-fixture") {
+      guard let attempt = ExportedKotlinPackages.org.levarac.parallax.discovery
+        .beginNearbyEventRegistryResolutionFromHex(store: store, eventCodeHashHex: hash)
+      else { preconditionFailure("Expected fixture registry resolution") }
+      _ = ExportedKotlinPackages.org.levarac.parallax.discovery.completeNearbyEventRegistryResolutionFromHex(
+        store: store, attempt: attempt, result: .VERIFIED,
+        resolvedEventIdHex: eventId, verifiedDefinitionJoinMode: .OPEN,
+        verifiedDefinitionEventIdHex: eventId, verifiedDefinitionEventCodeHashHex: hash,
+        envelopeAgreesWithRegistry: true,
+        verifiedDefinitionHashHex: String(repeating: "ab", count: 32),
+        registryBlockHashHex: String(repeating: "cd", count: 32),
+        verifiedDefinitionValidFromEpochSeconds: now - 60,
+        verifiedDefinitionValidUntilEpochSeconds: now + 3_600
+      )
+    }
+    if arguments.contains("-beid-nearby-multiple-fixture") {
       let otherHash = "ffffffffffffffff"
       let otherId = String(repeating: "22", count: 32)
       _ = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
@@ -67,7 +70,7 @@ enum NearbyJoinUITestFixture {
     }
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("nearby-ui-\(UUID().uuidString)")
     let deviceSecretStore: DeviceSecretKeychainStore
-    if ProcessInfo.processInfo.arguments.contains("-beid-device-key-unavailable-fixture") {
+    if arguments.contains("-beid-device-key-unavailable-fixture") {
       deviceSecretStore = DeviceSecretKeychainStore(keychain: UnavailableUITestDeviceSecretKeychain())
     } else {
       deviceSecretStore = .shared

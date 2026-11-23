@@ -50,6 +50,7 @@ final class JoinRefusalUITests: XCTestCase {
     retry.tap()
     title.assertDisappears()
     app.scrollViews["scan.sensing"].assertExists()
+    app.staticTexts["Nearby events appear here. Tap your event’s card to join."].assertExists()
     app.buttons["scan.manual-entry"].assertHittable()
   }
 
@@ -63,7 +64,7 @@ final class JoinRefusalUITests: XCTestCase {
     app.buttons["bluetooth.permission.continue"].assertHittable()
     app.buttons["bluetooth.permission.continue"].tap()
     // Home standby reads the locked key on both idioms. Wait for that same
-    // failure before JOIN instead of choosing a route from a timing window.
+    // failure before tapping the nearby card.
     let alert = app.alerts["Recording unavailable"]
     let message = "The device signing key is unavailable. Unlock your device and try again."
     XCTAssertTrue(alert.waitForExistence(timeout: UITestWait.timeout))
@@ -77,7 +78,7 @@ final class JoinRefusalUITests: XCTestCase {
     home.assertExists()
     let homeReceipt = home.staticTexts["fixture.nearby-join.receipt"]
     // This diagnostic text is below the fold on iPhone. Read its value;
-    // prove Home is interactive by tapping the actual JOIN control.
+    // prove Home is interactive by tapping the nearby card.
     homeReceipt.assertExists()
     XCTAssertEqual(homeReceipt.label, "joins=0 event=none")
     XCTAssertEqual(app.alerts.count, 0)
@@ -87,7 +88,7 @@ final class JoinRefusalUITests: XCTestCase {
 
     let panel = app.scrollViews["scan.cant-join"]
     panel.assertExists()
-    XCTAssertEqual(app.alerts.count, 0, "JOIN must not repeat the acknowledged device-key failure")
+    XCTAssertEqual(app.alerts.count, 0, "Tapping the card must not repeat the acknowledged device-key failure")
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
     receipt.assertHittable()
     XCTAssertEqual(receipt.label, "joins=0 event=none")
