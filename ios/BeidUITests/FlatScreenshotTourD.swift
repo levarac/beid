@@ -249,9 +249,10 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_14d_ScanQR() {
     openVenue(frame: "14d")
     app.buttons["Scan QR code"].tap()
-    _ = app.staticTexts["venue.scanner.title"].waitForExistence(timeout: 5)
+    // A native navigation title (#856): the bar exposes it as its static text.
+    let title = app.navigationBars.staticTexts["Scan QR code"]
+    XCTAssertTrue(title.waitForExistence(timeout: 5))
     attachScreenshot("14d")
-    XCTAssertTrue(app.navigationBars.staticTexts["venue.scanner.title"].exists)
     // The OS's close item (DESIGN.md §12, #732): its size is the OS's, so this
     // pins that it sits in the real navigation bar and can be tapped.
     let cancel = app.navigationBars.buttons["Cancel scan"]

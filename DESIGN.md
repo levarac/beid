@@ -895,6 +895,10 @@ spec §3.2; §0 records which styles were observed in Figma.
 
 Flat 2b rules:
 
+- **iOS navigation titles (#856, maintainer decision 2026-11-23).** Native
+  navigation bars use the iOS system font for both large and inline titles
+  in standard, scroll-edge, compact, and compact scroll-edge appearances.
+  Leave the title font attributes unset so UIKit supplies its defaults.
 - MUST: Every Flat 2b style is defined in `DS.Font` with
   `Font.custom(_:size:relativeTo:)`, so the base size scales with a text
   style. `Font.custom` stays inside `DesignSystem/` (§2 rule 2). That
