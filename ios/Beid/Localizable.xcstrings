@@ -3389,7 +3389,7 @@
       }
     },
     "now.join.action": {
-      "comment": "Starts sensing the event shown above this button after one tap.",
+      "comment": "The join action in the demo button and the nearby event card's accessibility label.",
       "localizations": {
         "en": {
           "stringUnit": {

@@ -279,29 +279,36 @@ private struct NowHomeView: View {
   }
 
   private func candidateCard(_ card: NearbyEventCard) -> some View {
-    VStack(alignment: .leading, spacing: DS.Space.s) {
-      Text("FOUND NEARBY")
-        .beidTextStyle(DS.Font.Library.labelMono10)
-        .foregroundStyle(DS.Color.textSecondaryOnInk)
-      Text("NAME ANNOUNCED NEARBY")
-        .beidTextStyle(DS.Font.Library.labelMono10)
-        .foregroundStyle(DS.Color.textSecondaryOnInk)
-      Text(verbatim: candidateName(card))
-        .beidTextStyle(DS.Font.Library.title19)
-        .accessibilityIdentifier("home.nearby.primary-name")
-      Text(candidateRegistrationStatus(card))
-        .beidTextStyle(DS.Font.Library.labelMono10)
-        .foregroundStyle(DS.Color.textSecondaryOnInk)
-      BeidTextControl("now.join.action", labelColor: DS.Color.labelOnActionPrimary, haptic: true) {
-        coordinator.joinNearbyEventFromHome(card)
+    Button {
+      BeidDesign.haptic()
+      coordinator.joinNearbyEventFromHome(card)
+    } label: {
+      VStack(alignment: .leading, spacing: DS.Space.s) {
+        Text("FOUND NEARBY")
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
+        Text("NAME ANNOUNCED NEARBY")
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
+        Text(verbatim: candidateName(card))
+          .beidTextStyle(DS.Font.Library.title19)
+        Text(candidateRegistrationStatus(card))
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
       }
-      .disabled(card.joinActionEventCodeHashHex == nil)
-      .accessibilityIdentifier("home.nearby.join.\(card.eventCodeHashHex)")
+      .foregroundStyle(DS.Color.labelOnActionPrimary)
+      .padding(DS.Space.l)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(DS.Color.textPrimary, in: RoundedRectangle(cornerRadius: DS.Radius.nowCard))
+      .contentShape(Rectangle())
     }
-    .foregroundStyle(DS.Color.labelOnActionPrimary)
-    .padding(DS.Space.l)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(DS.Color.textPrimary, in: RoundedRectangle(cornerRadius: DS.Radius.nowCard))
+    .buttonStyle(.plain)
+    .disabled(card.joinActionEventCodeHashHex == nil)
+    .accessibilityLabel(
+      Text("now.join.action") + Text(verbatim: ", ") + Text("NAME ANNOUNCED NEARBY") +
+        Text(verbatim: " \(candidateName(card)), ") + Text(candidateRegistrationStatus(card))
+    )
+    .accessibilityIdentifier("home.nearby.join.\(card.eventCodeHashHex)")
   }
 
   private var additionalCandidates: some View {

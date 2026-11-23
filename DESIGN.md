@@ -86,11 +86,13 @@ beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
 - **The 1.1 screen specification** is the authority for **layouts and
   behavior**: Fixed v2 is the base, with v3–v5 deltas applied in order.
   The final specification wins when an earlier screen disagrees. Now owns
-  current actions and explicit JOIN; Records owns saved records and events.
-  Now's DO THIS NOW and FROM THE ORGANIZER tiles use Flat 2b fills and a
-  12pt radius (`DS.Radius.control`); nearby candidate cards retain the 20pt
-  `DS.Radius.nowCard`. Records shows one Attendance per event, preserving
-  its stored recording sessions inside the existing detail routes.
+  current actions; Records owns saved records and events. On iOS, the
+  primary nearby candidate card is the join control (#858, maintainer
+  decision 2026-11-23). It becomes tappable after registry verification
+  and retains the 20pt `DS.Radius.nowCard`. Now's DO THIS NOW and FROM THE
+  ORGANIZER tiles use Flat 2b fills and a 12pt radius (`DS.Radius.control`).
+  Records shows one Attendance per event, preserving its stored recording
+  sessions inside the existing detail routes.
 - The earlier Flat 2b Screens and Liquid Glass-era Fixed layouts are
   historical input only; the latter is distinct from the Fixed v2 base.
 - The product name is **beid**. "SenseProof" on the Flat 2b board and in
@@ -1954,9 +1956,12 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   explains value before `session.requestBluetoothPermission` is called,
   matching the "explain before the system prompt" rule (verified
   `AppNavHost.kt`'s composable body).]**
-- **Collection home (04)**: `NavigationStack` + adaptive `LazyVGrid` of
-  `ProofCardView`; account entry top-trailing; "Sense Event" CTA in the
-  bottom bar. Empty state (04b) follows the §3 do/don't. **[iOS-only as
+- **Collection home (04)**: Now handles current participation and Records
+  holds saved records and events. Both tabs have an account entry in their
+  top-trailing toolbar. The primary nearby candidate card on Now presents
+  the announced name and registration status, and the whole card joins
+  after verification. Its accessibility label starts with the localized
+  join action. Empty state (04b) follows the §3 do/don't. **[iOS-only as
   written — no Android counterpart. `Screen.kt`'s own comment: `EventJoin`
   "stands in for iOS's `.home`, since Android has no post-onboarding
   collection-home screen yet." Promoting a screen to this role is
@@ -2517,7 +2522,7 @@ lives in `AGENTS.md`.
 - Welcome uses the exact headline "Record you were there." and subtitle
   "Your phones say hello to each other, and keep a note anyone can verify."
   These are the approved Welcome exception to the general presence-copy
-  caution. Other copy describes observations, explicit JOIN and foreground
+  caution. Other copy describes observations, explicit joining and foreground
   sensing without promising background operation.
 - Vocabulary: "record", "participation record", "encounter", "event", "sense/sensing", "collect",
   "seal", "verify". A record is **collected** or **sealed**, never "minted",

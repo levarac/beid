@@ -52,9 +52,9 @@ final class FlatScreenshotTourC: XCTestCase {
     app.tabButton("Now").assertExists()
     XCTAssertFalse(app.staticTexts["scan.detecting.caption"].exists)
 
-    let join = app.buttons["home.nearby.join.9adc61d60dda843e"]
-    join.assertHittable()
-    join.tap()
+    let card = app.buttons["home.nearby.join.9adc61d60dda843e"]
+    card.assertHittable()
+    card.tap()
     let caption = app.staticTexts["scan.detecting.caption"]
     caption.scrollToHittable(in: app)
     XCTAssertEqual(caption.label, "LOOKING FOR PEERS · STAY NEARBY")
