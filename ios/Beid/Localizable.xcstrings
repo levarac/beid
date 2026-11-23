@@ -3389,12 +3389,23 @@
       }
     },
     "now.join.action": {
-      "comment": "The join action in the demo button and the nearby event card's accessibility label.",
+      "comment": "The demo button label and the join action at the start of a nearby event's VoiceOver label.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "JOIN"
+          }
+        }
+      }
+    },
+    "now.nearby.event.accessibilityLabel": {
+      "comment": "VoiceOver label for a nearby event. %1$@ is the localized join action and comes first, %2$@ is the name announced by Bluetooth, and %3$@ is the registration status.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, name announced nearby %2$@, %3$@"
           }
         }
       }
@@ -3454,16 +3465,25 @@
         }
       }
     },
-    "beid listens for nearby events over Bluetooth. Tap JOIN when your event appears.": {
-      "comment": "Finding an event does not start participation; JOIN does.",
+    "beid listens for nearby events over Bluetooth. Tap your event’s card or row to join.": {
+      "comment": "Now standby guidance. Tapping the primary card or a row under Also Nearby starts participation in that event.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "beid listens for nearby events over Bluetooth. Tap JOIN when your event appears."
+            "value": "beid listens for nearby events over Bluetooth. Tap your event’s card or row to join."
           }
         }
       }
+    },
+    "Try sensing with a demo event.": {
+      "comment": "Now standby heading shown with the demo event and its Join button."
+    },
+    "Tap JOIN to start the demo.": {
+      "comment": "Now standby guidance for the demo event. Match the demo's Join button."
+    },
+    "Nearby events appear here. Tap your event’s card to join.": {
+      "comment": "Pre-join guidance. An available event's entire card is the join action."
     },
     "HOW SENSING WORKS": {
       "comment": "Opens information about sensing.",
@@ -3587,7 +3607,7 @@
       }
     },
     "JOINING": {
-      "comment": "The participant tapped JOIN and the app is beginning sensing.",
+      "comment": "The participant chose an event and the app is beginning sensing.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3915,12 +3935,12 @@
       }
     },
     "sensing.explainer.chooseEvent.detail": {
-      "comment": "Explains discovery followed by the participant choosing JOIN.",
+      "comment": "Explains discovery followed by the participant tapping a nearby event card or row to join.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "beid looks for nearby events. Tap JOIN when your event appears."
+            "value": "beid looks for nearby events. Tap your event’s card or row to join."
           }
         }
       }

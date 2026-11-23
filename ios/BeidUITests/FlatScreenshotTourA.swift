@@ -274,7 +274,7 @@ final class FlatScreenshotTourA: XCTestCase {
 
   private func assertExplainerCopy() {
     assertContainsText("Choose your event", message: "The explanation must require explicit event selection")
-    assertContainsText("beid looks for nearby events. Tap JOIN when your event appears.")
+    assertContainsText("beid looks for nearby events. Tap your event’s card or row to join.")
     assertContainsText("Private by design")
     assertContainsText("Devices exchange rotating anonymous IDs, not names or wallet addresses.")
     assertContainsText("Keep beid open")

@@ -50,6 +50,7 @@ final class JoinRefusalUITests: XCTestCase {
     retry.tap()
     title.assertDisappears()
     app.scrollViews["scan.sensing"].assertExists()
+    app.staticTexts["Nearby events appear here. Tap your event’s card to join."].assertExists()
     app.buttons["scan.manual-entry"].assertHittable()
   }
 
