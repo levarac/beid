@@ -58,6 +58,35 @@ final class BundledFontsTests: XCTestCase {
     }
   }
 
+  @MainActor
+  func testNavigationBarTitlesUseSystemFontsInAllAppearances() throws {
+    // The Beid host has run BeidApp.init(). UIKit applies its appearance
+    // proxy to a new bar when the bar enters a window.
+    let window = UIWindow()
+    let bar = UINavigationBar()
+    window.addSubview(bar)
+    window.layoutIfNeeded()
+
+    // UIKit can supply its own font even when the app sets no font attribute.
+    let defaults = UINavigationBarAppearance()
+    let inlineFont = defaults.titleTextAttributes[.font] as? UIFont
+    let largeFont = defaults.largeTitleTextAttributes[.font] as? UIFont
+    let appearances = [
+      ("standard", bar.standardAppearance),
+      ("scroll edge", try XCTUnwrap(bar.scrollEdgeAppearance)),
+      ("compact", try XCTUnwrap(bar.compactAppearance)),
+      ("compact scroll edge", try XCTUnwrap(bar.compactScrollEdgeAppearance)),
+    ]
+    for (name, appearance) in appearances {
+      XCTAssertEqual(
+        appearance.titleTextAttributes[.font] as? UIFont, inlineFont, "\(name) inline title must use the UIKit default"
+      )
+      XCTAssertEqual(
+        appearance.largeTitleTextAttributes[.font] as? UIFont, largeFont, "\(name) large title must use the UIKit default"
+      )
+    }
+  }
+
   /// `UIAppFonts` is what makes the files above loadable at all, so it is
   /// pinned exactly: a missing entry breaks a face, and an extra one names a
   /// file that is not there.
