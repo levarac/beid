@@ -114,11 +114,10 @@ struct ObservationDetailView: View {
             timeBands
               .padding(.top, DS.Space.l)
           } else {
-            Text("Measurements unavailable")
-              .beidTextStyle(DS.Font.Library.body13)
-              .foregroundStyle(DS.Color.textSecondary)
-              .padding(.top, DS.Space.xl)
-              .accessibilityIdentifier("observation-detail.unavailable")
+            BeidEmptyState(
+              Text("Measurements unavailable"), titleIdentifier: "observation-detail.unavailable"
+            )
+            .padding(.top, DS.Space.xl)
           }
 
           SessionWindowReports(
@@ -205,9 +204,7 @@ struct ObservationDetailView: View {
         RecordSigilSlot(input: input, placement: .proofDetail, isDeviceRecord: true)
           .frame(maxWidth: .infinity)
       } else {
-        Text("Artwork is not available for this window.")
-          .beidTextStyle(DS.Font.Library.body13)
-          .foregroundStyle(DS.Color.textSecondary)
+        BeidEmptyState(Text("Artwork is not available for this window."))
       }
       metricRow("DEVICES IN THIS WINDOW", value: window.peerCount)
       unavailableRow("WINDOW DURATION")
@@ -220,7 +217,7 @@ struct ObservationDetailView: View {
       Text("Time-band buildup").beidTextStyle(DS.Font.Library.labelMono10)
       if let aggregate {
         if aggregate.bandCount == 0 {
-          Text("No time bands recorded for this session").beidTextStyle(DS.Font.Library.body13)
+          BeidEmptyState(Text("No time bands recorded for this session"))
         }
         ForEach(0..<Int(aggregate.bandCount), id: \.self) { index in
           if let band = aggregate.bandAt(index: Int32(index)) {
@@ -353,7 +350,7 @@ private struct SessionWindowReports: View {
         for: proof, submissionStore: submissionStore, linkStore: linkStore, proofStore: proofStore
       ) {
       case .failure:
-        Text("Reports unavailable on this device").beidTextStyle(DS.Font.Library.body13)
+        BeidEmptyState(Text("Reports unavailable on this device"))
       case .success(let reports):
         if let windowIndex {
           Text("REPORTS FOR SELECTED WINDOW").beidTextStyle(DS.Font.Library.labelMono10)
@@ -361,7 +358,7 @@ private struct SessionWindowReports: View {
             sensing.observedWindowIndex(forWindowID: $0)
           }
           if selected.isEmpty {
-            Text("Report information is not available for this window.").beidTextStyle(DS.Font.Library.body13)
+            BeidEmptyState(Text("Report information is not available for this window."))
           }
           ForEach(selected, id: \.record.id) { report in
             ReportEvidenceSection(record: report.record, ordinal: report.ordinal, selected: selectedReportID == report.record.id)

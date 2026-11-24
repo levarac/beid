@@ -97,6 +97,7 @@ final class NowNavigationUITests: XCTestCase {
     let explanation = app.staticTexts["Saved records appear here after sensing."]
     app.scrollViews["records.grid"].assertExists()
     explanation.assertHittable()
+    capture("records-empty")
     app.selectRecordsGrouping("By event")
     app.scrollViews["records.events"].assertExists()
     explanation.assertHittable()
@@ -150,6 +151,38 @@ final class NowNavigationUITests: XCTestCase {
         app.scrollViews["records.grid"].assertExists()
       }
     }
+  }
+
+  func testEmptyRecordsUsesSharedTitleAndExplanationAtAccessibilitySize() {
+    launchHome([
+      "-beid-home-frame-04b",
+      "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+    ])
+    app.tabButton("Records").tap()
+    let title = app.staticTexts["No records yet"]
+    let description = app.staticTexts["Saved records appear here after sensing."]
+    title.assertHittable()
+    description.assertHittable()
+    let viewport = app.scrollViews["records.grid"].frame
+    XCTAssertTrue(viewport.contains(title.frame))
+    XCTAssertTrue(viewport.contains(description.frame))
+    XCTAssertLessThanOrEqual(title.frame.maxY, description.frame.minY)
+    capture("records-empty-accessibility")
+  }
+
+  func testEmptyPastEventsKeepsItsExplanation() {
+    launchHome(["-beid-home-frame-04b"])
+    app.buttons["home.account"].tap()
+    let pastEvents = app.buttons["Past events"]
+    pastEvents.assertHittable()
+    pastEvents.tap()
+    app.staticTexts["No past events yet."].assertHittable()
+    let explanation = app.staticTexts["Only events you have a saved record for are listed here."]
+    explanation.assertHittable()
+    XCTAssertEqual(app.staticTexts.matching(NSPredicate(
+      format: "label == %@", "Only events you have a saved record for are listed here."
+    )).count, 1)
+    capture("past-events-empty")
   }
 
   func testRecordsGridHasOneAttendancePerEventAndKeepsSessions() {

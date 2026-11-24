@@ -460,14 +460,14 @@ as-is.
 | **Ledger Trace** | A verifiable record exists behind this artifact | Metadata rows in `ItemDetailView`, address row in `AccountSheetView`, monospaced identifiers | Blockchain jargon, wallet chrome, explorer-link prominence |
 | **Event Artifact** | A record is a collectible memory of a real event | `ProofCardView` cards, `CollectionHomeView` grid, event recap | NFT-marketplace aesthetics, price/rarity framing |
 
-Concrete do/don't pair (the empty state of `CollectionHomeView`):
+Concrete do/don't pair (the Records empty state in `RecordsHomeView`):
 
 ```
 DO:
-Empty state uses the `encounter-field-empty` Encounter Field asset,
+Empty state uses BeidEmptyState with the dashed DS frame (§10),
 title "No records yet",
-body "Start sensing at an event to collect your first record.",
-CTA "Sense Event",
+body "Saved records appear here after sensing.",
+grouping remains available in the navigation-bar menu,
 background DS.Color.surfaceCanvas.
 
 DON'T:
@@ -481,18 +481,20 @@ or any wallet/crypto iconography.
 (no `CollectionHomeView` counterpart — §11). Android's closest analogue,
 `RecordsScreen`'s empty state, uses a plain centered `Text` with no icon
 and no CTA at all (verified, `RecordsScreen.kt`) — it is not this do/don't
-pair's target. Also note the CTA text itself: Android's actual join
+pair's target. For the historical CTA comparison, Android's join
 button string is `"Join event"` (`event_join_button`,
 `strings.xml`), not `"Sense Event"` — the two platforms do not currently
 share this grandfathered string; see #24's treatment in
 `docs/decisions/issue-339-design-md-android-scope.md`.]**
 
 > **Annotation 2026-09-22 (Flat 2b, beid#627,
-> [D-627](docs/decisions/issue-627-flat-2b.md)).** In the pair above, the
-> `encounter-field-empty` asset, `DS.Color.surfaceCanvas` and the icon
-> DON'T are superseded by 04b's dashed empty block (`NO EVENTS YET`; §8,
-> §12; #635). The rest of the pair (specific title and body, no generic
-> "No data", no system blue, no wallet/crypto iconography) still holds.
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** The former example used
+> `encounter-field-empty`; Flat 2b replaced that asset with 04b's dashed
+> empty block (§8, §12; #635). The current pair above reflects Records
+> after #889: its saved-record explanation and toolbar grouping replace
+> the historical first-record prompt and "Sense Event" CTA. Specific
+> copy, no generic "No data", no system blue, and no wallet/crypto
+> iconography remain the rules.
 > The four motifs themselves are unchanged. **Open item 6:** the Flat 2b
 > sensing graph's concentric rings sit next to Encounter Field's "avoid
 > radar/sonar clichés"; that is open, not settled (#634).
@@ -1244,9 +1246,11 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   dash `DS.Size.emptyBlockDash` (4, as [4, 4]; from the 2026-09-23 Figma
   read, §0), padding `DS.Space.l` horizontal and
   `DS.Space.emptyBlockVertical` (40) vertical, no fill, content centered.
-  It replaces `BeidPanel` at two empty states, `CollectionHomeView`'s
-  (04b) and `DailySummaryView`'s empty day; their content is unchanged
-  (the 04b copy is #635's, the glyph #631's).
+  Since #889, screens use `BeidEmptyState` (§10), which owns this frame
+  and the common title/description/action layout. `BeidEmptyBlock` is
+  its frame implementation, not a second screen-level empty-state API.
+  The former reference here to `DailySummaryView` described a removed
+  screen; it is not a current empty-state caller.
 
 Radii in `DS.Radius`: `control 12 / card 16 / seal 28 / pill 999 /
 glyph 24 / emptyBlock 16 / nowCard 20`. All rounded rectangles use
@@ -1517,6 +1521,44 @@ Real components in this codebase. Each entry is the contract for reuse.
 > path, and `BeidGlassGroup` and the glass button styles are gone (§8
 > "Surfaces (#630)"). Where an entry below names `beidSurface`, it is that
 > flat surface, no longer migration debt.
+
+### Component: BeidEmptyState
+
+**Platform scope:** iOS presentation only (#889, maintainer decision
+2026-11-24). Android native components and shared behavior are unchanged.
+
+Use this component whenever a screen or section has no content to show:
+an empty collection, missing stored content, or an unavailable result.
+It accepts a short localized title, an optional localized description,
+an optional SF Symbol, and optional actions. Keep existing factual copy;
+an unavailable value must not become a zero, a successful save, or a
+delivery/verification claim. A title may be added above existing explanatory
+copy to make the state easy to scan. One sentence may be split between title
+and description without changing its words.
+
+`BeidEmptyState` lives in `ios/Beid/DesignSystem.swift`. It uses the
+`BeidEmptyBlock` dashed frame (§8), centered `DS.Font.Library.title17`
+and `body13`, `DS.Color.textPrimary` / `textSecondary`, and `DS.Space`
+spacing. Text wraps at Dynamic Type sizes; it has no fixed height or line
+limit. Children remain separate accessibility elements, with existing text
+and action identifiers retained. The optional symbol is decorative and hidden
+from accessibility; current callers need no symbol.
+
+This follows the title/description/actions structure of SwiftUI's
+[`ContentUnavailableView`](https://developer.apple.com/documentation/swiftui/contentunavailableview).
+A small DS component is used because the same state must fit inline report
+sections as well as empty screens while retaining the existing dashed frame,
+bundled type ramp and DS insets. This is an explicit adjustment from the old
+Figma-only empty-block title convention; native navigation, menus and buttons
+keep their OS behavior.
+
+Callers cover Records (both groupings), Past events, nearby-event search,
+Event detail's empty records, Session measurements/artwork/time bands/reports,
+missing Report detail, Record delivery/receipt/result sections, empty or
+unreadable saved venue packs, Venue broadcast before a pack is loaded, and
+the unsaved-record stop outcome. Preserve empty versus unreadable distinctions.
+Individual unavailable metadata values, zero counters, live status/guidance,
+and deliberately omitted empty sections are not empty-state layouts.
 
 ### Component: ProofCardView
 
@@ -2089,7 +2131,8 @@ visual language).
 toolbars and Now / Records tabs (the 1.1 screen specification).**
 
 - MUST: App-drawn content uses text and the existing Sigil artwork, with
-  the Bluetooth illustration exception below. Controls inside a screen are
+  the Bluetooth illustration exception below and `BeidEmptyState`'s optional
+  decorative symbol (§10). Controls inside a screen are
   monospaced uppercase text in DM Mono (§6): `COPY`, `PASTE`, `OPEN →`,
   `ENTER EVENT CODE →`. Native Bluetooth primary actions follow §10.
 - **Record event-name disclosure.** The native SwiftUI `DisclosureGroup`
@@ -2905,7 +2948,11 @@ values, which is not a violation until an Android follow-up is scheduled
   `motion.proof.resolve` and `motion.screen.transition` (no
   `DS.Motion`-equivalent namespace exists — §9).
 
-### B. Asset inventory
+### B. Historical asset inventory
+
+The retained snapshot below is not a current caller inventory. Records now
+uses `BeidEmptyState` (§10), with no `encounter-field-empty` image. Refer to
+`Illustrations.xcassets` and current Swift callers when checking asset use.
 
 > **Platform scope:** iOS-only as written for now. **[Android counterpart:
 > no custom drawable/illustration assets exist under

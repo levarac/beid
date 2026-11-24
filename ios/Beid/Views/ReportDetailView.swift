@@ -174,10 +174,9 @@ struct ReportDetailView: View {
           if let record = submissionStore.record(id: recordID) {
             reportContent(record)
           } else {
-            Text("Report unavailable on this device")
-              .beidTextStyle(DS.Font.Library.body13)
-              .foregroundStyle(DS.Color.textSecondary)
-              .accessibilityIdentifier("report-detail.unavailable")
+            BeidEmptyState(
+              Text("Report unavailable on this device"), titleIdentifier: "report-detail.unavailable"
+            )
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

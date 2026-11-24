@@ -585,11 +585,10 @@ private struct RecordsHomeView: View {
         BeidLargeTitleContent(regularMaxWidth: DS.Layout.recordsContentMaxWidth) {
           VStack(alignment: .leading, spacing: DS.Space.l) {
             if eventGroups.isEmpty {
-              BeidEmptyBlock {
-                Text("Saved records appear here after sensing.")
-                  .beidTextStyle(DS.Font.Library.body13)
-                  .foregroundStyle(DS.Color.textSecondary)
-              }
+              BeidEmptyState(
+                Text("No records yet"),
+                description: Text("Saved records appear here after sensing.")
+              )
             } else if grouping == .byEvent {
               eventList
             } else {

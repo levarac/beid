@@ -275,8 +275,7 @@ struct BeidMetricRow: View {
 /// Library component `Block/Empty` (file xf2uFHceIYg0h0gJndUkmI, node
 /// 190:53; DESIGN.md §8): a `line-dashed` inside stroke with a 4/4 dash,
 /// radius 16, 24 pt horizontal and 40 pt vertical padding, no fill, content
-/// centered. This is the frame only: the block's 10 pt title/body gap and its
-/// mono title belong to the content the caller passes in (#635).
+/// centered. Screen-level empty states use BeidEmptyState below.
 struct BeidEmptyBlock<Content: View>: View {
   let content: Content
 
@@ -296,6 +295,69 @@ struct BeidEmptyBlock<Content: View>: View {
             style: StrokeStyle(lineWidth: DS.Size.hairline, dash: [DS.Size.emptyBlockDash, DS.Size.emptyBlockDash])
           )
       }
+  }
+}
+
+/// Shared empty-content layout. Text values keep localization extraction at
+/// each call site; identifiers stay on the individual accessible text elements.
+struct BeidEmptyState<Actions: View>: View {
+  let title: Text
+  let description: Text?
+  let symbol: String?
+  let titleIdentifier: String
+  let descriptionIdentifier: String
+  let actions: Actions
+
+  init(
+    _ title: Text, description: Text? = nil, symbol: String? = nil,
+    titleIdentifier: String = "", descriptionIdentifier: String = "",
+    @ViewBuilder actions: () -> Actions
+  ) {
+    self.title = title
+    self.description = description
+    self.symbol = symbol
+    self.titleIdentifier = titleIdentifier
+    self.descriptionIdentifier = descriptionIdentifier
+    self.actions = actions()
+  }
+
+  var body: some View {
+    BeidEmptyBlock {
+      VStack(spacing: DS.Space.m) {
+        if let symbol {
+          Image(systemName: symbol)
+            .font(DS.Font.cardTitle)
+            .dynamicTypeSize(.large)
+            .foregroundStyle(DS.Color.textSecondary)
+            .accessibilityHidden(true)
+        }
+        title
+          .beidTextStyle(DS.Font.Library.title17)
+          .foregroundStyle(DS.Color.textPrimary)
+          .accessibilityIdentifier(titleIdentifier)
+        if let description {
+          description
+            .beidTextStyle(DS.Font.Library.body13)
+            .foregroundStyle(DS.Color.textSecondary)
+            .accessibilityIdentifier(descriptionIdentifier)
+        }
+        actions
+      }
+      .multilineTextAlignment(.center)
+      .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+}
+
+extension BeidEmptyState where Actions == EmptyView {
+  init(
+    _ title: Text, description: Text? = nil, symbol: String? = nil,
+    titleIdentifier: String = "", descriptionIdentifier: String = ""
+  ) {
+    self.init(
+      title, description: description, symbol: symbol,
+      titleIdentifier: titleIdentifier, descriptionIdentifier: descriptionIdentifier
+    ) { EmptyView() }
   }
 }
 

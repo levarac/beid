@@ -322,10 +322,11 @@ struct VenueSignedServingView: View {
               .beidTextStyle(DS.Font.Library.labelMono11Time)
           }
         } else {
-          Text("No pack yet. Paste the link the organizer gave you, or scan its QR code.")
-            .beidTextStyle(DS.Font.Library.body13)
-            .foregroundStyle(DS.Color.textSecondary)
-            .padding(.vertical, DS.Space.s)
+          BeidEmptyState(
+            Text("No pack yet."),
+            description: Text("Paste the link the organizer gave you, or scan its QR code.")
+          )
+          .padding(.vertical, DS.Space.s)
         }
       case .acquiring:
         statusMessage("Getting the pack.")
