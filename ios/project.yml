@@ -219,6 +219,10 @@ targets:
         excludes:
           - App/BeidApp.swift
           - App/Info.plist
+          # Lab is a device harness with report submission off
+          # (BEID_REPORT_SUBMISSION_ENABLED=NO), so it must not ship the
+          # app's collection disclosures.
+          - PrivacyInfo.xcprivacy
       - Lab
     preBuildScripts:
       - name: Build BeidSharedKit

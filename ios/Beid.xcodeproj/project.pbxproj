@@ -49,7 +49,6 @@
 		1CC8EB9F7EF9C9C28082A39F /* VenueServingContractFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD44A5AAE447B59BE320F525 /* VenueServingContractFixture.swift */; };
 		1F1C3E2BBA0F5053EBABF01A /* EventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 585ED83B70A07B98029AD182 /* EventDetailView.swift */; };
 		2039711087916D30BEC01836 /* tampered-envelope.venue-bundle.cbor in Resources */ = {isa = PBXBuildFile; fileRef = 0ED82E11631EC6CC43CF4D53 /* tampered-envelope.venue-bundle.cbor */; };
-		2157972EB94377A920605E5A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 39A51ABA93C8A436F5BD8F02 /* PrivacyInfo.xcprivacy */; };
 		21ADB0A2B750AED641305BBD /* VenueDeviceOrganizerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B5D084B36D8B81C91BD987 /* VenueDeviceOrganizerViewModel.swift */; };
 		233C4ABB4C7C909DDF036EF6 /* EventJoinControlling.swift in Sources */ = {isa = PBXBuildFile; fileRef = C238EFE3D2172FCAC370F5F0 /* EventJoinControlling.swift */; };
 		2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B26B23A64184D96C012A5B6 /* DesignSystem.swift */; };
@@ -1416,7 +1415,6 @@
 				AAF1FFED5CE6D710574F3A20 /* OFL-BricolageGrotesque.txt in Resources */,
 				B620D311DB1ED264F001363C /* OFL-DMMono.txt in Resources */,
 				7D086D84906505EA47C16199 /* OFL-DMSans.txt in Resources */,
-				2157972EB94377A920605E5A /* PrivacyInfo.xcprivacy in Resources */,
 				15B16EACE3130C5115A0A2D5 /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
