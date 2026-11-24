@@ -188,10 +188,20 @@ extension XCUIApplication {
   }
 
   func tabButton(_ label: String) -> XCUIElement {
-    if UIDevice.current.userInterfaceIdiom == .pad {
-      return buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
-    }
-    return tabBars.buttons[label]
+    // UIKit can place tabs outside a tab bar in a wide window on any device.
+    let tab = tabBars.buttons[label]
+    if tab.exists { return tab }
+    return buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+  }
+
+  /// UIKit delivers the regular horizontal size class to a window roughly
+  /// from 680 points up (iPad full screen and large splits; not iPhone
+  /// portrait). The XCUI window frame is the app's observable geometry; the
+  /// runner process's own traits are not the app's.
+  var hasRegularWidthLayout: Bool {
+    let window = windows.firstMatch
+    window.assertExists()
+    return window.frame.width >= 680
   }
 
   func openRecordsByEvent() {
