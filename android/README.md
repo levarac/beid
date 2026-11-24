@@ -312,7 +312,10 @@ as of 2026-08-19 — reverify before reusing if this doc is old):
   Robolectric never downloads SDK jars during tests. Missing or unreadable
   jars fail explicitly rather than falling back to Maven Central. Gradle's
   dependency cache (including CI's existing Gradle user home cache) owns the
-  downloads; no separate Robolectric Maven cache is required.
+  downloads; no separate Robolectric Maven cache is required. Pull request
+  runs read that cache but do not write it, so until a run that writes the
+  cache has saved the jars, a pull request run resolves them through Gradle
+  (with Gradle's network retries) before the tests start.
   The pinned Robolectric **4.15.1** requires these exact artifacts:
   - **SDK 34:** `org.robolectric:android-all-instrumented:14-robolectric-10818077-i7`.
     Every Robolectric test class explicitly selects `@Config(sdk = [34])`;
@@ -326,7 +329,9 @@ as of 2026-08-19 — reverify before reusing if this doc is old):
   when changing Robolectric or test SDK settings. An additional SDK that has
   not been provisioned fails with the expected jar path in the local resolver.
   After an initial normal run resolves dependencies, verify without downloads
-  from `android/` with `./gradlew :app:testDebugUnitTest --offline --rerun-tasks --no-daemon`.
+  from `android/` with
+  `JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" ./gradlew :app:testDebugUnitTest --offline --rerun-tasks --no-daemon`,
+  which selects the same JDK as the other commands in this README.
 - `testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:<version
   matching kotlinx-coroutines-android>")` for `Dispatchers.setMain(...)` in
   plain (non-Robolectric) ViewModel unit tests that use `viewModelScope` —
