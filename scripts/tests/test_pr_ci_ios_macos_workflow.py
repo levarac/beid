@@ -1,12 +1,14 @@
 import json
 import os
+import shlex
 from pathlib import Path
-import re
 import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
+
+from scripts.tests.workflow_yaml import named_step, workflow_data
 
 
 WORKFLOW_PATH = Path(__file__).parents[2] / ".github/workflows/pr-ci-ios-macos.yml"
@@ -51,41 +53,44 @@ def without_comments(text: str) -> str:
     )
 
 
-def step_block(text: str, name: str) -> str:
-    marker = f"      - name: {name}\n"
-    start = text.index(marker)
-    next_step = text.find("\n      - ", start + len(marker))
-    next_job = re.search(r"\n  [\w-]+:\n", text[start:])
-    boundaries = [index for index in (next_step, start + next_job.start() if next_job else -1) if index != -1]
-    return text[start:min(boundaries)] if boundaries else text[start:]
+def step_data(text: str, name: str, job: str = "build") -> dict:
+    return named_step(workflow_data(text), job, name)
+
+
+def run_commands(text: str) -> str:
+    return "\n".join(without_comments(step.get("run", ""))
+                     for job in workflow_data(text)["jobs"].values()
+                     for step in job.get("steps", []))
 
 
 class PrCiIosMacosWorkflowTest(unittest.TestCase):
     def test_lane_creates_its_device_instead_of_selecting_or_erasing_one(self) -> None:
-        text = without_comments(workflow_text())
+        text = run_commands(workflow_text())
         self.assertIn("python3 scripts/ci_simulator.py", text)
         self.assertNotIn("simctl list devices", text)
         self.assertNotIn("simctl erase", text)
 
     def test_simulator_helper_changes_trigger_the_lane(self) -> None:
-        self.assertEqual(workflow_text().count('      - "scripts/ci_simulator.py"'), 1)
+        self.assertEqual(workflow_data(workflow_text())["on"]["push"]["paths"].count(
+            "scripts/ci_simulator.py"), 1)
 
     def test_every_device_operation_uses_only_the_create_steps_output(self) -> None:
         text = workflow_text()
-        creation = step_block(text, "Create owned simulator")
-        self.assertIn("        id: simulator\n", creation)
-        self.assertIn('--name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"', creation)
-        self.assertIn('printf \'udid=%s\\n\' "$simulator_udid" >> "$GITHUB_OUTPUT"', creation)
+        creation = step_data(text, "Create owned simulator")
+        self.assertEqual(creation["id"], "simulator")
+        self.assertIn('--name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"', creation["run"])
+        self.assertIn('printf \'udid=%s\\n\' "$simulator_udid" >> "$GITHUB_OUTPUT"', creation["run"])
         for name in ("Boot owned simulator", "Build for testing",
                      "Test without rebuilding", "Delete owned simulator"):
             with self.subTest(step=name):
-                self.assertIn("SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}", step_block(text, name))
-        cleanup = step_block(text, "Delete owned simulator")
-        self.assertIn("if: ${{ always() && steps.simulator.outputs.udid != '' }}", cleanup)
+                self.assertEqual(step_data(text, name)["env"]["SIMULATOR_UDID"],
+                                 "${{ steps.simulator.outputs.udid }}")
+        cleanup = step_data(text, "Delete owned simulator")
+        self.assertEqual(cleanup["if"], "${{ always() && steps.simulator.outputs.udid != '' }}")
 
     def test_cleanup_deletes_only_owned_udid_even_when_shutdown_fails(self) -> None:
-        block = step_block(workflow_text(), "Delete owned simulator")
-        command = textwrap.dedent(block.split("        run: |\n", 1)[1])
+        block = step_data(workflow_text(), "Delete owned simulator")
+        command = block["run"]
         owned = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)
@@ -118,8 +123,14 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
 
         for name in ("Build for testing", "Test without rebuilding"):
             with self.subTest(step=name):
-                block = step_block(text, name)
-                self.assertEqual(block.count("SWIFT_OPTIMIZATION_LEVEL=-O"), 1)
+                block = step_data(text, name)["run"]
+                # Shell tokenization respects quotes, array parentheses and comments;
+                # prefix matches would accept -Onone, -Osize and other wrong values.
+                lexer = shlex.shlex(block, posix=True, punctuation_chars="();|&")
+                lexer.whitespace_split = True
+                values = [token.split("=", 1)[1] for token in lexer
+                          if token.startswith("SWIFT_OPTIMIZATION_LEVEL=")]
+                self.assertEqual(values, ["-O"])
 
     def test_simulator_lane_no_longer_builds_release_for_device(self) -> None:
         """The Release-for-device build moved out (gh#479).
@@ -129,41 +140,49 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         runner — which TestFlight delivery also needs. This pins the removal so it cannot
         drift back in unnoticed; re-adding it here is a decision, not an edit.
         """
-        directives = without_comments(workflow_text())
+        directives = run_commands(workflow_text())
 
         self.assertNotIn("-configuration Release", directives)
-        self.assertNotIn("Build Release for device", directives)
+        self.assertNotIn("Build Release for device", [
+            step.get("name") for job in workflow_data(workflow_text())["jobs"].values()
+            for step in job.get("steps", [])
+        ])
         self.assertNotIn("generic/platform=iOS", directives)
 
     def test_mode_is_selected_once_and_cannot_skip_testing(self):
         text = workflow_text()
-        self.assertIn("      - name: Determine test mode\n", text)
-        mode = step_block(text, "Determine test mode")
-        self.assertIn("id: test-mode", mode)
-        self.assertIn('python3 -m scripts.ios_ui_smoke mode', mode)
-        self.assertIn('"$GITHUB_EVENT_PATH"', mode)
-        self.assertIn("ios_full: ${{ steps.classify.outputs.ios_full }}", text)
-        self.assertIn("needs.changes.result == 'success'", mode)
-        self.assertIn("needs.changes.outputs.error == 'false'", mode)
-        self.assertIn("needs.changes.outputs.ios_full == 'false'", mode)
-        self.assertIn("mode=full", mode)
-        self.assertNotIn("if:", mode)
-        self.assertEqual(text.count("scripts.ios_ui_smoke mode"), 1)
-        run = step_block(text, "Test without rebuilding")
-        self.assertIn("if: ${{ needs.plan.outputs.mode == 'smoke' }}", run)
-        self.assertIn("TEST_MODE: ${{ needs.plan.outputs.mode }}", run)
-        self.assertIn('scripts.ios_ui_smoke arguments', run)
-        self.assertIn('"${test_args[@]}"', run)
-        check = step_block(text, "Verify UI execution and bundle durations")
-        self.assertIn("if: ${{ always() && needs.plan.outputs.mode == 'smoke' }}", check)
-        self.assertIn("TEST_MODE: ${{ needs.plan.outputs.mode }}", check)
-        self.assertIn('xcresulttool get test-results tests', check)
-        self.assertIn('scripts.ios_ui_smoke verify-lane --lane build', check)
-        self.assertNotIn("continue-on-error", text)
+        data = workflow_data(text)
+        mode = step_data(text, "Determine test mode", "plan")
+        self.assertEqual(mode["id"], "test-mode")
+        self.assertIn('python3 -m scripts.ios_ui_smoke mode', mode["run"])
+        self.assertIn('"$GITHUB_EVENT_PATH"', mode["run"])
+        self.assertEqual(data["jobs"]["changes"]["outputs"]["ios_full"],
+                         "${{ steps.classify.outputs.ios_full }}")
+        for requirement in ("needs.changes.result == 'success'",
+                            "needs.changes.outputs.error == 'false'",
+                            "needs.changes.outputs.ios_full == 'false'"):
+            self.assertIn(requirement, mode["env"]["ALLOW_SMOKE"])
+        self.assertIn("mode=full", mode["run"])
+        self.assertNotIn("if", mode)
+        self.assertEqual(run_commands(text).count("scripts.ios_ui_smoke mode"), 1)
+        run = step_data(text, "Test without rebuilding")
+        self.assertEqual(run["if"], "${{ needs.plan.outputs.mode == 'smoke' }}")
+        self.assertEqual(run["env"]["TEST_MODE"], "${{ needs.plan.outputs.mode }}")
+        self.assertIn('scripts.ios_ui_smoke arguments', run["run"])
+        self.assertIn('"${test_args[@]}"', run["run"])
+        check = step_data(text, "Verify UI execution and bundle durations")
+        self.assertEqual(check["if"], "${{ always() && needs.plan.outputs.mode == 'smoke' }}")
+        self.assertEqual(check["env"]["TEST_MODE"], "${{ needs.plan.outputs.mode }}")
+        self.assertIn('xcresulttool get test-results tests', check["run"])
+        self.assertIn('scripts.ios_ui_smoke verify-lane --lane build', check["run"])
+        for job in data["jobs"].values():
+            self.assertNotIn("continue-on-error", job)
+            for step in job.get("steps", []):
+                self.assertNotIn("continue-on-error", step)
 
     def test_plan_runs_full_when_changed_path_output_affects_deferred_coverage(self):
-        block = step_block(workflow_text(), "Determine test mode")
-        command = textwrap.dedent(block.split("        run: |\n", 1)[1])
+        block = step_data(workflow_text(), "Determine test mode", "plan")
+        command = block["run"]
         root = WORKFLOW_PATH.parents[2]
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)
@@ -185,9 +204,9 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
                     self.assertEqual(output.read_text(), f"mode={expected}\n")
 
     def test_selection_shell_passes_exact_arguments_in_both_modes(self):
-        block = step_block(workflow_text(), "Test without rebuilding")
-        self.assertIn("scripts.ios_ui_smoke arguments", block)
-        command = textwrap.dedent(block.split("        run: |\n", 1)[1])
+        block = step_data(workflow_text(), "Test without rebuilding")
+        self.assertIn("scripts.ios_ui_smoke arguments", block["run"])
+        command = block["run"]
         root = WORKFLOW_PATH.parents[2]
         (root / "build").mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=root / "build") as temporary:
@@ -206,6 +225,8 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
                         "TEST_MODE": mode, "XCODE_EXIT": str(child_exit)})
                 self.assertEqual(result.returncode, child_exit, result.stderr)
                 argv = json.loads(result.stdout)
+                self.assertEqual([arg for arg in argv if arg.startswith("SWIFT_OPTIMIZATION_LEVEL=")],
+                                 ["SWIFT_OPTIMIZATION_LEVEL=-O"])
                 selections = [item for item in argv if item.startswith("-only-testing:")]
                 from scripts.ios_ui_smoke import parse_smoke_list
                 listed = parse_smoke_list((root / "ios/ci/ui-smoke-tests.txt").read_text())
@@ -221,15 +242,14 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
 
 class MainIosReleaseBuildWorkflowTest(unittest.TestCase):
     def test_release_build_command_moved_unchanged(self) -> None:
-        block = step_block(
-            release_workflow_text(), "Build Release for device"
-        )
-
-        self.assertIn(RELEASE_BUILD_COMMAND, block)
-        # Informational: it produces no artefact and gates nothing, so nothing
-        # downstream can come to depend on it without that being a visible edit.
-        self.assertNotIn("upload-artifact", release_workflow_text())
-        self.assertNotIn("needs:", release_workflow_text())
+        data = workflow_data(release_workflow_text())
+        step = named_step(data, "ios-release-build", "Build Release for device")
+        self.assertIn(textwrap.dedent(RELEASE_BUILD_COMMAND), step["run"])
+        # The informational lane must not produce artifacts or gain dependencies.
+        for job in data["jobs"].values():
+            self.assertNotIn("needs", job)
+            for step in job.get("steps", []):
+                self.assertFalse(step.get("uses", "").startswith("actions/upload-artifact@"))
 
     def test_release_workflow_runs_only_on_main_and_on_demand(self) -> None:
         """Push-to-main is the only trigger it gains.
@@ -238,16 +258,15 @@ class MainIosReleaseBuildWorkflowTest(unittest.TestCase):
         removed, on the same single runner, while looking like a separate
         lane.
         """
-        text = release_workflow_text()
-
-        directives = without_comments(text)
-
-        self.assertIn("  push:\n    branches: [main]\n", directives)
-        self.assertIn("  workflow_dispatch:\n", directives)
-        self.assertNotIn("pull_request", directives)
+        events = workflow_data(release_workflow_text())["on"]
+        self.assertEqual(set(events), {"push", "workflow_dispatch"})
+        self.assertEqual(events["push"]["branches"], ["main"])
+        self.assertNotIn("tags", events["push"])
+        self.assertNotIn("branches-ignore", events["push"])
 
     def test_release_workflow_uses_a_hosted_runner(self) -> None:
-        self.assertIn("runs-on: macos-26", release_workflow_text())
+        self.assertEqual(workflow_data(release_workflow_text())["jobs"]["ios-release-build"]["runs-on"],
+                         "macos-26")
 
 
 if __name__ == "__main__":
