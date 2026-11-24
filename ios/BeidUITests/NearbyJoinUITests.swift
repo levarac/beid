@@ -148,14 +148,16 @@ final class NowNavigationUITests: XCTestCase {
     ).firstMatch.assertExists()
   }
 
+  /// One predicate query (one accessibility snapshot). Reading `.label` from
+  /// every element of `allElementsBoundByIndex` re-resolves each element and
+  /// costs one snapshot apiece.
   private func assertNoNumericMutualLabel(
     in container: XCUIElement, file: StaticString = #filePath, line: UInt = #line
   ) {
-    let labels = container.descendants(matching: .any).allElementsBoundByIndex.map(\.label)
-    for label in labels {
-      XCTAssertNil(label.range(of: #"\d+\s+mutual"#, options: [.regularExpression, .caseInsensitive]),
-                   label, file: file, line: line)
-    }
+    let numeric = container.descendants(matching: .any).matching(
+      NSPredicate(format: "label MATCHES[c] %@", #"(?s).*\d+\s+mutual.*"#)
+    )
+    XCTAssertEqual(numeric.count, 0, "A label announces a numeric mutual count", file: file, line: line)
   }
 
   func testEmptyRecordsExplainsBothGroupingsInPlace() {
