@@ -290,6 +290,43 @@ final class BluetoothDeniedCallbackTests: XCTestCase {
     XCTAssertEqual(coordinator.screen, .bluetoothPermission)
   }
 
+  func testGrantBeforeDeniedWaiterCompletesWins() async throws {
+    try await assertLatestStateWins(first: .denied, latest: .granted, expected: .home)
+  }
+
+  func testDenialBeforeGrantedWaiterCompletesWins() async throws {
+    try await assertLatestStateWins(first: .granted, latest: .denied, expected: .bluetoothDenied)
+  }
+
+  func testPoweredOffBeforeDeniedWaiterCompletesStaysDistinct() async throws {
+    try await assertLatestStateWins(first: .denied, latest: .poweredOff, expected: .bluetoothOff)
+  }
+
+  private func assertLatestStateWins(
+    first: BluetoothAuthorizationState, latest: BluetoothAuthorizationState, expected: AppScreen
+  ) async throws {
+    let monitor = BluetoothMonitor(makeCentralManager: { _ in nil })
+    let waiting = expectation(description: "Authorization waiter registered")
+    let coordinator = try makeCoordinator(monitor: monitor, permissionEvaluation: {
+      waiting.fulfill()
+      return await monitor.waitForAuthorizationResolution()
+    })
+    coordinator.beginOnboarding()
+    let request = coordinator.requestBluetoothPermission()
+    await fulfillment(of: [waiting], timeout: 1)
+
+    // Same MainActor turn: resume the waiter, publish a newer result, then
+    // let the request task apply its captured (now stale) completion.
+    monitor.receiveAuthorizationState(first)
+    monitor.receiveAuthorizationState(latest)
+    await request.value
+
+    XCTAssertEqual(monitor.state, latest)
+    XCTAssertEqual(coordinator.screen, expected)
+    XCTAssertNil(coordinator.sensingCoordinator.joinedEventCode)
+    XCTAssertTrue(coordinator.sensingCoordinator.canSelectEventToJoin)
+  }
+
   private func resolveInitialState(
     _ state: BluetoothAuthorizationState,
     monitor: BluetoothMonitor,
@@ -303,7 +340,10 @@ final class BluetoothDeniedCallbackTests: XCTestCase {
     XCTAssertEqual(monitor.state, state)
   }
 
-  private func makeCoordinator(monitor: BluetoothMonitor) throws -> AppCoordinator {
+  private func makeCoordinator(
+    monitor: BluetoothMonitor,
+    permissionEvaluation: (() async -> BluetoothAuthorizationState)? = nil
+  ) throws -> AppCoordinator {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("bluetooth-denied-callback-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -323,6 +363,7 @@ final class BluetoothDeniedCallbackTests: XCTestCase {
       reportProofLinkStore: ReportProofLinkStore(fileURL: directory.appendingPathComponent("links.json")),
       registryClient: nil,
       userDefaults: defaults,
+      permissionEvaluation: permissionEvaluation,
       bluetoothMonitor: monitor
     )
   }

@@ -622,7 +622,9 @@ private struct RecordsHomeView: View {
       selectedRecord = proof
     } label: {
       VStack(alignment: .leading, spacing: DS.Space.s) {
-        RecordSigilSlot(input: sensing.sigilInput(forProofId: proof.id), placement: .recordsGrid)
+        RecordSigilSlot(
+          input: sensing.sigilInput(forProofId: proof.id), placement: .recordsGrid, isDeviceRecord: true
+        )
         Text(verbatim: proof.eventName)
           .beidTextStyle(DS.Font.Library.title17)
           .fixedSize(horizontal: false, vertical: true)
@@ -650,7 +652,9 @@ private struct RecordsHomeView: View {
                             submissionStore: coordinator.reportSubmissionStore)
           } label: {
             HStack(spacing: DS.Space.m) {
-              RecordSigilSlot(input: sensing.sigilInput(forProofId: proof.id), placement: .homePastRow)
+              RecordSigilSlot(
+                input: sensing.sigilInput(forProofId: proof.id), placement: .homePastRow, isDeviceRecord: true
+              )
               VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text(verbatim: proof.eventName).beidTextStyle(DS.Font.Library.title17)
                 Text(String(
