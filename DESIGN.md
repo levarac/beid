@@ -1962,7 +1962,11 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   `AppNavHost.kt`'s composable body).]**
 - **Collection home (04)**: Now handles current participation and Records
   holds saved records and events. Both tabs have an account entry in their
-  top-trailing toolbar. The primary nearby candidate card on Now presents
+  top-trailing toolbar. Records also has a native view-options menu in the
+  navigation bar, with an inline grouping picker (§12). Selecting either
+  grouping changes the same screen, including when it has no saved records;
+  the by-event rows retain their date, session count and record count.
+  The primary nearby candidate card on Now presents
   the announced name and registration status, and the whole card joins
   after verification. Its accessibility label starts with the localized
   join action. Empty state (04b) follows the §3 do/don't. **[iOS-only as
@@ -2096,9 +2100,21 @@ toolbars and Now / Records tabs (the 1.1 screen specification).**
   the role of Bluetooth. The illustration is noninteractive and hidden
   from accessibility because the adjacent text conveys the same
   information. The symbols stay within the 32 pt decorative cap (§12).
-- **Records grouping (#853).** Records uses a native segmented picker for
-  `All records` and `By event`. The system styles the labels and selected
-  state, and changing the grouping keeps the same Records screen.
+- **Records grouping (#888, #853).** A native navigation-bar `Menu` uses
+  `rectangle.grid.1x2` and the accessible title `Record view options`.
+  Its inline `Picker` offers `All records` and `By event`, with the OS
+  checking the current choice. Test the toolbar's 44×44pt touch region
+  with corner taps; its accessibility frame is not a hit-area
+  measurement. Menu-row sizing belongs to the OS. Changing grouping
+  keeps the same Records screen.
+  The scroll-view identifiers stay `records.grid` and `records.events`;
+  the button is `records.grouping`. The options declare
+  `records.grouping.all` and `records.grouping.event`, but iOS 27's native
+  menu does not expose those option identifiers. UI tests use the visible
+  English option labels and verify selection and the resulting scroll view.
+  This replaces the
+  segmented control by maintainer decision (2026-11-24); the system owns
+  menu presentation and selection styling on iPhone and iPad.
 - MUST: The Now / Records tab bar uses `TabView` with system symbols and
   titles. Its labels use the system font and its appearance belongs to the OS.
 - MUST: Navigation-bar and toolbar items are OS-standard items, not

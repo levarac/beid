@@ -584,11 +584,6 @@ private struct RecordsHomeView: View {
       ScrollView {
         BeidLargeTitleContent(regularMaxWidth: DS.Layout.recordsContentMaxWidth) {
           VStack(alignment: .leading, spacing: DS.Space.l) {
-            Picker("Record grouping", selection: $grouping) {
-              Text("All records").tag(Grouping.allRecords)
-              Text("By event").tag(Grouping.byEvent)
-            }
-            .pickerStyle(.segmented)
             if eventGroups.isEmpty {
               BeidEmptyBlock {
                 Text("Saved records appear here after sensing.")
@@ -611,6 +606,24 @@ private struct RecordsHomeView: View {
       .accessibilityIdentifier(grouping == .byEvent ? "records.events" : "records.grid")
       .background(DS.Color.surfaceCanvas.ignoresSafeArea())
       .modifier(HomeAccountToolbar(title: "records.title", iconColor: DS.Color.textPrimary))
+      .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Menu {
+            Picker("Record grouping", selection: $grouping) {
+              Text("All records").tag(Grouping.allRecords)
+                .accessibilityIdentifier("records.grouping.all")
+              Text("By event").tag(Grouping.byEvent)
+                .accessibilityIdentifier("records.grouping.event")
+            }
+            .pickerStyle(.inline)
+          } label: {
+            Image(systemName: "rectangle.grid.1x2")
+              .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget)
+          }
+          .accessibilityLabel(Text("Record view options"))
+          .accessibilityIdentifier("records.grouping")
+        }
+      }
       .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.light, for: .navigationBar)
       .navigationDestination(item: $selectedRecord) { HomeRecordDetail(proof: $0) }

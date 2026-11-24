@@ -80,7 +80,7 @@ final class NowNavigationUITests: XCTestCase {
     XCTAssertTrue(app.buttons["home.account"].exists)
     app.tabButton("Records").tap()
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
-    app.buttons["By event"].tap()
+    app.selectRecordsGrouping("By event")
     app.scrollViews["records.events"].assertExists()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
     XCTAssertTrue(app.buttons["home.account"].isHittable)
@@ -97,14 +97,59 @@ final class NowNavigationUITests: XCTestCase {
     let explanation = app.staticTexts["Saved records appear here after sensing."]
     app.scrollViews["records.grid"].assertExists()
     explanation.assertHittable()
-    app.buttons["By event"].tap()
+    app.selectRecordsGrouping("By event")
     app.scrollViews["records.events"].assertExists()
     explanation.assertHittable()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
     XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.past-event.")).count, 0)
-    app.buttons["All records"].tap()
+    app.selectRecordsGrouping("All records")
     app.scrollViews["records.grid"].assertExists()
     explanation.assertHittable()
+  }
+
+  func testRecordsGroupingToolbarKeepsSelectionAndMeetsHitTarget() {
+    launchHome(["-beid-home-frame-04"])
+    app.tabButton("Records").tap()
+    let options = app.navigationBars.buttons["records.grouping"]
+    options.assertHittable()
+    XCTAssertEqual(options.label, "Record view options")
+    XCTAssertEqual(app.segmentedControls.count, 0)
+    options.tap()
+    // Native Picker menu items omit identifiers, so use the English UI-test labels.
+    let allRecords = app.buttons["All records"]
+    let byEvent = app.buttons["By event"]
+    allRecords.assertHittable()
+    byEvent.assertHittable()
+    XCTAssertTrue(allRecords.isSelected)
+    XCTAssertFalse(byEvent.isSelected)
+    capture("records-grouping-menu")
+    byEvent.tap()
+    byEvent.assertDisappears()
+    app.scrollViews["records.events"].assertExists()
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
+    options.tap()
+    XCTAssertTrue(byEvent.isSelected)
+    XCTAssertFalse(allRecords.isSelected)
+    allRecords.tap()
+    allRecords.assertDisappears()
+    app.scrollViews["records.grid"].assertExists()
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
+    // Probe the four corners of the toolbar button's own frame (inset 2 points),
+    // so a hit target smaller than the control's visible bounds is caught.
+    let frame = options.frame
+    XCTAssertGreaterThanOrEqual(frame.width, 28)
+    XCTAssertGreaterThanOrEqual(frame.height, 28)
+    for dx in [2.0, frame.width - 2.0] {
+      for dy in [2.0, frame.height - 2.0] {
+        options.assertHittable()
+        options.coordinate(withNormalizedOffset: .zero)
+          .withOffset(CGVector(dx: dx, dy: dy)).tap()
+        allRecords.assertHittable()
+        allRecords.tap()
+        allRecords.assertDisappears()
+        app.scrollViews["records.grid"].assertExists()
+      }
+    }
   }
 
   func testRecordsGridHasOneAttendancePerEventAndKeepsSessions() {

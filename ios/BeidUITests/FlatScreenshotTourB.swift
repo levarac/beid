@@ -159,7 +159,7 @@ final class FlatScreenshotTourB: XCTestCase {
     app.tabButton("Records").tap()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].waitForExistence(timeout: 5))
     assertNavigationTitleDrawn("Records")
-    XCTAssertTrue(app.buttons["By event"].isHittable)
+    XCTAssertTrue(app.navigationBars.buttons["records.grouping"].isHittable)
     XCTAssertTrue(app.buttons["home.account"].isHittable)
     capture("records-navigation")
   }
@@ -214,10 +214,7 @@ final class FlatScreenshotTourB: XCTestCase {
     app.navigationBars.buttons.firstMatch.tap()
     app.scrollViews["records.events"].assertExists()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
-    let allRecords = app.buttons["All records"]
-    allRecords.assertHittable()
-    XCTAssertEqual(allRecords.label, "All records")
-    allRecords.tap()
+    app.selectRecordsGrouping("All records")
     app.scrollViews["records.grid"].assertExists()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
     XCTAssertEqual(Set(tiles.allElementsBoundByIndex.map(\.identifier)), gridRecordIDs)
