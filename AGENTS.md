@@ -52,7 +52,7 @@ README for its exact pin and verification path.
 `DECISIONS.md`, the append-only decision record at the top of this repo's
 source-of-truth hierarchy, lives outside this repository at
 `<private-project-records>/DECISIONS.md` (the agent-workspace
-PMO project) — it is not checked into `thegreeting/beid`.
+PMO project) — it is not checked into `levarac/beid`.
 
 ## 実機オペレーションで毎回効く知識
 
@@ -147,26 +147,24 @@ is given `ledgerFilesDir`, which its production `Activity` constructor passes.
 A coordinator built without `ledgerFilesDir` has neither; a test that injects
 an accumulator instead gets the writer but no drain. #121's records list still
 reads its own `ProofRecordStore`, not the unsent-window ledger.
-Android's screen set has grown since that verification point and this
-paragraph was measured again on 2026-09-03 against `d267fb5`. Android now has
-six screens—Welcome, Bluetooth permission, Bluetooth off, Join event, Account,
-and Records—and `EventJoinScreen` renders `Sensing`, `EventFound`, `Recording`,
-and `SignalLost` inside the Join event screen rather than as the four
-dedicated screens iOS uses. `EventJoinCoordinator` calls `engine.onEvent`.
+Android's screen set has grown since that verification point. As of
+2026-11-24, `AppNavHost.kt` wires these destinations: Welcome, Bluetooth
+permission, Bluetooth denied, Bluetooth off, Join event (redirects to Home),
+Home, Account, Manual event code, Records, Today summary, Event records, and
+Record detail; that file is the source of truth for the current list.
+`EventJoinScreen` renders `Sensing`, `EventFound`, `Recording`, and
+`SignalLost` inside one screen rather than as the four dedicated screens iOS
+uses. `EventJoinCoordinator` calls `engine.onEvent`.
 Owner-key binding/self-proof landed on Android in #125 (PR #314) once barnard
 v0.5.0 published the primitives. Records persistence and the list screen
 landed in #121 (PR #322), fed by three observation callbacks #235 (PR #321)
-added to `EventJoinCoordinator`; that list is reached from the Account screen,
-which is where iOS's *secondary* `PastEventsView` is reached, not where its
-primary `CollectionHomeView` sits. So the collection *home* is still absent
-(`Screen.kt` still states outright that `EventJoin` stands in for iOS's
-`.home`); promoting the records list to that position is a navigation decision
-that belongs with the participation-surface work in #141, not a follow-up to
-#121. Android's proof-detail flow already uses `RecordDetailScreen` (#122,
-PR #340); Flat 2b screens awaiting navigation wiring are a separate gap.
-Also still absent: wallet connection
-(#124, additionally gated on the iOS field test per its own issue body), and
-the venue-device organizer surface — `VenueDeviceBroadcasting` and
+added to `EventJoinCoordinator`; that list is reached from the Account screen.
+Android now has a `Home` destination (`Screen.kt`, `HomeScreen.kt`) and
+wallet connection (`WalletConnector.kt`; #124 and #141 are closed); status
+checked 2026-11-24 against `7e2ca6ba`. Android's proof-detail flow already
+uses `RecordDetailScreen` (#122, PR #340); Flat 2b screens awaiting
+navigation wiring are a separate gap.
+Also still absent: the venue-device organizer surface — `VenueDeviceBroadcasting` and
 `VenueDeviceOrganizerView` exist only on iOS (`git grep -w
 VenueDeviceBroadcasting` returns hits under `ios/` and **none** under
 `android/`), tracked as dispatch#4. It is listed here because this file's own
@@ -377,7 +375,7 @@ the same name shadows them.
   classification select full mode. A `ci:full-ui` label in the event payload
   selects the full UI suite. All other events run full, including
   `merge_group`, main pushes, nightly and manual dispatch. With the main merge
-  queue enabled, the merge step is to add the PR to the queue; the queue's
+  queue (active), the merge step is to add the PR to the queue; the queue's
   completed full-mode `iOS simulator` pass on the exact merge result satisfies
   the merge requirement. The queue lane never skips for paths. For a full run
   before queueing, add `ci:full-ui` after the final PR update (`labeled` starts
@@ -392,9 +390,9 @@ the same name shadows them.
   does not establish branch protection.
 - **Negative compile fixtures are manual today.** The fixtures in
   `compile-fixtures/` prove stale Kotlin symbols and old Swift module names
-  fail when applied in a disposable checkout. Recurring CI automation is
-  intentionally deferred to Issue #110; do not claim that CI currently runs
-  them.
+  fail when applied in a disposable checkout. This check is not automated
+  in CI and has no open tracking issue (#110 is closed); do not claim that CI
+  currently runs them.
 - **"Which behavior is protected by which test" is a tool, not a hand-
   maintained list.** `scripts/mutation_check.py` (beid#110) mutates one real
   site at a time in a target Kotlin source file or directory (comparison-
@@ -499,7 +497,7 @@ nightly (03:23 UTC, separate concurrency group) and manual runs are full.
 The xcresult tree must prove exactly the smoke list Passed in smoke mode and
 every enumerated non-exempt UI case Passed in full mode. Summary counts and per-bundle
 durations come from xcresult Test Case nodes, summed without suite totals.
-With the main merge queue enabled, add the PR to the queue to merge. Its
+With the main merge queue (active), add the PR to the queue to merge. Its
 full-mode `iOS simulator` pass on the exact merge result satisfies the merge
 requirement. Add `ci:full-ui` after updating the PR to request a full run before
 queueing; a PR smoke pass or skip is not full-suite evidence. The label need
@@ -567,18 +565,19 @@ release metadata checks use `ubuntu-24.04`. Recommend requiring `Determine
 changed paths`, `Android build`, `SwiftLint`, `Repository sanity`, `iOS
 simulator`, and `beid-lab-cli build and test` on main. After these workflows
 reach main,
-the operator can enable `Require merge queue` on the exact `main` rule. The
-proposed queue configuration is merge method `merge` (merge commit), build
+the operator enabled `Require merge queue` on the exact `main` rule (applied
+2026-10-24 as ruleset `main merge queue`, id 25775126, enforcement active;
+checked 2026-11-24). The queue configuration is merge method `merge` (merge commit), build
 concurrency `1`, only merge non-failing pull requests enabled, status check
 timeout `120` minutes, and merge limits minimum/maximum `1` PR. Keep the six
 checks above required with GitHub Actions as their source and enable Allow
-merge commits. This is a proposal, not an applied setting. The operator owns
+merge commits. The operator owns
 those settings and removal of persistent runner access; changing workflows
 does not revoke runner access or configure branch protection.
 
 ## PR と issue の紐付け (Development 欄)
 
-1. issue を閉じる PR は本文に `Closes #N` (複数可) を書く。base が main なら link は自動で付く。merge 後に本文を編集しても付く。
-2. For a PR targeting a non-default branch (stacked PR or `release/*`), add a manual closing link with the `addCloseIssueReferences` GraphQL mutation (`input: {issueId: "ISSUE_NODE_ID", pullRequestIds: ["PR_NODE_ID"]}`), or through the issue's Development sidebar. Keep the PR base unchanged and re-check `issue.closedByPullRequestsReferences(includeClosedPrs: true, first: 100)` for the intended PR, following pagination if needed.
+1. issue を閉じる PR は本文に `Closes #N` (複数可) を書く。base が既定ブランチ (main) なら、merge 時に本文にある `Closes #N` で issue が閉じる。既定ブランチ以外へ merge しても issue は閉じない。merge 後に本文へ足した `Closes #N` は link を付けるだけで、issue は閉じない (証拠を付けて手で close する)。
+2. For a PR targeting a non-default branch (stacked PR or `release/*`), add a manual closing link with the `addCloseIssueReferences` GraphQL mutation (`input: {issueId: "ISSUE_NODE_ID", pullRequestIds: ["PR_NODE_ID"]}`), or through the issue's Development sidebar. Keep the PR base unchanged and re-check `issue.closedByPullRequestsReferences(includeClosedPrs: true, first: 100)` for the intended PR, following pagination if needed. The link shows in the Development sidebar; it does not close the issue when the PR merges into a non-default branch, so close the issue by hand with evidence after the merge.
 3. merge 前の確認コメント (レビュー結果と検証結果を PR コメントに残す) に「Development link: 済」と書く。issue を閉じない PR だけ「該当 issue なし」。
 4. コメントや mention は link ではない。確認は GraphQL で行う。
