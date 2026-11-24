@@ -469,10 +469,14 @@ classification; failed collection or classification runs all three gates.
   including PRs. Its key and paths derive from `robolectricSdkVersions`;
   setup-gradle's PR cache remains read-only. Only `org.robolectric:android-all-instrumented`
   resolves from Google's Maven Central mirror first, then Central when absent.
-**SwiftLint**: `scripts/lint.sh`.
+**SwiftLint**: `scripts/lint.sh` and `scripts/check_lint_fixtures.py`.
+The fixture check requires SwiftLint exit 2 and exact fail-fixture line/rule
+violations, with no pass-fixture or application violations.
 **Repository sanity**: YAML and TestFlight note validation,
   `scripts/check_pr_ci_doc_drift.py`, and
   `python3 -m unittest discover -s scripts/tests -t .`.
+  Local runs of the checker or script tests require PyYAML in the active Python
+  environment: install it with `python3 -m pip install PyYAML==6.0.2`.
 
 The separate `.github/workflows/pr-ci-ios-macos.yml` reports **iOS simulator**
 from an always-running aggregate on `ubuntu-24.04-arm`. **Plan iOS test jobs**

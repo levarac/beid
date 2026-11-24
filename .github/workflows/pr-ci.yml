@@ -245,6 +245,8 @@ jobs:
           swiftlint version
       - name: Run design-contract lint
         run: scripts/lint.sh
+      - name: Verify design-contract lint fixtures
+        run: python3 scripts/check_lint_fixtures.py
 
   sanity:
     name: Repository sanity
@@ -285,6 +287,10 @@ jobs:
             python3 scripts/prepare_testflight_notes.py --source release_notes.json --output-dir /tmp/release-notes
           fi
       - name: Check AGENTS.md PR CI section matches this workflow
+        env:
+          PYTHONPATH: ${{ runner.temp }}/python-packages
         run: python3 scripts/check_pr_ci_doc_drift.py
       - name: Run scripts/ contract tests
+        env:
+          PYTHONPATH: ${{ runner.temp }}/python-packages
         run: python3 -m unittest discover -s scripts/tests -t .

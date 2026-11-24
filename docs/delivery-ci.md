@@ -48,6 +48,12 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     `scripts/check_parallax_comparison_ran.py` only on trusted main push/manual
     events behind the `parallax-comparison` environment. Its token must be an
     environment secret; missing credentials fail the trusted lane.
+    New main revisions supersede older comparison runs, including approval
+    waiters; the replacement still requires environment approval. The
+    concurrency group is per ref, so a manual dispatch from another branch
+    does not cancel the main comparison. Re-running an older main comparison
+    joins the same group and cancels a newer pending one, so re-run the
+    latest instead.
     Android unit-test resource roots include `shared/src/commonTest/fixtures/`
     and `ios/BeidTests/Fixtures/venue-bundle-conformance/`. Non-documentation
     changes under either root run Android checks, including on merge groups;
@@ -58,7 +64,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     setup-gradle's PR cache remains read-only. Only `org.robolectric:android-all-instrumented`
     resolves from Google's Maven Central mirror first, then Central when absent.
 
-  - SwiftLint: `scripts/lint.sh`
+  - SwiftLint: `scripts/lint.sh` and `scripts/check_lint_fixtures.py`.
+    The same hosted job proves both lint fixtures: SwiftLint must exit 2,
+    every fail marker must match its line and rule exactly, and the pass fixture
+    and application must have zero violations. The checker itself exits 0
+    only for that expected negative result; other exits or report drift fail.
   - repository sanity: XcodeGen YAML と TestFlight notes の JSON / 構造検証、
     `scripts/check_pr_ci_doc_drift.py` による本 subsection と workflow の
     drift 検査、`python3 -m unittest discover -s scripts/tests -t .` による
@@ -269,8 +279,19 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
   **`scripts/check_pr_ci_doc_drift.py` checks all three PR build workflows**
   against `AGENTS.md`, including the separate iOS and lab CLI job names and
-  distinguishing commands. Trigger, head checkout, hosted runner and secret
+  distinguishing commands. The scripts unittest discovery command is checked
+  in both directions, including whitespace and continued-line forms; an echo
+  or comment mentioning it is not execution evidence. Trigger, head checkout, hosted runner and secret
   boundaries are guarded by the contract tests in `scripts/tests`.
+
+  To run the script tests or documentation checker locally, install PyYAML
+  into the active Python environment (a virtual environment is suitable):
+
+  ```sh
+  python3 -m pip install PyYAML==6.0.2
+  python3 scripts/check_pr_ci_doc_drift.py
+  python3 -m unittest discover -s scripts/tests -t .
+  ```
 
   Recommended required status checks on main: `Determine changed paths`,
   `Android build`, `SwiftLint`, `Repository sanity`, `iOS simulator`, and
