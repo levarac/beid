@@ -77,9 +77,11 @@ enum BeidConfig {
   /// happens to be in service.
   static let nodeSignalSmoothingFactor: Double = 0.25
 
-  /// Display-only silence limit (#855). Neither recording nor signing uses it.
-  /// The sensing screen refreshes this projection once per second.
-  static let detectedNowTimeout: TimeInterval = 30
+  /// Display-only rolling silence limits (#855), refreshed once per second.
+  /// Both are provisional until measured with locked iOS and Android peers.
+  /// Neither recording nor signing uses these durations or expires at a window boundary.
+  static let detectedNowTimeout: TimeInterval = 300
+  static let detectedNowDimAfter: TimeInterval = 30
 
   /// Floor on how often `SensingCoordinator.nodeSignalStrengths` is
   /// republished, in seconds. The smoothed value updates on every sample;

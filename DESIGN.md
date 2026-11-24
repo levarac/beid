@@ -1986,7 +1986,14 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   say that the app can be closed. There is no threshold-based transition or
   countdown. While sensing, show devices heard and elapsed time without a
   mutual count or an achievement state. Radar nodes show devices heard in
-  the last 30 seconds, refreshed once per second. Expiry changes only this
+  the last 300 seconds, refreshed once per second, with the caption
+  "HEARD IN THE LAST 5 MINUTES" below the radar and the same time scope in
+  its VoiceOver summary. A node dims at 30 seconds of silence using
+  `DS.Opacity.radarSilentNode` (0.45), and disappears at 300 seconds.
+  Both durations in `BeidConfig` are provisional until measured with locked
+  iOS and Android peers. Each device's last detection or signal update
+  restarts its rolling timer; observation-window boundaries never expire
+  nodes. Expiry changes only this
   live display; DEVICES HEARD remains the session total, and earlier window
   observations and signed records remain intact. DONE advances to the collected-record
   screen, and View collection opens Records. Returning to Now resumes nearby

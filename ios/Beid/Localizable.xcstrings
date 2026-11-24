@@ -1,6 +1,30 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "HEARD IN THE LAST 5 MINUTES": {
+      "comment": "Caption below the sensing radar. Nodes represent devices heard within a rolling five minutes; the separate DEVICES HEARD metric is the whole session total.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HEARD IN THE LAST 5 MINUTES"
+          }
+        }
+      }
+    },
+    "%lld devices heard in the last 5 minutes": {
+      "comment": "VoiceOver summary of the sensing radar. The count is devices heard within the rolling last five minutes, not the session total. No device identifiers are spoken.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld devices heard in the last 5 minutes"
+          }
+        }
+      }
+    },
     "home.unsent.title": {
       "comment": "Now notice heading when saved records or captured inputs are waiting to be sent to the operator; not an error or a verification claim.",
       "extractionState": "manual",

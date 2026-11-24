@@ -341,8 +341,13 @@ final class SensingCoordinator: ObservableObject {
   func currentlyDetectedDisplayIDs(at now: Date) -> Set<String> {
     Set(detectedDisplayIDs.filter { id in
       guard let lastHeard = detectedLastHeardAt[id] else { return false }
-      return now.timeIntervalSince(lastHeard) <= BeidConfig.detectedNowTimeout
+      return now.timeIntervalSince(lastHeard) < BeidConfig.detectedNowTimeout
     })
+  }
+
+  func isDetectedDeviceDimmed(_ id: String, at now: Date) -> Bool {
+    guard let lastHeard = detectedLastHeardAt[id] else { return true }
+    return now.timeIntervalSince(lastHeard) >= BeidConfig.detectedNowDimAfter
   }
   /// Read-only linkage to the Proof created at the recording threshold.
   /// A phase alone cannot establish that a durable Proof actually exists.

@@ -23,9 +23,7 @@ final class SessionAggregateExposureTests: XCTestCase {
     let id = DetectionFixture.displayId(device: 0)
     coordinator.startSensing(eventCode: "TEST-EXPIRY")
     coordinator.handleDetection(enin: 6_000_000, rpid: "peer", detectedDisplayId: id, observedAt: clock())
-    now += 29
-    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: clock()), [id])
-    now += 1
+    now += 299
     XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: clock()), [id])
     now += 1
     XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: clock()).isEmpty)
@@ -49,9 +47,9 @@ final class SessionAggregateExposureTests: XCTestCase {
     coordinator.handleDetection(enin: 6_000_000, rpid: "second", detectedDisplayId: second, observedAt: start)
     coordinator.handleSignalStrength(rssi: -60, detectedDisplayId: first, at: start + 20)
     coordinator.handleSignalStrength(rssi: -60, detectedDisplayId: first, at: start + 1)
-    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: start + 31), [first])
-    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: start + 49), [first])
-    XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: start + 51).isEmpty)
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: start + 300), [first])
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: start + 319), [first])
+    XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: start + 320).isEmpty)
     XCTAssertEqual(coordinator.sessionAggregate?.deviceCount, 2)
     coordinator.reset()
     XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: start + 20).isEmpty)
@@ -64,9 +62,37 @@ final class SessionAggregateExposureTests: XCTestCase {
     coordinator.startSensing(eventCode: "TEST-UNMEASURED-EXPIRY")
     coordinator.handleDetection(enin: 6_000_000, rpid: "peer", detectedDisplayId: id, observedAt: start)
     coordinator.handleSignalStrength(rssi: 0, detectedDisplayId: id, at: start + 29)
-    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: start + 31), [id])
-    XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: start + 60).isEmpty)
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: start + 328), [id])
+    XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: start + 329).isEmpty)
     XCTAssertEqual(coordinator.sessionAggregate?.windowAt(index: 0)?.peerCount, 1)
+  }
+
+  func testSilentDeviceDimsAtThirtySecondsAndReappearsBright() {
+    let coordinator = makeCoordinator()
+    // Start just before a window boundary: it must not expire the node.
+    var now = Date(timeIntervalSince1970: 1_800_000_299)
+    let clock = { now }
+    let id = DetectionFixture.displayId(device: 0)
+    coordinator.startSensing(eventCode: "TEST-DIMMING")
+    coordinator.handleDetection(enin: 6_000_000, rpid: "peer", detectedDisplayId: id, observedAt: clock())
+    now += 29.999
+    XCTAssertFalse(coordinator.isDetectedDeviceDimmed(id, at: clock()))
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: clock()), [id])
+    now += 0.001
+    XCTAssertTrue(coordinator.isDetectedDeviceDimmed(id, at: clock()))
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: clock()), [id])
+    now += 269.999
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: clock()), [id])
+    now += 0.001
+    XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: clock()).isEmpty)
+    coordinator.handleSignalStrength(rssi: -60, detectedDisplayId: id, at: clock())
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: clock()), [id])
+    XCTAssertFalse(coordinator.isDetectedDeviceDimmed(id, at: clock()))
+    now += 30
+    XCTAssertTrue(coordinator.isDetectedDeviceDimmed(id, at: clock()))
+    coordinator.handleDetection(enin: 6_000_002, rpid: "peer", detectedDisplayId: id, observedAt: clock())
+    XCTAssertFalse(coordinator.isDetectedDeviceDimmed(id, at: clock()))
+    XCTAssertEqual(coordinator.devicesVerified, 1)
   }
 
   private func makeCoordinator() -> SensingCoordinator {

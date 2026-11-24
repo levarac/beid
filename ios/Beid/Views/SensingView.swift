@@ -602,6 +602,12 @@ struct SensingSessionSurface: View {
               .frame(width: contentWidth)
               .padding(.top, DS.Space.m)
 
+              Text("HEARD IN THE LAST 5 MINUTES")
+                .beidTextStyle(DS.Font.Library.labelMono11)
+                .foregroundStyle(DS.Color.textSecondaryOnInk)
+                .frame(width: contentWidth)
+                .padding(.top, DS.Space.s)
+
               metrics(at: now)
                 .padding(.top, DS.Space.m)
 
@@ -674,7 +680,10 @@ struct SensingSessionSurface: View {
 
   private func radarPeers(at now: Date) -> [SensingRadarPeer] {
     sensing.currentlyDetectedDisplayIDs(at: now).sorted().map { id in
-      SensingRadarPeer(id: id, signalStrength: sensing.signalStrength(forNodeId: id))
+      SensingRadarPeer(
+        id: id, signalStrength: sensing.signalStrength(forNodeId: id),
+        isDimmed: sensing.isDetectedDeviceDimmed(id, at: now)
+      )
     }
   }
 
