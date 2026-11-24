@@ -1,6 +1,6 @@
-# beid — native iOS (first slice)
+# beid — native iOS
 
-First slice of the native (Flutter-free) beid iOS app. SwiftUI, XcodeGen,
+The native beid iOS app uses SwiftUI and XcodeGen, and
 consumes the [levarac/barnard](https://github.com/levarac/barnard) BLE SDK.
 
 ## Build & run
@@ -124,9 +124,10 @@ Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 
 `project.yml` consumes
 [`levarac/barnard`](https://github.com/levarac/barnard) as a remote SwiftPM
-package pinned to the exact `0.3.0` release. The committed
+package pinned to the exact `0.9.2` release. The committed
 `Package.resolved` records the release's precise revision for reproducible
-builds. Verified 2026-08-07 against `project.yml` and `Package.resolved`.
+builds. The pinned version agrees in `project.yml` and
+`Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.
 
 Historically, beid copied barnard's Swift package into the repository because
 barnard did not have a root `Package.swift`, which SwiftPM requires for a
@@ -329,8 +330,8 @@ whose production adapter forwards to
 transition `.sensing → .eventFound` on the first detection, count distinct
 **devices**, and move to `.recording` when
 `BeidConfig.eventConfirmThreshold` is reached. That threshold is an app-wide
-constant today rather than an organizer-provided event setting; see "What's
-stubbed".
+constant today rather than an organizer-provided event setting; see "Runtime
+boundaries and remaining gaps".
 
 Devices are counted by `detectedDisplayId`, not by the proximity identifier
 the detection also carries. The proximity identifier rotates every ENIN
@@ -384,7 +385,7 @@ pause-and-resume scenario. It remains reachable manually through
 `SensingCoordinator.simulateSignalLost()`, exposed as a "Simulate Signal
 Lost" button on the Recording screen while in DemoEvent mode.
 
-## What's stubbed / out of scope for this slice
+## Runtime boundaries and remaining gaps
 
 - **Wallet**: v1.1 exposes no wallet-connect or wallet-signing UI. The
   connector, `AppCoordinator.signProof(_:)`, and legacy signature models
@@ -392,10 +393,15 @@ Lost" button on the Recording screen while in DemoEvent mode.
   **PROVISIONAL local convenience signature** in `ProofSignature.swift`
   is not the protocol's self-proof, does not prove physical attendance by
   itself, and no backend or verifier may depend on its payload.
-- **Chain**: no on-chain calls anywhere (`BarnardIdentity.proveRpidOwnership`
-  is available in the barnard SDK but not called from the app in this
-  slice).
-- **Server**: no backend calls. Proofs are local-only.
+- **Registry and reporting**: joining uses the configured registry and
+  operator lookup services. `ReportSubmissionRuntime` queues eligible signed
+  observations, submits them to the event's operator, and retains submission
+  state locally. It is constructed only when `BeidReportSubmissionEnabled`
+  is enabled and a definition provider exists. In `project.yml`, the default
+  `BEID_REPORT_SUBMISSION_ENABLED` build setting is `YES` for `Beid` and
+  `NO` for `BeidLab`; both targets expand that setting into the Info.plist
+  flag. A saved record does not by
+  itself establish receipt, inclusion, or third-party verification.
 - **Event-specific verification policy**: distinct-device counting and the
   app-wide `BeidConfig.eventConfirmThreshold` gate run on-device, but an
   organizer-provided per-event threshold is not wired yet.
@@ -409,7 +415,8 @@ Lost" button on the Recording screen while in DemoEvent mode.
 
 ## Local persistence
 
-The iOS app currently has five on-disk stores in its Documents directory:
+The iOS app uses native JSON files and the shared ledger snapshot rather
+than SwiftData. Its Documents stores include:
 
 - `proofs.json` — collected `Proof` values (`ProofStore`).
 - `window-reports.json` — durable native observations written before a
@@ -419,27 +426,43 @@ The iOS app currently has five on-disk stores in its Documents directory:
 - `binding-records-v2.json` — wallet/event binding records
   (`BindingRecordStore`).
 - `self-proofs.json` — owner-key-signed self-proofs (`SelfProofStore`).
+- `self-proof-checkpoint.json` — recoverable self-proof state
+  (`SelfProofCheckpointStore`).
+- `report-submissions.json` — durable submission records, with
+  `report-submissions.pending.json` for pending captures and
+  `report-submissions.exclusions.json` for exclusions (`ReportSubmissionStore`).
+- `report-proof-links.json` — durable window-to-record links, excluded from
+  backup (`ReportProofLinkStore`).
+- `session-aggregate-snapshots.json` — saved session aggregates
+  (`SessionAggregateSnapshotStore`).
+- `venue-device-assignments.json` — saved venue-device assignments
+  (`VenueDeviceAssignmentStore`).
+- `venue-public-artifact.json` — saved public bundle/handoff bytes and acquisition inputs
+  (`VenuePublicArtifactStore`).
 
-These flat files are used instead of SwiftData. The proof model is still a
-single unordered array with no relationships or migrations; revisit SwiftData
-when queries or relationships grow beyond "show them all, newest first".
+`SigilPresenceStore` separately stores `SigilPresence/sigil-presence.json`
+under Application Support, with that directory excluded from backup. This
+display data is not a submission input.
+
 The shared ledger owns its state transitions and snapshot format, while native
 iOS owns the file location and atomic write. The production
-`SensingCoordinator` uses this runtime. Android has a matching native snapshot
-store and portable-codec tests, but its production flow is still deferred to
-Issue #121.
+`SensingCoordinator` uses this runtime. Android also uses its native
+`UnsentWindowLedgerStore` in production: `WindowObservationAccumulator` writes
+windows and `WindowObservationSubmissionDrain` submits closed windows. The
+records list reads its separate `ProofRecordStore`; it is not a view of the
+unsent ledger.
 
 ## Screens
 
-01 Welcome, 02 Bluetooth permission guide, 03 Bluetooth-off, 04 Collection
-home (+04b empty state), 05 Scan (radar), 06a Event Found, 06b Recording,
-06d Signal Lost, 06 Sealed, 07 Proof Collected, 08 Item Detail, 09 Account sheet
-— plus manual Enter Event Code. Legacy wallet views remain in the source
-but are not introduced by the onboarding flag.
+`RootView` selects Welcome, event-code entry, Bluetooth permission, denied
+or off guidance, and the home. The home has Now and Records tabs, with
+Account and manual event-code entry presented as sheets. Stored event groups
+open Event Detail; individual records open Record detail (`ItemDetailView`).
 
-All screens use the repository design-system tokens, adaptive layouts, and
-current custom artwork documented in `DESIGN.md`; the original blue-accent
-scaffold is historical, not a current implementation guide.
+The Now flow presents sensing, Event Found, Recording, Signal Lost, stop
+confirmation, and the sealed/Record collected outcomes. These are flow
+states and presentations, not a numbered list of independent root screens.
+Wallet-connect and wallet-signing UI are absent from v1.1.
 
 ## Project layout
 
