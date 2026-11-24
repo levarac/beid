@@ -170,13 +170,20 @@ post-join flow (sensing → event found → recording with a one-time proof
 entrance, plus signal-loss recovery and collection home), which stays
 follow-up work.
 
-**Why `BarnardEngine` is owned by `MainActivity`, not the composable**:
-`requestPermissions` is Activity-driven — the hosting `Activity` must forward
-`onRequestPermissionsResult` back into the *same* engine instance for the
-pending callback to ever resolve. A
-composable-scoped instance would have no way to receive that callback, so
-`MainActivity` creates one `EventJoinCoordinator` in `onCreate`, forwards
-`onRequestPermissionsResult` into it, and disposes it in `onDestroy`.
+**Session lifetime and Activity recreation:** an Activity-scoped
+`EventJoinSessionViewModel` owns one `EventJoinCoordinator` and its proof-recording
+bridge. Configuration changes retain that owner, proof identity and running radio;
+`onCleared` disposes the coordinator on a real finish. Explicit leave still ends the
+recording, and process death still uses durable checkpoint recovery (beid#742).
+The owner is constructed with the Application, never an Activity. Each new
+`MainActivity` attaches itself as Barnard's permission host and constructs its own
+wallet binding flow and Compose subscriptions. Destruction cancels that wallet flow,
+removes its coordinator callback and clears Barnard's Activity reference without
+stopping sensing. `onRequestPermissionsResult` on the new Activity is forwarded to
+the same retained engine. The permission UI callback is rebound by the new Compose
+root; a result arriving before that attachment is delivered once it reattaches.
+This is an Android lifecycle fix; iOS is intentionally
+untouched. It does not provide a foreground service or background recording guarantee.
 
 ## App shell
 
@@ -187,6 +194,42 @@ library's floor of 24) — API 26 is what adaptive `neverForLocation` BLE scan
 permission semantics assume cleanly and keeps the launcher-icon story simple
 (no legacy per-density mipmap buckets needed); revisit if a real product
 reason to support API 24–25 shows up.
+
+### Collection home
+
+After onboarding and Bluetooth checks, `Home` is the start destination.
+`HomeRoute` wraps the existing `EventJoinRoute`, preserving automatic nearby
+discovery, one-tap card joining, and the active scan flow in one renderer.
+The same edge-to-edge Material 3 scaffold keeps the Account icon in its top
+app bar and scrolls discovery followed by the collection, including at large
+font sizes. The existing no-result manual-entry rescue shortcut is preserved;
+ordinary manual entry and the complete secondary Records list remain in Account.
+
+The collection reads the existing `ProofRecordStore.recordsFlow` and calls
+shared `homeRecordGroups` for identity, newest-first ordering, tie handling,
+and active-event exclusion; see
+[`shared-event-grouping.md`](../docs/decisions/shared-event-grouping.md).
+Cards use stored verified names, falling back to the Records label, with the
+latest recording date and record count. A singleton opens the existing detail;
+a larger group opens the existing Records screen filtered by an anchor UUID.
+Destinations re-read the current store, and system Back returns through that
+list to Home. The former `event_join` route redirects to Home for restored
+navigation state; no external navigation deep links are registered today.
+
+`CollectionHomeTest` exercises the production navigation graph with a fake
+session and a real local store under Robolectric. To avoid outbound clock
+preflight requests while running the full local suites, supply an empty lookup
+origin only to the test build:
+
+```sh
+ANDROID_HOME="$HOME/Library/Android/sdk" \
+  GRADLE_OPTS="-Dorg.gradle.project.beid.eventCodeLookupUrlTemplate=" \
+  python3 scripts/run_local_tests.py android \
+  :shared:testAndroidHostTest :app:testDebugUnitTest
+```
+
+Ordinary builds retain their configured operator URL. These tests provide JVM
+UI/navigation evidence; they do not establish real-radio or device behavior.
 
 ## Localization
 

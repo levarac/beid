@@ -18,14 +18,6 @@ struct CachedWalletHint: Equatable, Codable {
   let chainId: String
 }
 
-extension CachedWalletHint {
-  /// `0x1234...5678` display form, mirroring `AccountSheetView.truncated(_:)`.
-  var truncatedAddress: String {
-    guard address.count > 10 else { return address }
-    return "\(address.prefix(6))...\(address.suffix(4))"
-  }
-}
-
 /// UserDefaults-backed store for the single cached `CachedWalletHint` —
 /// UserDefaults, not Keychain, because the address is not a secret (it is
 /// already disclosed elsewhere in this app's own persisted data, e.g.
@@ -35,7 +27,7 @@ extension CachedWalletHint {
 /// isolated `UserDefaults(suiteName:)` instead of `.standard`.
 ///
 /// Cleared only by an explicit disconnect ("Forget"/"Disconnect Wallet")
-/// action — never by Cancel, Try Again, Start Over, or a sheet dismissal.
+/// action — never by Cancel, Try again, Start Over, or a sheet dismissal.
 /// Callers enforce that by simply never calling `clear()` from those paths;
 /// see `AppCoordinator.disconnectWallet()` for the one production call site.
 struct WalletHintStore {

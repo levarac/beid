@@ -249,12 +249,12 @@ branch; do not cherry-pick them individually. GitHub does not close issues from
 a PR merged into a non-default branch, so manually close each issue named by a
 release PR after confirming the release-branch merge.
 
-`MARKETING_VERSION` in `ios/project.yml` is the only repository source of
-truth for the store version. A push to `release/**` runs
-`.github/workflows/release-version-consistency.yml`, which compares an exact
-`release/X.Y.Z` branch name with that value and fails on a mismatch. The check
-is deliberately read-only: it never changes `project.yml` or any generated
-file. Build numbers remain managed by Xcode Cloud (or by Apple's export-time
+`MARKETING_VERSION` in `ios/Version.xcconfig` is the only repository source
+of truth for the store version; no target in `ios/project.yml` sets it. A push
+to `release/**` runs `.github/workflows/release-version-consistency.yml`,
+which compares an exact `release/X.Y.Z` branch name with that value and fails
+on a mismatch. The check is deliberately read-only: it never changes
+`Version.xcconfig` or any generated file. Build numbers remain managed by Xcode Cloud (or by Apple's export-time
 assignment in the temporary GitHub Actions lane); do not change
 `CURRENT_PROJECT_VERSION` as part of a release.
 
@@ -265,9 +265,9 @@ received a build.
 
 ### First `release/1.0.0` checklist
 
-- [ ] Set and confirm `targets.Beid.settings.base.MARKETING_VERSION` in
-  `ios/project.yml` is exactly `1.0.0`, then create `release/1.0.0` from the
-  intended `main` commit. Do not alter `CURRENT_PROJECT_VERSION`.
+- [ ] Set and confirm `MARKETING_VERSION` in `ios/Version.xcconfig` is
+  exactly `1.0.0`, then create `release/1.0.0` from the intended `main`
+  commit. Do not alter `CURRENT_PROJECT_VERSION`.
 - [ ] Rewrite `release_notes.json` completely for version 1.0.0 and confirm
   its locale entries pass the repository note validation.
 - [ ] Push the release branch and confirm both the read-only version check and
@@ -609,17 +609,17 @@ The other two workflows:
   against the actual diffs across enough commits to distinguish the
   hypothesis from coincidence before writing it down as fact.
 
-Version/build numbers: `project.yml` hardcodes
-`MARKETING_VERSION: "1.0"` / `CURRENT_PROJECT_VERSION: "1"`.
+Version/build numbers: `ios/Version.xcconfig` sets `MARKETING_VERSION`
+and `CURRENT_PROJECT_VERSION = 1`.
 **Verified 2026-07-23**: ASC's "Build Number Source: Xcode Cloud" is in
 effect — delivered build numbers equal the Xcode Cloud run numbers
 (builds 3/7/8/9 = runs 3/7/8/9), so the repo's
 `CURRENT_PROJECT_VERSION` is inert and must not be bumped per build. The
 temporary GitHub Actions lane instead sets
 `manageAppVersionAndBuildNumber: true` during export, so Apple assigns its
-next build number without changing `project.yml`.
-`MARKETING_VERSION` remains the single version knob, in `project.yml`
-only.
+next build number without changing the repository.
+`MARKETING_VERSION` remains the single version knob, in
+`ios/Version.xcconfig` only.
 
 ## First-time-only ASC step (not scriptable from here)
 

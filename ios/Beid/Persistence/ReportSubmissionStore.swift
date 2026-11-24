@@ -25,6 +25,15 @@ struct ReportSubmissionExclusion: Identifiable, Codable, Equatable {
   let peerCount: Int
   let reasonCode: String
   let createdAt: Date
+  var signingKeyChangeNoticeAcknowledged: Bool? = nil
+
+  var signingDiscardReason: EventSigningDiscardReason? {
+    switch reasonCode {
+    case "signing-key-changed": return .keyChanged
+    case "signing-key-unverifiable": return .unverifiable
+    default: return nil
+    }
+  }
 
   func hasSameWindowInputs(as other: ReportSubmissionExclusion) -> Bool {
     id == other.id &&
@@ -59,6 +68,7 @@ struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
   let peerRpids: [String]
   let reporterRpid: String
   let participantCommitment: Data?
+  let eventSigningPublicKey: Data?
   let finalizedAt: TimeInterval
   let createdAt: Date
 
@@ -70,6 +80,7 @@ struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
     peerRpids: [String],
     reporterRpid: String,
     participantCommitment: Data?,
+    eventSigningPublicKey: Data? = nil,
     finalizedAt: TimeInterval = Date().timeIntervalSince1970,
     createdAt: Date = Date()
   ) {
@@ -80,6 +91,7 @@ struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
     self.peerRpids = Array(Set(peerRpids)).sorted()
     self.reporterRpid = reporterRpid
     self.participantCommitment = participantCommitment
+    self.eventSigningPublicKey = eventSigningPublicKey
     self.finalizedAt = finalizedAt
     self.createdAt = createdAt
   }
@@ -92,6 +104,7 @@ struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
       peerRpids == other.peerRpids &&
       reporterRpid == other.reporterRpid &&
       participantCommitment == other.participantCommitment &&
+      eventSigningPublicKey == other.eventSigningPublicKey &&
       finalizedAt == other.finalizedAt
   }
 }
@@ -253,6 +266,8 @@ final class ReportSubmissionStore: ObservableObject {
   private var pendingCaptureLoadError: Error?
   private var exclusionLoadError: Error?
 
+  var hasReadableExclusions: Bool { exclusionLoadError == nil }
+
   enum LabRecordProjectionError: Error, Equatable {
     case unreadable
   }
@@ -356,10 +371,50 @@ final class ReportSubmissionStore: ObservableObject {
       }
       return existing
     }
+    var exclusion = exclusion
+    if exclusion.signingDiscardReason != nil,
+       acknowledgedSigningKeyChangeEventCodes.contains(exclusion.eventCode) {
+      exclusion.signingKeyChangeNoticeAcknowledged = true
+    }
     let updated = exclusions + [exclusion]
     try persistExclusions(updated)
     exclusions = updated
     return exclusion
+  }
+
+  var signingKeyChangeEventCodes: Set<String> {
+    guard pendingCaptureLoadError == nil else { return [] }
+    let pendingIds = Set(pendingCaptures.map(\.id))
+    return Set(exclusions.filter {
+      $0.signingDiscardReason != nil && !pendingIds.contains($0.id)
+    }.map(\.eventCode))
+  }
+
+  var acknowledgedSigningKeyChangeEventCodes: Set<String> {
+    Set(exclusions.filter {
+      $0.signingDiscardReason != nil && $0.signingKeyChangeNoticeAcknowledged == true
+    }.map(\.eventCode))
+  }
+
+  func signingDiscardReason(forEventCode eventCode: String) -> EventSigningDiscardReason {
+    let pendingIds = Set(pendingCaptures.map(\.id))
+    let discarded = exclusions.filter {
+      $0.eventCode == eventCode && $0.signingDiscardReason != nil && !pendingIds.contains($0.id)
+    }
+    return discarded.allSatisfy { $0.signingDiscardReason == .keyChanged } ? .keyChanged : .unverifiable
+  }
+
+  func acknowledgeSigningKeyChanges(forEventCodes eventCodes: Set<String>? = nil) throws {
+    try ensureWritable()
+    var updated = exclusions
+    for index in updated.indices where updated[index].signingDiscardReason != nil {
+      if eventCodes?.contains(updated[index].eventCode) ?? true {
+        updated[index].signingKeyChangeNoticeAcknowledged = true
+      }
+    }
+    guard updated != exclusions else { return }
+    try persistExclusions(updated)
+    exclusions = updated
   }
 
   func removePendingCapture(id: UUID) throws {

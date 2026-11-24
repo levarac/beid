@@ -22,12 +22,24 @@ final class BluetoothMonitor: NSObject, ObservableObject {
 
   var isPoweredOff: Bool { state == .poweredOff }
 
+  private let makeCentralManager: (CBCentralManagerDelegate) -> CBCentralManager?
   private var manager: CBCentralManager?
   private var permissionWaiters: [CheckedContinuation<BluetoothAuthorizationState, Never>] = []
 
+  /// Tests can suppress native manager construction without replacing state
+  /// publication or permission resolution. Normal callers use CoreBluetooth.
+  init(
+    makeCentralManager: @escaping (CBCentralManagerDelegate) -> CBCentralManager? = {
+      CBCentralManager(delegate: $0, queue: nil, options: [CBCentralManagerOptionShowPowerAlertKey: false])
+    }
+  ) {
+    self.makeCentralManager = makeCentralManager
+    super.init()
+  }
+
   func start() {
     guard manager == nil else { return }
-    manager = CBCentralManager(delegate: self, queue: nil, options: [CBCentralManagerOptionShowPowerAlertKey: false])
+    manager = makeCentralManager(self)
   }
 
   func waitForAuthorizationResolution() async -> BluetoothAuthorizationState {
@@ -38,6 +50,16 @@ final class BluetoothMonitor: NSObject, ObservableObject {
     return await withCheckedContinuation { continuation in
       permissionWaiters.append(continuation)
     }
+  }
+
+  /// The native delegate calls this after mapping and its MainActor hop.
+  /// A deterministic caller exercises that same body, not hardware delivery.
+  func receiveAuthorizationState(_ state: BluetoothAuthorizationState) {
+    self.state = state
+    guard state != .notDetermined else { return }
+    let waiters = permissionWaiters
+    permissionWaiters.removeAll()
+    waiters.forEach { $0.resume(returning: state) }
   }
 }
 
@@ -65,11 +87,7 @@ extension BluetoothMonitor: CBCentralManagerDelegate {
     }
 
     Task { @MainActor in
-      self.state = state
-      guard state != .notDetermined else { return }
-      let waiters = self.permissionWaiters
-      self.permissionWaiters.removeAll()
-      waiters.forEach { $0.resume(returning: state) }
+      self.receiveAuthorizationState(state)
     }
   }
 }

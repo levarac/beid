@@ -9,6 +9,8 @@ import Foundation
 @MainActor
 final class SelfProofStore: ObservableObject {
   @Published private(set) var records: [SelfProofRecord] = []
+  @Published private(set) var lastPersistenceError: Error?
+  private var durableRecords: [SelfProofRecord] = []
 
   /// Set when `load()` preserved a file that failed to decode, so the event
   /// is not invisible. Broader observability is beid#131's job.
@@ -25,9 +27,17 @@ final class SelfProofStore: ObservableObject {
   var isPersistenceSuspended: Bool { persistenceSuspensionReason != nil }
 
   private let fileURL: URL
+  private let encodeRecords: ([SelfProofRecord]) throws -> Data
+  private let writeData: (Data, URL) throws -> Void
 
-  init(fileURL: URL? = nil) {
+  init(
+    fileURL: URL? = nil,
+    encodeRecords: @escaping ([SelfProofRecord]) throws -> Data = { try RecordSchemaEnvelope.encodeRecords($0) },
+    writeData: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
+  ) {
     self.fileURL = fileURL ?? Self.defaultFileURL()
+    self.encodeRecords = encodeRecords
+    self.writeData = writeData
     load()
   }
 
@@ -36,17 +46,50 @@ final class SelfProofStore: ObservableObject {
     return dir.appendingPathComponent("self-proofs.json")
   }
 
-  func add(_ record: SelfProofRecord) {
-    records.append(record)
-    save()
+  /// True means this proof's record is durable, including an idempotent retry.
+  @discardableResult
+  func add(_ record: SelfProofRecord) -> Bool {
+    if durableRecord(forProofId: record.proofId) != nil {
+      lastPersistenceError = nil
+      return true
+    }
+    var updated = records.filter { $0.proofId != record.proofId }
+    updated.append(record)
+    if let reason = persistenceSuspensionReason {
+      records = updated
+      lastPersistenceError = reason
+      return false
+    }
+    do {
+      let data = try encodeRecords(updated)
+      try writeData(data, fileURL)
+      durableRecords = updated
+      records = updated
+      lastPersistenceError = nil
+      return true
+    } catch {
+      lastPersistenceError = error
+      return false
+    }
+  }
+
+  /// Memory-only fallback records must never authorize checkpoint removal.
+  func durableRecord(forProofId proofId: UUID) -> SelfProofRecord? {
+    durableRecords.first { $0.proofId == proofId }
+  }
+
+  /// Confirms the replacement is durable before a checkpoint can be removed.
+  func addDurably(_ record: SelfProofRecord) throws {
+    guard add(record) else {
+      throw lastPersistenceError ?? CocoaError(.fileWriteUnknown)
+    }
   }
 
   /// A `Proof` gets at most one self-proof (mirrors `BindingRecord`'s own
   /// `proofId` linkage), so the first match is the only match. Used by
-  /// checkpoint reconciliation to tell whether a graceful session end
-  /// already produced the real record.
+  /// checkpoint recovery and record presentation; only durable records qualify.
   func record(forProofId proofId: UUID) -> SelfProofRecord? {
-    records.first { $0.proofId == proofId }
+    durableRecord(forProofId: proofId)
   }
 
   private func load() {
@@ -54,6 +97,7 @@ final class SelfProofStore: ObservableObject {
     do {
       let data = try Data(contentsOf: fileURL)
       records = try RecordSchemaEnvelope.decodeRecords(SelfProofRecord.self, from: data)
+      durableRecords = records
     } catch {
       // A file that fails to decode used to be discarded silently and then
       // destroyed by the next save, taking every self-proof with it
@@ -66,11 +110,5 @@ final class SelfProofStore: ObservableObject {
       quarantinedFileURL = outcome.quarantinedFileURL
       persistenceSuspensionReason = outcome.persistenceSuspensionReason
     }
-  }
-
-  private func save() {
-    guard !isPersistenceSuspended else { return }
-    guard let data = try? RecordSchemaEnvelope.encodeRecords(records) else { return }
-    try? data.write(to: fileURL, options: .atomic)
   }
 }

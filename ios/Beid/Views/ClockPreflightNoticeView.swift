@@ -24,7 +24,7 @@ struct ClockPreflightPresentation: Equatable {
     case "overTolerance":
       return ClockPreflightPresentation(
         title: "This device's clock is off",
-        message: "beid can't trust event times while the clock is wrong. Turn on automatic date and time in Settings, then check again.",
+        message: "beid can't trust event times while the clock is wrong. Open Settings, choose General, then Date & Time, and check the time settings.",
         statusAccessibilityIdentifier: "scan.clock-preflight.over-tolerance"
       )
     default:

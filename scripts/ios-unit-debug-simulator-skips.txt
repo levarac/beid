@@ -1,0 +1,15 @@
+# Environment: hosted CI Debug build, iOS 27.0 Simulator, guestFirst onboarding,
+# with the local reference-operator integration opt-in unset (full and smoke).
+# Full mode selects every listed test. Smoke checks entries outside its deferred suites.
+# Each selected entry must exist and report Skipped.
+# A Passed result means this list is stale. Every other selected test must pass.
+
+# OnboardingMode.current is .guestFirst; this test only applies to .walletFirst.
+BeidTests/OnboardingFlagTests/testWalletFirstOrderReachesBluetoothPermissionAfterConnect
+
+# BEID_RUN_OPERATOR_SUBMISSION_TEST is unset in CI; the local reference operator
+# and its endpoint/key/event configuration are deliberately not provisioned.
+BeidTests/ReportSubmissionOperatorIntegrationTests/testRealSignedWindowGetsVerifiedReceiptFromReferenceOperator
+
+# This assertion applies only to Release; CI builds and transfers Debug bundles.
+BeidTests/SensingCoordinatorTests/testReleaseConfigurationCannotEnableDemoEventMode

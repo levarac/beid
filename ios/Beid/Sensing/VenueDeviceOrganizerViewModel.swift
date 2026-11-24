@@ -10,6 +10,7 @@ enum VenueDeviceValidationError: Equatable {
   /// empty) — a venue-device assignment has no eventCode to bind to, and
   /// Barnard's own B005 payload requires one (`BarnardEventInfoCodec.
   /// payloadIfServing` returns `nil` without it).
+  case deviceKeyUnavailable
   case noJoinedEvent
   case missingLabel
   case invalidLabel
@@ -89,6 +90,11 @@ final class VenueDeviceOrganizerViewModel: ObservableObject {
 
     do {
       try broadcasting.startBroadcasting(eventCode: eventCode, label: trimmedLabel)
+    } catch is DeviceSecretError {
+      broadcasting.stopBroadcasting()
+      isBroadcasting = false
+      validationError = .deviceKeyUnavailable
+      return
     } catch {
       validationError = .invalidLabel
       return

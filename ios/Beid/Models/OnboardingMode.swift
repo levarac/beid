@@ -3,18 +3,13 @@
 
 import Foundation
 
-/// Ordering of the wallet step relative to the rest of onboarding.
-///
-/// Resolved 2026-07-26 (docs/specs/onboarding-redesign.md §3): the entry
-/// flow is event-first. Welcome does not connect a wallet; wallet connect +
-/// binding happens later, after event confirmation. Both orders stay wired
-/// behind this flag so the earlier wallet-first order remains demonstrable
-/// by flipping it back.
+/// Legacy onboarding modes retained for compatibility.
+/// Both values enter Bluetooth permission directly; this flag does not
+/// introduce a wallet step in the current onboarding flow.
 enum OnboardingMode: String, CaseIterable {
   case walletFirst
   case guestFirst
 
-  /// Single toggle point for this slice. Event-first per the 2026-07-26
-  /// decision record.
+  /// Compatibility default; onboarding does not branch on this value.
   static let current: OnboardingMode = .guestFirst
 }

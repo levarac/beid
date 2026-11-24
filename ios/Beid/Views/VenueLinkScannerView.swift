@@ -94,7 +94,7 @@ struct VenueScannerScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-        Text("Point at the organiser's QR code")
+        Text("Point at the organizer's QR code")
           .beidTextStyle(DS.Font.Library.labelMono10)
           .foregroundStyle(DS.Color.textSecondaryOnInk)
           .accessibilityIdentifier("venue.scanner.caption")
@@ -102,18 +102,13 @@ struct VenueScannerScreen: View {
       }
       .foregroundStyle(DS.Color.actionInverse)
       .background(DS.Color.textPrimary)
+      // The title uses the iOS system font like every navigation title (#856).
+      .navigationTitle("Scan QR code")
       .navigationBarTitleDisplayMode(.inline)
       .toolbarBackground(DS.Color.textPrimary, for: .navigationBar)
       .toolbarBackground(.visible, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
-        ToolbarItem(placement: .principal) {
-          Text("Scan QR code")
-            .beidTextStyle(DS.Font.Library.labelMono11)
-            .foregroundStyle(DS.Color.actionInverse)
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityIdentifier("venue.scanner.title")
-        }
         ToolbarItem(placement: .topBarTrailing) {
           closeButton
             .accessibilityLabel("Cancel scan")

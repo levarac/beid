@@ -3,6 +3,7 @@ package org.levarac.beid
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -11,7 +12,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.levarac.beid.navigation.AppNavHost
-import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.registry.RegistryDependencies
 import org.levarac.beid.scenario.AndroidDataSource
 import org.levarac.beid.scenario.AndroidScenarioAdvance
@@ -24,7 +24,7 @@ import org.levarac.beid.sensing.MetaMaskWalletConnector
 import org.levarac.beid.sensing.WalletBindingFlow
 import org.levarac.beid.sensing.EventBindingState
 import org.levarac.beid.sensing.ProofRecordingBridge
-import org.levarac.beid.sensing.ProcessSessionCheckpointRuntimeOwner
+import org.levarac.beid.sensing.EventJoinSessionViewModel
 import org.levarac.beid.ui.screens.EventJoinContent
 import org.levarac.beid.ui.screens.RecordsScreen
 import org.levarac.beid.ui.theme.BeidAppTheme
@@ -36,13 +36,13 @@ import org.levarac.parallax.registry.RegistryClient
  * `BeidApp` + `RootView` (`ios/Beid/App/BeidApp.swift`,
  * `ios/Beid/Navigation/RootView.swift`).
  *
- * Owns [EventJoinCoordinator] (rather than letting a composable create it)
+ * Attaches to the Activity-scoped [EventJoinSessionViewModel] coordinator
  * because `BarnardEngine.requestPermissions` needs this Activity's
  * `onRequestPermissionsResult` forwarded back into the same engine instance
  * to resolve — see [EventJoinCoordinator]'s kdoc.
  */
 open class MainActivity : ComponentActivity() {
-    // Sole production coordinator owner; Lab reads this seam without replacing it.
+    // Current host attachment, not ownership; Lab reads this seam without replacing it.
     internal var eventJoinCoordinator: EventJoinCoordinator? = null
     internal fun labNearbyCandidateSelectors(): List<String> =
         eventJoinCoordinator?.nearbyEventCards?.value
@@ -82,14 +82,14 @@ open class MainActivity : ComponentActivity() {
 
     private fun startRealBleApp() {
         registryClient = RegistryDependencies.createClient()
-        val coordinator = EventJoinCoordinator(this)
+        val sessionOwner = ViewModelProvider(this)[EventJoinSessionViewModel::class.java]
+        val coordinator = sessionOwner.coordinator
+        coordinator.attachActivity(this)
         eventJoinCoordinator = coordinator
         val walletConnector = MetaMaskWalletConnector(this)
         walletBindingFlow = WalletBindingFlow(coordinator, walletConnector)
 
-        val proofRecordStore = ProcessSessionCheckpointRuntimeOwner.proofRecordStore(ProofRecordStore.defaultFile(filesDir))
-        val proofRecordingBridge = ProofRecordingBridge(proofRecordStore)
-        wireProofRecording(coordinator, proofRecordingBridge)
+        val proofRecordStore = sessionOwner.proofRecordStore
 
         setContent {
             BeidAppTheme {
@@ -166,9 +166,13 @@ open class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        walletBindingFlow?.cancel()
+        walletBindingFlow?.detach()
+        walletBindingFlow = null
+        eventJoinCoordinator?.onBindingAttemptInvalidated = null
+        eventJoinCoordinator?.detachActivity()
         registryClient?.close()
-        eventJoinCoordinator?.dispose()
+        // ComponentActivity retains the ViewModelStore for a configuration change;
+        // clearing it on real finish invokes the session owner's onCleared exactly once.
         super.onDestroy()
     }
 
@@ -224,28 +228,7 @@ internal fun ReadOnlyScenarioContent(
 
 private const val SCENARIO_FRAME_DELAY_MILLIS = 700L
 
-/**
- * Connects [EventJoinCoordinator]'s three proof-recording callback
- * properties (gh#235, `EventJoinCoordinator.kt`, landed in PR #321) to
- * [bridge] — the wiring beid#121 was blocked on until #235 landed. A
- * top-level function rather than inline in [MainActivity.onCreate] so it
- * has a seam testable independent of `Activity`/Robolectric construction:
- * [EventJoinCoordinator]'s `Activity`-based constructor pulls in a live
- * `BarnardEventJoinEngine`, Keystore-backed `BarnardSensingCryptography`,
- * and Bluetooth permission plumbing that this repository's existing tests
- * never construct through Robolectric (they use
- * [EventJoinCoordinator]'s `internal` test constructor with fakes
- * instead — see `EventJoinCoordinatorSelfProofTest`/
- * `EventJoinCoordinatorBindingTest` for the established pattern). This
- * function is that same testable seam: it takes an already-constructed
- * [EventJoinCoordinator] (real or fake-backed) and only asserts the
- * three-property assignment itself — see `MainActivityWiringTest` for the
- * coverage this seam provides and what it deliberately does not cover
- * (namely, `MainActivity.onCreate()`'s own construction of the real
- * `Activity`-backed [EventJoinCoordinator]/[ProofRecordStore]/[bridge]
- * instances, which stays unverified by a unit test in this repository's
- * current Robolectric setup).
- */
+/** Wires proof persistence once when the Activity session owner is first constructed. */
 internal fun wireProofRecording(coordinator: EventJoinCoordinator, bridge: ProofRecordingBridge) {
     val shared = coordinator.sharedProofRecordingBridge(bridge)
     coordinator.onProofCollected = { id, eventCode, peers ->

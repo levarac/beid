@@ -3,14 +3,22 @@ package org.levarac.beid.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import java.util.UUID
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.levarac.beid.sensing.ClockPreflightController
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.ScanEventSession
+import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.sensing.ScanSessionMetrics
 import org.levarac.beid.shared.clock.ClockPreflightState
 import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
@@ -35,6 +43,9 @@ sealed class EventJoinFieldError {
     data class JoinFailed(val reason: EventJoinFailureReason) : EventJoinFieldError()
 }
 
+/** Identity held by 05e while the live session continues sensing. */
+data class ScanStopConfirmation(val proofId: UUID, val event: ScanEventSession)
+
 /** Everything [org.levarac.beid.ui.screens.EventJoinScreen] needs to render, combined into one flow. */
 data class EventJoinScreenState(
     val eventCode: String = "",
@@ -52,6 +63,8 @@ data class EventJoinScreenState(
      * answer; the notice renders only the two states the participant must be told.
      */
     val clockPreflight: ClockPreflightState? = null,
+    val stopConfirmation: ScanStopConfirmation? = null,
+    val scanSessionMetrics: ScanSessionMetrics = ScanSessionMetrics(),
 )
 
 /**
@@ -66,7 +79,9 @@ data class EventJoinScreenState(
 class EventJoinViewModel(
     private val session: EventJoinSession,
     private val clockPreflight: ClockPreflightController? = null,
+    private val metricsDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
+    private var stopMetricsJob: Job? = null
     private val _uiState = MutableStateFlow(
         EventJoinScreenState(
             sessionState = session.state.value,
@@ -85,8 +100,14 @@ class EventJoinViewModel(
         viewModelScope.launch {
             session.state.collect { sessionState ->
                 _uiState.update {
+                    val confirmation = it.stopConfirmation?.takeIf { pending ->
+                        pending.proofId == session.currentProofId &&
+                            pending.event == recordedEvent(sessionState)
+                    }
                     it.copy(
                         sessionState = sessionState,
+                        stopConfirmation = confirmation,
+                        scanSessionMetrics = if (confirmation == null) ScanSessionMetrics() else it.scanSessionMetrics,
                         // A refusal is surfaced under the field, where the code
                         // that caused it is still on screen and still editable.
                         // Any other state clears it: leaving the error visible
@@ -95,6 +116,10 @@ class EventJoinViewModel(
                         fieldError = (sessionState as? EventJoinUiState.JoinFailed)
                             ?.let { failed -> EventJoinFieldError.JoinFailed(failed.reason) },
                     )
+                }
+                if (_uiState.value.stopConfirmation == null) {
+                    stopMetricsJob?.cancel()
+                    stopMetricsJob = null
                 }
             }
         }
@@ -191,6 +216,65 @@ class EventJoinViewModel(
     fun simulateSignalLost() = session.simulateSignalLost()
 
     fun resumeSensing() = session.resumeSensing()
+
+    fun leaveEvent() = session.leaveEvent()
+
+    /** Scan Close mirrors iOS 05e; the independent Account leave route stays unchanged. */
+    fun requestScanClose() {
+        if (_uiState.value.stopConfirmation != null) return
+        val proofId = session.currentProofId
+        val event = recordedEvent(session.state.value)
+        if (event == null || proofId == null || !session.hasStoredProof(proofId)) {
+            session.leaveEvent()
+            return
+        }
+        val confirmation = ScanStopConfirmation(proofId, event)
+        // Like iOS SensingStopConfirmView before its aggregate is known: show
+        // zero counts and omit "since" until the first metrics arrive. Opening
+        // the confirmation never waits for the full observation replay.
+        _uiState.update { it.copy(stopConfirmation = confirmation, scanSessionMetrics = ScanSessionMetrics()) }
+        stopMetricsJob = viewModelScope.launch {
+            // StateFlow conflates detections while withContext suspends this
+            // collector: only the in-flight replay and the latest snapshot
+            // can be evaluated, rather than a queue of full-history replays.
+            session.scanSessionMetrics.collect { evaluate ->
+                val metrics = withContext(metricsDispatcher) { evaluate() }
+                _uiState.update {
+                    if (it.stopConfirmation === confirmation &&
+                        session.currentProofId == confirmation.proofId &&
+                        recordedEvent(session.state.value) == confirmation.event
+                    ) it.copy(scanSessionMetrics = metrics) else it
+                }
+            }
+        }
+    }
+
+    fun keepSensing() {
+        clearStopConfirmation()
+    }
+
+    fun confirmStopSensing() {
+        val snapshot = _uiState.value.stopConfirmation ?: return
+        // Consume before finalizing: even a callback retained by a second tap is harmless.
+        clearStopConfirmation()
+        if (session.currentProofId != snapshot.proofId || !session.hasStoredProof(snapshot.proofId) ||
+            recordedEvent(session.state.value) != snapshot.event
+        ) return
+        session.leaveEvent()
+    }
+
+    private fun clearStopConfirmation() {
+        stopMetricsJob?.cancel()
+        stopMetricsJob = null
+        _uiState.update { it.copy(stopConfirmation = null, scanSessionMetrics = ScanSessionMetrics()) }
+    }
+
+    private fun recordedEvent(state: EventJoinUiState): ScanEventSession? =
+        when (val phase = (state as? EventJoinUiState.Sensing)?.phase) {
+            is ScanPhase.Recording -> phase.session
+            is ScanPhase.SignalLost -> phase.session
+            else -> null
+        }
 
     fun markRecordingCeremonyShown() {
         session.markRecordingCeremonyShown()

@@ -14,8 +14,7 @@ import SwiftUI
 /// fixed in count.
 ///
 /// Deliberately reuses `AccountSheetView`'s own plain `List`/`Section`/
-/// `Button` idiom, the same one `VenueDeviceOrganizerView`'s history
-/// list already uses for a "past records, tap for detail/no detail" list.
+/// `Button` idiom.
 /// Does **not** use `EventCardView` — its `Badge` vocabulary
 /// (`.detected`/`.recording`/`.paused`) is tied to the live scan-phase
 /// machine, and none of those states honestly describe "a past event, tap
@@ -38,7 +37,7 @@ struct PastEventsView: View {
         if pastEvents.isEmpty {
           Text(
             "No past events yet.",
-            comment: "Empty state on the Past Events screen, shown when this device has never recorded a Proof for any event."
+            comment: "Empty state on the Past events screen, shown when this device has never recorded a Proof for any event."
           )
           .font(DS.Font.supporting)
           .foregroundStyle(DS.Color.textSecondary)
@@ -49,11 +48,12 @@ struct PastEventsView: View {
         }
       } footer: {
         Text(
-          "Only events you've actually recorded a proof for are listed here.",
-          comment: "Footer under the Past Events list, clarifying that a code that was typed and abandoned before recording completed does not appear."
+          "Only events you have a saved record for are listed here.",
+          comment: "Footer under the Past events list, clarifying that a code that was typed and abandoned before recording completed does not appear."
         )
       }
     }
+    .listStyle(.plain)
     .scrollContentBackground(.hidden)
     .background(DS.Color.surfaceCanvas)
     .navigationTitle(navigationTitle)
@@ -61,12 +61,12 @@ struct PastEventsView: View {
   }
 
   /// Reuses `account.pastEvents.label` rather than a second, separately
-  /// translatable "Past Events" key — the Account sheet's row label and
+  /// translatable "Past events" key — the Account sheet's row label and
   /// this screen's nav title are the same English text for the same
   /// concept, so per AGENTS.md's key-reuse rule this is an explicit-key
   /// case, not two one-off literals.
   private var navigationTitle: String {
-    String(localized: "account.pastEvents.label", defaultValue: "Past Events")
+    String(localized: "account.pastEvents.label", defaultValue: "Past events")
   }
 
   @ViewBuilder
@@ -77,7 +77,7 @@ struct PastEventsView: View {
     // simply omit a row this invariant says can't occur, rather than crash
     // if it somehow did.
     if let eventCode = proof.eventCode {
-      let isCurrent = eventCode == sensingCoordinator.joinedEventCode
+      let isCurrent = eventCode == sensingCoordinator.currentEventCode
       Button {
         BeidDesign.haptic()
         onRejoin(eventCode)
@@ -97,19 +97,17 @@ struct PastEventsView: View {
           if isCurrent {
             Text(
               "Current",
-              comment: "Trailing label on the Past Events row for the event this device is presently joined to — a plain state marker, not an external verification claim."
+              comment: "Trailing label on the Past events row for the event this device is presently joined to — a plain state marker, not an external verification claim."
             )
             .font(DS.Font.meta)
             .foregroundStyle(DS.Color.textPrimary)
           }
         }
       }
-      // Matches "Join Event"'s existing single-slot invariant exactly
-      // (EventMembershipUITests.testJoinEventRowReenablesAfterLeavingEvent):
-      // every row here, including the current one, is only tappable while
-      // nothing is joined. Rejoining is "leave, then tap a past row," never
-      // an implicit leave-then-join on tap.
-      .disabled(sensingCoordinator.joinedEventCode != nil)
+      // Matches "Join Event"'s single-slot invariant: every row here,
+      // including the current one, is only tappable while no join or
+      // session is in progress. Ending the session (STOP) frees the slot.
+      .disabled(!sensingCoordinator.canSelectEventToJoin)
     }
   }
 }
