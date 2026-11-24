@@ -14,6 +14,42 @@ final class FlatScreenshotTourB: XCTestCase {
     continueAfterFailure = false
   }
 
+  /// Run under both simctl appearances while recording the display. The
+  /// checkpoints keep each transition identifiable in the external video.
+  func testBackgroundTransitionTour() {
+    launchHome(arguments: ["-beid-home-frame-04"])
+    capture("background-01-now")
+    app.buttons["home.open-details"].scrollToHittable(in: app)
+    app.buttons["home.open-details"].tap()
+    app.buttons["scan.stop-sensing"].assertExists()
+    capture("background-02-sensing")
+    app.navigationBars.buttons.firstMatch.tap()
+    app.tabButton("Now").assertExists()
+    capture("background-03-now-return")
+    app.buttons["home.account"].tap()
+    app.buttons["Done"].assertHittable()
+    capture("background-04-account")
+    app.buttons["Done"].tap()
+    capture("background-05-account-dismissed")
+    app.tabButton("Records").tap()
+    let record = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record.")).firstMatch
+    record.assertHittable()
+    capture("background-06-records")
+    record.tap()
+    app.scrollViews["proof.detail.content"].assertExists()
+    capture("background-07-record-detail")
+    app.navigationBars.buttons.firstMatch.tap()
+    app.buttons["By event"].tap()
+    let event = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.past-event.")).firstMatch
+    event.assertHittable()
+    event.tap()
+    app.staticTexts["event-detail.heading"].assertExists()
+    capture("background-08-event-detail")
+    app.navigationBars.buttons.firstMatch.tap()
+    app.tabButton("Now").tap()
+    capture("background-09-now-return")
+  }
+
   func testShot_04_Events() {
     launchHome(arguments: ["-beid-home-frame-04"])
     XCTAssertTrue(app.otherElements["home.active-event"].waitForExistence(timeout: 5))
