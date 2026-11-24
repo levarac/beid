@@ -131,7 +131,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     assertVisibleInWindow(account)
     captureRecordState("records-\(name)-before-account")
     account.tap()
-    let done = app.buttons["Done"]
+    let done = app.navigationBars["Account"].buttons["Done"]
     XCTAssertTrue(done.waitForExistence(timeout: 5))
     assertVisibleInWindow(done)
     captureRecordState("account-\(name)-open")
@@ -183,9 +183,9 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "collection-empty-\(orientation)")
 
     app.buttons["home.account"].tap()
-    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Account"].buttons["Done"].waitForExistence(timeout: 5))
     capture(named: "account-\(orientation)")
-    app.buttons["Done"].tap()
+    app.navigationBars["Account"].buttons["Done"].tap()
 
     let resumedSenseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))

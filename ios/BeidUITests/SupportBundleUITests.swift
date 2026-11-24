@@ -14,7 +14,7 @@ final class SupportBundleUITests: XCTestCase {
     app.buttons["bluetooth.permission.continue"].tap()
     XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
     app.buttons["home.account"].tap()
-    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Account"].buttons["Done"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["Organizer tools"].waitForExistence(timeout: 5), "the Account sheet must be open")
     XCTAssertFalse(app.buttons["Connect Wallet"].exists)
     XCTAssertFalse(app.buttons["Connect with MetaMask"].exists)

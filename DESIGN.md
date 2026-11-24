@@ -1997,22 +1997,36 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   2026-09-03 addendum, which treats this collapse as content the app
   already gets right, with only the screen *count* differing) — and it
   deliberately never shows "Verified" (§10).]**
-- **Account (09)**: `.sheet` with `List` + inline title; wallet
-  connect/disconnect lives here in guest-first mode. Destructive actions
-  (`Disconnect Wallet`) use `role: .destructive` and MUST confirm via
-  `.confirmationDialog`. The current `AccountSheetView` performs the
-  disconnect directly; that review-level violation is migration debt, not
-  precedent. **[Android's shape differs, not just its chrome:
+- **Account (10)**: a full-height `.sheet` containing one `NavigationStack`.
+  The root uses the system navigation bar with the inline title **Account**
+  and a **Done** toolbar button in `.confirmationAction`; Done dismisses
+  the sheet. Pushed destinations use that same stack and the native Back
+  button. The `.large` detent belongs to the stack and stays fixed across
+  pushes and pops (beid#851 / #873).
+  Native `List` / `Section` / `NavigationLink` rows replace the drawn arrows,
+  row dividers and overlay Done (maintainer decision 2026-11-24, beid#839).
+  Navigation chrome follows Apple's [toolbar guidance](https://developer.apple.com/design/human-interface-guidelines/toolbars):
+  the system draws the navigation title, trailing action and Back control.
+  The system list supplies row spacing, separators and typography; this
+  supersedes the Account-specific ink rows and custom menu typography in
+  the older Flat 2b specification. The version remains a bottom inset.
+  Bluetooth, Organizer tools, Past events, About sensing, Privacy Policy,
+  Join event and Share support information retain their order and behavior.
+  Row removals belong to beid#852 and are not part of this navigation change.
+  The current v1.1 Account sheet has no wallet rows, even with the legacy
+  connected fixture; the older description of direct wallet disconnect was
+  stale. If wallet disconnect returns, it MUST use `role: .destructive` and
+  confirm via `.confirmationDialog`.
+  This is an iOS presentation change; Android navigation is intentionally
+  unchanged. **[Android's shape differs, not just its chrome:
   `AccountScreen` is a plain nav-graph destination (`Scaffold` + `Column`
   of `BeidSecondaryButton` rows, verified `AccountScreen.kt`), not a
   `.sheet`/`List`. No wallet connect/disconnect exists (out of scope,
-  #124). Android does have its own destructive action — "Leave Event" —
-  and it has the *same* shape of gap this document already calls
-  migration debt for iOS: `AccountScreen`'s `onClick = viewModel::leaveEvent`
-  fires directly with no confirmation dialog (verified). This document
-  names that gap as a fact about current Android source, on the same
-  terms it already names it for iOS — it does not decide whether Android
-  should get a confirmation dialog before or independently of iOS.]**
+  #124). The earlier Android review recorded its destructive "Leave Event"
+  action (`AccountScreen`'s `onClick = viewModel::leaveEvent`) as firing
+  directly with no confirmation dialog. That historical finding is not
+  re-verified by this iOS presentation change; Android navigation and
+  confirmation behavior are intentionally unchanged.]**
 - Loading: indeterminate work shows calm progress (`RecordingView`'s
   activity indicator with cumulative peer count), never blocking spinners
   without copy or an invented denominator. **[Android counterpart: no

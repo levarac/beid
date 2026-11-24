@@ -12,11 +12,70 @@ final class FlatScreenshotTourD: XCTestCase {
     continueAfterFailure = false
   }
 
+  func testAccountNavigationBarShowsTitleAndDoneDismisses() {
+    openAccount()
+    let bar = app.navigationBars["Account"]
+    XCTAssertTrue(bar.waitForExistence(timeout: 5))
+    XCTAssertTrue(bar.staticTexts["Account"].exists)
+    let done = bar.buttons["Done"]
+    done.assertHittable()
+    assertMinimumHitTarget(done)
+    attachScreenshot("account-navigation-bar")
+    done.tap()
+    XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
+    app.buttons["home.account"].assertHittable()
+  }
+
+  func testAccountPushedScreenUsesNativeBackInTheSameBar() {
+    openAccount()
+    let accountBar = app.navigationBars["Account"]
+    XCTAssertTrue(accountBar.waitForExistence(timeout: 5))
+    let originalFrame = accountBar.frame
+    app.buttons["Organizer tools"].tap()
+    app.buttons["organizer.venueBroadcast"].assertHittable()
+    let bar = app.navigationBars.firstMatch
+    XCTAssertTrue(bar.staticTexts["Organizer tools"].exists)
+    XCTAssertEqual(bar.frame.minY, originalFrame.minY, accuracy: 1)
+    XCTAssertEqual(bar.frame.width, originalFrame.width, accuracy: 1)
+    XCTAssertFalse(bar.buttons["Done"].exists)
+    let back = bar.buttons.firstMatch
+    back.assertHittable()
+    attachScreenshot("account-organizer-native-back")
+    back.tap()
+    accountBar.buttons["Done"].assertHittable()
+    XCTAssertTrue(accountBar.staticTexts["Account"].exists)
+    app.buttons["Organizer tools"].assertHittable()
+  }
+
+  func testAccountKeepsPastEventsAndAboutSensingRoutes() {
+    openAccount()
+    let list = app.collectionViews.firstMatch
+    let pastEvents = app.buttons["Past events"]
+    for _ in 0..<5 where !pastEvents.isHittable { list.swipeUp() }
+    pastEvents.assertHittable()
+    pastEvents.tap()
+    let pastBar = app.navigationBars["Past events"]
+    XCTAssertTrue(pastBar.waitForExistence(timeout: 5))
+    XCTAssertFalse(pastBar.buttons["Done"].exists)
+    pastBar.buttons.firstMatch.tap()
+    app.navigationBars["Account"].buttons["Done"].assertHittable()
+
+    let about = app.buttons["account.aboutSensing"]
+    for _ in 0..<5 where !about.isHittable { list.swipeUp() }
+    about.assertHittable()
+    about.tap()
+    let aboutBar = app.navigationBars["About sensing"]
+    XCTAssertTrue(aboutBar.waitForExistence(timeout: 5))
+    XCTAssertFalse(aboutBar.buttons["Done"].exists)
+    aboutBar.buttons.firstMatch.tap()
+    app.navigationBars["Account"].buttons["Done"].assertHittable()
+  }
+
   func testAccountSheetKeepsItsHeightWhenOpeningOrganizerTools() {
     openAccount()
-    let done = app.buttons["Done"]
+    let done = app.navigationBars["Account"].buttons["Done"]
     done.assertHittable()
-    let accountTop = done.frame.minY
+    let accountTop = app.navigationBars["Account"].frame.minY
     let viewport = app.windows.firstMatch.frame
     XCTAssertLessThan(accountTop, viewport.minY + viewport.height / 4,
                       "Account should open at full height")
@@ -34,7 +93,7 @@ final class FlatScreenshotTourD: XCTestCase {
     openAccount()
     app.buttons["Organizer tools"].assertHittable()
     attachScreenshot("10")
-    assertMinimumHitTarget(app.buttons["Done"])
+    assertMinimumHitTarget(app.navigationBars["Account"].buttons["Done"])
     assertMinimumHitTarget(app.buttons["Organizer tools"])
     XCTAssertTrue(app.descendants(matching: .any)["account.bluetooth.status"].exists)
     let list = app.collectionViews.firstMatch
@@ -52,7 +111,7 @@ final class FlatScreenshotTourD: XCTestCase {
     }
     XCTAssertTrue(sawPrivacy)
     app.buttons["account.support.share"].assertHittable()
-    app.buttons["Done"].assertHittable()
+    app.navigationBars["Account"].buttons["Done"].assertHittable()
   }
 
   func testShot_12_ReportDetail() {
@@ -96,7 +155,7 @@ final class FlatScreenshotTourD: XCTestCase {
     bluetoothStatus.assertHittable()
     attachScreenshot("10c")
     XCTAssertEqual(bluetoothStatus.label, "Open Bluetooth Settings")
-    assertMinimumHitTarget(app.buttons["Done"])
+    assertMinimumHitTarget(app.navigationBars["Account"].buttons["Done"])
     assertMinimumHitTarget(bluetoothStatus)
   }
 

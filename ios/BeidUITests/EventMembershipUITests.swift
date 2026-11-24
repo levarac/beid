@@ -38,7 +38,7 @@ final class EventMembershipUITests: XCTestCase {
     XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
 
     app.buttons["home.account"].tap()
-    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Account"].buttons["Done"].waitForExistence(timeout: 5))
 
     // Lower rows can exist in the accessibility tree while sitting behind
     // the footer. Scroll until the whole tappable row is unobstructed.
@@ -155,7 +155,7 @@ final class EventMembershipUITests: XCTestCase {
         ? "submissions=1 resumed=1" : "submissions=2 resumed=2")
       assertFreshCodeEntry()
       app.buttons["Cancel"].tap()
-      app.buttons["Done"].tap()
+      app.navigationBars["Account"].buttons["Done"].tap()
     }
   }
 
