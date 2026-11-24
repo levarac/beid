@@ -218,6 +218,10 @@ final class AppCoordinator: ObservableObject {
   @Published var selectedHomeTab: HomeTab = .now
   @Published private(set) var homeStandby = HomeStandbyState()
   @Published private(set) var homeStandbyDiscoveryActive = false
+  /// True after an explicit Stop until the person taps Look for events or
+  /// joins an event. While true, Now never restarts nearby-event discovery,
+  /// across foreground/background and tab changes (beid#892).
+  @Published private(set) var homeDiscoveryHeldAfterStop = false
   @Published private(set) var nowEventRegistration: HomeEventRegistration?
   #if DEBUG
   @Published private(set) var homeStandbyFixtureTime: TimeInterval = 0
@@ -761,6 +765,7 @@ final class AppCoordinator: ObservableObject {
   /// button, so the join itself must start sensing and show the sensing
   /// screen from the Now tab.
   private func startSensingAfterSuccessfulJoin() {
+    homeDiscoveryHeldAfterStop = false
     stopOutcome = nil
     homeEventCodeSheetPresented = false
     eventCodeEntrySheetPresented = false
@@ -1193,9 +1198,14 @@ final class AppCoordinator: ObservableObject {
   func updateHomeStandby(isVisible: Bool, isSceneActive: Bool) {
     let isIdle: Bool
     if case .idle = sensingCoordinator.phase { isIdle = true } else { isIdle = false }
+    // Any join path (nearby card, code, demo, rejoin) ends the stopped state.
+    if homeDiscoveryHeldAfterStop && (!isIdle || sensingCoordinator.isAdvertising) {
+      homeDiscoveryHeldAfterStop = false
+    }
     let isEnabled = isVisible && isSceneActive && screen == .home
       && selectedHomeTab == .now && !scanPresented && !accountSheetPresented
       && !homeEventCodeSheetPresented && !homeBluetoothIsOff && isIdle && !sensingCoordinator.isAdvertising
+      && !homeDiscoveryHeldAfterStop
     if isEnabled && !homeStandbyDiscoveryActive {
       homeStandbyDiscoveryActive = true
       #if DEBUG
@@ -1224,8 +1234,15 @@ final class AppCoordinator: ObservableObject {
     )
   }
 
+  /// Ends the stopped state and lets Now search for nearby events again.
+  func lookForEvents() {
+    homeDiscoveryHeldAfterStop = false
+    sealedSnapshot = nil
+  }
+
   func joinNearbyEventFromHome(_ card: NearbyEventCard) {
     guard card.joinActionEventCodeHashHex != nil else { return }
+    homeDiscoveryHeldAfterStop = false
     stopOutcome = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
@@ -1273,6 +1290,7 @@ final class AppCoordinator: ObservableObject {
   #endif
 
   func startScan() {
+    homeDiscoveryHeldAfterStop = false
     stopOutcome = nil
     selectedHomeTab = .now
     stopConfirmSnapshot = nil
@@ -1365,6 +1383,7 @@ final class AppCoordinator: ObservableObject {
   }
 
   private func resetAndDismissScan() {
+    homeDiscoveryHeldAfterStop = true
     stopConfirmSnapshot = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
@@ -1434,6 +1453,7 @@ final class AppCoordinator: ObservableObject {
     case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
       event = currentEvent
     case .idle, .sensing:
+      homeDiscoveryHeldAfterStop = true
       scanPresented = false
       return
     }
@@ -1444,6 +1464,7 @@ final class AppCoordinator: ObservableObject {
     let detectedDeviceCount = sensingCoordinator.devicesVerified
     let firstSightingAt = sensingCoordinator.firstSightingAt
     let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
+    homeDiscoveryHeldAfterStop = true
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
     let stopResult = sensingCoordinator.stopSensingWithResult()

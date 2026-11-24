@@ -2,6 +2,45 @@ import XCTest
 
 /// Witnesses the production Button action, not a direct call to its helper.
 final class NearbyJoinUITests: XCTestCase {
+  func testExplicitStopStaysQuietUntilLookForEvents() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["-beid-ui-test", "-beid-nearby-join-fixture"]
+    app.launch()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
+    let join = app.buttons["home.nearby.join.9adc61d60dda843e"]
+    join.assertHittable()
+    join.tap()
+    app.buttons["scan.stop-sensing"].assertHittable()
+    app.buttons["scan.stop-sensing"].tap()
+    let stopped = app.staticTexts["home.stopped.title"]
+    stopped.assertExists()
+    XCTAssertEqual(stopped.label, "Sensing stopped")
+    XCTAssertTrue(app.staticTexts["No Record was created for this session."].exists)
+    XCTAssertFalse(app.staticTexts["home.listening"].exists)
+    XCTAssertFalse(join.exists)
+    app.tabButton("Records").tap()
+    app.tabButton("Now").tap()
+    XCUIDevice.shared.press(.home)
+    app.activate()
+    stopped.assertExists()
+    XCTAssertFalse(app.staticTexts["home.listening"].exists)
+    XCTAssertFalse(join.exists)
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "now-after-stop-no-record"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    let look = app.buttons["home.look-for-events"]
+    look.assertHittable()
+    XCTAssertEqual(look.label, "Look for events")
+    look.tap()
+    app.staticTexts["home.listening"].assertExists()
+    XCTAssertFalse(stopped.exists)
+  }
+
   func testNearbyCardTapJoinsItsVerifiedEventExactlyOnce() {
     continueAfterFailure = false
     let app = XCUIApplication()
@@ -97,6 +136,7 @@ final class NowNavigationUITests: XCTestCase {
     let explanation = app.staticTexts["Saved records appear here after sensing."]
     app.scrollViews["records.grid"].assertExists()
     explanation.assertHittable()
+    XCTAssertTrue(app.staticTexts["A Record lets you revisit what this device observed during a sensing session at an event."].exists)
     app.buttons["By event"].tap()
     app.scrollViews["records.events"].assertExists()
     explanation.assertHittable()
@@ -249,8 +289,8 @@ final class NowNavigationUITests: XCTestCase {
     let recording = app.buttons["Simulate Signal Lost"]
     XCTAssertTrue(recording.waitForExistence(timeout: 30))
     app.buttons["scan.stop-sensing"].tap()
-    app.buttons["Stop and keep record"].assertHittable()
-    app.buttons["Stop and keep record"].tap()
+    app.alerts.buttons["Stop sensing"].assertHittable()
+    app.alerts.buttons["Stop sensing"].tap()
     app.buttons["Done"].assertHittable()
     app.buttons["Done"].tap()
     app.buttons["View records"].assertHittable()

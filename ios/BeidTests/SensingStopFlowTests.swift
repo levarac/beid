@@ -6,6 +6,31 @@ import XCTest
 
 @MainActor
 final class SensingStopFlowTests: XCTestCase {
+  func testConfirmedStopDoesNotRestartDiscoveryAfterReturningToNow() async {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let app = makeCoordinator(sensingCoordinator: sensing)
+    app.screen = .home
+    await reachRecording(app)
+    app.requestScanClose()
+    app.confirmStopSensing()
+    app.doneWithSealedRecord()
+    app.viewCollectionAfterProofCollected()
+    sensing.useDemoEventMode = false
+    let startsAfterStop = engine.startDiscoveryScanCallCount
+    app.selectedHomeTab = .now
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    app.updateHomeStandby(isVisible: true, isSceneActive: false)
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    app.selectedHomeTab = .records
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    app.selectedHomeTab = .now
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertFalse(app.homeStandbyDiscoveryActive)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, startsAfterStop)
+    XCTAssertNil(app.homeStandby.listeningStartedAt)
+  }
+
   func testOwnedStopAlertWaitsForItsScanRouteToDisappear() async throws {
     for mode in [StopOutcomeUITestFixture.Mode.signingError, .saveFailureWithEndpoints] {
       let fixture = StopOutcomeUITestFixture(mode: mode)

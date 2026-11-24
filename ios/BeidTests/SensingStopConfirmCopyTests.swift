@@ -5,15 +5,15 @@ import XCTest
 @testable import Beid
 
 final class SensingStopConfirmCopyTests: XCTestCase {
-  func testCopyWithARecordPromisesItIsKept() {
+  func testCopyWithARecordExplainsWhereItStays() {
     let copy = SensingStopConfirmCopy(hasRecord: true)
-    XCTAssertEqual(copy.stopTitle, "Stop and keep record")
-    XCTAssertEqual(copy.body, "Your record will be saved on this device.")
+    XCTAssertEqual(copy.stopTitle, "Stop sensing")
+    XCTAssertEqual(copy.body, "This ends your sensing session at this event. Any saved Record stays in Records on this device.")
   }
 
-  func testCopyBeforeAnyRecordAllowsARecordToBeCreatedDuringConfirmation() {
+  func testCopyBeforeAnyRecordDoesNotPromiseOne() {
     let copy = SensingStopConfirmCopy(hasRecord: false)
     XCTAssertEqual(copy.stopTitle, "Stop sensing")
-    XCTAssertEqual(copy.body, "Any record created will be saved on this device.")
+    XCTAssertEqual(copy.body, "This ends your sensing session at this event. No Record has been created yet.")
   }
 }
