@@ -71,6 +71,9 @@ struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
   let eventSigningPublicKey: Data?
   let finalizedAt: TimeInterval
   let createdAt: Date
+  /// Set when the registry reports that no definition can ever be resolved for
+  /// this window. Presentation metadata only: the saved inputs stay untouched.
+  var definitionUnavailableCode: String?
 
   init(
     id: UUID,
@@ -279,7 +282,7 @@ final class ReportSubmissionStore: ObservableObject {
   func hasRecordsWaitingToSend(at now: Date, isSessionActive: Bool) -> Bool {
     guard !isSessionActive else { return false }
     let overdueCapture = pendingCaptures.contains {
-      record(id: $0.id) == nil && now.timeIntervalSince($0.createdAt) > BeidConfig.unsentNoticeGracePeriod
+      record(id: $0.id) == nil && $0.definitionUnavailableCode == nil && now.timeIntervalSince($0.createdAt) > BeidConfig.unsentNoticeGracePeriod
     }
     return overdueCapture || pendingRecords.contains {
       $0.hasFailedSendAttempt || now.timeIntervalSince($0.createdAt) > BeidConfig.unsentNoticeGracePeriod
@@ -433,6 +436,19 @@ final class ReportSubmissionStore: ObservableObject {
     guard updated != exclusions else { return }
     try persistExclusions(updated)
     exclusions = updated
+  }
+
+  /// Keeps the saved inputs but stops the unsent notice from counting a window
+  /// whose definition lookup can never succeed.
+  func markCaptureDefinitionUnavailable(id: UUID, code: String) throws {
+    try ensureWritable()
+    guard let index = pendingCaptures.firstIndex(where: { $0.id == id }),
+          pendingCaptures[index].definitionUnavailableCode != code
+    else { return }
+    var updated = pendingCaptures
+    updated[index].definitionUnavailableCode = code
+    try persistPendingCaptures(updated)
+    pendingCaptures = updated
   }
 
   func removePendingCapture(id: UUID) throws {

@@ -145,6 +145,10 @@ final class SensingRadarViewTests: XCTestCase {
 
     XCTAssertEqual(zeroSummary, "2 devices heard in the last 5 minutes")
     XCTAssertEqual(mutualSummary, "2 devices heard in the last 5 minutes")
+    XCTAssertEqual(
+      SensingRadarProjection.accessibilitySummary(
+        peers: Array(peers.prefix(1)), mutualDeviceCount: 0, observedWindowCount: 6),
+      "1 device heard in the last 5 minutes")
     XCTAssertFalse(zeroSummary.contains(privateID))
     XCTAssertFalse(mutualSummary.contains(privateID))
     XCTAssertFalse(mutualSummary.contains("other"))

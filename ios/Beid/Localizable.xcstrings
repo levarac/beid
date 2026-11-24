@@ -13,14 +13,26 @@
         }
       }
     },
-    "%lld devices heard in the last 5 minutes": {
+    "radar.accessibility.devicesHeard": {
       "comment": "VoiceOver summary of the sensing radar. The count is devices heard within the rolling last five minutes, not the session total. No device identifiers are spoken.",
       "extractionState": "manual",
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld devices heard in the last 5 minutes"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld device heard in the last 5 minutes"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld devices heard in the last 5 minutes"
+                }
+              }
+            }
           }
         }
       }

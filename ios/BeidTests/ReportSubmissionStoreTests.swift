@@ -77,6 +77,33 @@ final class ReportSubmissionStoreTests: XCTestCase {
     XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
   }
 
+  func testCaptureWithUnresolvableDefinitionLeavesNoticeButTransientFailureKeepsIt() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-terminal-capture-notice")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appendingPathComponent("submissions.json")
+    let store = ReportSubmissionStore(fileURL: url)
+    let created = Date(timeIntervalSince1970: 123)
+    let expired = ReportSubmissionCapture(
+      id: UUID(), eventCode: "EXAMPLE", eventIdHex: nil, enin: 1,
+      peerRpids: ["peer"], reporterRpid: "reporter", participantCommitment: nil, createdAt: created)
+    let transient = ReportSubmissionCapture(
+      id: UUID(), eventCode: "EXAMPLE", eventIdHex: nil, enin: 2,
+      peerRpids: ["peer"], reporterRpid: "reporter", participantCommitment: nil, createdAt: created)
+    try store.addPendingCapture(expired)
+    try store.addPendingCapture(transient)
+    let later = created + BeidConfig.unsentNoticeGracePeriod + 1
+    XCTAssertTrue(store.hasRecordsWaitingToSend(at: later, isSessionActive: false))
+    try store.markCaptureDefinitionUnavailable(id: expired.id, code: "definition_validity_mismatch")
+    XCTAssertTrue(
+      store.hasRecordsWaitingToSend(at: later, isSessionActive: false),
+      "A capture whose lookup failed transiently still counts")
+    try store.removePendingCapture(id: transient.id)
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: later, isSessionActive: false))
+    let reloaded = ReportSubmissionStore(fileURL: url)
+    XCTAssertFalse(reloaded.hasRecordsWaitingToSend(at: later, isSessionActive: false))
+    XCTAssertEqual(reloaded.pendingCaptures.map(\.id), [expired.id], "Saved evidence is kept")
+  }
+
   func testSavedRecordsPendingInputsAndAcceptedReceiptsStayDistinctAfterRestart() throws {
     let directory = try makeIsolatedDirectory(named: "beid-restart-states")
     defer { try? FileManager.default.removeItem(at: directory) }

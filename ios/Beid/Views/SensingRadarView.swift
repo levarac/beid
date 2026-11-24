@@ -138,7 +138,10 @@ enum SensingRadarProjection {
     mutualDeviceCount _: Int,
     observedWindowCount _: Int
   ) -> String {
-    String(localized: "\(peers.count) devices heard in the last 5 minutes")
+    String(
+      localized: "radar.accessibility.devicesHeard",
+      defaultValue: "\(peers.count) devices heard in the last 5 minutes"
+    )
   }
 
 }
