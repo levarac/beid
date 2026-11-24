@@ -7,25 +7,37 @@ workflow file by hand. This script is the guard rail that keeps the two from
 silently diverging (see gh#152): it checks both directions — every job name
 and distinguishing command token in the workflow must appear in the doc
 section, and every command-shaped token quoted in the doc section must
-actually exist in the workflow. It is intentionally narrow (line/regex based,
-not a general YAML/Markdown differ) since this is meant to stay simple and
-readable, not to become a generic diff tool.
+actually exist in the workflow. YAML scalars are decoded before inspecting
+standalone shell command lines; this is not a general shell interpreter.
+Unittest discovery invocations use shlex argument lists in both directions:
+spacing and quoting are immaterial, but argument order and values must match.
+Extra flags are allowed only when the workflow and documentation both include
+the same complete argument list. Here-document input is never a command.
 """
 import argparse
 import re
+import shlex
 import sys
 from pathlib import Path
+
+try:
+    import yaml
+except ModuleNotFoundError as error:
+    if error.name != "yaml":
+        raise
+    raise SystemExit("The workflow checker requires PyYAML; install it with: "
+                     "python3 -m pip install PyYAML==6.0.2") from error
 
 HEADING_RE = re.compile(r"^(#{2,3})\s+(.*)$")
 PR_CI_HEADING_RE = re.compile(r"^###\s+PR CI\s*$")
 
 JOB_NAME_LINE_RE = re.compile(r"^ {4}name:\s*(.+?)\s*$", re.MULTILINE)
-RUN_LINE_RE = re.compile(r"^(\s*)run:\s*(.*)$")
-BLOCK_SCALAR_RE = re.compile(r"^[|>][-+0-9]*\s*$")
 
 GRADLE_TASK_RE = re.compile(r"(?<![\w\[:]):\w[\w:-]*\w")
 SCRIPT_PATH_RE = re.compile(r"scripts/\S+\.(?:sh|py)")
 BARE_SCRIPT_RE = re.compile(r"^(scripts/\S+\.(?:sh|py))$")
+UNITTEST_DISCOVER_COMMAND = "python3 -m unittest discover -s scripts/tests -t ."
+UNITTEST_PREFIX = ("python3", "-m", "unittest", "discover")
 
 DOC_BULLET_JOB_NAME_RE = re.compile(r"^\s*-\s+([A-Za-z][A-Za-z0-9 /]{1,40}?):\s")
 DOC_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
@@ -75,41 +87,79 @@ def extract_pr_ci_section(agents_md_text):
 
 
 def collect_run_blocks(workflow_text):
-    """Return a list of raw run: content strings, one per `run:` step in the workflow."""
-    lines = workflow_text.splitlines()
-    blocks = []
-    i = 0
-    while i < len(lines):
-        match = RUN_LINE_RE.match(lines[i])
-        if not match:
-            i += 1
-            continue
-        indent, inline = match.group(1), match.group(2)
-        if inline and not BLOCK_SCALAR_RE.match(inline):
-            # Single-line form: `run: scripts/lint.sh`
-            blocks.append(inline.strip())
-            i += 1
-            continue
+    """Decode literal, folded and quoted YAML run scalars, one per step."""
+    return [step["run"]
+            for document in yaml.load_all(workflow_text, Loader=yaml.BaseLoader)
+            for job in document.get("jobs", {}).values()
+            for step in job.get("steps", []) if "run" in step]
 
-        # Block scalar form: `run: |` followed by more-indented lines.
-        base_indent = len(indent)
-        body_lines = []
-        j = i + 1
-        while j < len(lines):
-            line = lines[j]
-            if line.strip() == "":
-                body_lines.append("")
-                j += 1
+
+def shell_command_lines(block):
+    """Yield logical lines, removing continuations and here-document input.
+
+    Keep quoted multiline strings together so their contents cannot masquerade
+    as command lines. Compound shell constructs are not execution evidence.
+    """
+    pending = ""
+    quote = None
+    heredocs = []
+    for line in block.splitlines(keepends=True):
+        if heredocs:
+            delimiter, strip_tabs = heredocs[0]
+            candidate = line.rstrip("\n")
+            if (candidate.lstrip("\t") if strip_tabs else candidate) == delimiter:
+                heredocs.pop(0)
+            continue
+        index = 0
+        continued = False
+        while index < len(line):
+            char = line[index]
+            if char == "\\" and quote != "'" and index + 1 < len(line):
+                following = line[index + 1]
+                if following == "\n":
+                    continued = True
+                else:
+                    pending += char + following
+                index += 2
                 continue
-            line_indent = len(line) - len(line.lstrip(" "))
-            if line_indent <= base_indent:
+            if char == "#" and quote is None and (index == 0 or line[index - 1].isspace()):
                 break
-            body_lines.append(line.strip())
-            j += 1
-        blocks.append("\n".join(l for l in body_lines if l))
-        i = j
+            if char in ("'", '"'):
+                if quote is None:
+                    quote = char
+                elif quote == char:
+                    quote = None
+            pending += char
+            index += 1
+        if continued or quote is not None:
+            continue
+        # Preserve quotes here: echo '<<' EOF does not open a here-document.
+        lexer = shlex.shlex(pending, posix=False, punctuation_chars="<>;|&()")
+        lexer.whitespace_split = True
+        try:
+            words = list(lexer)
+        except ValueError:
+            words = []
+        for index, word in enumerate(words[:-1]):
+            if word == "<<":
+                delimiter = words[index + 1]
+                strip_tabs = delimiter.startswith("-")
+                if delimiter == "-" and index + 2 < len(words):
+                    delimiter = words[index + 2]
+                elif strip_tabs:
+                    delimiter = delimiter[1:]
+                heredocs.append(("".join(shlex.split(delimiter)), strip_tabs))
+        yield pending
+        pending = ""
 
-    return blocks
+
+def discovery_arguments(command):
+    """Normalize a standalone discovery invocation, or return None."""
+    try:
+        words = tuple(shlex.split(command, comments=True))
+    except ValueError:
+        return None
+    return words if words[:4] == UNITTEST_PREFIX else None
 
 
 def workflow_job_names(workflow_text):
@@ -120,7 +170,10 @@ def workflow_command_tokens(run_blocks):
     """Distinguishing literal command tokens: every Gradle-task-shaped token found
     anywhere in a run: block, plus script paths that are a run: step's *entire*
     (single-line) content — i.e. the job is identified by that bare script
-    invocation, the same way `scripts/lint.sh` identifies the SwiftLint job today.
+    invocation, the same way `scripts/lint.sh` identifies the SwiftLint job today,
+    plus the documented scripts unittest discovery command. The latter accepts
+    shell whitespace, quotes and backslash-newlines. Complete discovery
+    argument lists must agree with the documentation.
     A script invoked with extra args/flags alongside other setup lines (e.g.
     prepare_testflight_notes.py inside the sanity job) is a supporting step, not
     a distinguishing token, so it is intentionally not swept in here.
@@ -133,13 +186,22 @@ def workflow_command_tokens(run_blocks):
             bare = BARE_SCRIPT_RE.match(non_empty_lines[0].strip())
             if bare:
                 tokens.add(bare.group(1))
+        for command in shell_command_lines(block):
+            arguments = discovery_arguments(command)
+            if arguments:
+                tokens.add(shlex.join(arguments))
     return tokens
 
 
 def forward_check(job_names, command_tokens, section_text):
-    """Every workflow-derived token must appear verbatim (job names case-insensitively)
-    inside AGENTS.md's ### PR CI section. Returns a list of failure messages."""
+    """Require workflow tokens in the doc section, normalizing discovery argv.
+
+    Other command tokens are verbatim; job names are case-insensitive.
+    Returns a list of failure messages.
+    """
     failures = []
+    documented_discovery = {arguments for span in DOC_INLINE_CODE_RE.findall(section_text)
+                            if (arguments := discovery_arguments(span))}
     lowered_section = section_text.lower()
     for name in sorted(job_names):
         if name.lower() not in lowered_section:
@@ -149,7 +211,9 @@ def forward_check(job_names, command_tokens, section_text):
                 f"Fix: update AGENTS.md's ### PR CI section to mention it."
             )
     for token in sorted(command_tokens):
-        if token not in section_text:
+        arguments = discovery_arguments(token)
+        present = arguments in documented_discovery if arguments else token in section_text
+        if not present:
             failures.append(
                 f"AGENTS.md's ### PR CI section is missing command token '{token}' "
                 f"(present in the checked PR workflows but not mentioned in AGENTS.md). "
@@ -164,6 +228,8 @@ def reverse_check(job_names, section_text, workflow_text):
     workflow file. Returns a list of failure messages."""
     failures = []
     lowered_job_names = {n.lower() for n in job_names}
+    workflow_discovery = {arguments for token in workflow_command_tokens(collect_run_blocks(workflow_text))
+                          if (arguments := discovery_arguments(token))}
 
     for line in section_text.splitlines():
         bullet = DOC_BULLET_JOB_NAME_RE.match(line)
@@ -180,9 +246,15 @@ def reverse_check(job_names, section_text, workflow_text):
     for code_span in DOC_INLINE_CODE_RE.findall(section_text):
         is_gradle_task = bool(GRADLE_TASK_RE.fullmatch(code_span))
         is_script_path = bool(SCRIPT_PATH_RE.fullmatch(code_span))
-        if not (is_gradle_task or is_script_path):
+        arguments = discovery_arguments(code_span)
+        is_unittest_discovery = arguments is not None
+        if not (is_gradle_task or is_script_path or is_unittest_discovery):
             continue
-        if code_span not in workflow_text:
+        workflow_has_token = (
+            arguments in workflow_discovery
+            if is_unittest_discovery else code_span in workflow_text
+        )
+        if not workflow_has_token:
             failures.append(
                 f"AGENTS.md's ### PR CI section quotes command token '{code_span}' that does "
                 f"not appear anywhere in the checked PR workflows. "
@@ -204,7 +276,7 @@ def main():
         ".github/workflows/pr-ci-ios-macos.yml",
         ".github/workflows/pr-ci-lab-cli.yml",
     ]
-    workflow_text = "\n".join(Path(path).read_text(encoding="utf-8") for path in workflow_paths)
+    workflow_text = "\n---\n".join(Path(path).read_text(encoding="utf-8") for path in workflow_paths)
     workflow_description = ", ".join(workflow_paths)
     agents_md_text = Path(args.agents_md_path).read_text(encoding="utf-8")
 
