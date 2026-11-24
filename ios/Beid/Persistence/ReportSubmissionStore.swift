@@ -268,6 +268,10 @@ final class ReportSubmissionStore: ObservableObject {
 
   var hasReadableExclusions: Bool { exclusionLoadError == nil }
 
+  /// Waiting includes captured inputs awaiting signing/configuration, and
+  /// retryable canonical records. Terminal failures are not waiting to send.
+  var hasRecordsWaitingToSend: Bool { !pendingCaptures.isEmpty || !pendingRecords.isEmpty }
+
   enum LabRecordProjectionError: Error, Equatable {
     case unreadable
   }

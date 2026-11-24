@@ -1965,7 +1965,12 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   top-trailing toolbar. The primary nearby candidate card on Now presents
   the announced name and registration status, and the whole card joins
   after verification. Its accessibility label starts with the localized
-  join action. Empty state (04b) follows the §3 do/don't. **[iOS-only as
+  join action. A pending-dot notice above Now's current content says when
+  saved records are waiting to send and asks the participant to keep beid
+  open and online. It follows the clock notice's hairline and typography
+  style, includes pending captures and retryable submissions, and disappears
+  once none remain. Accepted records and terminal failures do not keep this
+  waiting notice visible. Empty state (04b) follows the §3 do/don't. **[iOS-only as
   written — no Android counterpart. `Screen.kt`'s own comment: `EventJoin`
   "stands in for iOS's `.home`, since Android has no post-onboarding
   collection-home screen yet." Promoting a screen to this role is

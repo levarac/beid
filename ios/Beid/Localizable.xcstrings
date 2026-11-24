@@ -1,6 +1,30 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "home.unsent.title": {
+      "comment": "Now notice heading when saved records or captured inputs are waiting to be sent to the operator; not an error or a verification claim.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDS WAITING TO SEND"
+          }
+        }
+      }
+    },
+    "home.unsent.message": {
+      "comment": "Now notice for retryable unsent records. Explains that sending needs the app open and connectivity; terminal failures are excluded.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some records have not been sent yet. Keep beid open and online to send them."
+          }
+        }
+      }
+    },
     "stop.outcome.action": {
       "extractionState": "manual",
       "localizations": {

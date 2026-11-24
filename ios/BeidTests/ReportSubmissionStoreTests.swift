@@ -7,6 +7,43 @@ import XCTest
 
 @MainActor
 final class ReportSubmissionStoreTests: XCTestCase {
+  func testWaitingNoticeTracksPreparedSubmittingAcceptedAndTerminalRecords() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-waiting-notice")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appendingPathComponent("submissions.json")
+    let store = ReportSubmissionStore(fileURL: url)
+    XCTAssertFalse(store.hasRecordsWaitingToSend)
+    let record = makeRecord()
+    try store.add(record)
+    XCTAssertTrue(store.hasRecordsWaitingToSend)
+    XCTAssertTrue(ReportSubmissionStore(fileURL: url).hasRecordsWaitingToSend)
+    try store.markSubmitting(for: record.id)
+    XCTAssertTrue(store.hasRecordsWaitingToSend)
+    try store.storeReceipt(for: record.id, signedReceiptHex: "aabb")
+    XCTAssertFalse(store.hasRecordsWaitingToSend)
+    let failed = makeRecord()
+    try store.add(failed)
+    try store.markTerminalFailure(for: failed.id, code: "definition_validity_mismatch")
+    XCTAssertFalse(store.hasRecordsWaitingToSend)
+  }
+
+  func testPendingCaptureKeepsNoticeUntilItsCanonicalRecordIsAccepted() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-pending-notice")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    let capture = ReportSubmissionCapture(
+      id: UUID(), eventCode: "EXAMPLE", eventIdHex: nil, enin: 1,
+      peerRpids: ["peer"], reporterRpid: "reporter", participantCommitment: nil)
+    try store.addPendingCapture(capture)
+    XCTAssertTrue(store.hasRecordsWaitingToSend)
+    let record = makeRecord(id: capture.id)
+    try store.add(record)
+    try store.removePendingCapture(id: capture.id)
+    XCTAssertTrue(store.hasRecordsWaitingToSend)
+    try store.storeReceipt(for: record.id, signedReceiptHex: "aabb")
+    XCTAssertFalse(store.hasRecordsWaitingToSend)
+  }
+
   func testSavedRecordsPendingInputsAndAcceptedReceiptsStayDistinctAfterRestart() throws {
     let directory = try makeIsolatedDirectory(named: "beid-restart-states")
     defer { try? FileManager.default.removeItem(at: directory) }

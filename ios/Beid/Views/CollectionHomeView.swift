@@ -85,6 +85,13 @@ private struct NowHomeView: View {
         ScrollView {
           BeidLargeTitleContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
             VStack(alignment: .leading, spacing: DS.Space.l) {
+              HomeUnsentNotice(store: coordinator.reportSubmissionStore, usesInk: usesInk)
+              #if DEBUG
+              if coordinator.isPendingRecordFixture {
+                Button("Accept pending fixture record") { coordinator.acceptPendingRecordForUITesting() }
+                  .accessibilityIdentifier("home.pending-fixture.accept")
+              }
+              #endif
               if !isIdle && coordinator.homeBluetoothIsOff { bluetoothOff }
               if let event = activeEvent {
                 activeSummary(event: event, now: context.date)
@@ -691,6 +698,42 @@ private struct HomeRecordDetail: View {
     #else
     ItemDetailView(proof: proof)
     #endif
+  }
+}
+
+private struct HomeUnsentNotice: View {
+  @ObservedObject var store: ReportSubmissionStore
+  let usesInk: Bool
+
+  var body: some View {
+    if store.hasRecordsWaitingToSend {
+      VStack(alignment: .leading, spacing: DS.Space.s) {
+        hairline
+        HStack(spacing: DS.Space.s) {
+          Circle()
+            .fill(DS.Color.statusPending)
+            .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+            .accessibilityHidden(true)
+          Text("home.unsent.title")
+            .beidTextStyle(DS.Font.Library.labelMono11)
+            .foregroundStyle(usesInk ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+        }
+        Text("home.unsent.message")
+          .beidTextStyle(DS.Font.Library.body13)
+          .foregroundStyle(usesInk ? DS.Color.textSecondaryOnInk : DS.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+        hairline
+      }
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("home.unsent-notice")
+    }
+  }
+
+  private var hairline: some View {
+    Rectangle()
+      .fill(usesInk ? DS.Color.strokeHairlineOnInk : DS.Color.strokeHairline)
+      .frame(height: DS.Size.hairline)
   }
 }
 

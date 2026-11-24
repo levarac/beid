@@ -67,6 +67,26 @@ final class NearbyJoinUITests: XCTestCase {
 final class NowNavigationUITests: XCTestCase {
   private let app = XCUIApplication()
 
+  func testNowShowsPendingRecordsUntilSubmissionSucceeds() {
+    launchHome(["-beid-home-frame-04b", "-beid-pending-record-fixture"])
+    let notice = app.otherElements["home.unsent-notice"]
+    XCTAssertTrue(notice.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Some records have not been sent yet. Keep beid open and online to send them."].exists)
+    capture("Now-unsent-records")
+    let accept = app.buttons["home.pending-fixture.accept"]
+    accept.assertHittable()
+    accept.tap()
+    let disappeared = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: notice
+    )
+    XCTAssertEqual(XCTWaiter.wait(for: [disappeared], timeout: 5), .completed)
+  }
+
+  func testNowHasNoWaitingNoticeWithoutPendingRecords() {
+    launchHome(["-beid-home-frame-04b"])
+    XCTAssertFalse(app.otherElements["home.unsent-notice"].exists)
+  }
+
   override func setUpWithError() throws {
     continueAfterFailure = false
   }

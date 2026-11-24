@@ -1381,6 +1381,7 @@ final class SensingCoordinator: ObservableObject {
     isEventDetailFixture = arguments.contains("-beid-ui-test") &&
       (arguments.contains("-beid-event-detail-frame-08") ||
         arguments.contains("-beid-event-detail-frame-08c") ||
+        arguments.contains("-beid-pending-record-fixture") ||
         arguments.contains("-beid-observation-frame-11"))
     #else
     isEventDetailFixture = false
