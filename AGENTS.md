@@ -462,6 +462,11 @@ classification; failed collection or classification runs all three gates.
   `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`, and
   `:app:dependencyInsight` for Barnard dependency provenance. The private Parallax comparison is explicitly SKIPPED here;
   a separate protected main-only workflow runs it.
+  A separate `actions/cache` restores only the two Robolectric SDK jars in
+  Gradle's dependency cache before the build and saves after successful jobs,
+  including PRs. Its key and paths derive from `robolectricSdkVersions`;
+  setup-gradle's PR cache remains read-only. Only `org.robolectric:android-all-instrumented`
+  resolves from Google's Maven Central mirror first, then Central when absent.
 **SwiftLint**: `scripts/lint.sh` and `scripts/check_lint_fixtures.py`.
 The fixture check requires SwiftLint exit 2 and exact fail-fixture line/rule
 violations, with no pass-fixture or application violations.

@@ -103,7 +103,7 @@ struct SensingSealedView: View {
               .foregroundStyle(DS.Color.textSecondaryOnInk)
               .padding(.top, DS.Space.s)
 
-            RecordSigilSlot(input: sigilInput, placement: .sensingSealed)
+            RecordSigilSlot(input: sigilInput, placement: .sensingSealed, isDeviceRecord: true)
               .frame(maxWidth: .infinity)
               .padding(.top, DS.Space.xl)
 

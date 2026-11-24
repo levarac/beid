@@ -14,6 +14,42 @@ final class FlatScreenshotTourB: XCTestCase {
     continueAfterFailure = false
   }
 
+  /// Run under both simctl appearances while recording the display. The
+  /// checkpoints keep each transition identifiable in the external video.
+  func testBackgroundTransitionTour() {
+    launchHome(arguments: ["-beid-home-frame-04"])
+    capture("background-01-now")
+    app.buttons["home.open-details"].scrollToHittable(in: app)
+    app.buttons["home.open-details"].tap()
+    app.buttons["scan.stop-sensing"].assertExists()
+    capture("background-02-sensing")
+    app.navigationBars.buttons.firstMatch.tap()
+    app.tabButton("Now").assertExists()
+    capture("background-03-now-return")
+    app.buttons["home.account"].tap()
+    app.buttons["Done"].assertHittable()
+    capture("background-04-account")
+    app.buttons["Done"].tap()
+    capture("background-05-account-dismissed")
+    app.tabButton("Records").tap()
+    let record = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record.")).firstMatch
+    record.assertHittable()
+    capture("background-06-records")
+    record.tap()
+    app.scrollViews["proof.detail.content"].assertExists()
+    capture("background-07-record-detail")
+    app.navigationBars.buttons.firstMatch.tap()
+    app.buttons["By event"].tap()
+    let event = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.past-event.")).firstMatch
+    event.assertHittable()
+    event.tap()
+    app.staticTexts["event-detail.heading"].assertExists()
+    capture("background-08-event-detail")
+    app.navigationBars.buttons.firstMatch.tap()
+    app.tabButton("Now").tap()
+    capture("background-09-now-return")
+  }
+
   func testShot_04_Events() {
     launchHome(arguments: ["-beid-home-frame-04"])
     XCTAssertTrue(app.otherElements["home.active-event"].waitForExistence(timeout: 5))
@@ -35,7 +71,7 @@ final class FlatScreenshotTourB: XCTestCase {
     capture("04")
   }
 
-  func testActiveNowKeepsInlineNavigationTitleAndAccountVisibleAfterScrolling() {
+  func testActiveNowKeepsNavigationIdentityAndAccountVisibleAfterScrolling() {
     launchHome(arguments: [
       "-beid-home-frame-04", "-beid-long-japanese-event-name-fixture",
       "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
@@ -43,17 +79,35 @@ final class FlatScreenshotTourB: XCTestCase {
     let activeContent = app.otherElements["home.active-event"]
     activeContent.assertExists()
     assertNavigationTitleDrawn("Now")
+    let navigationBar = app.navigationBars["Now"]
+    let expandedBarHeight = navigationBar.frame.height
     let title = app.navigationBars.staticTexts["Now"]
     let expandedTitleHeight = title.frame.height
     let now = app.scrollViews["home.now"]
     now.swipeUp()
     let account = app.navigationBars.buttons["home.account"]
     account.assertHittable()
-    XCTAssertLessThan(title.frame.height, expandedTitleHeight, "Now should collapse to an inline title")
-    XCTAssertEqual(title.frame.midY, account.frame.midY, accuracy: 4, "The title and Account should share the inline bar")
+    XCTAssertLessThan(navigationBar.frame.height, expandedBarHeight, "Scrolling must collapse the large navigation bar")
+    if UIDevice.current.userInterfaceIdiom == .pad {
+      // iPad's native top tab bar identifies Now after the large title
+      // collapses; UIKit omits the duplicate inline title (DESIGN.md §12).
+      let nowTab = app.tabButton("Now")
+      nowTab.assertHittable()
+      XCTAssertTrue(nowTab.isSelected, "The visible top tab must identify the current screen")
+      XCTAssertTrue(app.windows.firstMatch.frame.contains(nowTab.frame))
+      XCTAssertFalse(nowTab.frame.intersects(account.frame), "The screen identity and Account must not overlap")
+      assertNavigationForegroundDrawn(nowTab, name: "Selected Now tab")
+    } else {
+      XCTAssertLessThan(title.frame.height, expandedTitleHeight, "Now should collapse to an inline title")
+      XCTAssertEqual(title.frame.midY, account.frame.midY, accuracy: 4, "The title and Account should share the inline bar")
+      assertNavigationTitleDrawn("Now")
+    }
     XCTAssertTrue(activeContent.exists)
-    assertNavigationTitleDrawn("Now")
     assertNavigationForegroundDrawn(account, name: "Account", insetFraction: 0.2)
+    let hierarchy = XCTAttachment(string: app.debugDescription)
+    hierarchy.name = "04-collapsed-hierarchy"
+    hierarchy.lifetime = .keepAlways
+    add(hierarchy)
     capture("04-collapsed")
   }
 

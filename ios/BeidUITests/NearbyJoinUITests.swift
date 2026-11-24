@@ -91,6 +91,75 @@ final class NowNavigationUITests: XCTestCase {
     capture("now-active")
   }
 
+  func testRecordsGridExposedLabelDoesNotAnnounceNumericMutuality() {
+    openSavedDemoRecords()
+    app.scrollViews["records.grid"].assertExists()
+    let tile = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record.")).firstMatch
+    tile.assertExists()
+    // The tile intentionally replaces its children's labels with the event action.
+    XCTAssertEqual(tile.label, "Record for ETHGlobal Tokyo")
+    assertNoNumericMutualLabel(in: app.scrollViews["records.grid"])
+  }
+
+  func testRecordsByEventArtworkAnnouncesUnavailableMutuality() {
+    openSavedDemoRecords()
+    app.buttons["By event"].tap()
+    let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.past-event.")).firstMatch
+    row.assertExists()
+    XCTAssertNotNil(row.label.range(
+      of: #"Devices heard: \d+\. Window \d+\. Mutual check not available yet\."#, options: .regularExpression
+    ))
+    XCTAssertTrue(row.label.contains("ETHGlobal Tokyo"))
+    assertNoNumericMutualLabel(in: app.scrollViews["records.events"])
+  }
+
+  func testSealedRecordArtworkAnnouncesUnavailableMutuality() {
+    launchSealedDemoRecord()
+    let artwork = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label CONTAINS[c] %@", "mutual")
+    ).firstMatch
+    artwork.assertExists()
+    XCTAssertTrue(artwork.label.hasPrefix("Devices heard:"))
+    XCTAssertTrue(artwork.label.contains("Window"))
+    XCTAssertTrue(artwork.label.contains("Mutual check not available yet."))
+    assertNoNumericMutualLabel(in: app)
+  }
+
+  private func openSavedDemoRecords() {
+    launchSealedDemoRecord()
+    app.buttons["Done"].tap()
+    app.buttons["View records"].assertHittable()
+    app.buttons["View records"].tap()
+    app.tabButton("Records").tap()
+  }
+
+  private func launchSealedDemoRecord() {
+    launchHome([])
+    app.buttons["home.demo.join"].tap()
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    app.buttons["scan.stop-sensing"].tap()
+    app.buttons["Stop and keep record"].assertHittable()
+    app.buttons["Stop and keep record"].tap()
+    app.buttons["Done"].assertHittable()
+    // A persisted artwork is required: a neutral ring would make the
+    // absence of numeric narration a vacuous pass at the later grid/row.
+    app.descendants(matching: .any).matching(
+      NSPredicate(format: "label CONTAINS[c] %@", "mutual")
+    ).firstMatch.assertExists()
+  }
+
+  /// One predicate query (one accessibility snapshot). Reading `.label` from
+  /// every element of `allElementsBoundByIndex` re-resolves each element and
+  /// costs one snapshot apiece.
+  private func assertNoNumericMutualLabel(
+    in container: XCUIElement, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    let numeric = container.descendants(matching: .any).matching(
+      NSPredicate(format: "label MATCHES[c] %@", #"(?s).*\d+\s+mutual.*"#)
+    )
+    XCTAssertEqual(numeric.count, 0, "A label announces a numeric mutual count", file: file, line: line)
+  }
+
   func testEmptyRecordsExplainsBothGroupingsInPlace() {
     launchHome(["-beid-home-frame-04b"])
     app.tabButton("Records").tap()

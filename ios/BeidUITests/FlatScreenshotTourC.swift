@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import XCTest
+import UIKit
 
 /// Stream C's deterministic Figma comparison tour. Every app-side sample is
 /// gated by -beid-ui-test and -beid-sensing-shot. The 05b frame is excluded by
@@ -280,26 +281,48 @@ final class FlatScreenshotTourC: XCTestCase {
 
   func testRecordDetailKeepsLongEventNameAvailable() {
     let eventName = "International Community Gathering and Technology Festival Tokyo 2026"
-    let app = launchEventDetailFixture(extraArguments: ["-beid-long-record-name-fixture"])
-    let record = app.buttons["event-detail.proof.1"]
-    record.scrollToHittable(in: app)
-    record.tap()
-    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.navigationBars[eventName].exists)
-    let disclosure = app.buttons["record.event-name.disclosure"]
-    disclosure.scrollToHittable(in: app)
-    disclosure.tap()
-    let fullName = app.staticTexts.matching(identifier: "record.event-name.disclosure")
-      .matching(NSPredicate(format: "label == %@", eventName)).firstMatch
-    XCTAssertTrue(fullName.waitForExistence(timeout: 5))
-    XCTAssertEqual(fullName.label, eventName)
-    XCTAssertGreaterThan(fullName.frame.height, 40)
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    attachment.name = "record-detail-long-event-name"
-    attachment.lifetime = .keepAlways
-    add(attachment)
-    app.swipeUp()
-    XCTAssertTrue(app.navigationBars[eventName].exists)
+    for category in [UIContentSizeCategory.large, .accessibilityExtraLarge] {
+      let app = launchEventDetailFixture(extraArguments: [
+        "-beid-long-record-name-fixture", "-UIPreferredContentSizeCategoryName", category.rawValue
+      ])
+      let record = app.buttons["event-detail.proof.1"]
+      record.scrollToHittable(in: app)
+      record.tap()
+      let content = app.scrollViews["proof.detail.content"]
+      XCTAssertTrue(content.waitForExistence(timeout: 5))
+      XCTAssertTrue(app.navigationBars[eventName].exists)
+      let disclosure = app.buttons["record.event-name.disclosure"]
+      disclosure.scrollToHittable(in: app)
+      disclosure.tap()
+      let fullName = app.staticTexts.matching(identifier: "record.event-name.disclosure")
+        .matching(NSPredicate(format: "label == %@", eventName)).firstMatch
+      fullName.scrollToHittable(in: app, within: content)
+      XCTAssertEqual(fullName.label, eventName)
+      // This exact fixture measures 498.5pt on one line in Body/15 at Large.
+      // Use the name's available width, not the device idiom: narrow windows
+      // must wrap even at Large, while a regular-width window can fit it.
+      // Allow 1pt for accessibility-frame rounding at the one-line boundary.
+      let requiresWrappingAtLarge = fullName.frame.width < 498.5 - 1
+      if category.isAccessibilityCategory || requiresWrappingAtLarge {
+        let traits = UITraitCollection(preferredContentSizeCategory: category)
+        let singleLineHeight = UIFont.preferredFont(forTextStyle: .subheadline, compatibleWith: traits).lineHeight
+        XCTAssertGreaterThan(
+          fullName.frame.height, singleLineHeight * 1.5,
+          "The full name must wrap without truncation at \(category.rawValue); frame: \(fullName.frame)"
+        )
+      }
+      let hierarchy = XCTAttachment(string: app.debugDescription)
+      hierarchy.name = "record-detail-long-event-name-\(category.rawValue)-hierarchy"
+      hierarchy.lifetime = .keepAlways
+      add(hierarchy)
+      let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+      attachment.name = "record-detail-long-event-name-\(category.rawValue)"
+      attachment.lifetime = .keepAlways
+      add(attachment)
+      app.swipeUp()
+      XCTAssertTrue(app.navigationBars[eventName].exists)
+      app.terminate()
+    }
   }
 
   func testRecordDetailDoesNotRepeatEventNameAsHeading() {

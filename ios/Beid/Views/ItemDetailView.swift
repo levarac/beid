@@ -221,7 +221,7 @@ struct ItemDetailView: View {
       }
     }
     .accessibilityIdentifier("proof.detail.content")
-    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+    .beidScreenBackground(DS.Color.surfaceCanvas)
     .navigationTitle(Text(verbatim: proof.eventName))
     .navigationBarTitleDisplayMode(.inline)
   }

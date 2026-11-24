@@ -75,6 +75,7 @@ struct AccountSheetView: View {
         switch destination {
         case .organizerTools:
           OrganizerToolsView()
+            .beidScreenBackground(DS.Color.surfaceCanvas)
             .navigationTitle(organizerToolsLabel)
         case .pastEvents:
           PastEventsView(
@@ -86,6 +87,7 @@ struct AccountSheetView: View {
               }
             }
           )
+          .beidScreenBackground(DS.Color.surfaceCanvas)
         case .aboutSensing:
           AboutSensingView()
         }

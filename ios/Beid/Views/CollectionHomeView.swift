@@ -112,6 +112,7 @@ private struct NowHomeView: View {
         .background(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, ignoresSafeAreaEdges: .bottom)
       }
       .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+      .beidScreenBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
       .modifier(HomeAccountToolbar(title: "home.now.title", iconColor: DS.Color.textPrimary))
       .toolbarBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, for: .tabBar)
       .toolbarBackground(.hidden, for: .navigationBar)
@@ -609,7 +610,7 @@ private struct RecordsHomeView: View {
         }
       }
       .accessibilityIdentifier(grouping == .byEvent ? "records.events" : "records.grid")
-      .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+      .beidScreenBackground(DS.Color.surfaceCanvas)
       .modifier(HomeAccountToolbar(title: "records.title", iconColor: DS.Color.textPrimary))
       .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.light, for: .navigationBar)
@@ -622,7 +623,9 @@ private struct RecordsHomeView: View {
       selectedRecord = proof
     } label: {
       VStack(alignment: .leading, spacing: DS.Space.s) {
-        RecordSigilSlot(input: sensing.sigilInput(forProofId: proof.id), placement: .recordsGrid)
+        RecordSigilSlot(
+          input: sensing.sigilInput(forProofId: proof.id), placement: .recordsGrid, isDeviceRecord: true
+        )
         Text(verbatim: proof.eventName)
           .beidTextStyle(DS.Font.Library.title17)
           .fixedSize(horizontal: false, vertical: true)
@@ -650,7 +653,9 @@ private struct RecordsHomeView: View {
                             submissionStore: coordinator.reportSubmissionStore)
           } label: {
             HStack(spacing: DS.Space.m) {
-              RecordSigilSlot(input: sensing.sigilInput(forProofId: proof.id), placement: .homePastRow)
+              RecordSigilSlot(
+                input: sensing.sigilInput(forProofId: proof.id), placement: .homePastRow, isDeviceRecord: true
+              )
               VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text(verbatim: proof.eventName).beidTextStyle(DS.Font.Library.title17)
                 Text(String(

@@ -112,7 +112,7 @@ struct AboutSensingView: View {
       }
     }
     .accessibilityIdentifier("aboutSensing.scroll")
-    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+    .beidScreenBackground(DS.Color.surfaceCanvas)
     .navigationBarTitleDisplayMode(.large)
     .toolbar(.visible, for: .navigationBar)
     .toolbarBackground(.hidden, for: .navigationBar)
@@ -202,7 +202,7 @@ struct WhatWeSendView: View {
       }
     }
     .accessibilityIdentifier("whatWeSend.scroll")
-    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+    .beidScreenBackground(DS.Color.surfaceCanvas)
     .navigationBarTitleDisplayMode(.large)
     .toolbar(.visible, for: .navigationBar)
     .toolbarBackground(.hidden, for: .navigationBar)
