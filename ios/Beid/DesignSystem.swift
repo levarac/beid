@@ -312,6 +312,12 @@ extension ToolbarContent {
 }
 
 extension View {
+  /// A screen's state color also owns the backing exposed by native transitions.
+  /// This does not change the app's single Light appearance (DESIGN.md §14).
+  func beidScreenBackground(_ color: Color, updatesBacking: Bool = true) -> some View {
+    modifier(BeidScreenBackground(color: color, updatesBacking: updatesBacking))
+  }
+
   /// The one sanctioned way to give a view a surface under Flat 2b: the
   /// `bg` fill plus a 1 pt `line` hairline border (DESIGN.md §8 — no glass,
   /// no materials, no blur). This modifier owns the entire surface fill —
@@ -338,5 +344,123 @@ extension View {
           .fill(DS.Color.strokeHairline)
           .frame(height: DS.Size.hairline)
       }
+  }
+}
+
+private struct BeidScreenBackground: ViewModifier {
+  let color: Color
+  let updatesBacking: Bool
+
+  func body(content: Content) -> some View {
+    navigationBackground(content)
+      .background(color.ignoresSafeArea())
+      .background {
+        if updatesBacking {
+          BeidBackingView(color: UIColor(color)).frame(width: 0, height: 0)
+        }
+      }
+  }
+
+  @ViewBuilder private func navigationBackground(_ content: Content) -> some View {
+    if #available(iOS 18, *) {
+      content.containerBackground(color, for: .navigation)
+    } else {
+      content
+    }
+  }
+}
+
+private struct BeidBackingView: UIViewControllerRepresentable {
+  let color: UIColor
+
+  func makeUIViewController(context: Context) -> BeidBackingController {
+    BeidBackingController(color: color)
+  }
+
+  func updateUIViewController(_ controller: BeidBackingController, context: Context) {
+    controller.setBackground(color)
+  }
+}
+
+/// UIKit owns the window, hosting roots and tab container beneath SwiftUI.
+/// Use public controller containment, never private UIKit class names or a
+/// global UIView appearance proxy. Each appearing screen restores its ground
+/// on pop/dismiss as well as push, without changing navigation or sheet behavior.
+final class BeidBackingController: UIViewController {
+  private static let visibleSurfaces = NSHashTable<BeidBackingController>.weakObjects()
+  private var ground: UIColor
+  private var isVisible = false
+  private weak var backingWindow: UIWindow?
+
+  init(color: UIColor) {
+    ground = color
+    super.init(nibName: nil, bundle: nil)
+  }
+
+  required init?(coder: NSCoder) { return nil }
+
+  override func loadView() {
+    view = UIView()
+    view.isUserInteractionEnabled = false
+  }
+
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    isVisible = true
+    Self.visibleSurfaces.add(self)
+    applyBackground()
+  }
+
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    applyBackground()
+  }
+
+  override func viewWillDisappear(_ animated: Bool) {
+    isVisible = false
+    super.viewWillDisappear(animated)
+  }
+
+  override func viewDidDisappear(_ animated: Bool) {
+    super.viewDidDisappear(animated)
+    Self.visibleSurfaces.remove(self)
+    // A page sheet leaves its presenter visible, so dismissal does not always
+    // send that presenter another viewWillAppear. Restore its backing here.
+    guard let backingWindow else { return }
+    for surface in Self.visibleSurfaces.allObjects
+      .filter({ $0.viewIfLoaded?.window === backingWindow })
+      .sorted(by: { $0.containmentDepth < $1.containmentDepth }) {
+      surface.applyBackground()
+    }
+  }
+
+  private var containmentDepth: Int {
+    var depth = 0
+    var owner = parent
+    while let current = owner { depth += 1; owner = current.parent }
+    return depth
+  }
+
+  func setBackground(_ color: UIColor) {
+    guard !ground.resolvedColor(with: traitCollection).isEqual(color.resolvedColor(with: traitCollection)) else { return }
+    ground = color
+    if isVisible { applyBackground() }
+  }
+
+  private func applyBackground() {
+    guard isVisible else { return }
+    var chain: [UIViewController] = []
+    var child: UIViewController = self
+    while let owner = child.parent {
+      if let navigation = owner as? UINavigationController, navigation.topViewController !== child { return }
+      if let tabs = owner as? UITabBarController, tabs.selectedViewController !== child { return }
+      if let presented = owner.presentedViewController, !presented.isBeingDismissed { return }
+      chain.append(owner)
+      child = owner
+    }
+    let window = chain.compactMap { $0.viewIfLoaded?.window }.first ?? viewIfLoaded?.window
+    backingWindow = window
+    for controller in chain { controller.viewIfLoaded?.backgroundColor = ground }
+    window?.backgroundColor = ground
   }
 }

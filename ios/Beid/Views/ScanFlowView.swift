@@ -26,6 +26,7 @@ struct ScanFlowView: View {
           .layoutPriority(1)
       }
     }
+      .beidScreenBackground(usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
       .environment(\.showsFirstSensingHint, showsFirstTimeHint ?? false)
       .onAppear {
         if showsFirstTimeHint == nil { showsFirstTimeHint = !hasShownFirstTimeHint }

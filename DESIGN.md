@@ -2381,6 +2381,24 @@ Acceptance criteria for every component and screen, not post-hoc QA:
   pairs are no longer required. #632 removed the `.preferredColorScheme`
   preview variants.
 
+### iOS transition backing (#890)
+
+Screen roots use `beidScreenBackground` in `ios/Beid/DesignSystem.swift`:
+the existing `DS.Color.surfaceCanvas` or `DS.Color.textPrimary` fills the
+safe areas and the native navigation backing. A small UIKit containment
+bridge gives the window, hosting roots and tab container the same ground
+before a screen appears, and restores it on pop, tab changes and sheet
+dismissal. It does not change `UIUserInterfaceStyle = Light` or introduce
+another theme. RootView supplies the onboarding canvas; Home's visible
+screen owns its backing, so an offscreen tab cannot recolor it.
+
+The current Now title region remains white above its ink participation
+body; #883 owns any change to that screen's intended palette. Sensing is
+pushed, and Account already uses an ink presentation background. These
+current paths supersede §8's old cover/interim-canvas examples. Rounded
+transition corners remain OS-owned; background color must also cover the
+layers exposed outside them, not just a screen's scroll content.
+
 Kept unchanged:
 
 - SHOULD: High-contrast colorset variants are added at palette ratification;

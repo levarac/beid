@@ -24,6 +24,8 @@ struct RootView: View {
         CollectionHomeView()
       }
     }
+    // Home's visible tab/destination owns its state-colored backing instead.
+    .beidScreenBackground(DS.Color.surfaceCanvas, updatesBacking: coordinator.screen != .home)
     .modifier(OwnerKeyRestorationNoticePresenter(
       sensingCoordinator: coordinator.sensingCoordinator
     ))

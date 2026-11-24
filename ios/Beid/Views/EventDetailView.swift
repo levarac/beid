@@ -59,7 +59,7 @@ struct EventDetailView: View {
         .padding(.bottom, DS.Space.xl)
       }
     }
-    .background(DS.Color.surfaceCanvas)
+    .beidScreenBackground(DS.Color.surfaceCanvas)
     .navigationTitle("Event")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {

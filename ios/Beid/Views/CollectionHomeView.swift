@@ -112,6 +112,7 @@ private struct NowHomeView: View {
         .background(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, ignoresSafeAreaEdges: .bottom)
       }
       .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+      .beidScreenBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
       .modifier(HomeAccountToolbar(title: "home.now.title", iconColor: DS.Color.textPrimary))
       .toolbarBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, for: .tabBar)
       .toolbarBackground(.hidden, for: .navigationBar)
@@ -609,7 +610,7 @@ private struct RecordsHomeView: View {
         }
       }
       .accessibilityIdentifier(grouping == .byEvent ? "records.events" : "records.grid")
-      .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+      .beidScreenBackground(DS.Color.surfaceCanvas)
       .modifier(HomeAccountToolbar(title: "records.title", iconColor: DS.Color.textPrimary))
       .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.light, for: .navigationBar)

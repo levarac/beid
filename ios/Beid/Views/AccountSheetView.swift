@@ -120,7 +120,7 @@ struct AccountSheetView: View {
       // Keep Done clear of the first row.
       .contentMargins(.top, DS.Space.l + DS.Space.xs, for: .scrollContent)
       .scrollContentBackground(.hidden)
-      .background(DS.Color.textPrimary)
+      .beidScreenBackground(DS.Color.textPrimary)
       .foregroundStyle(DS.Color.actionInverse)
       // The root sheet has no navigation bar in Figma. Hiding it removes its
       // ~44pt content offset; pushed destinations restore the stock back bar.
@@ -147,6 +147,7 @@ struct AccountSheetView: View {
       }
       .navigationDestination(isPresented: $showOrganizerTools) {
         OrganizerToolsView()
+          .beidScreenBackground(DS.Color.surfaceCanvas)
           .toolbar(.visible, for: .navigationBar)
       }
       .navigationDestination(isPresented: $showPastEvents) {
@@ -159,6 +160,7 @@ struct AccountSheetView: View {
             }
           }
         )
+        .beidScreenBackground(DS.Color.surfaceCanvas)
         .toolbar(.visible, for: .navigationBar)
       }
       .navigationDestination(isPresented: $showAboutSensing) {
