@@ -23,39 +23,16 @@ struct SignalLostView: View {
   }
 
   var body: some View {
-    BeidStatusLayout(
-      title: "Signal lost",
-      message: "beid lost the connection to \(event.name). Move closer, then try again.",
-      accessory: {
-      VStack(spacing: DS.Space.m) {
-        BeidStatusPill(state: .sensingPaused)
-        EventCardView(event: event, badge: .paused) {
-          VStack(alignment: .leading, spacing: DS.Space.xs) {
-            EventIdentityVerificationRow(
-              status: event.identityVerification,
-              onRetry: onRetryVerification
-            )
-            // Same corrected count and same label as Proof Detail — one number
-            // must not carry two labels. See beid#154.
-            BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "\(peersVerified)")
-          }
-        }
-      }
-      },
-      footer: {
-      // "Try again" keeps its exact label (DESIGN.md §11 requires
-      // SignalLostView to always offer it), but the handler it calls
-      // resumes the same session in place — never `startSensing`, which
-      // would discard `peersVerified` and re-create the `Proof` (§5.4).
-      BeidPrimaryButton("Try again") {
-        coordinator.sensingCoordinator.resumeSensing()
-      }
-      }
+    SensingSessionSurface(
+      sensing: coordinator.sensingCoordinator,
+      event: event,
+      presentation: .signalLost,
+      onRetryVerification: onRetryVerification,
+      onResume: { coordinator.sensingCoordinator.resumeSensing() }
     )
-    // Recovery screen: "Try again" takes the actionPrimary tint — Flat 2b
-    // has one ink and no per-screen motif accents (DESIGN.md §5).
     .tint(DS.Color.actionPrimary)
   }
+
 }
 
 #Preview {

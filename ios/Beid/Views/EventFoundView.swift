@@ -27,7 +27,7 @@ struct EventFoundView: View {
       presentation: .detecting,
       onRetryVerification: onRetryVerification
     )
-    .tint(DS.Color.actionInverse)
+    .tint(DS.Color.actionPrimary)
   }
 }
 

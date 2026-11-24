@@ -121,6 +121,9 @@ enum DS {
     static let statusDot: CGFloat = 8
     /// Flat 2b 05 Sensing radar field, 362 pt in the Figma frame.
     static let radarField: CGFloat = 362
+    /// Compact field inside the bounded live-session panel (beid#883).
+    /// Radar geometry still scales from the original 362-point field.
+    static let liveSessionRadarField: CGFloat = 240
     /// Flat 2b 05 graph ring path diameters, measured from the 362 pt SVG.
     static let radarRingInner: CGFloat = 133.22
     static let radarRingMiddle: CGFloat = 233.12
