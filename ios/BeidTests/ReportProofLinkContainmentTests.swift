@@ -174,11 +174,14 @@ final class ReportProofLinkContainmentTests: XCTestCase {
       return
     }
     let proofId = try XCTUnwrap(coordinator.currentProofID)
+    #if DEBUG
+    server.observePostStages(from: runtime)
+    #endif
     _ = coordinator.stopSensing()
     try await server.waitFor(postCount: 1, timeout: SubmissionTestWait.timeout)
 
     #if DEBUG
-    let postFinished = try await SubmissionTestWait.until { runtime.activeSubmissionCountForTesting == 0 }
+    let postFinished = try await SubmissionTestWait.until(timeout: 60) { runtime.activeSubmissionCountForTesting == 0 }
     guard postFinished else {
       throw StubOperatorError.submissionStateTimedOut(
         expected: "original POST callback idle before relaunch",

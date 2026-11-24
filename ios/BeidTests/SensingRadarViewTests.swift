@@ -28,6 +28,29 @@ final class SensingRadarViewTests: XCTestCase {
     XCTAssertEqual(DS.Size.radarCenterDot, 8)
   }
 
+  func testRecordedWindowMarkGrowsFromInnerToOuterRing() {
+    let windowIndex: Int64 = 42
+    let start = Double(windowIndex) * 300
+    func diameter(at offset: Double) -> CGFloat? {
+      SensingRadarProjection.recordedWindowMarkDiameter(
+        observedWindowIndex: windowIndex,
+        secondsSince1970: start + offset,
+        windowDuration: 300,
+        size: size
+      )
+    }
+
+    let rings = SensingRadarProjection.ringDiameters(size: size)
+    XCTAssertEqual(diameter(at: 0), rings.first)
+    XCTAssertEqual(diameter(at: 150), (rings[0] + rings[2]) / 2)
+    XCTAssertEqual(diameter(at: 300), rings.last)
+    XCTAssertNil(diameter(at: -1))
+    XCTAssertNil(diameter(at: 301), "An unobserved next window must not be drawn")
+    XCTAssertNil(SensingRadarProjection.recordedWindowMarkDiameter(
+      observedWindowIndex: nil, secondsSince1970: start, windowDuration: 300, size: size
+    ))
+  }
+
   func testAngleAndDirectionStayFixedAcrossSignalChanges() {
     let first = SensingRadarProjection.project(
       [SensingRadarPeer(id: "peer-a", signalStrength: .unmeasured)],
@@ -94,7 +117,7 @@ final class SensingRadarViewTests: XCTestCase {
     XCTAssertEqual(sensing.edges.count, peers.count)
   }
 
-  func testAccessibilitySummaryUsesSuppliedMutualCountIncludingZeroWithoutIdentifiers() {
+  func testAccessibilitySummaryOmitsMutualCountsAndPrivateIdentifiers() {
     let privateID = "private-peer-identifier"
     let peers = [
       SensingRadarPeer(id: privateID, signalStrength: .unmeasured),
@@ -111,8 +134,8 @@ final class SensingRadarViewTests: XCTestCase {
       observedWindowCount: 6
     )
 
-    XCTAssertEqual(zeroSummary, "0 mutual, 2 detected, window 6")
-    XCTAssertEqual(mutualSummary, "1 mutual, 2 detected, window 6")
+    XCTAssertEqual(zeroSummary, "2 devices heard")
+    XCTAssertEqual(mutualSummary, "2 devices heard")
     XCTAssertFalse(zeroSummary.contains(privateID))
     XCTAssertFalse(mutualSummary.contains(privateID))
     XCTAssertFalse(mutualSummary.contains("other"))

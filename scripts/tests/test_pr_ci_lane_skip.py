@@ -1,7 +1,7 @@
 """Documentation-only PRs skip the iOS simulator and lab CLI lanes.
 
-Both lanes keep their exact job names, so the required status contexts are still
-created on every PR head and report "skipped" when the lane does not apply.
+The iOS build and lab CLI jobs skip when unaffected. The iOS aggregate still
+runs and validates that the classifier explicitly allowed the skip.
 These tests evaluate each lane's real job-level ``if:`` expression against the
 real classifier output, rather than matching strings, so a condition that
 quietly stops skipping (or stops failing closed) is caught.
@@ -55,6 +55,11 @@ def evaluate(condition: str, *, event: str, changes_result: str, outputs: dict, 
     values = {
         "github.event_name": event,
         "needs.changes.result": changes_result,
+        "needs.plan.result": "success",
+        "needs.plan.outputs.run": str(not (
+            event == "pull_request" and changes_result == "success"
+            and outputs.get("ios") == "false" and outputs.get("error") == "false"
+        )).lower(),
     }
     values.update({f"needs.changes.outputs.{key}": value for key, value in outputs.items()})
 
@@ -76,7 +81,7 @@ def outputs_for(files: list[str]) -> dict:
 
 
 LANES = {
-    "ios": (IOS, "ios-simulator", "iOS simulator"),
+    "ios": (IOS, "build", "Build iOS test bundles"),
     "lab-cli": (LAB_CLI, "lab-cli", "beid-lab-cli build and test"),
 }
 
@@ -90,15 +95,15 @@ def lane_runs(lane: str, *, event="pull_request", changes_result="success", file
 
 class LaneNamesTest(unittest.TestCase):
     def test_required_check_names_are_unchanged(self):
-        for lane, (path, job_id, name) in LANES.items():
-            with self.subTest(lane=lane):
+        for path, job_id, name in ((IOS, "ios-simulator", "iOS simulator"), LANES["lab-cli"]):
+            with self.subTest(job=job_id):
                 self.assertEqual(job_name(path, job_id), name)
 
     def test_lanes_are_gated_by_a_job_not_a_workflow_path_filter(self):
         for lane, (path, job_id, _) in LANES.items():
             with self.subTest(lane=lane):
                 block = job_block(path, job_id)
-                self.assertIn("    needs: changes\n", block)
+                self.assertIn("    needs: [changes, plan]\n" if lane == "ios" else "    needs: changes\n", block)
                 self.assertIn("!cancelled()", job_condition(path, job_id))
 
     def test_classification_job_names_do_not_collide_with_required_contexts(self):

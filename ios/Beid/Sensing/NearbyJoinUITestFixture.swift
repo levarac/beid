@@ -5,6 +5,7 @@
 import Barnard
 import BarnardCore
 import BeidSharedKit
+import Security
 import SwiftUI
 
 /// A seeded receiver snapshot and recording native effects for beid#579.
@@ -22,27 +23,58 @@ enum NearbyJoinUITestFixture {
   static let hash = "9adc61d60dda843e"
 
   static func makeCoordinator() -> SensingCoordinator {
+    let arguments = ProcessInfo.processInfo.arguments
     let now = Int64(Date().timeIntervalSince1970)
     let store = ExportedKotlinPackages.org.levarac.parallax.discovery.createNearbyEventDiscoveryStore()
     _ = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
-      store: store, peripheralId: "nearby-ui-fixture", eventDisplayName: "Community night",
+      store: store, peripheralId: "nearby-ui-fixture", eventDisplayName: "Sample gathering",
       eventCodeHashHex: hash, rawContainerHex: "03000004", agreesWithRegistry: false,
       additionalNamesOmitted: false, additionalEventsOmitted: false, observedAtEpochMillis: now * 1_000
     )
-    guard let attempt = ExportedKotlinPackages.org.levarac.parallax.discovery
-      .beginNearbyEventRegistryResolutionFromHex(store: store, eventCodeHashHex: hash)
-    else { preconditionFailure("Expected fixture registry resolution") }
-    _ = ExportedKotlinPackages.org.levarac.parallax.discovery.completeNearbyEventRegistryResolutionFromHex(
-      store: store, attempt: attempt, result: .VERIFIED,
-      resolvedEventIdHex: eventId, verifiedDefinitionJoinMode: .OPEN,
-      verifiedDefinitionEventIdHex: eventId, verifiedDefinitionEventCodeHashHex: hash,
-      envelopeAgreesWithRegistry: true,
-      verifiedDefinitionHashHex: String(repeating: "ab", count: 32),
-      registryBlockHashHex: String(repeating: "cd", count: 32),
-      verifiedDefinitionValidFromEpochSeconds: now - 60,
-      verifiedDefinitionValidUntilEpochSeconds: now + 3_600
-    )
+    if !arguments.contains("-beid-nearby-unverified-fixture") {
+      guard let attempt = ExportedKotlinPackages.org.levarac.parallax.discovery
+        .beginNearbyEventRegistryResolutionFromHex(store: store, eventCodeHashHex: hash)
+      else { preconditionFailure("Expected fixture registry resolution") }
+      _ = ExportedKotlinPackages.org.levarac.parallax.discovery.completeNearbyEventRegistryResolutionFromHex(
+        store: store, attempt: attempt, result: .VERIFIED,
+        resolvedEventIdHex: eventId, verifiedDefinitionJoinMode: .OPEN,
+        verifiedDefinitionEventIdHex: eventId, verifiedDefinitionEventCodeHashHex: hash,
+        envelopeAgreesWithRegistry: true,
+        verifiedDefinitionHashHex: String(repeating: "ab", count: 32),
+        registryBlockHashHex: String(repeating: "cd", count: 32),
+        verifiedDefinitionValidFromEpochSeconds: now - 60,
+        verifiedDefinitionValidUntilEpochSeconds: now + 3_600
+      )
+    }
+    if arguments.contains("-beid-nearby-multiple-fixture") {
+      let otherHash = "ffffffffffffffff"
+      let otherId = String(repeating: "22", count: 32)
+      _ = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
+        store: store, peripheralId: "second-sample", eventDisplayName: "Second sample event",
+        eventCodeHashHex: otherHash, rawContainerHex: "03000004", agreesWithRegistry: false,
+        additionalNamesOmitted: false, additionalEventsOmitted: false, observedAtEpochMillis: now * 1_000
+      )
+      guard let otherAttempt = ExportedKotlinPackages.org.levarac.parallax.discovery
+        .beginNearbyEventRegistryResolutionFromHex(store: store, eventCodeHashHex: otherHash)
+      else { preconditionFailure("Expected sample registration request") }
+      _ = ExportedKotlinPackages.org.levarac.parallax.discovery.completeNearbyEventRegistryResolutionFromHex(
+        store: store, attempt: otherAttempt, result: .VERIFIED,
+        resolvedEventIdHex: otherId, verifiedDefinitionJoinMode: .OPEN,
+        verifiedDefinitionEventIdHex: otherId, verifiedDefinitionEventCodeHashHex: otherHash,
+        envelopeAgreesWithRegistry: true,
+        verifiedDefinitionHashHex: String(repeating: "ab", count: 32),
+        registryBlockHashHex: String(repeating: "cd", count: 32),
+        verifiedDefinitionValidFromEpochSeconds: now - 60,
+        verifiedDefinitionValidUntilEpochSeconds: now + 3_600
+      )
+    }
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("nearby-ui-\(UUID().uuidString)")
+    let deviceSecretStore: DeviceSecretKeychainStore
+    if arguments.contains("-beid-device-key-unavailable-fixture") {
+      deviceSecretStore = DeviceSecretKeychainStore(keychain: UnavailableUITestDeviceSecretKeychain())
+    } else {
+      deviceSecretStore = .shared
+    }
     let coordinator = SensingCoordinator(
       windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("windows.json")),
       selfProofStore: SelfProofStore(fileURL: directory.appendingPathComponent("proofs.json")),
@@ -50,7 +82,7 @@ enum NearbyJoinUITestFixture {
       bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("aggregate.json")),
       unsentWindowLedgerRuntime: nil,
-      sensingCryptography: BarnardSensingCryptography(),
+      sensingCryptography: BarnardSensingCryptography(deviceSecretStore: deviceSecretStore),
       eventJoinControl: engine,
       nearbyDiscoveryStore: store,
       participantRelayControl: engine
@@ -58,6 +90,17 @@ enum NearbyJoinUITestFixture {
     coordinator.useDemoEventMode = false
     return coordinator
   }
+}
+
+/// Fails before any device-secret bytes can be read or generated.
+private struct UnavailableUITestDeviceSecretKeychain: BeidKeychainAccessing {
+  func read(service: String, account: String) -> BeidKeychainReadResult {
+    .failure(errSecInteractionNotAllowed)
+  }
+  func add(_ write: BeidKeychainWrite) -> OSStatus { errSecInteractionNotAllowed }
+  func write(_ write: BeidKeychainWrite) -> OSStatus { errSecInteractionNotAllowed }
+  func remove(service: String, account: String) -> OSStatus { errSecInteractionNotAllowed }
+  func attributes(service: String, account: String) -> BeidKeychainItemAttributes? { nil }
 }
 
 /// Records only actual native join calls; no phase or tap callback writes this receipt.

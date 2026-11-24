@@ -124,6 +124,7 @@ enum ReportSubmissionGoldenScenario {
         peerRpids: peerRpids,
         reporterRpid: reporterRpid,
         participantCommitment: participantCommitment,
+        eventSigningPublicKey: TestSensingCryptography().eventSigningPublicKey(eventCode: eventCode),
         finalizedAt: finalizedAt,
         createdAt: createdAt
       )
@@ -150,13 +151,12 @@ enum ReportSubmissionGoldenScenario {
       allowInsecureLoopbackForTests: true
     ))
 
+    #if DEBUG
+    server.observePostStages(from: runtime)
+    #endif
     runtime.submitPending()
     try await server.waitFor(postCount: 1, timeout: hostedWaits ? SubmissionTestWait.timeout : nil)
-    if hostedWaits {
-      try await waitForStoredSubmissionState(.accepted, at: fileURL, server: server)
-    } else {
-      try await waitForAcceptedRecord(at: fileURL, server: server)
-    }
+    try await waitForStoredSubmissionState(.accepted, at: fileURL, server: server)
     // The runtime's own callbacks hold it weakly; keep it alive until its
     // receipt write has landed.
     withExtendedLifetime(runtime) {}
@@ -171,20 +171,6 @@ enum ReportSubmissionGoldenScenario {
       signatureInputHex: goldenHex(signatureInput),
       signedObservationHex: record.signedObservationHex.lowercased(),
       postBodyHex: goldenHex(postBody)
-    )
-  }
-
-  private static func waitForAcceptedRecord(at fileURL: URL, server: StubOperatorServer) async throws {
-    for _ in 0..<1_000 {
-      if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == .accepted {
-        return
-      }
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
-    let actual = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState.rawValue
-    throw StubOperatorError.submissionStateTimedOut(
-      expected: ReportSubmissionState.accepted.rawValue,
-      diagnostics: "last state \(actual ?? "nil"); \(server.timeoutDiagnostics)"
     )
   }
 
@@ -216,17 +202,17 @@ final class SignatureInputRecordingCryptography: SensingCryptography {
     self.wrapped = wrapped
   }
 
-  func eventSigningPublicKey(eventCode: String) -> Data {
-    wrapped.eventSigningPublicKey(eventCode: eventCode)
+  func eventSigningPublicKey(eventCode: String) throws -> Data {
+    try wrapped.eventSigningPublicKey(eventCode: eventCode)
   }
 
   func ownerPublicKey() throws -> Data {
     try wrapped.ownerPublicKey()
   }
 
-  func signWindowReport(eventCode: String, bytes: Data) -> SensingRecoverableSignature {
+  func signWindowReport(eventCode: String, bytes: Data) throws -> SensingRecoverableSignature {
     signatureInputs.append(bytes)
-    return wrapped.signWindowReport(eventCode: eventCode, bytes: bytes)
+    return try wrapped.signWindowReport(eventCode: eventCode, bytes: bytes)
   }
 
   func signSelfProof(

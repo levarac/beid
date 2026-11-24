@@ -24,6 +24,7 @@ PLAY_WORKFLOW = REPO_ROOT / ".github/workflows/internal-google-play.yml"
 SIGN_SCRIPT = REPO_ROOT / "scripts/gha/build-and-sign-android.sh"
 IOS_POST_CLONE = REPO_ROOT / "ios/ci_scripts/ci_post_clone.sh"
 GRADLE = REPO_ROOT / "android/app/build.gradle.kts"
+ANDROID_VERSION = REPO_ROOT / "android/version.properties"
 
 
 def _git(*args, cwd):
@@ -148,7 +149,7 @@ class AndroidWiringTest(unittest.TestCase):
 
     def test_the_store_number_is_untouched(self) -> None:
         """versionCode and the build position are different numbers."""
-        self.assertIn("versionCode = 1\n", GRADLE.read_text(encoding="utf-8"))
+        self.assertIn("versionCode=1\n", ANDROID_VERSION.read_text(encoding="utf-8"))
 
 
 class IosWiringTest(unittest.TestCase):

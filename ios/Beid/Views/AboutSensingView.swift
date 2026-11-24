@@ -3,39 +3,68 @@
 
 import SwiftUI
 
-/// Flat 2b frame 15. This destination is shared by the Account route and
-/// the pending Welcome, Home, and first-time sensing routes.
+/// Shared explanation presented from Welcome, Home, Account, and sensing.
 struct AboutSensingView: View {
+  private let submissionEnabled: Bool
+
+  init(submissionEnabled: Bool? = nil) {
+    #if DEBUG
+    let debugBuild = true
+    #else
+    let debugBuild = false
+    #endif
+    self.submissionEnabled = Self.submissionCapability(
+      explicit: submissionEnabled,
+      actual: ReportSubmissionRuntime.isSubmissionEnabled(),
+      arguments: ProcessInfo.processInfo.arguments,
+      debugBuild: debugBuild
+    )
+  }
+
+  /// Resolves display capability only; it never configures or starts the sender.
+  static func submissionCapability(
+    explicit: Bool?, actual: Bool, arguments: [String], debugBuild: Bool
+  ) -> Bool {
+    if let explicit { return explicit }
+    #if DEBUG
+    guard debugBuild, arguments.contains("-beid-ui-test") else { return actual }
+    let options = arguments.indices.filter { arguments[$0] == "-beid-about-sending" }
+    guard options.count == 1, let index = options.first,
+      arguments.indices.contains(index + 1) else { return actual }
+    switch arguments[index + 1] {
+    case "on": return true
+    case "off": return false
+    default: return actual
+    }
+    #else
+    return actual
+    #endif
+  }
+
   var body: some View {
     ScrollView {
-      BeidAdaptiveContent {
+      BeidLargeTitleContent {
         VStack(alignment: .leading, spacing: 0) {
-          Text("About\nsensing")
-            .beidTextStyle(DS.Font.Library.display52)
-            .foregroundStyle(DS.Color.textPrimary)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityAddTraits(.isHeader)
-
           SensingExplainerSectionLabel("HOW IT WORKS")
             .padding(.top, DS.Space.l)
           SensingExplainerRule()
 
           SensingExplainerStep(
             number: "01",
-            title: "Events find you",
-            detail: "Nearby events appear automatically — no codes, no search."
+            title: "sensing.explainer.chooseEvent.title",
+            detail: "sensing.explainer.chooseEvent.detail"
           )
           SensingExplainerRule()
           SensingExplainerStep(
             number: "02",
             title: "Private by design",
-            detail: "Phones exchange rotating anonymous IDs, not names or wallet addresses."
+            detail: "Devices exchange rotating anonymous IDs, not names or wallet addresses."
           )
           SensingExplainerRule()
           SensingExplainerStep(
             number: "03",
-            title: "Zero effort",
-            detail: "Sensing runs quietly in the background. Nothing to tap."
+            title: "sensing.explainer.keepOpen.title",
+            detail: "sensing.explainer.keepOpen.detail"
           )
           SensingExplainerRule()
 
@@ -58,7 +87,7 @@ struct AboutSensingView: View {
           .accessibilityIdentifier("aboutSensing.whatWeSend")
           SensingExplainerRule()
 
-          SensingExplainerSectionLabel("SENDING STATUS · ALL SAVED OBSERVATIONS")
+          SensingExplainerSectionLabel("SENDING STATUS")
             .padding(.top, DS.Space.xl)
           SensingExplainerRule()
           VStack(alignment: .leading, spacing: DS.Space.s) {
@@ -69,26 +98,31 @@ struct AboutSensingView: View {
               .beidTextStyle(DS.Font.Library.body13)
               .foregroundStyle(DS.Color.textPrimary)
               .fixedSize(horizontal: false, vertical: true)
+            Text("aboutSensing.submission.detailsUnavailable")
+              .beidTextStyle(DS.Font.Library.body13)
+              .foregroundStyle(DS.Color.textSecondary)
+              .fixedSize(horizontal: false, vertical: true)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(.vertical, DS.Space.m)
           .accessibilityElement(children: .combine)
           SensingExplainerRule()
         }
-        .padding(.horizontal, DS.Space.pageMargin)
         .padding(.bottom, DS.Space.xxl)
       }
     }
     .accessibilityIdentifier("aboutSensing.scroll")
-    .background(DS.Color.surfaceCanvas)
-    .navigationTitle("")
-    .navigationBarTitleDisplayMode(.inline)
+    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+    .navigationBarTitleDisplayMode(.large)
     .toolbar(.visible, for: .navigationBar)
+    .toolbarBackground(.hidden, for: .navigationBar)
+    .toolbarColorScheme(.light, for: .navigationBar)
+    .navigationTitle("About sensing")
   }
 
   private var sendingStatus: String {
-    if ReportSubmissionRuntime.isSubmissionEnabled() {
-      return String(localized: "aboutSensing.submission.enabled", defaultValue: "Sending is turned on for this build.")
+    if submissionEnabled {
+      return String(localized: "aboutSensing.submission.enabled", defaultValue: "Sending is on.")
     }
     return String(localized: "dailySummary.submission.disabledForBuild")
   }
@@ -99,20 +133,14 @@ struct AboutSensingView: View {
 struct WhatWeSendView: View {
   var body: some View {
     ScrollView {
-      BeidAdaptiveContent {
+      BeidLargeTitleContent {
         VStack(alignment: .leading, spacing: 0) {
-          Text("What\nwe send")
-            .beidTextStyle(DS.Font.Library.display52)
-            .foregroundStyle(DS.Color.textPrimary)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityAddTraits(.isHeader)
-
           SensingExplainerSectionLabel("WHAT WE SEND")
             .padding(.top, DS.Space.l)
           SensingExplainerRule()
           SensingExplainerDetail(
             title: "The event you joined",
-            detail: "The event’s identifier, so the organiser knows which event this belongs to.",
+            detail: "The event’s identifier, so the organizer knows which event this belongs to.",
             identifier: "whatWeSend.firstRow"
           )
           SensingExplainerRule()
@@ -122,13 +150,13 @@ struct WhatWeSendView: View {
           )
           SensingExplainerRule()
           SensingExplainerDetail(
-            title: "The anonymous IDs of the phones near you",
-            detail: "Each phone announces an ID that changes on its own schedule. It is not a name, an account, or a device serial."
+            title: "The anonymous IDs of the devices near you",
+            detail: "Each device announces an ID that changes on its own schedule. It is not a name, an account, or a device serial."
           )
           SensingExplainerRule()
           SensingExplainerDetail(
             title: "Your own anonymous ID for that window",
-            detail: "The same kind of rotating ID, so the phones around you can be matched with this record."
+            detail: "The same kind of rotating ID, so the devices around you can be matched with this record."
           )
           SensingExplainerRule()
           SensingExplainerDetail(
@@ -137,8 +165,8 @@ struct WhatWeSendView: View {
           )
           SensingExplainerRule()
           SensingExplainerDetail(
-            title: "A signature from this phone",
-            detail: "It proves the record was not changed after this phone made it."
+            title: "A signature from this device",
+            detail: "A signature lets a reader check whether the signed record has changed."
           )
           SensingExplainerRule()
 
@@ -164,21 +192,22 @@ struct WhatWeSendView: View {
           } else {
             SensingExplainerDetail(
               title: "Anything you have not recorded",
-              detail: "Records stay on this phone until sending is turned on for this build.",
+              detail: "Sending is off in this version. Records stay on this device.",
               identifier: "whatWeSend.finalRow"
             )
           }
           SensingExplainerRule()
         }
-        .padding(.horizontal, DS.Space.pageMargin)
         .padding(.bottom, DS.Space.xxl)
       }
     }
     .accessibilityIdentifier("whatWeSend.scroll")
-    .background(DS.Color.surfaceCanvas)
-    .navigationTitle("")
-    .navigationBarTitleDisplayMode(.inline)
+    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+    .navigationBarTitleDisplayMode(.large)
     .toolbar(.visible, for: .navigationBar)
+    .toolbarBackground(.hidden, for: .navigationBar)
+    .toolbarColorScheme(.light, for: .navigationBar)
+    .navigationTitle("What we send")
   }
 }
 

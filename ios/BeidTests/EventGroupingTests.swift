@@ -122,7 +122,7 @@ final class EventGroupingTests: XCTestCase {
   /// scans event A, then re-scans it in a later app run where
   /// `gradientSeed` (via #219's known instability, SE-0206) differs from
   /// the first scan. The group's *oldest* session must still drive the
-  /// artwork seed — this is the property that makes `ProofCardView`'s and
+  /// artwork seed — this is the property that makes the removed proof card's and
   /// `ItemDetailView`'s artwork stop mutating on re-scan (spec §5.1/§6.1).
   func testOldestSessionGradientSeedIsUnaffectedByANewerSessionWithADifferentSeed() {
     let firstScanSeed = 111

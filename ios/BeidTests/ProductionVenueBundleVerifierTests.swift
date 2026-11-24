@@ -6,6 +6,7 @@ import Barnard
 import BarnardCore
 import BeidSharedKit
 import CryptoKit
+import Network
 import XCTest
 @testable import Beid
 
@@ -689,6 +690,13 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     }
     XCTAssertEqual(permit.identity.eventIdHex, fixture.eventId)
     XCTAssertEqual(permit.currentEnin, 5_967_648)
+    XCTAssertEqual(permit.relayHopCount, 0)
+    XCTAssertNotNil(imported.broadcastUntilUnixSeconds)
+    // full-schedule.venue-bundle.hex: signed definition payload key 3;
+    // fullScheduleContextABIHex: registry registration key 1 agrees.
+    XCTAssertEqual(imported.registrarHex, "0xdf6986bbadd189309d52d437851c10e47ca02e20")
+    XCTAssertGreaterThan(try XCTUnwrap(imported.broadcastUntilUnixSeconds), permit.stopAtUnixSeconds,
+                         "the screen's end covers the verified chain, not just this ENIN")
   }
 
   func testProductionClientAndVerifierRejectIncompleteFixtureAfterDelayedRegistryResponse() async throws {
@@ -1030,6 +1038,113 @@ private final class RecordedVenueRegistryURLProtocol: URLProtocol {
       return Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"number\":\"0x2a\",\"hash\":\"0x2222222222222222222222222222222222222222222222222222222222222222\"}}".utf8)
     }
     return Data("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":\"0x\(contextABIHex)\"}".utf8)
+  }
+}
+/// Exercises the same startup waiter used by the live loopback server. Event
+/// delivery is controlled here, so no wall-clock delay or network race is needed.
+final class LoopbackJSONRPCServerStartupTests: XCTestCase {
+  private typealias Waiter = LoopbackJSONRPCServer.StartupWaiter
+  private let port = NWEndpoint.Port(rawValue: 49_152)
+  private let endpoint = URL(string: "http://127.0.0.1:49152")!
+
+  func testStartupWaitsForReadyNotificationEvenWhenAPortIsAlreadyVisible() throws {
+    let waiter = Waiter()
+    var outcomes: [Waiter.Outcome] = []
+    waiter.wait { outcomes.append($0) }
+    waiter.receive(.setup, port: port)
+    waiter.receive(.waiting(.posix(.ENETDOWN)), port: port)
+    XCTAssertTrue(outcomes.isEmpty, "a port without .ready must not release the caller")
+
+    // Release readiness only after proving the registered caller is still waiting.
+    waiter.receive(.ready, port: port)
+    XCTAssertEqual(outcomes.count, 1)
+    XCTAssertEqual(try XCTUnwrap(outcomes.first).get(), endpoint)
+  }
+
+  func testReadyBeforeWaitRegistrationIsNotLost() throws {
+    let waiter = Waiter()
+    waiter.receive(.ready, port: port)
+    var outcomes: [Waiter.Outcome] = []
+    waiter.wait { outcomes.append($0) }
+    XCTAssertEqual(outcomes.count, 1)
+    XCTAssertEqual(try XCTUnwrap(outcomes.first).get(), endpoint)
+  }
+
+  func testListenerFailurePropagatesWithoutBeingReplacedByTimeout() throws {
+    let waiter = Waiter()
+    var outcomes: [Waiter.Outcome] = []
+    waiter.wait { outcomes.append($0) }
+    let failure = NWError.posix(.EADDRINUSE)
+    waiter.receive(.failed(failure), port: nil)
+    waiter.timeOut()
+    waiter.receive(.ready, port: port)
+    XCTAssertEqual(outcomes.count, 1)
+    XCTAssertThrowsError(try XCTUnwrap(outcomes.first).get()) {
+      XCTAssertEqual($0 as? NWError, failure)
+    }
+  }
+
+  func testTimeoutOwnsCompletionBeforeLateReady() throws {
+    let waiter = Waiter()
+    var outcomes: [Waiter.Outcome] = []
+    waiter.wait { outcomes.append($0) }
+    waiter.timeOut()
+    waiter.receive(.ready, port: port)
+    waiter.cancel()
+    XCTAssertEqual(outcomes.count, 1)
+    XCTAssertThrowsError(try XCTUnwrap(outcomes.first).get()) {
+      XCTAssertEqual($0 as? LoopbackJSONRPCServer.Error, .timedOut)
+    }
+  }
+
+  func testReadyOwnsCompletionBeforeLateTimeoutAndCancellation() throws {
+    let waiter = Waiter()
+    var outcomes: [Waiter.Outcome] = []
+    waiter.wait { outcomes.append($0) }
+    waiter.receive(.ready, port: port)
+    waiter.timeOut()
+    waiter.cancel()
+    XCTAssertEqual(outcomes.count, 1)
+    XCTAssertEqual(try XCTUnwrap(outcomes.first).get(), endpoint)
+  }
+
+  func testCancellationBeforeWaitRegistrationIsNotLost() throws {
+    let waiter = Waiter()
+    waiter.cancel()
+    var outcomes: [Waiter.Outcome] = []
+    waiter.wait { outcomes.append($0) }
+    waiter.receive(.ready, port: port)
+    XCTAssertEqual(outcomes.count, 1)
+    XCTAssertThrowsError(try XCTUnwrap(outcomes.first).get()) {
+      XCTAssertTrue($0 is CancellationError)
+    }
+  }
+
+  func testListenerCancellationResumesAPendingWaitOnlyOnce() throws {
+    let waiter = Waiter()
+    var outcomes: [Waiter.Outcome] = []
+    waiter.wait { outcomes.append($0) }
+    waiter.receive(.cancelled, port: nil)
+    waiter.cancel()
+    waiter.timeOut()
+    XCTAssertEqual(outcomes.count, 1)
+    XCTAssertThrowsError(try XCTUnwrap(outcomes.first).get()) {
+      XCTAssertTrue($0 is CancellationError)
+    }
+  }
+
+  func testReadyWithoutAUsablePortFailsClosed() throws {
+    for port in [nil, NWEndpoint.Port.any] {
+      let waiter = Waiter()
+      var outcomes: [Waiter.Outcome] = []
+      waiter.wait { outcomes.append($0) }
+      waiter.receive(.ready, port: port)
+      waiter.receive(.ready, port: self.port)
+      XCTAssertEqual(outcomes.count, 1)
+      XCTAssertThrowsError(try XCTUnwrap(outcomes.first).get()) {
+        XCTAssertEqual($0 as? LoopbackJSONRPCServer.Error, .readyWithoutPort)
+      }
+    }
   }
 }
 #endif

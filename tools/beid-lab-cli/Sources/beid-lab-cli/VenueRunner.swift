@@ -153,10 +153,14 @@ final class VenueRunner {
   /// Says what the container claims about itself, so an operator who copied
   /// the wrong file finds out before the phones do.
   ///
-  /// `currentEnin` is nil on purpose: whether the window is open now is the
-  /// operator's call and the phones' check, not this tool's. Passing a clock
-  /// reading would make the CLI quietly refuse a container it was told to
-  /// serve.
+  /// Whether the window is open now is the operator's call and the phones'
+  /// check, not this tool's, so the signature is checked at the container's
+  /// own first ENIN rather than at the host clock. Barnard's `verify` returns
+  /// nil when given no ENIN at all, which reported every container as
+  /// unverified. Phones accept the envelope from validFromUnix through
+  /// acceptedThroughUnix (the second before relayExpiresAtEnin, spec 134);
+  /// validThroughUnix is the envelope's outer bound and runs past that, so
+  /// compare nowUnix with acceptedThroughUnix to know when to switch.
   private func describe(_ container: [UInt8]) {
     var data: [String: LabValue] = ["bytes": .int(container.count)]
     if let scheduling = BarnardB005EnvelopeV2.schedulingFields(container: container) {
@@ -166,15 +170,21 @@ final class VenueRunner {
       data["eninSeconds"] = .int(Int(scheduling.eninSeconds))
       // The window in wall-clock terms, because ENIN numbers are not
       // something an operator in a room can compare against a watch.
-      let seconds = Int(scheduling.eninSeconds)
+      let seconds = Int64(scheduling.eninSeconds)
       if seconds > 0 {
-        data["validFromUnix"] = .int(Int(scheduling.validFromEnin) * seconds)
-        data["validThroughUnix"] = .int((Int(scheduling.validThroughEnin) + 1) * seconds - 1)
+        data["validFromUnix"] = .int(Int(LabVenueWindow.validFromUnix(
+          validFromEnin: Int64(scheduling.validFromEnin), eninSeconds: seconds)))
+        data["validThroughUnix"] = .int(Int(LabVenueWindow.validThroughUnix(
+          validThroughEnin: Int64(scheduling.validThroughEnin), eninSeconds: seconds)))
+        data["acceptedThroughUnix"] = .int(Int(LabVenueWindow.acceptedThroughUnix(
+          relayExpiresAtEnin: Int64(scheduling.relayExpiresAtEnin), eninSeconds: seconds)))
         data["nowUnix"] = .int(Int(Date().timeIntervalSince1970))
       }
     }
+    let ownStartEnin = BarnardB005EnvelopeV2.schedulingFields(container: container)
+      .map { Int64($0.validFromEnin) }
     if let verified = BarnardB005EnvelopeV2.verify(
-      container: container, currentEnin: nil,
+      container: container, currentEnin: ownStartEnin,
       nameValidator: BarnardB005NativeDisplayNameNormalizer())
     {
       let eventIdHex = LabRedaction.hex(verified.eventId)
