@@ -334,6 +334,16 @@ final class SensingCoordinator: ObservableObject {
   /// signal strength is persisted. All peers remain detected-only until a
   /// reciprocal observation source exists (DECISIONS 2026-09-26).
   @Published private(set) var detectedDisplayIDs: Set<String> = []
+  private var detectedLastHeardAt: [String: Date] = [:]
+
+  /// Presentation-only liveness. The caller supplies its clock; observation
+  /// windows, session totals and signed records retain every earlier sighting.
+  func currentlyDetectedDisplayIDs(at now: Date) -> Set<String> {
+    Set(detectedDisplayIDs.filter { id in
+      guard let lastHeard = detectedLastHeardAt[id] else { return false }
+      return now.timeIntervalSince(lastHeard) <= BeidConfig.detectedNowTimeout
+    })
+  }
   /// Read-only linkage to the Proof created at the recording threshold.
   /// A phase alone cannot establish that a durable Proof actually exists.
   var currentProofID: UUID? { activeProofId }
@@ -2067,6 +2077,7 @@ final class SensingCoordinator: ObservableObject {
         rpid: rpid,
         detectedDisplayId: detectedDisplayId,
         reporterRpid: reporterRpid,
+        observedAt: observedAt,
         for: session
       )
       rememberFirstSighting(at: observedAt)
@@ -2076,6 +2087,7 @@ final class SensingCoordinator: ObservableObject {
         rpid: rpid,
         detectedDisplayId: detectedDisplayId,
         reporterRpid: reporterRpid,
+        observedAt: observedAt,
         for: session
       )
       rememberFirstSighting(at: observedAt)
@@ -2085,6 +2097,7 @@ final class SensingCoordinator: ObservableObject {
         rpid: rpid,
         detectedDisplayId: detectedDisplayId,
         reporterRpid: reporterRpid,
+        observedAt: observedAt,
         for: session
       )
       rememberFirstSighting(at: observedAt)
@@ -2141,6 +2154,7 @@ final class SensingCoordinator: ObservableObject {
     rpid: String,
     detectedDisplayId: String?,
     reporterRpid: String?,
+    observedAt: Date?,
     for session: EventSession
   ) {
     advanceWindowBookkeepingIfNeeded(enin: enin, eventCode: session.id)
@@ -2149,7 +2163,9 @@ final class SensingCoordinator: ObservableObject {
     }
     currentWindowRpids.insert(rpid)
 
-    let deviceCountChanged = recordDeviceIdentity(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId)
+    let deviceCountChanged = recordDeviceIdentity(
+      enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId, observedAt: observedAt
+    )
 
     let result = applyPhaseDecision(
       coPresentDeviceCount: currentWindowRpids.count,
@@ -2421,15 +2437,18 @@ final class SensingCoordinator: ObservableObject {
   /// is untouched from before beid#109/#162: it is a deliberately different
   /// quantity from anything `BeidSharedKit.aggregation` reports (see
   /// `unidentifiedRpidCount`'s doc comment), so it stays purely native.
-  private func recordDeviceIdentity(enin: Int, rpid: String, detectedDisplayId: String?) -> Bool {
+  private func recordDeviceIdentity(
+    enin: Int, rpid: String, detectedDisplayId: String?, observedAt: Date? = nil
+  ) -> Bool {
     // Canonicalization (lowercasing) is `BeidSharedKit.sensing
     // .normalizedDisplayIdOrNull` (beid#231) — the same `shared/` decision
     // Android's `ScanDeviceAccounting.record` applies, not a native
     // `.lowercased()` check owned here.
     let displayId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(detectedDisplayId: detectedDisplayId)
 
-    if let displayId, !detectedDisplayIDs.contains(displayId) {
-      detectedDisplayIDs.insert(displayId)
+    if let displayId {
+      if !detectedDisplayIDs.contains(displayId) { detectedDisplayIDs.insert(displayId) }
+      rememberDetectedDevice(displayId, at: observedAt ?? sensingPresentationNow(Date()))
     }
 
     if displayId == nil {
@@ -2582,6 +2601,7 @@ final class SensingCoordinator: ObservableObject {
     guard let nodeId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(
       detectedDisplayId: detectedDisplayId
     ) else { return }
+    if detectedDisplayIDs.contains(nodeId) { rememberDetectedDevice(nodeId, at: timestamp) }
     guard rssi < BeidConfig.nodeSignalUsableUpperBoundDbm else { return }
 
     let sample = Double(rssi)
@@ -2597,6 +2617,11 @@ final class SensingCoordinator: ObservableObject {
     guard isFirstMeasurement || shouldRepublishNodeSignalStrengths(at: timestamp) else { return }
     lastNodeSignalPublishAt = timestamp
     nodeSignalStrengths = smoothedNodeSignalDbm.mapValues { NodeSignalStrength.measured(dBm: $0) }
+  }
+
+  private func rememberDetectedDevice(_ id: String, at timestamp: Date) {
+    // Reordered callbacks must not make a recently heard device expire early.
+    detectedLastHeardAt[id] = max(detectedLastHeardAt[id] ?? timestamp, timestamp)
   }
 
   /// Whether enough event time has passed since the last republish. Compares
@@ -3249,6 +3274,7 @@ final class SensingCoordinator: ObservableObject {
     sessionAggregate = nil
     firstSightingAt = nil
     detectedDisplayIDs = []
+    detectedLastHeardAt = [:]
     #if DEBUG
     sensingScreenshotNow = nil
     sensingScreenshotFixture = nil

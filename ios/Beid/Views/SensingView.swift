@@ -591,7 +591,7 @@ struct SensingSessionSurface: View {
               }
 
               SensingRadarView(
-                peers: radarPeers,
+                peers: radarPeers(at: now),
                 mutualDeviceCount: 0,
                 observedWindowCount: observedWindowCount ?? 0,
                 showsEdges: false,
@@ -672,8 +672,8 @@ struct SensingSessionSurface: View {
     }
   }
 
-  private var radarPeers: [SensingRadarPeer] {
-    sensing.detectedDisplayIDs.sorted().map { id in
+  private func radarPeers(at now: Date) -> [SensingRadarPeer] {
+    sensing.currentlyDetectedDisplayIDs(at: now).sorted().map { id in
       SensingRadarPeer(id: id, signalStrength: sensing.signalStrength(forNodeId: id))
     }
   }

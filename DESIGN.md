@@ -1980,7 +1980,10 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   Only successful durable finalization may show the saved-record screen and
   say that the app can be closed. There is no threshold-based transition or
   countdown. While sensing, show devices heard and elapsed time without a
-  mutual count or an achievement state. DONE advances to the collected-record
+  mutual count or an achievement state. Radar nodes show devices heard in
+  the last 30 seconds, refreshed once per second. Expiry changes only this
+  live display; DEVICES HEARD remains the session total, and earlier window
+  observations and signed records remain intact. DONE advances to the collected-record
   screen, and View collection opens Records. Returning to Now resumes nearby
   discovery without joining another event.
   **[Android retains its native event-join surface for this release; the

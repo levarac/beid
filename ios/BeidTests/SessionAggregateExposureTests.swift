@@ -16,6 +16,59 @@ import XCTest
 /// fields this property surfaces.
 @MainActor
 final class SessionAggregateExposureTests: XCTestCase {
+  func testSilentDeviceExpiresButEarlierWindowObservationsRemain() {
+    let coordinator = makeCoordinator()
+    var now = Date(timeIntervalSince1970: 1_800_000_000)
+    let clock = { now }
+    let id = DetectionFixture.displayId(device: 0)
+    coordinator.startSensing(eventCode: "TEST-EXPIRY")
+    coordinator.handleDetection(enin: 6_000_000, rpid: "peer", detectedDisplayId: id, observedAt: clock())
+    now += 29
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: clock()), [id])
+    now += 1
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: clock()), [id])
+    now += 1
+    XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: clock()).isEmpty)
+    XCTAssertEqual(coordinator.devicesVerified, 1)
+    XCTAssertEqual(coordinator.sessionAggregate?.deviceCount, 1)
+    XCTAssertEqual(coordinator.sessionAggregate?.windowCount, 1)
+    XCTAssertEqual(coordinator.sessionAggregate?.windowAt(index: 0)?.windowIndex, 6_000_000)
+    XCTAssertEqual(coordinator.sessionAggregate?.windowAt(index: 0)?.peerCount, 1)
+    XCTAssertEqual(coordinator.sessionAggregate?.windowAt(index: 0)?.observationCount, 1)
+    coordinator.handleDetection(enin: 6_000_000, rpid: "peer", detectedDisplayId: id, observedAt: clock())
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: clock()), [id])
+  }
+
+  func testSignalUpdatesRefreshOnlyTheirDeviceAndOldUpdatesCannotRewindExpiry() {
+    let coordinator = makeCoordinator()
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    let first = DetectionFixture.displayId(device: 0)
+    let second = DetectionFixture.displayId(device: 1)
+    coordinator.startSensing(eventCode: "TEST-SIGNAL-EXPIRY")
+    coordinator.handleDetection(enin: 6_000_000, rpid: "first", detectedDisplayId: first, observedAt: start)
+    coordinator.handleDetection(enin: 6_000_000, rpid: "second", detectedDisplayId: second, observedAt: start)
+    coordinator.handleSignalStrength(rssi: -60, detectedDisplayId: first, at: start + 20)
+    coordinator.handleSignalStrength(rssi: -60, detectedDisplayId: first, at: start + 1)
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: start + 31), [first])
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: start + 49), [first])
+    XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: start + 51).isEmpty)
+    XCTAssertEqual(coordinator.sessionAggregate?.deviceCount, 2)
+    coordinator.reset()
+    XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: start + 20).isEmpty)
+  }
+
+  func testHeardDeviceWithUnusableRSSIStillRefreshesItsDisplayLifetime() {
+    let coordinator = makeCoordinator()
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    let id = DetectionFixture.displayId(device: 0)
+    coordinator.startSensing(eventCode: "TEST-UNMEASURED-EXPIRY")
+    coordinator.handleDetection(enin: 6_000_000, rpid: "peer", detectedDisplayId: id, observedAt: start)
+    coordinator.handleSignalStrength(rssi: 0, detectedDisplayId: id, at: start + 29)
+    XCTAssertEqual(coordinator.currentlyDetectedDisplayIDs(at: start + 31), [id])
+    XCTAssertTrue(coordinator.currentlyDetectedDisplayIDs(at: start + 60).isEmpty)
+    XCTAssertEqual(coordinator.sessionAggregate?.windowAt(index: 0)?.peerCount, 1)
+  }
+
   private func makeCoordinator() -> SensingCoordinator {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("session-aggregate-test-\(UUID().uuidString)", isDirectory: true)
