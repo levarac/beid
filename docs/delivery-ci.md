@@ -48,12 +48,22 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     `scripts/check_parallax_comparison_ran.py` only on trusted main push/manual
     events behind the `parallax-comparison` environment. Its token must be an
     environment secret; missing credentials fail the trusted lane.
+    New main revisions supersede older comparison runs, including approval
+    waiters; the replacement still requires environment approval. The
+    concurrency group is per ref, so a manual dispatch from another branch
+    does not cancel the main comparison. Re-running an older main comparison
+    joins the same group and cancels a newer pending one, so re-run the
+    latest instead.
     Android unit-test resource roots include `shared/src/commonTest/fixtures/`
     and `ios/BeidTests/Fixtures/venue-bundle-conformance/`. Non-documentation
     changes under either root run Android checks, including on merge groups;
     the iOS fixture root also continues to run iOS and SwiftLint checks.
 
-  - SwiftLint: `scripts/lint.sh`
+  - SwiftLint: `scripts/lint.sh` and `scripts/check_lint_fixtures.py`.
+    The same hosted job proves both lint fixtures: SwiftLint must exit 2,
+    every fail marker must match its line and rule exactly, and the pass fixture
+    and application must have zero violations. The checker itself exits 0
+    only for that expected negative result; other exits or report drift fail.
   - repository sanity: XcodeGen YAML と TestFlight notes の JSON / 構造検証、
     `scripts/check_pr_ci_doc_drift.py` による本 subsection と workflow の
     drift 検査、`python3 -m unittest discover -s scripts/tests -t .` による
@@ -264,28 +274,37 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
   **`scripts/check_pr_ci_doc_drift.py` checks all three PR build workflows**
   against `AGENTS.md`, including the separate iOS and lab CLI job names and
-  distinguishing commands. Trigger, head checkout, hosted runner and secret
+  distinguishing commands. The scripts unittest discovery command is checked
+  in both directions, including whitespace and continued-line forms; an echo
+  or comment mentioning it is not execution evidence. Trigger, head checkout, hosted runner and secret
   boundaries are guarded by the contract tests in `scripts/tests`.
 
-  Recommended required status checks on main: `Determine changed paths`,
+  To run the script tests or documentation checker locally, install PyYAML
+  into the active Python environment (a virtual environment is suitable):
+
+  ```sh
+  python3 -m pip install PyYAML==6.0.2
+  python3 scripts/check_pr_ci_doc_drift.py
+  python3 -m unittest discover -s scripts/tests -t .
+  ```
+
+  Required status checks on main: `Determine changed paths`,
   `Android build`, `SwiftLint`, `Repository sanity`, `iOS simulator`, and
   `beid-lab-cli build and test`. Android, lint and lab CLI may legitimately be
   skipped by their changed-path classifier; the iOS aggregate validates and
   reports its classifier skip as success. A skipped required check counts as
   passing. Do not require the
   main-only delivery, trusted comparison or Release compilation jobs, nor the
-  release-notes metadata warning. Branch protection is a separate operator
-  change; this document does not claim it has been applied.
+  release-notes metadata warning.
 
-  Proposed operator settings after these workflows reach main: target the
-  exact `main` branch (no wildcard), enable `Require merge queue`, choose
-  merge method `merge` (merge commit), build concurrency `1`, Only merge
-  non-failing pull requests enabled, status check timeout `120` minutes, and
-  merge limits minimum/maximum `1` PR. Enable Allow merge commits in repository
-  settings and retain all six required status checks above with GitHub Actions
-  as their source. Queue build concurrency starts at one to limit concurrent
-  full macOS suites; it does not serialize jobs within a run. These settings
-  are a proposal and have not been changed by this work. See [GitHub's merge
+  The merge queue is active on `main` (ruleset `main merge queue`, id
+  25775126, enforcement `active`): merge method `merge` (merge commit), build
+  concurrency `1`, Only merge non-failing pull requests enabled, status check
+  timeout `120` minutes, and merge limits minimum/maximum `1` PR, with the six
+  required status checks above sourced from GitHub Actions. Merge commits are
+  allowed in repository settings. Queue build concurrency is one to limit
+  concurrent full macOS suites; it does not serialize jobs within a run. Pull
+  requests enter the queue instead of being merged directly. See [GitHub's merge
   queue settings](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue).
 - GitHub branch protection は approving review を merge 条件にしない。
   これは 2026-07-27 のオーナー判断による repository setting であり、

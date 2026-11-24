@@ -3,7 +3,7 @@
 import re
 import unittest
 
-from scripts.tests.test_pr_ci_ios_macos_triggers import event_section, trigger_block
+from scripts.tests.workflow_yaml import workflow_data
 from scripts.tests.test_pr_ci_lane_skip import WORKFLOWS, job_name
 
 NAMES = ("pr-ci.yml", "pr-ci-ios-macos.yml", "pr-ci-lab-cli.yml")
@@ -39,17 +39,15 @@ class MergeGroupWorkflowTest(unittest.TestCase):
     def test_trigger_lists_include_checks_requested_without_path_filters(self):
         for name in NAMES:
             with self.subTest(workflow=name):
-                block = trigger_block((WORKFLOWS / name).read_text())
+                events = workflow_data((WORKFLOWS / name).read_text())["on"]
                 expected = {"pull_request", "push", "merge_group"}
                 if name != "pr-ci.yml":
                     expected.add("workflow_dispatch")
                 if name == "pr-ci-ios-macos.yml":
                     expected.add("schedule")
-                self.assertEqual(set(re.findall(r"(?m)^  ([\w]+):", block)), expected)
-                # Explicit membership keeps a missing trigger an assertion failure.
-                self.assertIn("  merge_group:\n", block)
-                section = event_section(block, "merge_group")
-                self.assertEqual(section.strip(), "types: [checks_requested]")
+                self.assertEqual(set(events), expected)
+                self.assertIn("merge_group", events)
+                self.assertEqual(events["merge_group"], {"types": ["checks_requested"]})
 
     def test_required_context_names_remain_available(self):
         for workflow, jobs in {
