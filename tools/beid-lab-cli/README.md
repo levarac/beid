@@ -470,8 +470,13 @@ missing file. Copy the file to the host.
 
 ## Tests
 
+The Python script tests require PyYAML, matching the version installed by PR CI.
+Install it into your active Python environment (use a virtual environment if
+your Python installation is externally managed):
+
 ```sh
 swift test                                             # 86 tests
+python3 -m pip install PyYAML==6.0.2
 python3 -m unittest discover -s ../../scripts/tests -t ../..   # includes both checkers
 ```
 
