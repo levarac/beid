@@ -7,41 +7,74 @@ import XCTest
 
 @MainActor
 final class ReportSubmissionStoreTests: XCTestCase {
-  func testWaitingNoticeTracksPreparedSubmittingAcceptedAndTerminalRecords() throws {
+  func testWaitingNoticeUsesClockGraceAndHidesThroughoutActiveSession() throws {
     let directory = try makeIsolatedDirectory(named: "beid-waiting-notice")
     defer { try? FileManager.default.removeItem(at: directory) }
     let url = directory.appendingPathComponent("submissions.json")
     let store = ReportSubmissionStore(fileURL: url)
-    XCTAssertFalse(store.hasRecordsWaitingToSend)
+    var now = Date(timeIntervalSince1970: 123)
+    let clock = { now }
     let record = makeRecord()
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
     try store.add(record)
-    XCTAssertTrue(store.hasRecordsWaitingToSend)
-    XCTAssertTrue(ReportSubmissionStore(fileURL: url).hasRecordsWaitingToSend)
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
     try store.markSubmitting(for: record.id)
-    XCTAssertTrue(store.hasRecordsWaitingToSend)
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false), "Submitting is not failure")
+    now += 60
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
+    now += 0.001
+    XCTAssertTrue(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: true))
+    XCTAssertTrue(ReportSubmissionStore(fileURL: url).hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
     try store.storeReceipt(for: record.id, signedReceiptHex: "aabb")
-    XCTAssertFalse(store.hasRecordsWaitingToSend)
-    let failed = makeRecord()
-    try store.add(failed)
-    try store.markTerminalFailure(for: failed.id, code: "definition_validity_mismatch")
-    XCTAssertFalse(store.hasRecordsWaitingToSend)
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
   }
 
-  func testPendingCaptureKeepsNoticeUntilItsCanonicalRecordIsAccepted() throws {
+  func testFailedAttemptShowsImmediatelySurvivesReloadAndExcludesTerminalRecords() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-failed-notice")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appendingPathComponent("submissions.json")
+    let store = ReportSubmissionStore(fileURL: url)
+    let now = Date(timeIntervalSince1970: 124)
+    let record = makeRecord()
+    try store.add(record)
+    try store.markSubmitting(for: record.id)
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: now, isSessionActive: false))
+    try store.markRetryableSendFailure(for: record.id)
+    XCTAssertTrue(store.hasRecordsWaitingToSend(at: now, isSessionActive: false))
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: now, isSessionActive: true))
+    XCTAssertTrue(ReportSubmissionStore(fileURL: url).hasRecordsWaitingToSend(at: now, isSessionActive: false))
+    try store.storeReceipt(for: record.id, signedReceiptHex: "aabb")
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: now, isSessionActive: false))
+    let failed = makeRecord()
+    try store.add(failed)
+    try store.markRetryableSendFailure(for: failed.id)
+    try store.markTerminalFailure(for: failed.id, code: "definition_validity_mismatch")
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: now + 300, isSessionActive: false))
+  }
+
+  func testPendingCaptureUsesTheSameGraceAndKeepsNoticeUntilAcceptance() throws {
     let directory = try makeIsolatedDirectory(named: "beid-pending-notice")
     defer { try? FileManager.default.removeItem(at: directory) }
     let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    var now = Date(timeIntervalSince1970: 123)
+    let clock = { now }
     let capture = ReportSubmissionCapture(
       id: UUID(), eventCode: "EXAMPLE", eventIdHex: nil, enin: 1,
-      peerRpids: ["peer"], reporterRpid: "reporter", participantCommitment: nil)
+      peerRpids: ["peer"], reporterRpid: "reporter", participantCommitment: nil, createdAt: clock())
     try store.addPendingCapture(capture)
-    XCTAssertTrue(store.hasRecordsWaitingToSend)
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
+    now += 60
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
+    now += 0.001
+    XCTAssertTrue(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: true))
     let record = makeRecord(id: capture.id)
     try store.add(record)
     try store.removePendingCapture(id: capture.id)
-    XCTAssertTrue(store.hasRecordsWaitingToSend)
+    XCTAssertTrue(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
     try store.storeReceipt(for: record.id, signedReceiptHex: "aabb")
-    XCTAssertFalse(store.hasRecordsWaitingToSend)
+    XCTAssertFalse(store.hasRecordsWaitingToSend(at: clock(), isSessionActive: false))
   }
 
   func testSavedRecordsPendingInputsAndAcceptedReceiptsStayDistinctAfterRestart() throws {

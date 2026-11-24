@@ -83,6 +83,9 @@ enum BeidConfig {
   static let detectedNowTimeout: TimeInterval = 300
   static let detectedNowDimAfter: TimeInterval = 30
 
+  /// Hide the Now notice during an ordinary send; failures bypass this grace.
+  static let unsentNoticeGracePeriod: TimeInterval = 60
+
   /// Floor on how often `SensingCoordinator.nodeSignalStrengths` is
   /// republished, in seconds. The smoothed value updates on every sample;
   /// only the republish — and so the redraw — is coalesced.

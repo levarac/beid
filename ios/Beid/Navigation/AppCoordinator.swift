@@ -580,7 +580,22 @@ final class AppCoordinator: ObservableObject {
     #endif
   }
 
+  func unsentNoticeNow(_ liveNow: Date) -> Date {
+    #if DEBUG
+    if isPendingRecordFixture { return Self.pendingFixtureCreatedAt + pendingRecordClockOffset }
+    #endif
+    return liveNow
+  }
+
   #if DEBUG
+  @Published private var pendingRecordClockOffset: TimeInterval = 0
+  private static let pendingFixtureCreatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+
+  func advancePendingRecordClockForUITesting(by seconds: TimeInterval) {
+    guard isPendingRecordFixture else { return }
+    pendingRecordClockOffset += seconds
+  }
+
   var isPendingRecordFixture: Bool {
     let arguments = ProcessInfo.processInfo.arguments
     return arguments.contains("-beid-ui-test") && arguments.contains("-beid-pending-record-fixture")
@@ -610,7 +625,8 @@ final class AppCoordinator: ObservableObject {
       eventIdHex: String(repeating: "b", count: 64),
       eventDefinitionDigestHex: String(repeating: "c", count: 64),
       validFrom: nil, validUntil: nil, signedObservationHex: "d28440a04040",
-      observationDigestHex: String(repeating: "d", count: 64), submissionState: .prepared
+      observationDigestHex: String(repeating: "d", count: 64), submissionState: .prepared,
+      createdAt: Self.pendingFixtureCreatedAt
     )
     do {
       try reportSubmissionStore.add(record)

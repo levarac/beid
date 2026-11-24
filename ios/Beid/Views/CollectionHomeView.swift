@@ -85,9 +85,20 @@ private struct NowHomeView: View {
         ScrollView {
           BeidLargeTitleContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
             VStack(alignment: .leading, spacing: DS.Space.l) {
-              HomeUnsentNotice(store: coordinator.reportSubmissionStore, usesInk: usesInk)
+              HomeUnsentNotice(
+                store: coordinator.reportSubmissionStore, usesInk: usesInk,
+                now: coordinator.unsentNoticeNow(context.date), isSessionActive: !isIdle
+              )
               #if DEBUG
               if coordinator.isPendingRecordFixture {
+                Button("Advance pending fixture clock 60 seconds") {
+                  coordinator.advancePendingRecordClockForUITesting(by: 60)
+                }
+                .accessibilityIdentifier("home.pending-fixture.advance60")
+                Button("Advance pending fixture clock 1 second") {
+                  coordinator.advancePendingRecordClockForUITesting(by: 1)
+                }
+                .accessibilityIdentifier("home.pending-fixture.advance1")
                 Button("Accept pending fixture record") { coordinator.acceptPendingRecordForUITesting() }
                   .accessibilityIdentifier("home.pending-fixture.accept")
               }
@@ -704,9 +715,11 @@ private struct HomeRecordDetail: View {
 private struct HomeUnsentNotice: View {
   @ObservedObject var store: ReportSubmissionStore
   let usesInk: Bool
+  let now: Date
+  let isSessionActive: Bool
 
   var body: some View {
-    if store.hasRecordsWaitingToSend {
+    if store.hasRecordsWaitingToSend(at: now, isSessionActive: isSessionActive) {
       VStack(alignment: .leading, spacing: DS.Space.s) {
         hairline
         HStack(spacing: DS.Space.s) {

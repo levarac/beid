@@ -940,6 +940,11 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     }
     let isNoResponseTransportFailure = result.statusCode == 0 && result.errorCode == "http_error"
     if result.isRetryable || isNoResponseTransportFailure {
+      do {
+        try store.markRetryableSendFailure(for: record.id)
+      } catch {
+        Self.log.error("Unable to persist waiting-notice metadata")
+      }
       if let origin = submissionOperatorOrigin(record.endpoint) {
         retryController.retry(operatorOrigin: origin) { [weak self] in self?.submitPending() }
       }

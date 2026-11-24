@@ -26,25 +26,25 @@
       }
     },
     "home.unsent.title": {
-      "comment": "Now notice heading when saved records or captured inputs are waiting to be sent to the operator; not an error or a verification claim.",
+      "comment": "Now notice heading outside an active session, after a failed send attempt or more than 60 seconds waiting. Describes data saved locally and not sent yet, not lost data or a verification result.",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "RECORDS WAITING TO SEND"
+            "value": "NOT SENT YET"
           }
         }
       }
     },
     "home.unsent.message": {
-      "comment": "Now notice for retryable unsent records. Explains that sending needs the app open and connectivity; terminal failures are excluded.",
+      "comment": "Now notice outside active sessions for retryable unsent Record data. Preserve Record as the product term. Data remains saved if the app closes; sending retries when open and online. Do not ask the participant to keep the app open. Terminal failures are excluded.",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Some records have not been sent yet. Keep beid open and online to send them."
+            "value": "Part of your Record is saved on this device but not sent yet. beid sends it when the app is open and online."
           }
         }
       }
