@@ -49,7 +49,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     events behind the `parallax-comparison` environment. Its token must be an
     environment secret; missing credentials fail the trusted lane.
     New main revisions supersede older comparison runs, including approval
-    waiters; the replacement still requires environment approval.
+    waiters; the replacement still requires environment approval. The
+    concurrency group is per ref, so a manual dispatch from another branch
+    does not cancel the main comparison. Re-running an older main comparison
+    joins the same group and cancels a newer pending one, so re-run the
+    latest instead.
     Android unit-test resource roots include `shared/src/commonTest/fixtures/`
     and `ios/BeidTests/Fixtures/venue-bundle-conformance/`. Non-documentation
     changes under either root run Android checks, including on merge groups;

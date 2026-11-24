@@ -10,7 +10,9 @@ permissions:
 
 concurrency:
   # Keep the latest main revision eligible for approval instead of an outdated run.
-  group: trusted-parallax-comparison
+  # The group is per ref, so a manual dispatch from another branch (whose job is
+  # skipped) cannot cancel the main comparison.
+  group: trusted-parallax-comparison-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
