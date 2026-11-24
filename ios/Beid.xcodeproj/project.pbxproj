@@ -49,6 +49,7 @@
 		1CC8EB9F7EF9C9C28082A39F /* VenueServingContractFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD44A5AAE447B59BE320F525 /* VenueServingContractFixture.swift */; };
 		1F1C3E2BBA0F5053EBABF01A /* EventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 585ED83B70A07B98029AD182 /* EventDetailView.swift */; };
 		2039711087916D30BEC01836 /* tampered-envelope.venue-bundle.cbor in Resources */ = {isa = PBXBuildFile; fileRef = 0ED82E11631EC6CC43CF4D53 /* tampered-envelope.venue-bundle.cbor */; };
+		2157972EB94377A920605E5A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 39A51ABA93C8A436F5BD8F02 /* PrivacyInfo.xcprivacy */; };
 		21ADB0A2B750AED641305BBD /* VenueDeviceOrganizerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B5D084B36D8B81C91BD987 /* VenueDeviceOrganizerViewModel.swift */; };
 		233C4ABB4C7C909DDF036EF6 /* EventJoinControlling.swift in Sources */ = {isa = PBXBuildFile; fileRef = C238EFE3D2172FCAC370F5F0 /* EventJoinControlling.swift */; };
 		2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B26B23A64184D96C012A5B6 /* DesignSystem.swift */; };
@@ -213,6 +214,7 @@
 		8CC9BAA568858DBA68D31EBF /* venue-current-lease-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = 77B393454AB42E627CAFA6E8 /* venue-current-lease-v1.json */; };
 		8E13AE4E8A6FB7BFA3AFBD76 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10807372081AA25A74942BE3 /* WelcomeView.swift */; };
 		8E46266E6961044BFC6ABA8C /* WalletHintStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0969D5632A59660576ACA113 /* WalletHintStoreTests.swift */; };
+		8FB126F96CE2F0559B0D7CF6 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 39A51ABA93C8A436F5BD8F02 /* PrivacyInfo.xcprivacy */; };
 		8FDC27D2283A74EB215D9DE0 /* BindingRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = E065C15C72E249BC341A101C /* BindingRecord.swift */; };
 		903C47844113AADA5701273B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */; };
 		9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58EEA07A80440D53597D515 /* ProofCollectedView.swift */; };
@@ -510,6 +512,7 @@
 		374F94F6CCF46C03274745B6 /* VenueLifecycleTaskOwnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueLifecycleTaskOwnerTests.swift; sourceTree = "<group>"; };
 		37FA90EF414E13290219CDF5 /* demo-scenarios.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "demo-scenarios.txt"; sourceTree = "<group>"; };
 		394E6F2E97311572D2BAED89 /* Proof.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Proof.swift; sourceTree = "<group>"; };
+		39A51ABA93C8A436F5BD8F02 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		3A6A7E89629098751BA84B9B /* NearbyJoinUITestFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyJoinUITestFixture.swift; sourceTree = "<group>"; };
 		3B2FE2EEF9281491958E8E59 /* WindowReportFinalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReportFinalizationTests.swift; sourceTree = "<group>"; };
 		3C9E22834D0EA5008A547341 /* ProofDetailPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofDetailPresentationTests.swift; sourceTree = "<group>"; };
@@ -1058,6 +1061,7 @@
 				00B88F37F569ED386AB057A8 /* Assets.xcassets */,
 				6B26B23A64184D96C012A5B6 /* DesignSystem.swift */,
 				BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */,
+				39A51ABA93C8A436F5BD8F02 /* PrivacyInfo.xcprivacy */,
 				2F6F38F46CD774BC65D25626 /* App */,
 				4E986A01713398264565B346 /* DesignSystem */,
 				4E2CC145A16B282147941B12 /* Models */,
@@ -1388,6 +1392,7 @@
 				AAAEAD92BF52356D6D6B0212 /* OFL-BricolageGrotesque.txt in Resources */,
 				5E75DD8A91133D193CA94191 /* OFL-DMMono.txt in Resources */,
 				2B4875CCE69995E4552A14DD /* OFL-DMSans.txt in Resources */,
+				8FB126F96CE2F0559B0D7CF6 /* PrivacyInfo.xcprivacy in Resources */,
 				808DF3DBBFEC1A79E45C2B32 /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1411,6 +1416,7 @@
 				AAF1FFED5CE6D710574F3A20 /* OFL-BricolageGrotesque.txt in Resources */,
 				B620D311DB1ED264F001363C /* OFL-DMMono.txt in Resources */,
 				7D086D84906505EA47C16199 /* OFL-DMSans.txt in Resources */,
+				2157972EB94377A920605E5A /* PrivacyInfo.xcprivacy in Resources */,
 				15B16EACE3130C5115A0A2D5 /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
