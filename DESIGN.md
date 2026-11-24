@@ -2274,7 +2274,9 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 > - Flat 2b's own accessibility ask is adopted as part of the contract
 >   (spec §9): graphs and Sigils carry information, not decoration, so
 >   each carries a VoiceOver summary (for example, "7 mutual, 13 detected,
->   window 6"; #633, #634, #640).
+>   window 6"; #633, #634, #640). Device records cannot establish
+>   mutuality, so their summary says "Devices heard: 13. Window 6. Mutual
+>   check not available yet." instead (#837).
 > - Open item 4 (D-627): non-text contrast under WCAG 1.4.11 is not
 >   covered by this section today, which covers text; recorded, no new
 >   rule.
