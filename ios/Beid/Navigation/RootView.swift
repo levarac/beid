@@ -34,7 +34,14 @@ struct RootView: View {
     ))
     .tint(DS.Color.actionPrimary)
     .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: coordinator.screen)
-
+    #if DEBUG
+    .background {
+      if ProcessInfo.processInfo.arguments.contains("-beid-ui-test") {
+        AdaptiveLayoutUITestHost(sensing: coordinator.sensingCoordinator)
+          .allowsHitTesting(false)
+      }
+    }
+    #endif
   }
 }
 
