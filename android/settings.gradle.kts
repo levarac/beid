@@ -8,7 +8,20 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
-        google()
+        // Large Robolectric SDK jars can hit Maven Central's shared-runner rate limit.
+        // Only this module uses the mirror; Central remains the missing-module fallback.
+        maven {
+            name = "robolectricCentralMirror"
+            url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
+            content {
+                includeModule("org.robolectric", "android-all-instrumented")
+            }
+        }
+        google {
+            content {
+                excludeModule("org.robolectric", "android-all-instrumented")
+            }
+        }
         mavenCentral()
     }
 }

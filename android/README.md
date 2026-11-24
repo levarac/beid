@@ -310,12 +310,17 @@ as of 2026-08-19 — reverify before reusing if this doc is old):
   versions of the same `android-all-instrumented` module. The test JVM sets
   `robolectric.offline=true` and `robolectric.dependency.dir` to that directory;
   Robolectric never downloads SDK jars during tests. Missing or unreadable
-  jars fail explicitly rather than falling back to Maven Central. Gradle's
-  dependency cache (including CI's existing Gradle user home cache) owns the
-  downloads; no separate Robolectric Maven cache is required. Pull request
-  runs read that cache but do not write it, so until a run that writes the
-  cache has saved the jars, a pull request run resolves them through Gradle
-  (with Gradle's network retries) before the tests start.
+  jars fail explicitly rather than falling back to Maven Central. Gradle
+  resolves only `org.robolectric:android-all-instrumented` from Google's
+  [Maven Central mirror](https://maven-central.storage-download.googleapis.com/maven2/)
+  first, with Maven Central as the missing-module fallback. Once Gradle has
+  selected a repository, a jar download failing with HTTP 429/5xx fails
+  resolution after retries; it does not switch the jar's source.
+  CI separately caches exactly these two jars in Gradle's dependency cache,
+  keyed by `robolectricSdkVersions`. Unlike setup-gradle's read-only PR cache,
+  this cache saves after successful PR jobs and is reusable on the same PR
+  (subject to GitHub cache scope/eviction); a hit avoids downloading the jars,
+  though Gradle may still fetch metadata/checksums.
   The pinned Robolectric **4.15.1** requires these exact artifacts:
   - **SDK 34:** `org.robolectric:android-all-instrumented:14-robolectric-10818077-i7`.
     Every Robolectric test class explicitly selects `@Config(sdk = [34])`;

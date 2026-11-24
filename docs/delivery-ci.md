@@ -52,6 +52,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     and `ios/BeidTests/Fixtures/venue-bundle-conformance/`. Non-documentation
     changes under either root run Android checks, including on merge groups;
     the iOS fixture root also continues to run iOS and SwiftLint checks.
+    A separate `actions/cache` restores only the two Robolectric SDK jars in
+    Gradle's dependency cache before the build and saves after successful jobs,
+    including PRs. Its key and paths derive from `robolectricSdkVersions`;
+    setup-gradle's PR cache remains read-only. Only `org.robolectric:android-all-instrumented`
+    resolves from Google's Maven Central mirror first, then Central when absent.
 
   - SwiftLint: `scripts/lint.sh`
   - repository sanity: XcodeGen YAML と TestFlight notes の JSON / 構造検証、
