@@ -1080,7 +1080,11 @@ final class AppCoordinator: ObservableObject {
       } else {
         state = await bluetoothMonitor.waitForAuthorizationResolution()
       }
-      self?.applyBluetoothState(state)
+      // A newer callback can arrive after the waiter captures its result,
+      // including while the denied-screen recovery sink is not active yet.
+      // Read the monitor after suspension so that stale completions cannot win.
+      let latestState = bluetoothMonitor.state
+      self?.applyBluetoothState(latestState == .notDetermined ? state : latestState)
     }
   }
 
