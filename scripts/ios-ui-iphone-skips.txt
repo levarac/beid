@@ -4,3 +4,5 @@ BeidUITests/BeidIPadLayoutTests/testRecordCardsNavigateIndependentlyInPortrait
 BeidUITests/BeidIPadLayoutTests/testRecordCardsNavigateIndependentlyInLandscape
 # The app supports portrait only on iPhone; the independent landscape flow is iPad-only.
 BeidUITests/BeidIPadLayoutTests/testPrimaryFlowInLandscape
+# System window resizing needs a starting window at least 600 points wide; iPhone windows are narrower.
+BeidUITests/AdaptiveContinuityUITests/testSystemWindowResizeKeepsRecordingWhereSupported
