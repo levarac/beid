@@ -155,7 +155,10 @@ class SubmissionOperatorConfigurationTest {
     @Test
     fun acceptsBothValidPortBounds() {
         for (port in listOf(1, 65_535)) {
-            assertNotNull(restoredConfiguration(endpoint = "https://operator.example:$port"), "$port")
+            val configuration = assertNotNull(restoredConfiguration(
+                endpoint = "https://operator.example:$port",
+            ), "$port")
+            assertEquals("https://operator.example:$port", configuration.submissionEndpoint)
         }
     }
 
