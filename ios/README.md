@@ -330,8 +330,8 @@ whose production adapter forwards to
 transition `.sensing → .eventFound` on the first detection, count distinct
 **devices**, and move to `.recording` when
 `BeidConfig.eventConfirmThreshold` is reached. That threshold is an app-wide
-constant today rather than an organizer-provided event setting; see "What's
-stubbed".
+constant today rather than an organizer-provided event setting; see "Runtime
+boundaries and remaining gaps".
 
 Devices are counted by `detectedDisplayId`, not by the proximity identifier
 the detection also carries. The proximity identifier rotates every ENIN

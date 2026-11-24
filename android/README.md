@@ -162,9 +162,10 @@ passed directly to the radio.
 `EventJoinScreen` renders `ScanFlowScreen` for the active session. That
 router includes Sensing, Event Found, Recording, and Signal Lost bodies;
 these are embedded in the participation screen rather than separate
-navigation destinations. Recording has a one-time entrance display, and
-signal-loss simulation is a Debug-only control. This does not establish
-real-radio loss detection or recovery evidence.
+navigation destinations. Recording has a one-time entrance display. Signal
+Lost is reached only through a Debug-only simulation control: real signal-loss
+detection is not built, so release builds never enter that state, and nothing
+here establishes radio loss detection or recovery evidence.
 
 `ProofRecordingBridge` writes the collected records used by Records and
 record detail. Separately, `WindowObservationAccumulator` opens and closes
