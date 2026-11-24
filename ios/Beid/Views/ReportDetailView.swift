@@ -175,7 +175,7 @@ struct ReportDetailView: View {
             reportContent(record)
           } else {
             BeidEmptyState(
-              Text("Report unavailable on this device"), titleIdentifier: "report-detail.unavailable"
+              "Report unavailable on this device", titleIdentifier: "report-detail.unavailable"
             )
           }
         }

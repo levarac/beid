@@ -221,7 +221,7 @@ struct ScanFlowView: View {
       BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
         VStack(spacing: DS.Space.l) {
           BeidEmptyState(
-            Text("stop.outcome.title"), description: Text("stop.outcome.message"),
+            "stop.outcome.title", description: "stop.outcome.message",
             descriptionIdentifier: "stop.outcome.message"
           ) {
             BeidPrimaryButton("stop.outcome.action") { coordinator.dismissStopOutcome() }

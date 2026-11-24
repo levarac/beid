@@ -135,15 +135,14 @@ final class NowNavigationUITests: XCTestCase {
     allRecords.assertDisappears()
     app.scrollViews["records.grid"].assertExists()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
-    // Probe the four corners of the toolbar button's own frame (inset 2 points),
-    // so a hit target smaller than the control's visible bounds is caught.
-    let frame = options.frame
-    XCTAssertGreaterThanOrEqual(frame.width, 28)
-    XCTAssertGreaterThanOrEqual(frame.height, 28)
-    for dx in [2.0, frame.width - 2.0] {
-      for dy in [2.0, frame.height - 2.0] {
+    // DESIGN.md requires a 44x44 pt touch region. The accessibility frame is not
+    // a hit-area measurement, so tap the four corners (inset 2 points) of a
+    // 44x44 region centered on the button; a smaller hit target misses the menu.
+    let inset = 44.0 / 2 - 2.0
+    for dx in [-inset, inset] {
+      for dy in [-inset, inset] {
         options.assertHittable()
-        options.coordinate(withNormalizedOffset: .zero)
+        options.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
           .withOffset(CGVector(dx: dx, dy: dy)).tap()
         allRecords.assertHittable()
         allRecords.tap()

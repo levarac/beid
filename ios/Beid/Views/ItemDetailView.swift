@@ -369,7 +369,7 @@ private struct RecordEvidenceLadder: View {
     if number == 1 {
       Text("Kept on this device").beidTextStyle(DS.Font.Library.body13)
     } else if number == 4 {
-      BeidEmptyState(Text("NOT YET AVAILABLE"))
+      BeidEmptyState("NOT YET AVAILABLE")
     } else if let reports, !reports.isEmpty {
       ForEach(reports, id: \.record.id) { report in
         let record = report.record
@@ -398,8 +398,8 @@ private struct RecordEvidenceLadder: View {
       }
     } else {
       BeidEmptyState(
-        Text("NOT YET AVAILABLE"),
-        description: reports == nil ? Text("REPORT STATUS UNAVAILABLE") : nil
+        "NOT YET AVAILABLE",
+        description: reports == nil ? "REPORT STATUS UNAVAILABLE" : nil
       )
     }
   }

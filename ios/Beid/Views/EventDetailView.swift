@@ -199,7 +199,7 @@ struct EventDetailView: View {
       }
     } else {
       Text("RECORDS · 0").beidTextStyle(DS.Font.Library.labelMono10)
-      BeidEmptyState(Text("No records are stored for this event."))
+      BeidEmptyState("No records are stored for this event.")
     }
   }
 

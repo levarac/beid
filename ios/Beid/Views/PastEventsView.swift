@@ -36,7 +36,7 @@ struct PastEventsView: View {
       Section {
         if pastEvents.isEmpty {
           BeidEmptyState(
-            Text(
+            text: Text(
               "No past events yet.",
               comment: "Empty state on the Past events screen, shown when this device has never recorded a Proof for any event."
             ),

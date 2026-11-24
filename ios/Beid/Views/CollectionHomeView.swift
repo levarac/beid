@@ -586,8 +586,8 @@ private struct RecordsHomeView: View {
           VStack(alignment: .leading, spacing: DS.Space.l) {
             if eventGroups.isEmpty {
               BeidEmptyState(
-                Text("No records yet"),
-                description: Text("Saved records appear here after sensing.")
+                "No records yet",
+                description: "Saved records appear here after sensing."
               )
             } else if grouping == .byEvent {
               eventList
@@ -616,10 +616,12 @@ private struct RecordsHomeView: View {
             }
             .pickerStyle(.inline)
           } label: {
-            Image(systemName: "rectangle.grid.1x2")
+            // The title is the native menu title (overflow, expanded display,
+            // VoiceOver); the bar shows only the symbol.
+            Label("Record view options", systemImage: "rectangle.grid.1x2")
+              .labelStyle(.iconOnly)
               .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget)
           }
-          .accessibilityLabel(Text("Record view options"))
           .accessibilityIdentifier("records.grouping")
         }
       }

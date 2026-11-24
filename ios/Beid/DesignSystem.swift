@@ -298,8 +298,9 @@ struct BeidEmptyBlock<Content: View>: View {
   }
 }
 
-/// Shared empty-content layout. Text values keep localization extraction at
-/// each call site; identifiers stay on the individual accessible text elements.
+/// Shared empty-content layout. Copy is passed as `LocalizedStringKey`; call
+/// sites that hold prebuilt `Text` (runtime values, translator comments) use the
+/// `text:` initializers. Identifiers stay on the individual accessible text elements.
 struct BeidEmptyState<Actions: View>: View {
   let title: Text
   let description: Text?
@@ -309,7 +310,7 @@ struct BeidEmptyState<Actions: View>: View {
   let actions: Actions
 
   init(
-    _ title: Text, description: Text? = nil, symbol: String? = nil,
+    text title: Text, description: Text? = nil, symbol: String? = nil,
     titleIdentifier: String = "", descriptionIdentifier: String = "",
     @ViewBuilder actions: () -> Actions
   ) {
@@ -319,6 +320,18 @@ struct BeidEmptyState<Actions: View>: View {
     self.titleIdentifier = titleIdentifier
     self.descriptionIdentifier = descriptionIdentifier
     self.actions = actions()
+  }
+
+  init(
+    _ title: LocalizedStringKey, description: LocalizedStringKey? = nil, symbol: String? = nil,
+    titleIdentifier: String = "", descriptionIdentifier: String = "",
+    @ViewBuilder actions: () -> Actions
+  ) {
+    self.init(
+      text: Text(title), description: description.map { Text($0) }, symbol: symbol,
+      titleIdentifier: titleIdentifier, descriptionIdentifier: descriptionIdentifier,
+      actions: actions
+    )
   }
 
   var body: some View {
@@ -351,13 +364,23 @@ struct BeidEmptyState<Actions: View>: View {
 
 extension BeidEmptyState where Actions == EmptyView {
   init(
-    _ title: Text, description: Text? = nil, symbol: String? = nil,
+    text title: Text, description: Text? = nil, symbol: String? = nil,
     titleIdentifier: String = "", descriptionIdentifier: String = ""
   ) {
     self.init(
-      title, description: description, symbol: symbol,
+      text: title, description: description, symbol: symbol,
       titleIdentifier: titleIdentifier, descriptionIdentifier: descriptionIdentifier
     ) { EmptyView() }
+  }
+
+  init(
+    _ title: LocalizedStringKey, description: LocalizedStringKey? = nil, symbol: String? = nil,
+    titleIdentifier: String = "", descriptionIdentifier: String = ""
+  ) {
+    self.init(
+      text: Text(title), description: description.map { Text($0) }, symbol: symbol,
+      titleIdentifier: titleIdentifier, descriptionIdentifier: descriptionIdentifier
+    )
   }
 }
 

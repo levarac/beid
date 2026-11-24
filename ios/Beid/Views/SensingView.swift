@@ -300,7 +300,7 @@ struct SensingView: View {
         .foregroundStyle(DS.Color.textPrimary)
 
       if presentation.isSearching {
-        BeidEmptyState(Text(searchingTitle), description: Text(rescueGuidance))
+        BeidEmptyState(text: Text(searchingTitle), description: Text(rescueGuidance))
       } else {
         ForEach(presentation.cards) { card in
           nearbyEventCard(

@@ -3761,7 +3761,7 @@
       }
     },
     "All records": {
-      "comment": "Segmented control option for the saved record grid.",
+      "comment": "Records grouping menu option for the saved record grid.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3772,7 +3772,7 @@
       }
     },
     "By event": {
-      "comment": "Segmented control option for the saved event list.",
+      "comment": "Records grouping menu option for the saved event list.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3782,8 +3782,52 @@
         }
       }
     },
+    "No records yet": {
+      "comment": "Title of the empty Records tab.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No records yet"
+          }
+        }
+      }
+    },
+    "Record view options": {
+      "comment": "Title and accessibility label of the Records toolbar menu that switches between all records and records by event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record view options"
+          }
+        }
+      }
+    },
+    "No pack yet.": {
+      "comment": "Title of the empty state on the venue broadcast screen before a pack is loaded.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No pack yet."
+          }
+        }
+      }
+    },
+    "Paste the link the organizer gave you, or scan its QR code.": {
+      "comment": "Explanation under the empty venue broadcast title; tells the venue how to load a pack.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste the link the organizer gave you, or scan its QR code."
+          }
+        }
+      }
+    },
     "Record grouping": {
-      "comment": "Accessibility label for the Records grouping control."
+      "comment": "Title of the inline picker inside the Records grouping menu."
     },
     "Saved records appear here after sensing.": {
       "comment": "Empty Records tab.",

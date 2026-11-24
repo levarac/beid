@@ -238,7 +238,7 @@ struct OrganizerToolsView: View {
       savedPackHairline
       if savedPackIsEmpty {
         BeidEmptyState(
-          savedPackStatusLabel, description: savedPackNote.map { Text($0) },
+          text: savedPackStatusLabel, description: savedPackNote.map { Text($0) },
           titleIdentifier: "organizer.savedPack.status", descriptionIdentifier: "organizer.savedPack.note"
         )
       } else {

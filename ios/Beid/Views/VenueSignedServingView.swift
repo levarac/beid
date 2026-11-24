@@ -323,8 +323,8 @@ struct VenueSignedServingView: View {
           }
         } else {
           BeidEmptyState(
-            Text("No pack yet."),
-            description: Text("Paste the link the organizer gave you, or scan its QR code.")
+            "No pack yet.",
+            description: "Paste the link the organizer gave you, or scan its QR code."
           )
           .padding(.vertical, DS.Space.s)
         }

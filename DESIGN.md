@@ -1543,6 +1543,8 @@ spacing. Text wraps at Dynamic Type sizes; it has no fixed height or line
 limit. Children remain separate accessibility elements, with existing text
 and action identifiers retained. The optional symbol is decorative and hidden
 from accessibility; current callers need no symbol.
+Copy is passed as `LocalizedStringKey`. Callers that hold runtime values or a
+translator comment pass prebuilt `Text` through the `text:` initializers.
 
 This follows the title/description/actions structure of SwiftUI's
 [`ContentUnavailableView`](https://developer.apple.com/documentation/swiftui/contentunavailableview).
