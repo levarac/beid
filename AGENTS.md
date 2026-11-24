@@ -470,6 +470,8 @@ violations, with no pass-fixture or application violations.
 **Repository sanity**: YAML and TestFlight note validation,
   `scripts/check_pr_ci_doc_drift.py`, and
   `python3 -m unittest discover -s scripts/tests -t .`.
+  Local runs of the checker or script tests require PyYAML in the active Python
+  environment: install it with `python3 -m pip install PyYAML==6.0.2`.
 
 The separate `.github/workflows/pr-ci-ios-macos.yml` reports **iOS simulator**
 from an always-running aggregate on `ubuntu-24.04-arm`. **Plan iOS test jobs**

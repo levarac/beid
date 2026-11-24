@@ -1,6 +1,12 @@
 """Read workflow structure with the YAML parser already installed by PR CI."""
 
-import yaml
+try:
+    import yaml
+except ModuleNotFoundError as error:
+    if error.name != "yaml":
+        raise
+    raise SystemExit("Script tests require PyYAML; install it with: "
+                     "python3 -m pip install PyYAML==6.0.2") from error
 
 
 def workflow_data(text):

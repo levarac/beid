@@ -273,6 +273,15 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
   or comment mentioning it is not execution evidence. Trigger, head checkout, hosted runner and secret
   boundaries are guarded by the contract tests in `scripts/tests`.
 
+  To run the script tests or documentation checker locally, install PyYAML
+  into the active Python environment (a virtual environment is suitable):
+
+  ```sh
+  python3 -m pip install PyYAML==6.0.2
+  python3 scripts/check_pr_ci_doc_drift.py
+  python3 -m unittest discover -s scripts/tests -t .
+  ```
+
   Recommended required status checks on main: `Determine changed paths`,
   `Android build`, `SwiftLint`, `Repository sanity`, `iOS simulator`, and
   `beid-lab-cli build and test`. Android, lint and lab CLI may legitimately be
