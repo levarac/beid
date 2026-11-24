@@ -300,6 +300,29 @@ as of 2026-08-19 — reverify before reusing if this doc is old):
   `testImplementation("androidx.test.ext:junit:<version>")` for the
   `@RunWith(RobolectricTestRunner::class)` + `@Config(sdk = [...])` test
   harness itself.
+- `:app:prepareRobolectricSdks` resolves the SDK jars through Gradle and
+  syncs them into `app/build/robolectric` before every app JVM test task.
+  Each SDK has its own non-transitive configuration so Gradle retains both
+  versions of the same `android-all-instrumented` module. The test JVM sets
+  `robolectric.offline=true` and `robolectric.dependency.dir` to that directory;
+  Robolectric never downloads SDK jars during tests. Missing or unreadable
+  jars fail explicitly rather than falling back to Maven Central. Gradle's
+  dependency cache (including CI's existing Gradle user home cache) owns the
+  downloads; no separate Robolectric Maven cache is required.
+  The pinned Robolectric **4.15.1** requires these exact artifacts:
+  - **SDK 34:** `org.robolectric:android-all-instrumented:14-robolectric-10818077-i7`.
+    Every Robolectric test class explicitly selects `@Config(sdk = [34])`;
+    there is no `robolectric.properties` override.
+  - **SDK 35:** `org.robolectric:android-all-instrumented:15-robolectric-12650502-i7`.
+    `SandboxManager` selects Robolectric's maximum supported SDK for
+    `AndroidTestEnvironment`'s compile-time system resources, even when the
+    test runs on SDK 34. This is independent of the app's compileSdk/targetSdk 36.
+  Both versions, including instrumentation suffix `i7`, come from 4.15.1's
+  `DefaultSdkProvider`. Recheck `robolectricSdkVersions` in `app/build.gradle.kts`
+  when changing Robolectric or test SDK settings. An additional SDK that has
+  not been provisioned fails with the expected jar path in the local resolver.
+  After an initial normal run resolves dependencies, verify without downloads
+  from `android/` with `./gradlew :app:testDebugUnitTest --offline --rerun-tasks --no-daemon`.
 - `testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:<version
   matching kotlinx-coroutines-android>")` for `Dispatchers.setMain(...)` in
   plain (non-Robolectric) ViewModel unit tests that use `viewModelScope` —
