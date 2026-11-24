@@ -298,12 +298,18 @@ final class FlatScreenshotTourC: XCTestCase {
         .matching(NSPredicate(format: "label == %@", eventName)).firstMatch
       fullName.scrollToHittable(in: app, within: content)
       XCTAssertEqual(fullName.label, eventName)
-      if category.isAccessibilityCategory {
-        // This fixture fits on one line at iPad's default size. AX3 makes
-        // it wrap on both devices; require more than one scaled body line.
+      // This exact fixture measures 498.5pt on one line in Body/15 at Large.
+      // Use the name's available width, not the device idiom: narrow windows
+      // must wrap even at Large, while a regular-width window can fit it.
+      // Allow 1pt for accessibility-frame rounding at the one-line boundary.
+      let requiresWrappingAtLarge = fullName.frame.width < 498.5 - 1
+      if category.isAccessibilityCategory || requiresWrappingAtLarge {
         let traits = UITraitCollection(preferredContentSizeCategory: category)
         let singleLineHeight = UIFont.preferredFont(forTextStyle: .subheadline, compatibleWith: traits).lineHeight
-        XCTAssertGreaterThan(fullName.frame.height, singleLineHeight * 1.5, "The full name must wrap at AX3 without truncation")
+        XCTAssertGreaterThan(
+          fullName.frame.height, singleLineHeight * 1.5,
+          "The full name must wrap without truncation at \(category.rawValue); frame: \(fullName.frame)"
+        )
       }
       let hierarchy = XCTAttachment(string: app.debugDescription)
       hierarchy.name = "record-detail-long-event-name-\(category.rawValue)-hierarchy"
