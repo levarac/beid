@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -123,7 +124,13 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         for name in ("Build for testing", "Test without rebuilding"):
             with self.subTest(step=name):
                 block = step_data(text, name)["run"]
-                self.assertEqual(block.count("SWIFT_OPTIMIZATION_LEVEL=-O"), 1)
+                # Shell tokenization respects quotes, array parentheses and comments;
+                # prefix matches would accept -Onone, -Osize and other wrong values.
+                lexer = shlex.shlex(block, posix=True, punctuation_chars="();|&")
+                lexer.whitespace_split = True
+                values = [token.split("=", 1)[1] for token in lexer
+                          if token.startswith("SWIFT_OPTIMIZATION_LEVEL=")]
+                self.assertEqual(values, ["-O"])
 
     def test_simulator_lane_no_longer_builds_release_for_device(self) -> None:
         """The Release-for-device build moved out (gh#479).
@@ -218,6 +225,8 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
                         "TEST_MODE": mode, "XCODE_EXIT": str(child_exit)})
                 self.assertEqual(result.returncode, child_exit, result.stderr)
                 argv = json.loads(result.stdout)
+                self.assertEqual([arg for arg in argv if arg.startswith("SWIFT_OPTIMIZATION_LEVEL=")],
+                                 ["SWIFT_OPTIMIZATION_LEVEL=-O"])
                 selections = [item for item in argv if item.startswith("-only-testing:")]
                 from scripts.ios_ui_smoke import parse_smoke_list
                 listed = parse_smoke_list((root / "ios/ci/ui-smoke-tests.txt").read_text())
