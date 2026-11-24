@@ -458,7 +458,10 @@ final class FlatScreenshotTourD: XCTestCase {
     let done = bar.buttons["Done"]
     XCTAssertTrue(done.exists)
     XCTAssertGreaterThanOrEqual(done.frame.width + 0.01, 44)
-    XCTAssertGreaterThanOrEqual(bar.frame.height + 0.01, 44)
+    XCTAssertTrue(done.isHittable)
+    // A 44pt-tall region centered on Done's own center must sit inside the bar.
+    XCTAssertGreaterThanOrEqual(done.frame.midY - 22 + 0.01, bar.frame.minY)
+    XCTAssertLessThanOrEqual(done.frame.midY + 22 - 0.01, bar.frame.maxY)
   }
 
   private func assertMinimumHitTarget(_ control: XCUIElement) {

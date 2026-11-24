@@ -23,7 +23,7 @@ struct AccountSheetView: View {
       List {
         AccountBluetoothRow(monitor: coordinator.bluetoothMonitor, relayNote: relayNoteText)
         Section {
-          NavigationLink("Organizer tools", value: Destination.organizerTools)
+          NavigationLink(organizerToolsLabel, value: Destination.organizerTools)
             .accessibilityLabel("Organizer tools")
 
           // Row removal is a separate decision in beid#852.
@@ -58,13 +58,7 @@ struct AccountSheetView: View {
       .toolbar {
         if path.isEmpty {
           ToolbarItem(placement: .confirmationAction) {
-            Button {
-              BeidDesign.haptic()
-              dismiss()
-            } label: {
-              Text("Done")
-                .frame(minWidth: AccountSheetHitTarget.minimum)
-            }
+            doneButton
           }
         }
       }
@@ -81,7 +75,7 @@ struct AccountSheetView: View {
         switch destination {
         case .organizerTools:
           OrganizerToolsView()
-            .navigationTitle("Organizer tools")
+            .navigationTitle(organizerToolsLabel)
         case .pastEvents:
           PastEventsView(
             sensingCoordinator: coordinator.sensingCoordinator,
@@ -124,6 +118,27 @@ struct AccountSheetView: View {
       EventCodeEntrySheetView()
         .environmentObject(coordinator)
     }
+  }
+
+  @ViewBuilder private var doneButton: some View {
+    if #available(iOS 26, *) {
+      Button(role: .confirm, action: dismissAccount)
+    } else {
+      Button("Done", systemImage: "checkmark", action: dismissAccount)
+    }
+  }
+
+  private func dismissAccount() {
+    BeidDesign.haptic()
+    dismiss()
+  }
+
+  private var organizerToolsLabel: String {
+    String(
+      localized: "account.organizerTools.title",
+      defaultValue: "Organizer tools",
+      comment: "Account menu row and navigation title for the venue operator tools screen."
+    )
   }
 
   private var pastEventsLabel: String {
