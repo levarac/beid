@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -35,6 +37,19 @@ val eventCodeHashLookupUrlTemplate = providers.gradleProperty("beid.eventCodeHas
 val gitHeight: String =
     (project.findProperty("gitHeight") as? String)?.takeIf { it.isNotBlank() } ?: "local"
 
+// The app version lives in android/version.properties and only there: a
+// version bump edits that one file. Its versionCode is the source-level
+// placeholder; the delivery workflow assigns the store number
+// (docs/google-play.md).
+val appVersionFile = rootProject.layout.projectDirectory.file("version.properties")
+val appVersion = Properties().apply {
+    load(providers.fileContents(appVersionFile).asText.get().reader())
+}
+
+fun appVersionValue(key: String): String =
+    appVersion.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() }
+        ?: throw GradleException("android/version.properties must set $key")
+
 android {
     namespace = "org.levarac.beid"
     compileSdk = 36
@@ -43,8 +58,8 @@ android {
         applicationId = "org.levarac.beid"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionValue("versionCode").toInt()
+        versionName = appVersionValue("versionName")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
             "String",

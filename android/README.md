@@ -2,9 +2,10 @@
 
 The native beid Android app uses Kotlin and Jetpack Compose with the
 [levarac/barnard](https://github.com/levarac/barnard) BLE SDK. It includes
-onboarding, Bluetooth guidance, collection home, event participation,
-Account, Records, record detail, a daily summary, and a separate venue
-broadcast activity. The native navigation and platform effects differ from
+Welcome, Bluetooth permission/denied/off guidance, collection home, event
+participation, Account, manual event-code entry, Records (including an event
+group), record detail, a daily summary, and a separate venue broadcast
+activity. The native navigation and platform effects differ from
 iOS; shared code owns the decisions both apps must agree on.
 
 ## Build & run

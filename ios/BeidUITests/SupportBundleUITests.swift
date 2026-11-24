@@ -9,12 +9,16 @@ final class SupportBundleUITests: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
-    app.buttons["Get Started"].tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
-    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["Continue"].tap()
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    app.buttons["bluetooth.permission.continue"].tap()
     XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
     app.buttons["home.account"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Organizer tools"].waitForExistence(timeout: 5), "the Account sheet must be open")
+    XCTAssertFalse(app.buttons["Connect Wallet"].exists)
+    XCTAssertFalse(app.buttons["Connect with MetaMask"].exists)
+    XCTAssertFalse(app.buttons["Disconnect wallet"].exists)
 
     // Flat 2b: the share row is the Account sheet's last list row, and the
     // version footer can cover it while XCTest still reports it hittable.

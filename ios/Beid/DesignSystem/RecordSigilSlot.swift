@@ -18,6 +18,8 @@ enum RecordSigilPlacement: CaseIterable {
   case homeActiveCard
   /// Frames 04 / 04c, a past event row (nodes 183:54, 203:47).
   case homePastRow
+  /// The saved-record grid uses an ink disc on the canvas.
+  case recordsGrid
   /// Frame 06, Sensing — Sealed (node 184:65).
   case sensingSealed
   /// Frame 07, Proof Collected (node 183:222).
@@ -34,6 +36,7 @@ enum RecordSigilPlacement: CaseIterable {
     switch self {
     case .homeActiveCard: 84
     case .homePastRow: 60
+    case .recordsGrid: DS.Size.recordsGridSigil
     case .sensingSealed: DS.Size.sensingSealedSigil
     case .proofCollected: 290
     case .eventDetailRow: DS.Size.proofRowMinHeight - DS.Space.l
@@ -45,13 +48,13 @@ enum RecordSigilPlacement: CaseIterable {
   var page: RecordSigilSlot.Ground {
     switch self {
     case .homeActiveCard, .sensingSealed: .ink
-    case .homePastRow, .proofCollected, .eventDetailRow, .proofDetail, .reportDetailRow: .canvas
+    case .homePastRow, .recordsGrid, .proofCollected, .eventDetailRow, .proofDetail, .reportDetailRow: .canvas
     }
   }
 
   var sigilGround: BeidSharedKit.sigil.SigilGround {
     switch self {
-    case .proofCollected, .proofDetail: .DISC
+    case .proofCollected, .proofDetail, .recordsGrid: .DISC
     case .homeActiveCard, .homePastRow, .sensingSealed, .eventDetailRow, .reportDetailRow: .NONE
     }
   }
@@ -105,6 +108,7 @@ struct RecordSigilSlot: View {
 
   let input: BeidSharedKit.sigil.SigilInput?
   let placement: RecordSigilPlacement
+  var isDeviceRecord = false
 
   var body: some View {
     switch Self.artwork(for: input) {
@@ -118,7 +122,8 @@ struct RecordSigilSlot: View {
         input: input,
         size: placement.size,
         ground: placement.sigilGround,
-        page: placement.page.sigilPage
+        page: placement.page.sigilPage,
+        isDeviceRecord: isDeviceRecord
       )
     }
   }

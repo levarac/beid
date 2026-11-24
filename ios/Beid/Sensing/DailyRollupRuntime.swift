@@ -10,7 +10,7 @@ import Foundation
 /// second, native re-derivation of "which proofs are today's."
 ///
 /// This is deliberately the *only* place that decides which proofs are
-/// "today's": `DailySummaryView` must not separately filter `proof.date`
+/// "today's": a summary view must not separately filter `proof.date`
 /// with `Calendar.isDateInToday` or similar to build its own row list,
 /// because that would be a second native implementation of the exact
 /// decision this adapter routes through shared — the ownership-boundary

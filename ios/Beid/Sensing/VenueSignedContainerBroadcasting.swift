@@ -85,11 +85,15 @@ enum VenueRadioEventMapping {
 final class BarnardVenueSignedContainerBroadcasting: VenueSignedContainerBroadcasting {
   var onState: ((VenueRadioUpdate) -> Void)?
 
-  private let engine: BarnardEngine
+  private var engine: BarnardEngine?
+  private let deviceSecretStore: DeviceSecretKeychainStore
 
-  init(engine: BarnardEngine = BarnardEngine()) {
-    self.engine = engine
-    self.engine.onEvent = { [weak self] event in
+  init(deviceSecretStore: DeviceSecretKeychainStore = .shared) {
+    self.deviceSecretStore = deviceSecretStore
+  }
+
+  private func connectEvents() {
+    engine?.onEvent = { [weak self] event in
       MainActor.assumeIsolated {
         guard let self, let update = Self.update(for: event) else { return }
         self.onState?(update)
@@ -121,6 +125,13 @@ final class BarnardVenueSignedContainerBroadcasting: VenueSignedContainerBroadca
   /// leave the PREVIOUS event's signed bytes live on the air, which is the
   /// one outcome this screen must never produce.
   func installAndStart(_ permit: VenueServePermit) throws {
+    // A previous engine holds a snapshot of its secret. Retire it even when
+    // a fresh read fails, so no later start can reuse stale key material.
+    clearAndStop()
+    let storage = try deviceSecretStore.resolve()
+    let engine = BarnardEngine(keyStorage: storage)
+    self.engine = engine
+    connectEvents()
     // Clear BEFORE replacing.
     try? engine.configureOwnEventInfoEnvelopeV2(container: nil)
     do {
@@ -134,7 +145,10 @@ final class BarnardVenueSignedContainerBroadcasting: VenueSignedContainerBroadca
   }
 
   func clearAndStop() {
-    try? engine.configureOwnEventInfoEnvelopeV2(container: nil)
-    engine.stopAdvertise()
+    try? engine?.configureOwnEventInfoEnvelopeV2(container: nil)
+    engine?.stopAdvertise()
+    engine?.onEvent = nil
+    engine?.dispose()
+    engine = nil
   }
 }

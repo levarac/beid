@@ -6,6 +6,8 @@ import Combine
 import Foundation
 
 #if DEBUG
+import BarnardCore
+
 /// Two screenshot-only samples; production code never compiles this type.
 enum EventCodeScreenshotFixture {
   case entry
@@ -29,30 +31,201 @@ private struct HomeClockFixtureDateSource: TrustedDateSource {
     "Wed, 16 Sep 2026 11:58:53 GMT"
   }
 }
+
+/// S47 fault inputs only. STOP, persistence, and presentation stay on their
+/// existing paths. Each launch retains its artifacts in a fresh directory.
+@MainActor
+final class StopOutcomeUITestFixture {
+  private final class WriteCounter { var count = 0 }
+  enum Mode: String {
+    case saveFailure = "save-failure"
+    case saveFailureWithEndpoints = "save-failure-with-endpoints"
+    case nilSignature = "nil-signature"
+    case signingError = "signing-error"
+    case detecting
+  }
+
+  static func selectedMode(arguments: [String]) -> Mode? {
+    guard arguments.contains("-beid-ui-test"),
+      let index = arguments.firstIndex(of: "-beid-stop-outcome-fixture"),
+      arguments.indices.contains(index + 1)
+    else { return nil }
+    return Mode(rawValue: arguments[index + 1])
+  }
+
+  static func fromLaunchArguments() -> StopOutcomeUITestFixture? {
+    selectedMode(arguments: ProcessInfo.processInfo.arguments).map { StopOutcomeUITestFixture(mode: $0) }
+  }
+
+  let mode: Mode
+  let directory: URL
+  let proofStore: ProofStore
+  let selfProofStore: SelfProofStore
+  let checkpointStore: SelfProofCheckpointStore
+  let sensingCoordinator: SensingCoordinator
+  private let cryptography: StopOutcomeUITestCryptography
+  private let recordWrites: WriteCounter
+  private(set) var proofID: UUID?
+  var signingCallCount: Int { cryptography.signingCallCount }
+  var recordWriteCount: Int { recordWrites.count }
+
+  init(mode: Mode) {
+    self.mode = mode
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-stop-outcome-\(UUID().uuidString)", isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    } catch {
+      preconditionFailure("Unable to create isolated STOP fixture directory: \(error)")
+    }
+    self.directory = directory
+    let recordWrites = WriteCounter()
+    self.recordWrites = recordWrites
+    let proofStore = ProofStore(
+      fileURL: directory.appendingPathComponent("proofs.json"),
+      writeData: { data, url in
+        recordWrites.count += 1
+        if mode == .saveFailure || mode == .saveFailureWithEndpoints { throw CocoaError(.fileWriteNoPermission) }
+        try data.write(to: url, options: .atomic)
+      }
+    )
+    let selfProofStore = SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json"))
+    let checkpointStore = SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json"))
+    let cryptography = StopOutcomeUITestCryptography(mode: mode)
+    // Reuse the existing no-radio adapter; no permissions, SDK, or network fault.
+    let engine = NearbyJoinUITestEngine()
+    self.proofStore = proofStore
+    self.selfProofStore = selfProofStore
+    self.checkpointStore = checkpointStore
+    self.cryptography = cryptography
+    sensingCoordinator = SensingCoordinator(
+      windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("windows.json")),
+      selfProofStore: selfProofStore,
+      selfProofCheckpointStore: checkpointStore,
+      bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("aggregate.json")),
+      unsentWindowLedgerRuntime: nil,
+      sensingCryptography: cryptography,
+      eventJoinControl: engine,
+      participantRelayControl: engine,
+      proofStore: proofStore
+    )
+  }
+
+  func prepare() async {
+    // Zero-delay existing demo primitives establish the same inputs as
+    // SensingStopFlowTests. The scan opens only after they have settled.
+    let sample = EventSession.demoSample
+    let event = EventSession(id: sample.id, name: sample.name, venue: sample.venue)
+    if mode == .detecting {
+      sensingCoordinator.runDemoScenario(
+        DemoScenario.appReviewGolden.replacingEvent(event), stepDelayNanos: 0, stopWhenPhaseReaches: .eventFound
+      )
+      await sensingCoordinator.waitForDemoScenarioPreviewToSettle()
+    } else if mode == .saveFailure {
+      // Omit demo ENIN-advance inputs, then stop at the first recording
+      // decision. No timestamps are invented for the missing endpoints.
+      // With endpoints present the real ProofStore admission check already
+      // raises .discardFailed; do not suppress or duplicate that alert.
+      let scenario = DemoScenario(
+        identifier: "stopSaveFailureBeforeWindow", event: event,
+        steps: DemoScenario.appReviewGolden.steps.filter { $0 != .advanceDemoWindow }
+      )
+      sensingCoordinator.runDemoScenario(scenario, stepDelayNanos: 0, stopWhenPhaseReaches: .recording)
+      await sensingCoordinator.waitForDemoScenarioPreviewToSettle()
+    } else {
+      sensingCoordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
+      await sensingCoordinator.waitForDemoSequenceToFinish()
+    }
+    proofID = sensingCoordinator.currentProofID
+    cryptography.failKeyRead = mode == .signingError
+  }
+}
+
+/// The existing native protocol is the fault boundary, as in the unit oracle.
+/// Fixed bytes are test inputs, never signatures used by a normal app launch.
+private final class StopOutcomeUITestCryptography: SensingCryptography {
+  private let mode: StopOutcomeUITestFixture.Mode
+  var failKeyRead = false
+  private(set) var signingCallCount = 0
+
+  init(mode: StopOutcomeUITestFixture.Mode) { self.mode = mode }
+
+  func eventSigningPublicKey(eventCode: String) throws -> Data {
+    if failKeyRead { throw CocoaError(.fileReadNoPermission) }
+    return Data([0x02] + [UInt8](repeating: 0x33, count: 32))
+  }
+
+  func ownerPublicKey() -> Data { Data([0x03] + [UInt8](repeating: 0x44, count: 32)) }
+
+  func signWindowReport(eventCode: String, bytes: Data) -> SensingRecoverableSignature {
+    SensingRecoverableSignature(r: Data(repeating: 0x11, count: 32), s: Data(repeating: 0x22, count: 32), v: 0)
+  }
+
+  func signSelfProof(
+    eventIdHash: Data, eventSigningPublicKey: Data, eninStart: UInt64, eninEnd: UInt64
+  ) -> SensingRecoverableSignature? {
+    signingCallCount += 1
+    if mode == .nilSignature { return nil }
+    return SensingRecoverableSignature(r: Data(repeating: 0x55, count: 32), s: Data(repeating: 0x66, count: 32), v: 1)
+  }
+
+  func signWalletAcknowledgement(walletAddress: Data, walletSignature: Data) -> SensingRecoverableSignature? { nil }
+}
 #endif
 
-/// Root state machine for onboarding + the collection home. Order of the
-/// wallet step is decided once at init from `OnboardingMode.current`; see
-/// README "Onboarding flag".
+/// Presentation-only receipt for one consumed STOP confirmation.
+struct SensingStopOutcome: Equatable {
+  let id = UUID()
+  let sessionID: UUID
+}
+
+/// Root routing for onboarding and the collection home.
 @MainActor
 final class AppCoordinator: ObservableObject {
   @Published var screen: AppScreen = .welcome
   @Published var walletAddress: String?
   /// The address from this process's live connector session, if any — the
-  /// only wallet-address value `EventBindingSheetView.performBinding` is
+  /// only wallet-address value the former event-binding sheet was
   /// allowed to read for its "already connected" fast path (beid#315
   /// structural containment; see `LiveWalletAddress`'s doc comment in
   /// `WalletConnector.swift`). `walletAddress` above stays a plain,
   /// freely-settable `String?` for display only (previews/tests already
   /// assign it directly) and is never read on that path.
   @Published private(set) var liveWalletAddress: LiveWalletAddress?
-  @Published var scanPresented = false
-  @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
-  private enum ScanStopIntent {
-    case keepAutomaticTransport
-    case stopAutomaticTransport
+  @Published var scanPresented = false {
+    didSet {
+      if scanPresented, !oldValue {
+        scanRouteID = UUID()
+        stopAlertHandoffRouteID = nil
+      }
+    }
   }
-  private var pendingStopIntent: ScanStopIntent?
+  /// Each native destination lifetime owns its departure callback. Reopening
+  /// cancels any previous STOP handoff, including an interrupted pop.
+  private(set) var scanRouteID = UUID()
+  @Published private var stopAlertHandoffRouteID: UUID?
+
+  var canPresentRootEventSigningKeyFailure: Bool {
+    !scanPresented && stopAlertHandoffRouteID == nil
+  }
+
+  func scanRouteDidDisappear(_ routeID: UUID) {
+    guard !scanPresented, stopAlertHandoffRouteID == routeID else { return }
+    stopAlertHandoffRouteID = nil
+  }
+
+  @Published var selectedHomeTab: HomeTab = .now
+  @Published private(set) var homeStandby = HomeStandbyState()
+  @Published private(set) var homeStandbyDiscoveryActive = false
+  @Published private(set) var nowEventRegistration: HomeEventRegistration?
+  #if DEBUG
+  @Published private(set) var homeStandbyFixtureTime: TimeInterval = 0
+  @Published private(set) var homeStandbyFixtureHasCandidate = false
+  let stopOutcomeUITestFixture: StopOutcomeUITestFixture?
+  #endif
+  @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
+  @Published private(set) var stopOutcome: SensingStopOutcome?
   @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
   @Published private(set) var proofCollectedSnapshot: ProofCollectedSnapshot?
   @Published var selectedProof: Proof?
@@ -61,7 +234,13 @@ final class AppCoordinator: ObservableObject {
   /// signing/reporting store, and is set only by the UI-test launch gate.
   private(set) var proofDetailScreenshotPresentation: ProofDetailPresentation?
   #endif
-  @Published var accountSheetPresented = false
+  @Published var accountSheetPresented = false {
+    didSet {
+      if oldValue, !accountSheetPresented {
+        cancelPendingJoinAttempt()
+      }
+    }
+  }
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
   /// Home's 04b code sheet. Closing it cancels a pending lookup, whatever
@@ -77,7 +256,6 @@ final class AppCoordinator: ObservableObject {
       }
     }
   }
-  @Published var dailySummaryPresented = false
 
   private(set) var walletConnector: (any WalletConnector)?
 
@@ -97,6 +275,7 @@ final class AppCoordinator: ObservableObject {
   let clockPreflight: ClockPreflightController
   private let userDefaults: UserDefaults
   private let permissionEvaluation: (() async -> BluetoothAuthorizationState)?
+  private var bluetoothStateObservation: AnyCancellable?
 
   private static let hasCompletedOnboardingKey = "beid.hasCompletedOnboarding"
 
@@ -130,9 +309,10 @@ final class AppCoordinator: ObservableObject {
       RegistryDependencies.createClient(),
     userDefaults: UserDefaults = .standard,
     permissionEvaluation: (() async -> BluetoothAuthorizationState)? = nil,
+    bluetoothMonitor injectedBluetoothMonitor: BluetoothMonitor? = nil,
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
-    let bluetoothMonitor = BluetoothMonitor()
+    let bluetoothMonitor = injectedBluetoothMonitor ?? BluetoothMonitor()
     let reportStore: ReportSubmissionStore
     #if DEBUG
     let reportArguments = ProcessInfo.processInfo.arguments
@@ -168,6 +348,14 @@ final class AppCoordinator: ObservableObject {
     #else
     linkStore = reportProofLinkStore ?? ReportProofLinkStore()
     #endif
+    #if DEBUG
+    let stopFixture = proofStore == nil && injectedSensingCoordinator == nil
+      ? StopOutcomeUITestFixture.fromLaunchArguments() : nil
+    self.stopOutcomeUITestFixture = stopFixture
+    let resolvedProofStore = proofStore ?? stopFixture?.proofStore ?? ProofStore()
+    #else
+    let resolvedProofStore = proofStore ?? ProofStore()
+    #endif
     self.registryClient = registryClient
     self.reportSubmissionStore = reportStore
     self.joinDiagnosticLog = joinDiagnosticLog
@@ -177,20 +365,65 @@ final class AppCoordinator: ObservableObject {
       self.sensingCoordinator = injectedSensingCoordinator
     } else {
       #if DEBUG
-      if NearbyJoinUITestFixture.isEnabled {
+      if let stopFixture {
+        self.sensingCoordinator = stopFixture.sensingCoordinator
+      } else if reportArguments.contains("-beid-ui-test"),
+        reportArguments.contains("-beid-event-detail-frame-08"),
+        reportArguments.contains("-beid-record-legacy-binding-fixture")
+      {
+        // One stored-shape legacy binding, with no SelfProofRecord. Placeholder
+        // signature bytes exercise lookup/presentation, never cryptographic verification.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+          "beid-legacy-record-\(UUID().uuidString)", isDirectory: true
+        )
+        do {
+          try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+          preconditionFailure("Unable to create isolated legacy-record fixture")
+        }
+        let proofId = UUID(uuidString: "00000000-0000-4000-8000-000000000631")!
+        let binding = BindingRecord(
+          proofId: proofId, eventCode: "ETHTOKYO2026",
+          walletAddress: "0x" + String(repeating: "00", count: 20),
+          eventSigningPublicKey: Data(repeating: 1, count: 33),
+          ownerPublicKey: Data(repeating: 2, count: 33), chainId: 1,
+          nonce: Data(repeating: 0, count: 16), issuedAt: "2026-03-25T13:02:00Z",
+          walletSignatureHex: String(repeating: "00", count: 65),
+          deviceSignature: BarnardCoreRecoverableSignature(
+            r: [UInt8](repeating: 1, count: 32), s: [UInt8](repeating: 2, count: 32), v: 0
+          )
+        )
+        let bindingURL = directory.appendingPathComponent("binding-records.json")
+        BindingRecordStore(fileURL: bindingURL).add(binding)
+        let fixture = SensingCoordinator(
+          windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("reports.json")),
+          selfProofStore: SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")),
+          selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")),
+          bindingRecordStore: BindingRecordStore(fileURL: bindingURL),
+          sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("snapshots.json")),
+          unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
+          sensingCryptography: BarnardSensingCryptography(),
+          reportProofLinkStore: linkStore, proofStore: resolvedProofStore
+        )
+        precondition(fixture.bindingRecord(forProofId: proofId) == binding)
+        precondition(fixture.selfProofRecord(forProofId: proofId) == nil)
+        self.sensingCoordinator = fixture
+      } else if NearbyJoinUITestFixture.isEnabled {
         self.sensingCoordinator = NearbyJoinUITestFixture.makeCoordinator()
       } else {
         self.sensingCoordinator = SensingCoordinator(
           registryClient: registryClient, reportSubmissionStore: reportStore,
           reportProofLinkStore: linkStore,
-          joinDiagnosticLog: joinDiagnosticLog
+          joinDiagnosticLog: joinDiagnosticLog,
+          proofStore: resolvedProofStore
         )
       }
       #else
       self.sensingCoordinator = SensingCoordinator(
         registryClient: registryClient, reportSubmissionStore: reportStore,
         reportProofLinkStore: linkStore,
-        joinDiagnosticLog: joinDiagnosticLog
+        joinDiagnosticLog: joinDiagnosticLog,
+        proofStore: resolvedProofStore
       )
       #endif
     }
@@ -220,7 +453,7 @@ final class AppCoordinator: ObservableObject {
     )
     #endif
     self.walletConnector = walletConnector
-    self.proofStore = proofStore ?? ProofStore()
+    self.proofStore = resolvedProofStore
     self.userDefaults = userDefaults
     self.bluetoothMonitor = bluetoothMonitor
     #if DEBUG
@@ -258,6 +491,12 @@ final class AppCoordinator: ObservableObject {
     }
     self.sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
+    }
+    bluetoothStateObservation = bluetoothMonitor.$state.sink { [weak self] state in
+      guard let self, self.screen == .bluetoothDenied,
+        state == .granted || state == .poweredOff else { return }
+      // @Published emits in willSet; use the delivered value, not the cached state.
+      self.applyBluetoothState(state)
     }
     if hasCompletedOnboardingPersisted {
       restoreAfterOnboarding()
@@ -352,13 +591,18 @@ final class AppCoordinator: ObservableObject {
     guard hasReport || noReports || observationDetail else { return }
 
     let eventCode = "ETHTOKYO2026"
+    let fixtureEventName = arguments.contains("-beid-long-record-name-fixture")
+      ? "International Community Gathering and Technology Festival Tokyo 2026"
+      : "ETH Tokyo 2026"
     let starts: [TimeInterval] = [1_774_486_920, 1_774_498_500, 1_774_510_200]
     let deviceCounts = [23, 18, 31]
     for (index, start) in starts.enumerated() {
       let proof = Proof(
         id: UUID(uuidString: "00000000-0000-4000-8000-00000000063\(index + 1)")!,
-        eventName: "ETH Tokyo 2026", date: Date(timeIntervalSince1970: start),
-        peersVerified: 0, eventCode: eventCode
+        eventName: fixtureEventName, date: Date(timeIntervalSince1970: start),
+        peersVerified: 0, eventCode: eventCode,
+        selfProofDiscardedForKeyChange: index == 0 && arguments.contains("-beid-record-incomplete-fixture"),
+        signingKeyChangeNoticeAcknowledged: true
       )
       proofStore.add(proof)
       // 08c and 11 deliberately omit one snapshot so the single unavailable
@@ -419,13 +663,6 @@ final class AppCoordinator: ObservableObject {
   /// exists to prevent — a restored user must never be dropped onto `.home`
   /// with a dead radio).
   ///
-  /// `.walletFirst` restore is intentionally left exactly as
-  /// `beginOnboarding()`'s existing `.walletConnect` routing — i.e. it does
-  /// not skip wallet-connect. Deciding how a previously-connected wallet
-  /// should restore intersects #202 Q6 (wallet-unconnected guest handling),
-  /// which is explicitly out of scope here; `.walletFirst` isn't
-  /// `OnboardingMode.current` in production, so this is a documented,
-  /// accepted limitation, not a regression.
   private func restoreAfterOnboarding() {
     beginOnboarding()
     if screen == .bluetoothPermission {
@@ -434,25 +671,19 @@ final class AppCoordinator: ObservableObject {
   }
 
   func beginOnboarding() {
-    switch onboardingMode {
-    case .walletFirst:
-      screen = .walletConnect
-    case .guestFirst:
-      screen = .bluetoothPermission
-    }
+    screen = .bluetoothPermission
   }
 
-  /// `address` is supplied by `WalletConnectPairingView` (MetaMask) once a
-  /// session settles.
+  /// Legacy compatibility entry for a settled connector session.
+  /// v1.1 onboarding has no wallet-connect step.
   func completeWalletConnect(address: LiveWalletAddress, connector: (any WalletConnector)? = nil) {
     recordWalletConnection(address: address, connector: connector)
     screen = .bluetoothPermission
   }
 
-  /// Takes `LiveWalletAddress`, not a plain `String` — every production
-  /// caller already has one, straight from a connector's own successful
-  /// `connect()`/`connectAndSign()` (see `WalletConnectPairingView.onConnected`
-  /// and `EventBindingSheetView`'s restored-hint fast path). This is part of
+  /// Takes `LiveWalletAddress`, not a plain `String`, so compatibility
+  /// callers must supply a connector's successful `connect()` or
+  /// `connectAndSign()` result. v1.1 has no wallet-connect UI. This is part of
   /// beid#315's structural containment: a bare `String` (e.g. read from a
   /// `CachedWalletHint`) cannot be passed here without first being wrapped in
   /// a visible `LiveWalletAddress(...)` construction.
@@ -464,25 +695,19 @@ final class AppCoordinator: ObservableObject {
     walletAddress = address.address
   }
 
-  /// Wallet-optional fallback from `WalletConnectView`'s secondary action:
-  /// join an event by manually entered code instead of connecting a wallet.
-  func skipWalletForEventCode() {
-    screen = .eventCodeEntry
-  }
-
   /// The way back out of `EventCodeEntryView` for a user who doesn't
   /// actually have a code — this is a root-switch screen (not a modal
   /// push), so there is no system back affordance without this.
   ///
   /// Also abandons any join attempt still resolving its lookup: without
   /// this, a user who taps this while a code-entry lookup is in flight and
-  /// then reaches `.walletConnect` could later be silently yanked into
+  /// then leaves code entry could later be silently yanked into
   /// `.bluetoothPermission` when that stale lookup finally completes and
   /// `joinEvent` succeeds — a screen change the user never asked for, for
   /// an event they explicitly walked away from (beid#258 P1-1 round-2 fix).
-  func returnToWalletConnect() {
+  func returnToBluetoothPermission() {
     cancelPendingJoinAttempt()
-    screen = .walletConnect
+    screen = .bluetoothPermission
   }
 
   /// Validates and joins the manually entered event code
@@ -511,7 +736,9 @@ final class AppCoordinator: ObservableObject {
   /// `EventCodeEntryView` presented as a sheet over the Account sheet (see
   /// `AccountSheetView`'s `eventCodeEntrySheetPresented` binding). Unlike
   /// `joinEvent(code:)`, success here just dismisses the sheet — it never
-  /// touches `screen`, since the user is already past onboarding.
+  /// touches `screen`, since the user is already past onboarding. It then
+  /// finishes like every other post-onboarding code join
+  /// (`startSensingAfterSuccessfulJoin`).
   @discardableResult
   func joinEventFromAccountSheet(
     code rawCode: String,
@@ -525,8 +752,25 @@ final class AppCoordinator: ObservableObject {
     ) {
       return error
     }
-    eventCodeEntrySheetPresented = false
+    startSensingAfterSuccessfulJoin()
     return nil
+  }
+
+  /// The one way a successful post-onboarding code join finishes (home code
+  /// sheet, Account sheet, Rejoin): v1.1 has no separate start-sensing
+  /// button, so the join itself must start sensing and show the sensing
+  /// screen from the Now tab.
+  private func startSensingAfterSuccessfulJoin() {
+    stopOutcome = nil
+    homeEventCodeSheetPresented = false
+    eventCodeEntrySheetPresented = false
+    accountSheetPresented = false
+    nowEventRegistration = nil
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
+    selectedHomeTab = .now
+    sensingCoordinator.startSensing()
+    scanPresented = true
   }
 
   /// Best-effort code -> canonical registry Event ID lookup, via the
@@ -562,6 +806,13 @@ final class AppCoordinator: ObservableObject {
   /// beid#472 exists to show, and the shape here should be the shape
   /// production produces.
   var resolveCanonicalEventIdHexOverride: ((String) async -> CanonicalEventIdLookup)?
+
+  #if DEBUG
+  /// UI-only failure input: nonempty selection currently cannot fail, but
+  /// frame 13 must restore its controls if a current attempt ever does.
+  /// Installed only by the doubly gated code-entry progress fixture.
+  var eventCodeJoinErrorForUITesting: (() -> EventCodeJoinError?)?
+  #endif
 
   /// What a code-to-id lookup produced: the id when it answered, and the
   /// registry's own `errorCode` when it did not.
@@ -702,11 +953,8 @@ final class AppCoordinator: ObservableObject {
   /// Home's 04b entry has its own sheet flag so the Account sheet cannot
   /// race to present its private wrapper for the same coordinator binding.
   func joinEventFromHomeResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
-    let outcome = await joinEventFromAccountSheetResolvingCanonicalId(code: code)
-    if case .completed(nil) = outcome {
-      homeEventCodeSheetPresented = false
-    }
-    return outcome
+    // The shared success path closes the home code sheet and starts sensing.
+    await joinEventFromAccountSheetResolvingCanonicalId(code: code)
   }
 
   /// Manual rescue from the nearby-event scan surface. It preserves the same
@@ -732,7 +980,7 @@ final class AppCoordinator: ObservableObject {
 
   /// Call when the account-sheet join surface is dismissed (Cancel or
   /// swipe) while a lookup may still be in flight — see
-  /// `cancelPendingJoinAttempt`'s doc comment and `returnToWalletConnect`'s
+  /// `cancelPendingJoinAttempt`'s doc comment and `returnToBluetoothPermission`'s
   /// onboarding-side equivalent.
   func cancelPendingAccountSheetJoinAttempt() {
     cancelPendingJoinAttempt()
@@ -766,6 +1014,13 @@ final class AppCoordinator: ObservableObject {
     guard let normalized = BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) else {
       return .emptyCode
     }
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"), arguments.contains("-beid-code-entry-progress-fixture"),
+      let error = eventCodeJoinErrorForUITesting?() {
+      return error
+    }
+    #endif
     guard sensingCoordinator.joinEvent(
       normalized,
       canonicalEventIdHex: canonicalEventIdHex,
@@ -783,10 +1038,11 @@ final class AppCoordinator: ObservableObject {
 
   /// Rejoins a previously joined event by an already-known `Proof.eventCode`
   /// (beid#230's past-events list), instead of retyping it through
-  /// `EventCodeEntryView`. A no-op while an event is already joined —
-  /// matches the single-slot invariant `EventMembershipUITests` already
-  /// covers for "Join Event"; the caller is expected to disable the row the
-  /// same way, but this does not rely on that as its only guard.
+  /// `EventCodeEntryView`. A no-op while a join or session is in progress
+  /// (`SensingCoordinator.canSelectEventToJoin`) — the single-slot invariant
+  /// "Join event" enforces; the caller is expected to disable its control the
+  /// same way, but this does not rely on that as its only guard. A joined
+  /// code survives STOP, so an idle coordinator may rejoin and replaces it.
   ///
   /// Routes through `attemptJoinEvent(code:)` (beid#226, DECISIONS
   /// 2026-08-20) so there is exactly one iOS call site into
@@ -796,14 +1052,13 @@ final class AppCoordinator: ObservableObject {
   /// `attemptJoinEvent`'s normalization here means a legacy-cased stored
   /// code rejoins to the same RPID a fresh join of the same text derives
   /// today, instead of reproducing whatever it happened to canonicalize to
-  /// under the old, platform-diverging rule. The return value is discarded:
-  /// a stored `Proof.eventCode` cannot normalize to empty (it was itself
-  /// produced by a successful join), and a `.joinFailed` here has no
-  /// separate UI to report to, matching this function's pre-existing
-  /// `Bool`-discarding call into `SensingCoordinator`.
+  /// under the old, platform-diverging rule. A failed attempt has no separate
+  /// UI to report to, so it simply does nothing; a successful one finishes
+  /// like every other code join (`startSensingAfterSuccessfulJoin`).
   func rejoinPastEvent(code: String, canonicalEventIdHex: String? = nil) {
-    guard sensingCoordinator.joinedEventCode == nil else { return }
-    _ = attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex)
+    guard sensingCoordinator.canSelectEventToJoin else { return }
+    guard attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex) == nil else { return }
+    startSensingAfterSuccessfulJoin()
   }
 
   /// Presents `EventCodeEntryView` in account-sheet mode as a sheet over the
@@ -893,6 +1148,7 @@ final class AppCoordinator: ObservableObject {
   /// without depending on the network.
   private static func clockPreflightOrigin(bundle: Bundle = .main) -> URL? {
 #if DEBUG
+    if StopOutcomeUITestFixture.selectedMode(arguments: ProcessInfo.processInfo.arguments) != nil { return nil }
     if NearbyJoinUITestFixture.isEnabled { return nil }
     if ProcessInfo.processInfo.arguments.contains("-beid-clock-preflight-fixture") {
       return nil
@@ -903,9 +1159,123 @@ final class AppCoordinator: ObservableObject {
     )
   }
 
+  var homeStandbyNow: TimeInterval {
+    #if DEBUG
+    if isHomeStandbyFixture { return homeStandbyFixtureTime }
+    #endif
+    return ProcessInfo.processInfo.systemUptime
+  }
+
+  var homeBluetoothIsOff: Bool {
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test"),
+      ProcessInfo.processInfo.arguments.contains("-beid-now-bluetooth-off-fixture") { return true }
+    #endif
+    return bluetoothMonitor.isPoweredOff
+  }
+
+  var homeHasDemoCandidate: Bool {
+    #if DEBUG
+    if stopOutcomeUITestFixture != nil { return true }
+    if isHomeStandbyFixture { return homeStandbyFixtureHasCandidate }
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"),
+      arguments.contains("-beid-home-frame-04b") || arguments.contains("-beid-home-frame-04c") {
+      return false
+    }
+    #endif
+    return sensingCoordinator.homeDemoEventAvailable
+  }
+
+  /// Starts only discovery while Now's root is visible and interactive.
+  /// Joining owns its own in-flight evidence; leaving that phase must not
+  /// clear a candidate before the permission completion consumes it.
+  func updateHomeStandby(isVisible: Bool, isSceneActive: Bool) {
+    let isIdle: Bool
+    if case .idle = sensingCoordinator.phase { isIdle = true } else { isIdle = false }
+    let isEnabled = isVisible && isSceneActive && screen == .home
+      && selectedHomeTab == .now && !scanPresented && !accountSheetPresented
+      && !homeEventCodeSheetPresented && !homeBluetoothIsOff && isIdle && !sensingCoordinator.isAdvertising
+    if isEnabled && !homeStandbyDiscoveryActive {
+      homeStandbyDiscoveryActive = true
+      #if DEBUG
+      if !isHomeStandbyFixture && stopOutcomeUITestFixture == nil {
+        sensingCoordinator.startHomeStandbyDiscovery()
+      }
+      #else
+      sensingCoordinator.startHomeStandbyDiscovery()
+      #endif
+    } else if !isEnabled && homeStandbyDiscoveryActive {
+      homeStandbyDiscoveryActive = false
+      if isIdle { sensingCoordinator.stopNearbyEventDiscovery() }
+    }
+    // Same projection the Now tab renders: a card whose JOIN control is
+    // disabled (no registration-verified event) must not stop the timer.
+    let nearbyCards = NearbyEventCardListPresentation(
+      candidates: sensingCoordinator.nearbyEventCandidates,
+      nowEpochSeconds: sensingCoordinator.nearbyDiscoveryNowEpochSeconds
+    ).cards
+    let hasJoinableCandidates = nearbyCards.contains { $0.joinActionEventCodeHashHex != nil }
+      || homeHasDemoCandidate
+    homeStandby.update(
+      isEnabled: isEnabled,
+      hasJoinableCandidates: hasJoinableCandidates,
+      now: homeStandbyNow
+    )
+  }
+
+  func joinNearbyEventFromHome(_ card: NearbyEventCard) {
+    guard card.joinActionEventCodeHashHex != nil else { return }
+    stopOutcome = nil
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
+    nowEventRegistration = homeRegistration(for: card)
+    sensingCoordinator.joinNearbyEvent(card: card, clockPreflight: clockPreflight)
+    scanPresented = true
+  }
+
+  func homeRegistration(for card: NearbyEventCard) -> HomeEventRegistration? {
+    guard let context = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .RegistryVerifiedJoinContext.Companion.shared.fromNearbyCandidate(
+        candidates: sensingCoordinator.nearbyEventCandidates,
+        eventCodeHashHex: card.eventCodeHashHex,
+        nowEpochSeconds: Int64(Date().timeIntervalSince1970.rounded(.down))
+      ), let name = context.eventName,
+      let starts = card.displayValidFromEpochSeconds,
+      let ends = card.displayValidUntilEpochSeconds else { return nil }
+    return HomeEventRegistration(
+      name: name,
+      startsAt: Date(timeIntervalSince1970: TimeInterval(starts)),
+      endsAt: Date(timeIntervalSince1970: TimeInterval(ends))
+    )
+  }
+
+  func joinDemoEventFromHome() {
+    nowEventRegistration = nil
+    startScan()
+  }
+
+  #if DEBUG
+  var isHomeStandbyFixture: Bool {
+    let arguments = ProcessInfo.processInfo.arguments
+    return arguments.contains("-beid-ui-test") && arguments.contains("-beid-now-standby-fixture")
+  }
+
+  func advanceHomeStandbyFixture(by seconds: TimeInterval) {
+    guard isHomeStandbyFixture else { return }
+    homeStandbyFixtureTime += seconds
+  }
+
+  func setHomeStandbyFixtureCandidate(_ present: Bool) {
+    guard isHomeStandbyFixture else { return }
+    homeStandbyFixtureHasCandidate = present
+  }
+  #endif
+
   func startScan() {
+    stopOutcome = nil
+    selectedHomeTab = .now
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
     #if DEBUG
@@ -930,6 +1300,15 @@ final class AppCoordinator: ObservableObject {
         date: Date(timeIntervalSince1970: 1_800_000_000),
         peersVerified: 0
       )
+      return
+    }
+    #endif
+    #if DEBUG
+    if let stopOutcomeUITestFixture {
+      Task {
+        await stopOutcomeUITestFixture.prepare()
+        scanPresented = true
+      }
       return
     }
     #endif
@@ -980,115 +1359,141 @@ final class AppCoordinator: ObservableObject {
     await clockPreflight.check()
   }
 
-  /// Legacy close entry point. It follows the same Proof gate as every new
-  /// caller, so no caller can bypass the confirmation for an actual Proof.
+  /// Retained for callers that explicitly request the stop flow.
   func finishScan() {
     requestScanClose()
   }
 
-  private func resetAndDismissScan(intent: ScanStopIntent) {
+  private func resetAndDismissScan() {
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
     cancelPendingJoinAttempt()
     scanPresented = false
     sensingCoordinator.stopNearbyEventDiscovery()
-    switch intent {
-    case .keepAutomaticTransport:
-      sensingCoordinator.reset()
-    case .stopAutomaticTransport:
-      sensingCoordinator.stopSensing()
+    sensingCoordinator.stopSensing()
+  }
+
+  /// Only STOP SENSING ends participation. The Bluetooth-off screen is also
+  /// reached from the Now tab while an event session is active, so opening
+  /// Settings from there must not reset (finalize) that session.
+  var shouldResetSensingBeforeOpeningBluetoothSettings: Bool {
+    Self.shouldResetSensing(
+      beforeOpeningBluetoothSettingsIn: sensingCoordinator.phase,
+      joinedEventCode: sensingCoordinator.joinedEventCode
+    )
+  }
+
+  static func shouldResetSensing(
+    beforeOpeningBluetoothSettingsIn phase: ScanPhase,
+    joinedEventCode: String?
+  ) -> Bool {
+    switch phase {
+    case .idle: return true
+    case .sensing: return joinedEventCode == nil
+    case .eventFound, .recording, .signalLost: return false
     }
   }
 
-  /// Scan CLOSE preserves automatic operation after ending this session.
-  /// A stored Proof still passes through 05e before finalization.
+  /// Returning with Back never calls this method. Only an explicit stop
+  /// requests confirmation for the current participation.
   func requestScanClose() {
-    requestScanClose(intent: .keepAutomaticTransport)
-  }
-
-  /// Home Stop sensing uses the same Proof gate and 05e confirmation, but
-  /// stops automatic transport after confirmation or immediately prejoin.
-  func requestHomeStopSensing() {
-    requestScanClose(intent: .stopAutomaticTransport)
-  }
-
-  private func requestScanClose(intent: ScanStopIntent) {
     guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
-      stopConfirmSnapshot == nil else { return }
-    guard let proofID = sensingCoordinator.currentProofID,
-      proofStore.proof(withId: proofID) != nil
-    else {
-      resetAndDismissScan(intent: intent)
-      return
-    }
+      stopConfirmSnapshot == nil, stopOutcome == nil else { return }
     let event: EventSession
     switch sensingCoordinator.phase {
-    case .recording(let currentEvent, _), .signalLost(let currentEvent, _):
+    case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
       event = currentEvent
-    case .idle, .sensing, .eventFound:
-      resetAndDismissScan(intent: intent)
+    case .idle, .sensing:
+      resetAndDismissScan()
       return
     }
     stopConfirmSnapshot = SensingStopConfirmSnapshot(
-      proofID: proofID,
+      proofID: sensingCoordinator.currentProofID,
       event: event
     )
-    pendingStopIntent = intent
+    selectedHomeTab = .now
     scanPresented = true
+  }
+
+  func requestHomeStopSensing() {
+    requestScanClose()
   }
 
   func keepSensing() {
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
   }
 
-  /// The single confirmed finalization entry for Scan CLOSE and Home Stop.
-  /// Clear the pending confirmation before ending the session so a repeated
-  /// tap cannot finalize again. Scan keeps automatic transport; Home stops it.
-  /// A nil return keeps the Proof but dismisses without a sealed claim.
+  /// Consume the confirmation before performing effects so repeated taps
+  /// cannot finalize twice. A different session cannot use an old request.
   func confirmStopSensing() {
-    guard let snapshot = stopConfirmSnapshot, let proofID = snapshot.proofID,
-      let intent = pendingStopIntent else { return }
+    guard let snapshot = stopConfirmSnapshot else { return }
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
-    guard sensingCoordinator.currentProofID == proofID else {
-      // A newer session may have taken this slot while 05e was open. Keep
-      // that live session visible; only an externally reset session exits.
-      if sensingCoordinator.currentProofID == nil { scanPresented = false }
+    let event: EventSession
+    switch sensingCoordinator.phase {
+    case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
+      event = currentEvent
+    case .idle, .sensing:
+      scanPresented = false
       return
     }
-    guard proofStore.proof(withId: proofID) != nil else {
-      // Still sensing, but the record vanished: return to the live screen
-      // without finalizing or making a sealed claim.
-      return
-    }
+    guard event.sessionID == snapshot.event.sessionID else { return }
+    let proofID = sensingCoordinator.currentProofID
+    if let expectedID = snapshot.proofID, proofID != expectedID { return }
     let aggregate = sensingCoordinator.sessionAggregate
     let detectedDeviceCount = sensingCoordinator.devicesVerified
     let firstSightingAt = sensingCoordinator.firstSightingAt
+    let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
-    let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
-    let selfProof: SelfProofRecord?
-    switch intent {
-    case .keepAutomaticTransport:
-      selfProof = sensingCoordinator.reset()
-    case .stopAutomaticTransport:
-      selfProof = sensingCoordinator.stopSensing()
+    let stopResult = sensingCoordinator.stopSensingWithResult()
+    let presentation = Self.stopPresentation(
+      attemptedRecordID: proofID,
+      signedRecordID: stopResult.selfProof?.proofId,
+      storedRecordID: proofID.flatMap { proofStore.proof(withId: $0)?.id },
+      hasExplainingAlert: stopResult.hasExplainingAlert
+    )
+    if presentation == .noRecordSaved {
+      stopOutcome = SensingStopOutcome(sessionID: event.sessionID)
+      return
     }
-    guard selfProof?.proofId == proofID else {
+    guard presentation == .sealed, let proofID else {
+      if stopResult.hasExplainingAlert, scanPresented {
+        // The desired route changes before the native destination leaves.
+        // Keep this STOP's existing explanation off the root until it does.
+        stopAlertHandoffRouteID = scanRouteID
+      }
       scanPresented = false
       return
     }
     sealedSnapshot = SensingSealedSnapshot(
       recordID: proofID,
-      event: snapshot.event,
+      event: event,
       aggregate: aggregate,
       detectedDeviceCount: detectedDeviceCount,
       firstSightingAt: firstSightingAt,
       sealedAt: sealedAt
     )
+  }
+
+  enum StopPresentation: Equatable { case sealed, noRecordSaved, dismiss }
+
+  /// Called only after this confirmation's session/record ownership guards
+  /// and the existing finalization attempt. Signing output is not evidence
+  /// that a Record was durably saved; a nil signature is not evidence of loss.
+  static func stopPresentation(
+    attemptedRecordID: UUID?, signedRecordID: UUID?, storedRecordID: UUID?, hasExplainingAlert: Bool
+  ) -> StopPresentation {
+    guard !hasExplainingAlert, let attemptedRecordID else { return .dismiss }
+    guard storedRecordID == attemptedRecordID else { return .noRecordSaved }
+    return signedRecordID == attemptedRecordID ? .sealed : .dismiss
+  }
+
+  func dismissStopOutcome() {
+    guard stopOutcome != nil else { return }
+    stopOutcome = nil
+    scanPresented = false
+    selectedHomeTab = .now
   }
 
   /// DONE advances from the sealed frame to persistent frame 07. The record
@@ -1106,13 +1511,13 @@ final class AppCoordinator: ObservableObject {
       detectedPeerCount: sealedSnapshot.detectedDeviceCount,
       observedWindowCount: sealedSnapshot.aggregate.map { Int($0.windowCount) }
     )
-    self.sealedSnapshot = nil
   }
 
   func viewCollectionAfterProofCollected() {
     guard proofCollectedSnapshot != nil else { return }
     proofCollectedSnapshot = nil
     scanPresented = false
+    selectedHomeTab = .records
   }
 
   // MARK: - Item detail

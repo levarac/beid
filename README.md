@@ -1,7 +1,7 @@
 # beid
 
 Native iOS and Android implementation of the Levarac protocol. Devices use
-Bluetooth to observe nearby devices and keep signed participation records.
+Bluetooth to observe nearby devices and keep participation records.
 A local observation does not establish that a person attended an event.
 
 This repository was restarted from an empty history on 2026-07-09 for the

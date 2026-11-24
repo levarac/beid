@@ -129,11 +129,9 @@ final class WalletConnectTests: XCTestCase {
     XCTAssertEqual(connector.state, .idle)
   }
 
-  /// dispatch#26 condition 3: `disconnect()` is what every Cancel/Try
-  /// Again/Start Over path in `WalletConnectPairingView` calls — it must
-  /// reset the connector's in-memory session without touching the
-  /// persisted hint. Only `AppCoordinator.disconnectWallet()` ("Disconnect
-  /// Wallet") does that; see `testDisconnectWalletClearsThePersistedHint`.
+  /// The connector's `disconnect()` resets its in-memory session without
+  /// touching the persisted hint. `AppCoordinator.disconnectWallet()`
+  /// clears that hint too; see `testDisconnectWalletClearsThePersistedHint`.
   func testMetaMaskDisconnectDoesNotClearThePersistedHint() async {
     let transport = FakeMetaMaskTransport(isWalletInstalled: true)
     transport.connectResult = .success(
@@ -150,10 +148,8 @@ final class WalletConnectTests: XCTestCase {
   }
 
   /// `.restored` and `.connected` must never compare equal even when they
-  /// describe the "same" address — `WalletConnectPairingView`'s exhaustive
-  /// switch (and any future one) depends on the compiler, not a runtime
-  /// check, to force a distinct branch for each; this pins the `Equatable`
-  /// behavior that makes that possible.
+  /// describe the "same" address: a cached hint is not a live session.
+  /// This pins the `Equatable` behavior of the retained connector states.
   func testRestoredStateIsNeverEqualToConnectedStateForTheSameAddress() {
     let restored = WalletConnectorState.restored(
       CachedWalletHint(address: "0xSAME", chainId: "eip155:1")
@@ -222,7 +218,7 @@ final class WalletConnectTests: XCTestCase {
 
   // MARK: - `cancelPendingOperation()` (dispatch#26 condition 3)
   //
-  // The light, in-app cancel used by Cancel/Try Again/Start Over — unlike
+  // The light, in-app cancel used by Cancel/Try again/Start Over — unlike
   // `disconnect()`, it must never reach the SDK's own persisted session
   // (`transport.disconnectCount` staying 0 is the proof of that) or clear
   // `WalletHintStore`.

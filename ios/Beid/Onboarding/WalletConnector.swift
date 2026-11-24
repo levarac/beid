@@ -12,7 +12,7 @@ enum WalletConnectorUnavailableReason: Equatable {
 /// read from `CachedWalletHint`/`WalletHintStore`. This is the structural
 /// half of dispatch#26 condition 4 (a cached address must never reach a
 /// binding signature): `performBinding`/`completeBinding`'s call site in
-/// `EventBindingSheetView` only ever accepts this type, and nothing in this
+/// The removed binding sheet only ever accepts this type, and nothing in this
 /// codebase converts a `CachedWalletHint`/`String` into one — the memberwise
 /// initializer is `private` to this file, and the only way to construct a
 /// value from any other file is `fromConnectorResult(address:chainId:)`
@@ -77,7 +77,7 @@ enum WalletConnectorError: Error, Equatable {
   /// forever (release). Of the other three existing cases, none is a
   /// truthful value to resolve it with: `.rejected` means MetaMask error
   /// 4001, a wallet-side decline, which never happened; `.notConnected` is
-  /// the literal string `EventBindingSheetView` shows a user ("Wallet not
+  /// the literal string the removed binding sheet shows a user ("Wallet not
   /// connected"), which overclaims — it reads as "your wallet link is
   /// broken, reconnect from zero," when the SDK session is deliberately
   /// left intact; `.timedOut` claims a response timer lapsed, which also
@@ -85,7 +85,7 @@ enum WalletConnectorError: Error, Equatable {
   /// justifies the case's existence on its own, independent of whether any
   /// UI path reaches it today. For direct user cancellation, it also
   /// describes what happened: the user stopped this specific operation from
-  /// beid's own UI (Cancel, Try Again, Start Over) before it reached — or
+  /// beid's own UI (Cancel, Try again, Start Over) before it reached — or
   /// heard back from — the wallet.
   case cancelled
 }
@@ -129,7 +129,7 @@ protocol WalletConnector: ObservableObject {
   /// Aborts whatever connect/sign attempt is currently in flight and returns
   /// to `.idle`, without touching the wallet SDK's own persisted session or
   /// `WalletHintStore` (dispatch#26 condition 3). Use this for a user
-  /// cancelling out of beid's own UI (Cancel, Try Again, Start Over) —
+  /// cancelling out of beid's own UI (Cancel, Try again, Start Over) —
   /// reserve `disconnect()` for an explicit "forget this wallet" action.
   func cancelPendingOperation()
   @discardableResult func handle(url: URL) -> Bool

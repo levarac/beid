@@ -82,9 +82,14 @@ class SmokeContractTest(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.tool.parse_smoke_list(value)
 
-    def test_arguments_select_all_units_and_exact_ui_only_in_smoke(self):
-        self.assertEqual(self.tool.selection_arguments("smoke", [ONE, TWO]),
-                         ["-only-testing:BeidTests", f"-only-testing:{ONE}", f"-only-testing:{TWO}"])
+    def test_arguments_select_unit_subset_and_exact_ui_only_in_smoke(self):
+        self.assertEqual(self.tool.selection_arguments("smoke", [ONE, TWO]), [
+            "-only-testing:BeidTests",
+            "-skip-testing:BeidTests/ReportSubmissionOperatorIntegrationTests",
+            "-skip-testing:BeidTests/ProductionVenueBundleVerifierTests",
+            "-skip-testing:BeidTests/ReportProofLinkContainmentTests",
+            f"-only-testing:{ONE}", f"-only-testing:{TWO}",
+        ])
         self.assertEqual(self.tool.selection_arguments("full", [ONE, TWO]), [])
         for mode, tests in (("", [ONE]), ("short", [ONE]), ("smoke", []), ("full", [ONE, ONE])):
             with self.subTest(mode=mode, tests=tests), self.assertRaises(ValueError):

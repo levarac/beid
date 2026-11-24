@@ -20,10 +20,9 @@ protocol VenueDeviceBroadcasting: AnyObject {
   /// always configures both together on the same engine instance rather
   /// than assuming a prior `configure(eventCode:)` call.
   ///
-  /// Throws only from Barnard's own `BarnardEventInfoCodec.
-  /// validateEventDisplayName` (`BarnardEventInfoError.invalidDisplayName`)
-  /// — callers should pre-validate `label` for a same-turn UI error; this is
-  /// the SDK's own last-line check, not the first signal a user should see.
+  /// Throws `DeviceSecretError` if the device key cannot be resolved, or
+  /// Barnard's `invalidDisplayName` for an invalid label. Callers should
+  /// pre-validate the label and surface key availability separately.
   func startBroadcasting(eventCode: String, label: String) throws
 
   /// Stops discovery-serving and advertising. Safe to call when already
@@ -35,9 +34,18 @@ protocol VenueDeviceBroadcasting: AnyObject {
 /// Production adapter. Owns one dedicated `BarnardEngine` instance, separate
 /// from `SensingCoordinator`'s — see the protocol doc comment.
 final class BarnardVenueDeviceBroadcasting: VenueDeviceBroadcasting {
-  private let engine = BarnardEngine()
+  private var engine: BarnardEngine?
+  private let deviceSecretStore: DeviceSecretKeychainStore
+
+  init(deviceSecretStore: DeviceSecretKeychainStore = .shared) {
+    self.deviceSecretStore = deviceSecretStore
+  }
 
   func startBroadcasting(eventCode: String, label: String) throws {
+    stopBroadcasting()
+    let storage = try deviceSecretStore.resolve()
+    let engine = BarnardEngine(keyStorage: storage)
+    self.engine = engine
     engine.configure(eventCode: eventCode)
     try engine.configureEventInfoServing(
       organizerDesignated: true,
@@ -51,7 +59,9 @@ final class BarnardVenueDeviceBroadcasting: VenueDeviceBroadcasting {
     // `eventDisplayName` defaults to `nil`, which `configureEventInfoServing`
     // never validates, so this can never actually throw — but the method is
     // `throws` at the type level, so a call site is still required.
-    try? engine.configureEventInfoServing(eventActiveForDiscovery: false)
-    engine.stopAdvertise()
+    try? engine?.configureEventInfoServing(eventActiveForDiscovery: false)
+    engine?.stopAdvertise()
+    engine?.dispose()
+    engine = nil
   }
 }

@@ -68,7 +68,7 @@ final class EventBindingTests: XCTestCase {
   func testBeginBindingWithMalformedInputLeavesBindingStateRecoverable() async {
     // Regression test: `bindingState` must never move to `.connecting`
     // before wallet-address/chain-ID validation succeeds. If it did (the
-    // original bug), `EventBindingSheetView` would disable swipe-dismiss
+    // original bug), the removed binding sheet would disable swipe-dismiss
     // and hide the Cancel button with no path back — asserting only the
     // `nil` return (as the two tests above do) would not catch that, since
     // `beginBinding` still returns `nil` correctly either way. This asserts
@@ -501,7 +501,7 @@ final class EventBindingTests: XCTestCase {
     // beid#222: `ScanFlowView`'s auto-present/auto-dismiss `.onChange(of:
     // sensing.bindingState)` presents on a fresh `.none -> .pendingConnect`
     // and dismisses on any transition INTO `.none`. Both guards depend on
-    // this exact round trip (`.failed` -> Try Again's `declineBinding()`
+    // this exact round trip (`.failed` -> Try again's `declineBinding()`
     // -> `.pendingConnect`) never observably landing on `.none` in
     // between — if it did, the sheet would spuriously dismiss itself while
     // the user is actively retrying a failed binding. `declineBinding()`'s
@@ -534,7 +534,7 @@ final class EventBindingTests: XCTestCase {
   /// every return to the foreground and offers only the wallet that cannot
   /// work. The `failBinding(reason:retryable:)` call below (with
   /// `retryable: false`) mirrors
-  /// `EventBindingSheetView.completeBindingOrFailVerification`'s
+  /// the removed binding sheet's `completeBindingOrFailVerification`'s
   /// `.smartWalletUnsupported` branch. The view's own choice of
   /// `retryable: false` cannot be reached from a unit test (there is no
   /// view-test harness), so this test pins the state contract the sheet
@@ -645,7 +645,7 @@ final class EventBindingTests: XCTestCase {
     coordinator.declineBinding()
     coordinator.declineBinding()
 
-    coordinator.reset()
+    XCTAssertNotNil(coordinator.reset())
 
     XCTAssertEqual(coordinator.bindingState, .none)
 
@@ -710,7 +710,7 @@ final class EventBindingTests: XCTestCase {
       XCTFail("expected a BindingRecord")
       return
     }
-    coordinator.reset()
+    XCTAssertNotNil(coordinator.reset())
 
     coordinator.startSensing(demoEvent: .demoSample)
     await coordinator.waitForDemoSequenceToFinish()
@@ -720,7 +720,7 @@ final class EventBindingTests: XCTestCase {
 
   /// beid#315 structural-containment coverage: drives the exact same
   /// live-connect → `beginBinding` → sign → `completeBinding` sequence
-  /// `EventBindingSheetView.performBinding` drives, using
+  /// the removed binding sheet's `performBinding` drives, using
   /// `DemoWalletConnector` as the test double (its preview code already
   /// exercises `performBinding` this way — this is the XCTest-runnable
   /// analogue). Asserts the address on the resulting `BindingRecord` is
@@ -779,7 +779,7 @@ final class EventBindingTests: XCTestCase {
 
   // MARK: - Restored-hint mismatch (beid#315 Phase 3)
   //
-  // `EventBindingSheetView.continueFromRestoredHint` is `private` and not
+  // the removed binding sheet's `continueFromRestoredHint` is `private` and not
   // directly callable from a test. These exercise the exact
   // `SensingCoordinator`/`WalletConnector` sequence the fixed
   // `continueFromRestoredHint` runs when a `connectAndSign` result reports
@@ -1004,7 +1004,12 @@ private final class BarnardBackedBindingCryptography: SensingCryptography {
     eninStart: UInt64,
     eninEnd: UInt64
   ) throws -> SensingRecoverableSignature? {
-    nil
+    try ownerKeyProvider.signSelfProof(
+      eventIdHash: eventIdHash,
+      eventSigningPublicKey: eventSigningPublicKey,
+      eninStart: eninStart,
+      eninEnd: eninEnd
+    ).map { SensingRecoverableSignature(barnardCore: $0) }
   }
 
   func signWalletAcknowledgement(
