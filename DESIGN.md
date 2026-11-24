@@ -1156,10 +1156,11 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   display cutouts) — `Scaffold`'s `innerPadding`, which `EventJoinScreen`/
   `AccountScreen`/`ManualEventCodeScreen` already thread through
   (verified). Keyboard avoidance uses standard Compose/`Scaffold` behavior.]**
-- SHOULD: Grid layouts use `DS.Space.m` (16) gutters (the
-  `CollectionHomeView` `LazyVGrid` pattern). **[iOS-only as written: no
+- SHOULD: Records grids use `DS.Space.l` (24) gutters, matching the
+  `RecordsHomeView` `LazyVGrid` in `CollectionHomeView.swift`. The former
+  16-point recommendation did not match the implementation. **[iOS-only as written: no
   `CollectionHomeView`/grid layout exists on Android today (§11) — the
-  gutter *value* recommendation (`BeidSpacing.m`) would carry over to a
+  gutter *value* recommendation (`BeidSpacing.l`) would carry over to a
   future Compose `LazyVerticalGrid`, but there is no current screen this
   rule governs.]**
 - SHOULD: Vertical rhythm inside a state screen (icon → title → body → CTA)
@@ -1167,6 +1168,73 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   counterpart: `Arrangement.spacedBy(BeidSpacing.l)` — verified as the
   actual spacing `BeidStateScreen`/`BeidScreen` use internally
   (`ui/designsystem/BeidStateScreen.kt`, `BeidScreen.kt`).]**
+
+### Adaptive layout and live-session continuity (iOS, #894)
+
+This is the implementation contract for the staged adaptive-layout work,
+not a claim that the regular-width arrangements below have shipped. The
+first slice adds continuity tests and corrects this contract without a
+visible iPhone layout change. Android keeps its existing native navigation;
+this slice exercises UIKit traits, SwiftUI presentation and iOS scene geometry.
+The reference is Apple's [iPhone Duo HIG](https://developer.apple.com/design/human-interface-guidelines/designing-for-iphone-duo)
+and [ArrangementView documentation](https://developer.apple.com/documentation/swiftui/arrangementview).
+
+- MUST: Choose layout using horizontal size class **and available container
+  space**, including safe areas, reserved regions and Dynamic Type. Device
+  idiom, device name and orientation MUST NOT choose a layout. A narrow
+  multitasking window uses the compact layout regardless of its device.
+- MUST: Keep state and navigation owners stable across resizing. Do not
+  switch entire stack/split roots with `if horizontalSizeClass` or key a
+  screen by width. Use one collapsing `NavigationSplitView` for Records,
+  with explicit selection, compact-column behavior and detail-path ownership.
+  Selecting a different Record clears the old detail path; resizing preserves
+  an intentional selection, scroll anchor, sheet and its inner navigation path.
+  No selection means a selection prompt, never implicit newest-Record selection.
+- MUST: Keep Stop outside scrolling content and accessible at every supported
+  size. Stop and other essential actions MUST NOT exist only in a secondary
+  pane: `ArrangementView` can hide that pane in closed Duo landscape. Lay out
+  the remaining content around persistent actions. Use `ArrangementView` on
+  iOS 27.1+ and identity-preserving `AnyLayout` below it, including iOS 27.0.
+  `ViewThatFits` can test fit but does not itself preserve state between
+  alternative subtrees. Avoid competing containers around the arrangement.
+- MUST: Derive Records columns from the **pane's usable width**, after its
+  actual horizontal insets, not the whole window or an assumed 320-point
+  sidebar. For usable width `U`, minimum card width `M` and gutter `G`, use
+  `max(1, floor((U + G) / (M + G)))`, with one column at accessibility text
+  sizes. Two 150-point cards require at least 324 usable points at the current
+  24-point gutter; a 320-point pane cannot fit them even before padding.
+  Permit one column or a readable list when tiles are cramped. The split-grid
+  slice must explicitly adopt or retire **both** existing minimum-width tokens;
+  merely using the compact token leaves the regular token unused.
+- MUST: Keep the two-tab bar and system placement; no `sidebarAdaptable`.
+  `Tab` and `.tabBarOnly` need an iOS 18 availability branch because the app
+  still supports iOS 17. Toolbar actions use meaningful labels and symbols;
+  the Records grouping action must not take the system overflow ellipsis.
+- MUST: Keep sheets as sheets and preserve their presentation owner and path
+  while their size changes. Account and event-code entry use form sizing on
+  supported OS versions, with the standard iOS 17 fallback. The scanner may
+  use page sizing. Verify keyboard avoidance and accessibility text.
+- MUST: A resize must preserve the live session and Record identity, advancing
+  elapsed time, observations and animation phase, without extra start, stop
+  or finalization calls. Explicit Stop finalizes exactly once. The modifier
+  calling `scanRouteDidDisappear` is on the destination in `CollectionHomeView`;
+  the method only releases a matching alert handoff after `scanPresented` is
+  false. It does **not** stop sensing. Back preserves participation (§11).
+- MUST: Test compact → regular → compact while recording, during Stop
+  confirmation, with a sheet and its inner route open, and with a Record
+  detail open. Trait overrides alone do not reproduce window geometry,
+  reserved regions, scene transitions or a physical fold. Exercise real
+  window resizing and Duo display/pose transitions where supported and list
+  unavailable cases separately. Real BLE continuity remains a hardware check.
+
+Implement in this order: (1) continuity instrumentation/tests and this
+contract; (2) availability-safe shell/navigation state; (3) Records split;
+(4) Sensing arrangement with persistent Stop; (5) Record collected, Now and
+venue adaptation; (6) sheets, state screens and scanner. Each affected slice
+includes available Duo/Split View checks and documentation. Keep Sensing
+pushed from Now for 1.1 and ordinary-iPhone portrait support unchanged.
+These adjustments to the original layout proposal take precedence over
+static Figma geometry when fitting the available space or preserving actions.
 
 ## 8. Shape, Material, Elevation
 
@@ -2056,6 +2124,39 @@ visual language).
 > shape any future convergence follows; see
 > `docs/decisions/issue-339-design-md-android-scope.md`.
 
+### Regular-width screen plan (iOS, #894)
+
+The table is the target for subsequent slices, subject to §7's continuity
+rules. Compact windows retain the current flows through the same state
+owners. Caps bound readable content; they do not force a pane count.
+
+| Screen / surface | Regular-width plan | Compact / fit and continuity requirements |
+| --- | --- | --- |
+| Tabs and shell | Two system tabs; retain platform bar placement | Availability-safe legacy shell on iOS 17; no extra sidebar |
+| Now, standby and nearby events | Content within 960 pt; nearby cards use computed columns; joined card may arrange its contents side by side | Account for gutters; an adaptive minimum alone does not guarantee an even column count; preserve card order and live session |
+| Sensing / recording | Radar and facts in two panes when both fit; persistent Stop outside the arrangement and scroll view | One column when space/text requires it; radar avoids reserved regions; keep pushed route and session |
+| Stop confirmation | System alert on the same live session | Remains open across resize; Cancel continues that session; explicit Stop finalizes once |
+| Sealed Record / Record saved / collected | Sigil and facts side by side when they fit; essential CTA remains accessible independently of the secondary pane | Tall/narrow layouts use the readable 600-point column |
+| Records, All records / By event | One balanced `NavigationSplitView`; same grid/list in its primary pane, selected content in detail | Computed columns, one at AX sizes; explicit compact navigation; grouping stays with its content |
+| Records empty / no selection | Existing empty block in the primary pane; shared selection prompt in detail | Do not auto-select a Record; preserve an existing intentional selection |
+| Record / Event detail | Selected detail in a detail-owned `NavigationStack`, leading-aligned within 600 pt | Preserve Record/Event identity; clear nested path only when selection changes |
+| Session / observation / report detail | Push within the selected detail's stack, readable 600-point content | Preserve nested path across collapse and expansion |
+| Welcome, Bluetooth permission/off/denied | Centered 600-point state column with CTA inside the column | Compact body scrolls above pinned CTA; verify short windows and AX text |
+| Signal lost, Can't join | Readable state content with accessible recovery action | Keep recovery semantics; the existing 220-point heading cap belongs to **Can't join**, not live Sensing; changing it is a separate visible-layout slice |
+| Clock notice | Keep the system alert and its pending-join owner | Preserve the alert and recovery action across resizing |
+| Account, Organizer tools, About sensing, Past events | Form-sized sheet, same navigation stack, readable rows within 600 pt | Keep modal and nested route; preserve ink treatment and standard dismissal |
+| Privacy policy | Keep the existing external link and system browser presentation | The link is not a native sheet destination; retain the return path to Account |
+| Event-code entry | Form-sized sheet with field and CTA in one keyboard-safe column | Keep entry and validation state; standard cancel action |
+| Venue broadcast / signed serving | Fit-based two-pane status and instructions inside the form sheet | Use one column when needed; Start/Stop broadcast never only in secondary pane |
+| Venue link scanner | Page-sized sheet; aspect-fit preview with reserved-region-aware reticle where supported | Keep scanner lifecycle and dismissal across resize; hardware camera checks remain separate |
+
+**Current implementation corrections (baseline `691c9501`).** Records uses
+two flexible columns, or **one at accessibility sizes**, and 24-point
+`DS.Space.l` gutters. Neither grid-minimum token is currently consumed.
+Records uses the 680-point cap listed in §17 A; Now uses 960 and state
+content 600. The permission screen's 440-point literal and Can't join's
+220-point heading cap remain unchanged by the continuity-only slice.
+
 ## 12. Iconography and Illustration
 
 > **Platform scope:** iOS-specific mechanism — Android counterpart named
@@ -2800,8 +2901,9 @@ to.]**
 | `radius.nowCard` | `DS.Radius.nowCard` | 20 pt | The now-sensing `ink` card on Home (#635) |
 | `layout.state.content.maxWidth` | `DS.Layout.stateContentMaxWidth` | 600 pt | Readable state-screen and CTA width in regular size classes |
 | `layout.collection.content.maxWidth` | `DS.Layout.collectionContentMaxWidth` | 960 pt | Maximum collection width in regular size classes |
-| `layout.grid.card.minimum.regular` | `DS.Layout.regularGridCardMinimumWidth` | 260 pt | Minimum proof-card width in regular grids |
-| `layout.grid.card.minimum.compact` | `DS.Layout.compactGridCardMinimumWidth` | 150 pt | Minimum proof-card width in compact grids |
+| `layout.records.content.maxWidth` | `DS.Layout.recordsContentMaxWidth` | 680 pt | Current Records content cap in regular size classes |
+| `layout.grid.card.minimum.regular` | `DS.Layout.regularGridCardMinimumWidth` | 260 pt | Defined but unused; adaptive Records slice must adopt or retire explicitly |
+| `layout.grid.card.minimum.compact` | `DS.Layout.compactGridCardMinimumWidth` | 150 pt | Defined but unused; current Records has two columns, one at AX sizes |
 | `size.status.dot` | `DS.Size.statusDot` | 8 pt | `BeidStatusPill` dot diameter |
 | `size.hairline` | `DS.Size.hairline` | 1 pt | The hairline rule's thickness |
 | `size.emptyBlock.dash` | `DS.Size.emptyBlockDash` | 4 pt | `Block/Empty` dash and gap length ([4, 4]; #630) |
