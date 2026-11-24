@@ -19,7 +19,7 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertTrue(bar.staticTexts["Account"].exists)
     let done = bar.buttons["Done"]
     done.assertHittable()
-    assertMinimumHitTarget(done)
+    assertDoneHitTarget()
     attachScreenshot("account-navigation-bar")
     done.tap()
     XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
@@ -93,7 +93,7 @@ final class FlatScreenshotTourD: XCTestCase {
     openAccount()
     app.buttons["Organizer tools"].assertHittable()
     attachScreenshot("10")
-    assertMinimumHitTarget(app.navigationBars["Account"].buttons["Done"])
+    assertDoneHitTarget()
     assertMinimumHitTarget(app.buttons["Organizer tools"])
     XCTAssertTrue(app.descendants(matching: .any)["account.bluetooth.status"].exists)
     let list = app.collectionViews.firstMatch
@@ -155,7 +155,7 @@ final class FlatScreenshotTourD: XCTestCase {
     bluetoothStatus.assertHittable()
     attachScreenshot("10c")
     XCTAssertEqual(bluetoothStatus.label, "Open Bluetooth Settings")
-    assertMinimumHitTarget(app.navigationBars["Account"].buttons["Done"])
+    assertDoneHitTarget()
     assertMinimumHitTarget(bluetoothStatus)
   }
 
@@ -449,6 +449,16 @@ final class FlatScreenshotTourD: XCTestCase {
     attachment.name = name
     attachment.lifetime = .keepAlways
     add(attachment)
+  }
+
+  /// Done is the system bar button: its frame is the 36pt glass capsule, while the
+  /// tappable region spans the 44pt navigation bar. Check both.
+  private func assertDoneHitTarget() {
+    let bar = app.navigationBars["Account"]
+    let done = bar.buttons["Done"]
+    XCTAssertTrue(done.exists)
+    XCTAssertGreaterThanOrEqual(done.frame.width + 0.01, 44)
+    XCTAssertGreaterThanOrEqual(bar.frame.height + 0.01, 44)
   }
 
   private func assertMinimumHitTarget(_ control: XCUIElement) {

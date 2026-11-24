@@ -63,7 +63,7 @@ struct AccountSheetView: View {
               dismiss()
             } label: {
               Text("Done")
-                .frame(minWidth: AccountSheetHitTarget.minimum, minHeight: AccountSheetHitTarget.minimum)
+                .frame(minWidth: AccountSheetHitTarget.minimum)
             }
           }
         }
