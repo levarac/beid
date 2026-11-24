@@ -194,7 +194,7 @@ test -d shared/build/SwiftExport
 
 Xcode build が **Build BeidSharedKit** phase で Swift Export を新規生成し、iOS app と tests が `BeidSharedKit` を import できれば完了です。
 
-`compile-fixtures/` は walking-skeleton authoring の完了条件ではなく、該当する shared/native 境界を変更する PR で実行する手動 gate です。存在しない shared symbol、古い module 名、production の shared caller を壊す one-shot patch を disposable checkout へ適用し、各 fixture が指定する diagnostic を確認します。negative fixture の定期 CI gate 化は Issue #110 へ意図的に延期されており、現行 CI はこれらを実行しません。
+`compile-fixtures/` は walking-skeleton authoring の完了条件ではなく、該当する shared/native 境界を変更する PR で実行する手動 gate です。存在しない shared symbol、古い module 名、production の shared caller を壊す one-shot patch を disposable checkout へ適用し、各 fixture が指定する diagnostic を確認します。negative fixture の定期 CI gate 化は行われておらず、現行 CI はこれらを実行しません。fixture は手動のままで、追跡する open な Issue はありません（#110 は close 済み）。
 
 ## 4. 一つの family を移す
 
