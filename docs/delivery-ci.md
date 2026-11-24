@@ -273,25 +273,23 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
   distinguishing commands. Trigger, head checkout, hosted runner and secret
   boundaries are guarded by the contract tests in `scripts/tests`.
 
-  Recommended required status checks on main: `Determine changed paths`,
+  Required status checks on main: `Determine changed paths`,
   `Android build`, `SwiftLint`, `Repository sanity`, `iOS simulator`, and
   `beid-lab-cli build and test`. Android, lint and lab CLI may legitimately be
   skipped by their changed-path classifier; the iOS aggregate validates and
   reports its classifier skip as success. A skipped required check counts as
   passing. Do not require the
   main-only delivery, trusted comparison or Release compilation jobs, nor the
-  release-notes metadata warning. Branch protection is a separate operator
-  change; this document does not claim it has been applied.
+  release-notes metadata warning.
 
-  Proposed operator settings after these workflows reach main: target the
-  exact `main` branch (no wildcard), enable `Require merge queue`, choose
-  merge method `merge` (merge commit), build concurrency `1`, Only merge
-  non-failing pull requests enabled, status check timeout `120` minutes, and
-  merge limits minimum/maximum `1` PR. Enable Allow merge commits in repository
-  settings and retain all six required status checks above with GitHub Actions
-  as their source. Queue build concurrency starts at one to limit concurrent
-  full macOS suites; it does not serialize jobs within a run. These settings
-  are a proposal and have not been changed by this work. See [GitHub's merge
+  The merge queue is active on `main` (ruleset `main merge queue`, id
+  25775126, enforcement `active`): merge method `merge` (merge commit), build
+  concurrency `1`, Only merge non-failing pull requests enabled, status check
+  timeout `120` minutes, and merge limits minimum/maximum `1` PR, with the six
+  required status checks above sourced from GitHub Actions. Merge commits are
+  allowed in repository settings. Queue build concurrency is one to limit
+  concurrent full macOS suites; it does not serialize jobs within a run. Pull
+  requests enter the queue instead of being merged directly. See [GitHub's merge
   queue settings](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue).
 - GitHub branch protection は approving review を merge 条件にしない。
   これは 2026-07-27 のオーナー判断による repository setting であり、

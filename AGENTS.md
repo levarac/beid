@@ -147,12 +147,14 @@ is given `ledgerFilesDir`, which its production `Activity` constructor passes.
 A coordinator built without `ledgerFilesDir` has neither; a test that injects
 an accumulator instead gets the writer but no drain. #121's records list still
 reads its own `ProofRecordStore`, not the unsent-window ledger.
-Android's screen set has grown since that verification point and this
-paragraph was measured again on 2026-09-03 against `d267fb5`. Android now has
-six screens—Welcome, Bluetooth permission, Bluetooth off, Join event, Account,
-and Records—and `EventJoinScreen` renders `Sensing`, `EventFound`, `Recording`,
-and `SignalLost` inside the Join event screen rather than as the four
-dedicated screens iOS uses. `EventJoinCoordinator` calls `engine.onEvent`.
+Android's screen set has grown since that verification point. As of
+2026-11-24, `AppNavHost.kt` wires these destinations: Welcome, Bluetooth
+permission, Bluetooth denied, Bluetooth off, Join event (redirects to Home),
+Home, Account, Manual event code, Records, Today summary, Event records, and
+Record detail; that file is the source of truth for the current list.
+`EventJoinScreen` renders `Sensing`, `EventFound`, `Recording`, and
+`SignalLost` inside one screen rather than as the four dedicated screens iOS
+uses. `EventJoinCoordinator` calls `engine.onEvent`.
 Owner-key binding/self-proof landed on Android in #125 (PR #314) once barnard
 v0.5.0 published the primitives. Records persistence and the list screen
 landed in #121 (PR #322), fed by three observation callbacks #235 (PR #321)
