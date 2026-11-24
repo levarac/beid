@@ -33,18 +33,78 @@ class PrCiDocDriftTests(unittest.TestCase):
         command = "python3 -m unittest discover -s scripts/tests -t ."
         for block in (command, "  python3   -m unittest discover -s scripts/tests -t .  ",
                       "set -eu\n" + command,
-                      "python3 -m unittest discover \\\n  -s scripts/tests \\\n  -t .",
-                      "python3 -m unittest discover\n  -s scripts/tests -t ."):
+                      "python3 -m unittest discover \\\n  -s scripts/tests \\\n  -t ."):
             with self.subTest(block=block):
                 self.assertEqual(workflow_command_tokens([block]), {command})
 
-    def test_discovery_mentions_and_changed_arguments_are_not_commands(self):
+    def check_discovery_scalar(self, scalar, expected, documented=None):
         command = "python3 -m unittest discover -s scripts/tests -t ."
-        for block in (f'echo "{command}"', f"# {command}",
-                      command.replace("scripts/tests", "other/tests"),
-                      command + " --failfast"):
+        workflow = "jobs:\n  sanity:\n    name: Repository sanity\n    steps:\n      - name: Script tests\n        run: " + scalar
+        document = f"### PR CI\nRepository sanity runs `{documented or command}`.\n"
+        result = self.run_checker([workflow], document)
+        self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+
+    def test_heredoc_text_is_not_execution(self):
+        command = "python3 -m unittest discover -s scripts/tests -t ."
+        for opener, end in (("cat <<'EOF'", "EOF"), ("cat <<EOF", "EOF"),
+                            ('cat <<"EOF"', "EOF"), ("cat <<-EOF", "\tEOF")):
+            with self.subTest(opener=opener):
+                self.check_discovery_scalar(f"|\n          {opener}\n          {command}\n          {end}\n", 1)
+
+    def test_literal_lines_do_not_form_one_command(self):
+        self.check_discovery_scalar("|\n          python3 -m unittest discover\n          -s scripts/tests -t .\n", 1)
+
+    def test_quoted_heredoc_operator_does_not_hide_execution(self):
+        self.check_discovery_scalar("|\n          echo '<<' EOF\n          python3 -m unittest discover -s scripts/tests -t .\n", 0)
+
+    def test_heredoc_terminator_is_not_execution(self):
+        command = "python3 -m unittest discover -s scripts/tests -t ."
+        self.check_discovery_scalar(f"|\n          cat <<'{command}'\n          text\n          {command}\n", 1)
+
+    def test_execution_after_multiple_heredocs_counts(self):
+        self.check_discovery_scalar("|\n          cat <<ONE <<'TWO'\n          first\n          ONE\n          second\n          TWO\n          python3 -m unittest discover -s scripts/tests -t .\n", 0)
+
+    def test_multiline_quoted_string_is_not_execution(self):
+        self.check_discovery_scalar('|\n          echo "text\n          python3 -m unittest discover -s scripts/tests -t .\n          "\n', 1)
+
+    def test_continued_command_after_setup_executes(self):
+        self.check_discovery_scalar("|\n          set -eu\n          python3 -m unittest discover \\\n            -s scripts/tests \\\n            -t .\n", 0)
+
+    def test_folded_scalar_forms_one_command(self):
+        self.check_discovery_scalar(">-\n          python3 -m unittest discover\n          -s scripts/tests -t .\n", 0)
+
+    def test_yaml_quoted_scalar_executes(self):
+        self.check_discovery_scalar('"python3 -m unittest discover -s scripts/tests -t ."\n', 0)
+
+    def test_documented_discovery_normalizes_spaces_and_quotes(self):
+        for command in ("python3  -m unittest discover -s scripts/tests -t .",
+                        "python3 -m unittest discover -s 'scripts/tests' -t ."):
+            with self.subTest(command=command):
+                self.check_discovery_scalar("python3 -m unittest discover -s scripts/tests -t .\n", 0, command)
+
+    def test_extra_documented_flag_is_a_mismatch(self):
+        command = "python3 -m unittest discover -s scripts/tests -t ."
+        self.check_discovery_scalar(command + "\n", 1, command + " --failfast")
+
+    def test_extra_workflow_flag_is_a_mismatch(self):
+        command = "python3 -m unittest discover -s scripts/tests -t ."
+        self.check_discovery_scalar(command + " --failfast\n", 1)
+
+    def test_matching_extra_flags_are_documented(self):
+        command = "python3 -m unittest discover -s scripts/tests -t . --failfast"
+        self.check_discovery_scalar(command + "\n", 0, command)
+
+    def test_discovery_mentions_are_not_commands(self):
+        command = "python3 -m unittest discover -s scripts/tests -t ."
+        for block in (f'echo "{command}"', f"# {command}"):
             with self.subTest(block=block):
                 self.assertEqual(workflow_command_tokens([block]), set())
+
+    def test_changed_arguments_remain_distinct_commands(self):
+        command = "python3 -m unittest discover -s scripts/tests -t ."
+        for changed in (command.replace("scripts/tests", "other/tests"), command + " --failfast"):
+            with self.subTest(changed=changed):
+                self.assertEqual(workflow_command_tokens([changed]), {changed})
 
     def test_discovery_deletion_is_detected_in_both_directions_on_hosted_workflows(self):
         command = "python3 -m unittest discover -s scripts/tests -t ."
