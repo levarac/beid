@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 Levarac Foundation
 // SPDX-License-Identifier: MIT
 
-import Barnard
+@testable import Barnard
 import BeidSharedKit
 import Foundation
 @testable import Beid
@@ -116,6 +116,20 @@ final class RecordingEventJoinControl: EventJoinControlling, @unchecked Sendable
 
   func stopDiscoveryScan() {
     stopDiscoveryScanCallCount += 1
+  }
+
+  /// Delivers transport state separately from start/stop effects so tests
+  /// can retain a stop acknowledgement until a later lifecycle transition.
+  func emitState(isScanning: Bool, isAdvertising: Bool = false) {
+    onEvent?(.state(BarnardState(
+      isScanning: isScanning,
+      isAdvertising: isAdvertising,
+      eventCode: currentEventCode,
+      eninMode: .fixedLength,
+      eninSeconds: 300,
+      beaconChain: .ethereumMainnet,
+      reasonCode: nil
+    )))
   }
 
   /// Answers a held permission request, granting both capabilities.

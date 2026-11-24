@@ -24,13 +24,14 @@ final class RecordSigilPresentationTests: XCTestCase {
     let expected: [RecordSigilPlacement: Expected] = [
       .homeActiveCard: Expected(size: 84, page: .ink, sigilGround: .NONE),
       .homePastRow: Expected(size: 60, page: .canvas, sigilGround: .NONE),
+      .recordsGrid: Expected(size: 104, page: .canvas, sigilGround: .DISC),
       .sensingSealed: Expected(size: 300, page: .ink, sigilGround: .NONE),
       .proofCollected: Expected(size: 290, page: .canvas, sigilGround: .DISC),
       .eventDetailRow: Expected(size: 48, page: .canvas, sigilGround: .NONE),
       .proofDetail: Expected(size: 200, page: .canvas, sigilGround: .DISC),
       .reportDetailRow: Expected(size: 40, page: .canvas, sigilGround: .NONE),
     ]
-    XCTAssertEqual(RecordSigilPlacement.allCases.count, 7)
+    XCTAssertEqual(RecordSigilPlacement.allCases.count, 8)
     for placement in RecordSigilPlacement.allCases {
       guard let want = expected[placement] else {
         XCTFail("\(placement) has no measured expectation")

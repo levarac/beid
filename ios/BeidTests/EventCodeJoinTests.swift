@@ -11,15 +11,6 @@ final class EventCodeJoinTests: XCTestCase {
     super.tearDown()
   }
 
-  func testSkipWalletForEventCodeRoutesToEventCodeEntry() {
-    let coordinator = AppCoordinator()
-    coordinator.screen = .walletConnect
-
-    coordinator.skipWalletForEventCode()
-
-    XCTAssertEqual(coordinator.screen, .eventCodeEntry)
-  }
-
   func testJoinEventWithEmptyCodeReturnsValidationErrorAndDoesNotAdvance() {
     let coordinator = AppCoordinator()
     coordinator.screen = .eventCodeEntry
@@ -66,7 +57,13 @@ final class EventCodeJoinTests: XCTestCase {
   }
 
   func testJoinEventFromAccountSheetWithValidCodeDismissesSheetWithoutTouchingScreen() {
-    let coordinator = AppCoordinator()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: RecordingEventJoinControl())
+    sensing.useDemoEventMode = false
+    let coordinator = AppCoordinator(
+      sensingCoordinator: sensing,
+      registryClient: nil,
+      userDefaults: UserDefaults(suiteName: "EventCodeJoinTests.\(UUID().uuidString)")!
+    )
     coordinator.screen = .home
     coordinator.eventCodeEntrySheetPresented = true
 

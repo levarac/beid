@@ -38,6 +38,10 @@ struct BeidKeychainItemAttributes: Equatable {
 
 protocol BeidKeychainAccessing {
   func read(service: String, account: String) -> BeidKeychainReadResult
+  /// Creates the item and never replaces one: an existing item answers
+  /// `errSecDuplicateItem` and is left as it was.
+  func add(_ write: BeidKeychainWrite) -> OSStatus
+  /// Creates the item, or replaces the data of an existing one.
   func write(_ write: BeidKeychainWrite) -> OSStatus
   func remove(service: String, account: String) -> OSStatus
   func attributes(service: String, account: String) -> BeidKeychainItemAttributes?
@@ -61,7 +65,7 @@ struct SystemBeidKeychainAccess: BeidKeychainAccessing {
     }
   }
 
-  func write(_ write: BeidKeychainWrite) -> OSStatus {
+  func add(_ write: BeidKeychainWrite) -> OSStatus {
     let item: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: write.service,
@@ -70,7 +74,11 @@ struct SystemBeidKeychainAccess: BeidKeychainAccessing {
       kSecAttrAccessible as String: write.accessible,
       kSecAttrSynchronizable as String: write.synchronizable
     ]
-    let addStatus = SecItemAdd(item as CFDictionary, nil)
+    return SecItemAdd(item as CFDictionary, nil)
+  }
+
+  func write(_ write: BeidKeychainWrite) -> OSStatus {
+    let addStatus = add(write)
     guard addStatus == errSecDuplicateItem else { return addStatus }
 
     let updates: [String: Any] = [

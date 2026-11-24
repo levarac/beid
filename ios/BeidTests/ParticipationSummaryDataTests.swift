@@ -5,7 +5,7 @@ import BeidSharedKit
 import XCTest
 @testable import Beid
 
-/// beid#143 — `ParticipationSummaryView` reads
+/// beid#143 — the removed participation summary screen reads
 /// `SensingCoordinator.sessionAggregateSnapshot(forProofId:)`, keyed on
 /// `Proof.id` (not `eventCode` — confirmed against
 /// `SessionAggregateSnapshotStore`'s own doc comment). That method forwards
@@ -85,7 +85,7 @@ final class ParticipationSummaryDataTests: XCTestCase {
   /// seeds windows landing in band 0 and band 3 only (`windowsPerBand: 2`),
   /// leaving bands 1-2 with no data, and confirms the persisted-and-reread
   /// series still reports exactly two present bands at their real absolute
-  /// indices — the shape `ParticipationSummaryView`'s
+  /// indices — the shape the removed participation summary screen's
   /// `ForEach(0..<aggregate.bandCount)` / `bandAt(index:)` loop depends on
   /// to surface the gap instead of hiding or filling it.
   func testPersistedSnapshotBandSeriesStaysSparseAcrossAGap() throws {

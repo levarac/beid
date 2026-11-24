@@ -27,8 +27,8 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
       XCTAssertEqual(error as? OwnerKeyOperationError, .storage(.readFailed(errSecInteractionNotAllowed)))
     }
     XCTAssertEqual(random.callCount, 0)
-    XCTAssertEqual(keychain.storedData, existingSeed)
-    XCTAssertNil(keychain.lastWrite)
+    XCTAssertTrue(keychain.storedData == existingSeed)
+    XCTAssertFalse(keychain.lastWrite != nil)
   }
 
   func testProviderPublishesRandomFailureWithoutWritingANewSeed() {
@@ -43,8 +43,8 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
       XCTAssertEqual(error as? OwnerKeyOperationError, .randomFailed(-42))
     }
     XCTAssertEqual(random.callCount, 1)
-    XCTAssertNil(keychain.storedData)
-    XCTAssertNil(keychain.lastWrite)
+    XCTAssertFalse(keychain.storedData != nil)
+    XCTAssertFalse(keychain.lastWrite != nil)
   }
 
   func testSystemKeychainRoundTripUsesBackupPreservingNonSynchronizableItem() throws {
@@ -55,7 +55,7 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
 
     storage.setBytes(seed, forKey: key)
 
-    XCTAssertEqual(storage.bytes(forKey: key), seed)
+    XCTAssertTrue(storage.bytes(forKey: key) == seed)
     let attributes = try XCTUnwrap(storage.itemAttributes(forKey: key))
     XCTAssertEqual(attributes.service, BeidKeychainKeyStorage.service)
     XCTAssertEqual(attributes.account, key)
@@ -70,9 +70,9 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
 
     let resolved = try storage.resolveSeed(forKey: seedKey, randomSource: random)
 
-    XCTAssertEqual(resolved, [UInt8](repeating: 0x11, count: 32))
+    XCTAssertTrue(resolved == [UInt8](repeating: 0x11, count: 32))
     XCTAssertEqual(random.callCount, 1)
-    XCTAssertEqual(keychain.storedData, Data(repeating: 0x11, count: 32))
+    XCTAssertTrue(keychain.storedData == Data(repeating: 0x11, count: 32))
     XCTAssertEqual(keychain.lastWrite?.accessible, kSecAttrAccessibleAfterFirstUnlock as String)
     XCTAssertEqual(keychain.lastWrite?.synchronizable, false)
   }
@@ -89,7 +89,7 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
       )
     }
     XCTAssertEqual(random.callCount, 0, "locked Keychain must never trigger generation")
-    XCTAssertNil(keychain.lastWrite)
+    XCTAssertFalse(keychain.lastWrite != nil)
   }
 
   func testResolveFailsClosedOnUnknownReadErrorWithoutGenerating() {
@@ -116,9 +116,9 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
       randomSource: CountingRandomSource(bytes: [UInt8](repeating: 0xFF, count: 32))
     )
 
-    XCTAssertEqual(resolved, Array(legacySeed))
-    XCTAssertEqual(keychain.storedData, legacySeed)
-    XCTAssertNil(defaults.object(forKey: seedKey))
+    XCTAssertTrue(resolved == Array(legacySeed))
+    XCTAssertTrue(keychain.storedData == legacySeed)
+    XCTAssertFalse(defaults.object(forKey: seedKey) != nil)
   }
 
   func testMigrationKeepsLegacySeedWhenWriteCannotBeVerified() {
@@ -134,7 +134,7 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
         randomSource: CountingRandomSource(bytes: [UInt8](repeating: 0x55, count: 32))
       )
     )
-    XCTAssertEqual(defaults.data(forKey: seedKey), legacySeed)
+    XCTAssertTrue(defaults.data(forKey: seedKey) == legacySeed)
   }
 
   func testProviderMapsKeychainWriteFailureWithoutRemovingLegacySeed() {
@@ -153,7 +153,7 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
         .storage(.writeFailed(errSecInteractionNotAllowed))
       )
     }
-    XCTAssertEqual(defaults.data(forKey: seedKey), legacySeed)
+    XCTAssertTrue(defaults.data(forKey: seedKey) == legacySeed)
   }
 
   func testProviderMapsKeychainReadbackFailureWithoutRemovingLegacySeed() {
@@ -174,7 +174,7 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
         .storage(.verificationFailed)
       )
     }
-    XCTAssertEqual(defaults.data(forKey: seedKey), legacySeed)
+    XCTAssertTrue(defaults.data(forKey: seedKey) == legacySeed)
   }
 
   func testInterruptedMigrationConvergesWhenBothStoresContainSameSeed() throws {
@@ -184,14 +184,13 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
     let keychain = FakeBeidKeychainAccess(storedData: seed)
     let storage = makeStorage(keychain: keychain, defaults: defaults)
 
-    XCTAssertEqual(
+    XCTAssertTrue(
       try storage.resolveSeed(
         forKey: seedKey,
         randomSource: CountingRandomSource(bytes: [UInt8](repeating: 0x77, count: 32))
-      ),
-      Array(seed)
+      ) == Array(seed)
     )
-    XCTAssertNil(defaults.object(forKey: seedKey))
+    XCTAssertFalse(defaults.object(forKey: seedKey) != nil)
   }
 
   func testCorruptedLegacyValueIsQuarantinedAndSignalAIsPreserved() throws {
@@ -208,8 +207,8 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
 
     let quarantineKey = try XCTUnwrap(provider.quarantinedSeedKey)
     XCTAssertTrue(quarantineKey.hasPrefix("\(seedKey).quarantine."))
-    XCTAssertEqual(defaults.string(forKey: quarantineKey), "not-a-seed")
-    XCTAssertNil(defaults.object(forKey: seedKey))
+    XCTAssertTrue(defaults.string(forKey: quarantineKey) == "not-a-seed")
+    XCTAssertFalse(defaults.object(forKey: seedKey) != nil)
   }
 
   func testMigrationPreservesOwnerPublicKeyForSignalBComparison() throws {
@@ -287,6 +286,11 @@ private final class FakeBeidKeychainAccess: BeidKeychainAccessing {
       return readResults.removeFirst()
     }
     return storedData.map(BeidKeychainReadResult.found) ?? .notFound
+  }
+
+  func add(_ write: BeidKeychainWrite) -> OSStatus {
+    guard storedData == nil else { return errSecDuplicateItem }
+    return self.write(write)
   }
 
   func write(_ write: BeidKeychainWrite) -> OSStatus {

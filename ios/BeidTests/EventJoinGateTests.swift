@@ -70,6 +70,57 @@ final class EventJoinGateTests: XCTestCase {
 
   // MARK: - Selecting is not joining
 
+  func testRegistryRefusalErrorLogNeverIncludesArbitraryErrorText() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    let hostileError = "FAKE_PRIVATE_RPID_KEY_SIGNATURE_CREDENTIAL\nFAKE_FORGED_LOG_LINE"
+    registry.answer = .readFails(errorCode: hostileError)
+    var refusalLines: [String] = []
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinControl: engine, eventJoinRegistry: registry,
+      joinRefusalLog: { refusalLines.append($0) }
+    )
+    coordinator.useDemoEventMode = false
+
+    coordinator.joinEvent("fake-private-code", canonicalEventIdHex: canonicalEventIdHex)
+    coordinator.startSensing()
+    await settle()
+
+    XCTAssertEqual(registry.requestedEventIdHexes, [canonicalEventIdHex])
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertEqual(coordinator.joinRefusal, .registryReadFailed)
+    XCTAssertEqual(coordinator.joinRefusalReasonKey, "unknown")
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(refusalLines, [
+      "join_refused outcome=rejected_registry_read_failed reason=unknown"
+    ])
+  }
+
+  func testManualJoinLogsEachPermissionRefusalWithoutReadingTheRegistry() async {
+    for (canScan, canAdvertise) in [(false, false), (false, true), (true, false)] {
+      let engine = RecordingEventJoinControl()
+      engine.permissionOutcome = .reports(canScan: canScan, canAdvertise: canAdvertise)
+      let registry = FakeEventJoinRegistry()
+      var lines: [String] = []
+      let coordinator = makeGatedCoordinator(
+        engine: engine, registry: registry, joinDiagnosticLog: { lines.append($0) }
+      )
+
+      coordinator.joinEvent("fake-private-code", canonicalEventIdHex: canonicalEventIdHex)
+      coordinator.startSensing()
+      await settle()
+
+      XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+      XCTAssertEqual(coordinator.phase, .idle)
+      XCTAssertFalse(engine.didJoin)
+      XCTAssertTrue(registry.requestedEventIdHexes.isEmpty)
+      XCTAssertEqual(lines, [
+        diagnostic("admission", "rejected_permission_denied", attempt: "none")
+      ])
+    }
+  }
+
   func testManualJoinLogsPendingReadAndFailureWithoutRawErrorOrCode() async {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
@@ -636,3 +687,39 @@ final class EventJoinGateTests: XCTestCase {
 private final class NoopEventJoinRequest: EventIdentityVerificationRequest {
   func cancel() {}
 }
+
+#if !DEBUG
+@MainActor
+final class JoinDiagnosticReleaseExclusionTests: XCTestCase {
+  func testReleaseJoinTransitionsNeverCallTheInjectedDiagnosticSink() async throws {
+    var lines: [String] = []
+    var refusalLines: [String] = []
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinControl: engine, joinDiagnosticLog: { lines.append($0) },
+      joinRefusalLog: { refusalLines.append($0) }
+    )
+    let eventIdHex = "0x" + String(repeating: "ab", count: 32)
+
+    emitJoinStageDiagnostic(
+      { lines.append($0) }, eventIdHex: eventIdHex,
+      stage: "registry_resolution", outcome: "rejected_unknown",
+      attempt: "2", retryAtEpochMillis: 1_800_000_005_000
+    )
+    coordinator.handleUnverifiedEventInfoEnvelopeV2()
+    XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 1)
+
+    coordinator.joinEvent("fake-private-code", canonicalEventIdHex: eventIdHex)
+    coordinator.startSensing()
+    try await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+    XCTAssertEqual(coordinator.joinRefusal, .noRegistryConfigured)
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertTrue(lines.isEmpty)
+    XCTAssertEqual(refusalLines.count, 1)
+  }
+}
+#endif

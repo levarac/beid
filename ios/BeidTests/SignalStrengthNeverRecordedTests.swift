@@ -321,7 +321,8 @@ private final class SignalStrengthContainmentSubmissionSpy: WindowReportSubmissi
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
-    participantCommitment: Data?
+    participantCommitment: Data?,
+    eventSigningPublicKey: Data?
   ) {
     captures.append(
       SubmissionCapture(

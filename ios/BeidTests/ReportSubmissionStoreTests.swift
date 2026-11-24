@@ -7,6 +7,37 @@ import XCTest
 
 @MainActor
 final class ReportSubmissionStoreTests: XCTestCase {
+  func testSavedRecordsPendingInputsAndAcceptedReceiptsStayDistinctAfterRestart() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-restart-states")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let proofURL = directory.appendingPathComponent("proofs.json")
+    let submissionURL = directory.appendingPathComponent("submissions.json")
+    let proof = Proof(eventName: "Example event", date: Date(), peersVerified: 2, eventCode: "EXAMPLE")
+    XCTAssertTrue(ProofStore(fileURL: proofURL).add(proof))
+    let prepared = makeRecord()
+    let accepted = makeRecord()
+    let pending = ReportSubmissionCapture(
+      id: UUID(), eventCode: "EXAMPLE", eventIdHex: nil, enin: 1,
+      peerRpids: ["example-peer"], reporterRpid: "example-reporter", participantCommitment: nil)
+    let store = ReportSubmissionStore(fileURL: submissionURL)
+    try store.add(prepared)
+    try store.add(accepted)
+    try store.storeReceipt(for: accepted.id, signedReceiptHex: String(repeating: "ab", count: 24))
+    try store.addPendingCapture(pending)
+
+    let reopened = ReportSubmissionStore(fileURL: submissionURL)
+    XCTAssertEqual(ProofStore(fileURL: proofURL).proofs, [proof])
+    XCTAssertEqual(reopened.record(id: prepared.id)?.submissionState, .prepared)
+    XCTAssertNil(reopened.record(id: prepared.id)?.acceptanceReceiptHex)
+    XCTAssertEqual(reopened.record(id: accepted.id)?.submissionState, .accepted)
+    XCTAssertNotNil(reopened.record(id: accepted.id)?.acceptanceReceiptHex)
+    XCTAssertEqual(reopened.pendingCaptures, [pending])
+    XCTAssertNil(reopened.record(id: pending.id))
+    XCTAssertFalse(reopened.pendingCaptures.contains { $0.id == accepted.id })
+    // Pending inputs precede canonical signing. They are not a third-party
+    // evidence package, and a stored acceptance receipt does not create one.
+    XCTAssertEqual(reopened.records.count, 2)
+  }
   func testEventDetailReadsOnlyMatchingDurableSubmissionRecords() throws {
     let directory = try makeIsolatedDirectory(named: "beid-event-detail-submissions")
     defer { try? FileManager.default.removeItem(at: directory) }

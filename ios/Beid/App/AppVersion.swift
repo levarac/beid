@@ -20,6 +20,11 @@ enum AppVersion {
   static let gitHeightInfoKey = "BeidGitHeight"
   static let localHeightPlaceholder = "local"
 
+  /// The optional short version, without the full version row's fallback.
+  static func shortVersion(bundle: Bundle = .main) -> String? {
+    string(bundle, "CFBundleShortVersionString")
+  }
+
   static func displayString(bundle: Bundle = .main) -> String {
     let marketing = string(bundle, "CFBundleShortVersionString") ?? "0.0.0"
     let store = string(bundle, "CFBundleVersion") ?? "0"

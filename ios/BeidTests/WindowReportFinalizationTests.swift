@@ -78,6 +78,8 @@ final class WindowReportFinalizationTests: XCTestCase {
     coordinator.reset()
 
     let report = store.reports.first
+    XCTAssertEqual(report.flatMap { coordinator.observedWindowIndex(forWindowID: $0.id) }, 7)
+    XCTAssertNil(coordinator.observedWindowIndex(forWindowID: UUID()))
     XCTAssertEqual(
       report?.signatureRHex,
       signature.r.map { String(format: "%02x", $0) }.joined()

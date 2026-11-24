@@ -16,12 +16,14 @@ Also check the event's validity window (its start and end time). Outside it, joi
 
 **The event code and the Event ID are different strings.** The app takes the event code. `beid-lab-cli --event-id` takes the Event ID. Mixing them up does not produce an error; it produces a run in which nobody is detected (see the lab CLI README).
 
+**At least four participating devices.** A device records only after it has verified three others ([`defaultEventConfirmThreshold = 3`](../shared/src/commonMain/kotlin/org/levarac/beid/shared/sensing/EventConfirmThreshold.kt)), so three phones sense each other but never reach recording. Venue devices do not count; a Mac running `beid-lab-cli participate` does.
+
 **The same build on every device.** A mixed set of builds can fail silently. Read out the build number on each device before starting.
 
 ## 1. Join on iPhone
 
 1. Install Beid (the current TestFlight build, or your own development build).
-2. Open Collection → Sense Event → Enter event code, type `<EVENT_CODE>`, and tap Join Event.
+2. Open Collection → Sense Event → Enter event code, type `<EVENT_CODE>`, and tap Join event.
 3. If the device is already in another event, leave it first, then join.
 
 ## 2. Broadcast as the venue (one iPhone)
@@ -55,11 +57,25 @@ cd tools/beid-lab-cli
 - Output is one JSON object per line; `-v` adds discoveries with RSSI.
 - Exit codes: 0 ran the whole window as asked; 1 arguments or a missing file; 2 the expected peer count was not reached (only with `--expect-peers`); 3 Bluetooth unavailable (not yet granted, off, or restricted).
 
-The `venue` subcommand can also broadcast from a Mac, but it needs a signed container extracted for the current hour and replaced as the hours roll over. For this test, broadcast from an iPhone.
+### C. A Mac as the venue
+
+`beid-lab-cli venue` can broadcast the event from a Mac instead of an iPhone. What it broadcasts is a hop-zero delivery container: one signed envelope behind a 4-byte header (format, relay hop count, length). The time window belongs to the envelope inside, and phones accept it for about one hour, so the Mac needs the next delivery container every hour. Cut the current delivery container from the event's venue bundle with `tools/event-occurrence/bundle-to-delivery-container.mjs` in levarac/parallax (a private repository; project members have read access). The bundle is public and holds no keys: it is on the venue link's host at `/artifacts/venue-bundles/<EVENT_ID>`.
+
+```sh
+curl -fsS -o venue-bundle.cbor "https://<venue link host>/artifacts/venue-bundles/<EVENT_ID>"
+node <parallax checkout>/tools/event-occurrence/bundle-to-delivery-container.mjs --bundle venue-bundle.cbor --out delivery-container.bin
+cd tools/beid-lab-cli
+./scripts/run.sh --skip-build venue --container ../../delivery-container.bin --timeout <secondsLeft>
+```
+
+- `bundle-to-delivery-container.mjs` prints `secondsLeft`, the time until phones stop accepting this delivery container. Pass it as `--timeout`, then cut the next delivery container and start again. `no envelope serves` means the event is not open at that time.
+- `venue_ready` should show the event ID prefix, the window in Unix seconds next to `nowUnix`, and `receiverState` as verified with result `match`. `UNVERIFIED` with `mismatch` means the signature did not check out. The window is not judged there: phones accept the delivery container from `validFromUnix` through `acceptedThroughUnix`, so check that `nowUnix` lies between those two. `validThroughUnix` runs up to ten minutes past the point where phones stop accepting it; do not use it to decide when to switch.
+- The Bluetooth approval and stable signing are the same as in B; see the tool README.
+- The same Mac can also run `participate` in a second terminal as an extra participant. This was observed to work once alongside `venue`; it is not guaranteed.
 
 ## 4. Check mutual sensing
 
-1. Put the joined devices (two or more iPhones, or iPhones plus a Mac) near each other with Beid in the foreground, and wait a few minutes.
+1. Put the joined devices (two or more iPhones, or iPhones plus a Mac) near each other with Beid in the foreground, and wait a few minutes. Two or more devices are enough to see the detected count rise, but a Record is created and submitted only with four or more participants.
 2. On iPhone, the count of detected participants should rise. On the Mac, the JSON log should show lines for detected peers.
 3. If nothing is detected, check in this order: every device joined the same event (the Event ID matches), Bluetooth is granted, Beid is in the foreground, and all devices run the same build.
 
