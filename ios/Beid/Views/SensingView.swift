@@ -300,17 +300,7 @@ struct SensingView: View {
         .foregroundStyle(DS.Color.textPrimary)
 
       if presentation.isSearching {
-        BeidPanel {
-          VStack(alignment: .leading, spacing: DS.Space.s) {
-            Text(searchingTitle)
-              .font(DS.Font.cardTitle)
-              .foregroundStyle(DS.Color.textPrimary)
-            Text(rescueGuidance)
-              .font(DS.Font.supporting)
-              .foregroundStyle(DS.Color.textSecondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-        }
+        BeidEmptyState(text: Text(searchingTitle), description: Text(rescueGuidance))
       } else {
         ForEach(presentation.cards) { card in
           nearbyEventCard(

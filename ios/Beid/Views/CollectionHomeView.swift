@@ -603,17 +603,11 @@ private struct RecordsHomeView: View {
       ScrollView {
         BeidLargeTitleContent(regularMaxWidth: DS.Layout.recordsContentMaxWidth) {
           VStack(alignment: .leading, spacing: DS.Space.l) {
-            Picker("Record grouping", selection: $grouping) {
-              Text("All records").tag(Grouping.allRecords)
-              Text("By event").tag(Grouping.byEvent)
-            }
-            .pickerStyle(.segmented)
             if eventGroups.isEmpty {
-              BeidEmptyBlock {
-                Text("Saved records appear here after sensing.")
-                  .beidTextStyle(DS.Font.Library.body13)
-                  .foregroundStyle(DS.Color.textSecondary)
-              }
+              BeidEmptyState(
+                "No records yet",
+                description: "Saved records appear here after sensing."
+              )
             } else if grouping == .byEvent {
               eventList
             } else {
@@ -630,6 +624,26 @@ private struct RecordsHomeView: View {
       .accessibilityIdentifier(grouping == .byEvent ? "records.events" : "records.grid")
       .beidScreenBackground(DS.Color.surfaceCanvas)
       .modifier(HomeAccountToolbar(title: "records.title", iconColor: DS.Color.textPrimary))
+      .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Menu {
+            Picker("Record grouping", selection: $grouping) {
+              Text("All records").tag(Grouping.allRecords)
+                .accessibilityIdentifier("records.grouping.all")
+              Text("By event").tag(Grouping.byEvent)
+                .accessibilityIdentifier("records.grouping.event")
+            }
+            .pickerStyle(.inline)
+          } label: {
+            // The title is the native menu title (overflow, expanded display,
+            // VoiceOver); the bar shows only the symbol.
+            Label("Record view options", systemImage: "rectangle.grid.1x2")
+              .labelStyle(.iconOnly)
+              .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget)
+          }
+          .accessibilityIdentifier("records.grouping")
+        }
+      }
       .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.light, for: .navigationBar)
       .navigationDestination(item: $selectedRecord) { HomeRecordDetail(proof: $0) }

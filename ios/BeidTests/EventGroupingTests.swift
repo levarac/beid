@@ -11,6 +11,35 @@ import XCTest
 /// harness — see `ParticipationSummaryDataTests` for the same
 /// data-layer-only precedent).
 final class EventGroupingTests: XCTestCase {
+  // The row formats its copy inline. Exercise the app's compiled English
+  // catalog here; FlatScreenshotTourB verifies that the visible row uses it.
+  func testByEventRowTextForOneSession() {
+    assertByEventRowText(sessionCount: 1, expectedCaption: "Nov 19 · 1 session")
+  }
+
+  func testByEventRowTextForSeveralSessions() {
+    assertByEventRowText(sessionCount: 3, expectedCaption: "Nov 19 · 3 sessions")
+  }
+
+  private func assertByEventRowText(
+    sessionCount: Int, expectedCaption: String, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    let date = "Nov 19"
+    let caption = String(
+      localized: "home.past.sessionCaption",
+      defaultValue: "\(date) · \(sessionCount) sessions",
+      bundle: .main, locale: Locale(identifier: "en_US")
+    )
+    let recordCount = 1
+    let action = String(
+      localized: "records.event.recordAction",
+      defaultValue: "\(recordCount) records →",
+      bundle: .main, locale: Locale(identifier: "en_US")
+    )
+    XCTAssertEqual(caption, expectedCaption, file: file, line: line)
+    XCTAssertEqual(action, "1 record →", file: file, line: line)
+  }
+
   func testHomeGroupsSortByDateAndHideEverySessionOfActiveEvent() {
     let earlierActive = Proof(
       eventName: "Active event", date: Date(timeIntervalSince1970: 100),

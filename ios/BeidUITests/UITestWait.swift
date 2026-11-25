@@ -209,9 +209,18 @@ extension XCUIApplication {
     recordsTab.assertHittable()
     recordsTab.tap()
     if scrollViews["records.events"].exists { return }
-    let byEvent = buttons["By event"]
-    byEvent.assertHittable()
-    byEvent.tap()
+    selectRecordsGrouping("By event")
     scrollViews["records.events"].assertExists()
+  }
+
+  func selectRecordsGrouping(_ label: String, file: StaticString = #filePath, line: UInt = #line) {
+    let options = navigationBars.buttons["records.grouping"]
+    options.assertHittable(file: file, line: line)
+    options.tap()
+    // Native Picker menu items omit identifiers, so use the English UI-test label.
+    let item = buttons[label]
+    item.assertHittable(file: file, line: line)
+    item.tap()
+    item.assertDisappears(file: file, line: line)
   }
 }
