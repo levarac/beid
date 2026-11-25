@@ -2121,7 +2121,10 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   unchanged session; `Stop sensing` finalizes the Record and ends
   participation, including participant advertising and relay. Only
   successful durable finalization may show the saved-record screen and say
-  that the app can be closed. There is no threshold-based transition or
+  that the app can be closed. A stop before the first detection, while the
+  session is still waiting and no Record can exist, ends participation
+  immediately with no confirmation (`AppCoordinator.requestScanClose`).
+  There is no threshold-based transition or
   countdown. While sensing, show devices heard and elapsed time without a
   mutual count or an achievement state. Radar nodes show devices heard in
   the last 300 seconds, refreshed once per second, with the caption
@@ -3058,6 +3061,7 @@ to.]**
 | `size.button.primary.compact.width` | `DS.Size.compactPrimaryButtonWidth` | 140 pt | `Button/Primary` Size=Small width (Home's Scan) |
 | `size.step.badge` | `DS.Size.stepBadge` | 28 pt | `BeidNumberedStepList` index badge (from `BeidDesign`) |
 | `size.radar.field` | `DS.Size.radarField` | 362 pt | Flat 2b 05 sensing graph frame; also read by the interim `SensingView` pulse until integration |
+| `size.radar.field.compact` | `DS.Size.liveSessionRadarField` | 240 pt | Compact radar field inside the bounded live-session panel (beid#883); radar geometry still scales from the 362 pt field |
 | `size.radar.rings` | `DS.Size.radarRingInner` / `radarRingMiddle` / `radarRingOuter` | 133.22 / 233.12 / 333.04 pt | Three circle path diameters measured from the 05 graph SVG |
 | `size.radar.core` | `DS.Size.radarCore` | 38 pt | White centre disc in the 05 sensing graph |
 | `size.radar.coreSeparation` | `DS.Size.radarCoreSeparation` | 48 pt | Ink separation around the white centre disc |

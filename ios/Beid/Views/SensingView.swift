@@ -714,7 +714,7 @@ struct SensingSessionSurface: View {
           .beidTextStyle(DS.Font.Library.body13)
           .foregroundStyle(DS.Color.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
-        BeidPrimaryButton("Try again", action: onResume)
+        BeidSecondaryButton(title: "Try again", action: onResume)
       }
       Group {
         if presentation == .waiting {
