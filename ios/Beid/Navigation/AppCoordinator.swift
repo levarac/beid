@@ -1260,8 +1260,8 @@ final class AppCoordinator: ObservableObject {
   func updateHomeStandby(isVisible: Bool, isSceneActive: Bool) {
     let isIdle: Bool
     if case .idle = sensingCoordinator.phase { isIdle = true } else { isIdle = false }
-    // Any join path (nearby card, code, demo, rejoin) ends the stopped state.
-    if homeDiscoveryHeldAfterStop && (!isIdle || sensingCoordinator.isAdvertising) {
+    // A new session ends the hold; the previous session's advertising callback does not.
+    if homeDiscoveryHeldAfterStop && !isIdle {
       homeDiscoveryHeldAfterStop = false
     }
     let isEnabled = isVisible && isSceneActive && screen == .home

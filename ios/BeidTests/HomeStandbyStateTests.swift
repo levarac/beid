@@ -126,6 +126,25 @@ final class HomeStandbyLifecycleTests: XCTestCase {
     XCTAssertNil(app.homeStandby.listeningStartedAt)
   }
 
+  func testAdvertisingOffAfterExplicitStopDoesNotRestartDiscovery() async {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    sensing.useDemoEventMode = true
+    sensing.startSensing()
+    await deliverAdvertisingState(true, through: engine, to: sensing)
+    let app = makeApp(sensing: sensing)
+    app.requestScanClose()
+    sensing.useDemoEventMode = false
+    // Stop reached idle while the radio still reports advertising.
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertTrue(app.homeDiscoveryHeldAfterStop)
+    await deliverAdvertisingState(false, through: engine, to: sensing)
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertTrue(app.homeDiscoveryHeldAfterStop, "A late advertising-off report must not release the hold")
+    XCTAssertFalse(app.homeStandbyDiscoveryActive)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 0)
+  }
+
   func testLookForEventsReleasesTheGateAndSearchStartsAgain() {
     let engine = RecordingEventJoinControl()
     let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
@@ -321,6 +340,19 @@ final class HomeStandbyLifecycleTests: XCTestCase {
     await fulfillment(of: [delivered], timeout: 1)
     observation.cancel()
     XCTAssertEqual(sensing.isScanning, isScanning)
+  }
+
+  private func deliverAdvertisingState(
+    _ isAdvertising: Bool,
+    through engine: RecordingEventJoinControl,
+    to sensing: SensingCoordinator
+  ) async {
+    let delivered = expectation(description: "The engine reports advertising=\(isAdvertising)")
+    let observation = sensing.$isAdvertising.dropFirst().prefix(1).sink { _ in delivered.fulfill() }
+    engine.emitState(isScanning: false, isAdvertising: isAdvertising)
+    await fulfillment(of: [delivered], timeout: 1)
+    observation.cancel()
+    XCTAssertEqual(sensing.isAdvertising, isAdvertising)
   }
 
   private func makeApp(sensing: SensingCoordinator) -> AppCoordinator {
