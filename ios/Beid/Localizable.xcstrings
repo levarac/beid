@@ -2102,6 +2102,17 @@
     "Only events you have a saved record for are listed here.": {
       "comment": "Footer under the Past Events list, clarifying that a code that was typed and abandoned before recording completed does not appear."
     },
+    "account.organizerTools.title": {
+      "comment": "Account menu row and navigation title for the venue operator tools screen.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Organizer tools"
+          }
+        }
+      }
+    },
     "account.pastEvents.label": {
       "comment": "Menu row in the Account sheet that opens the list of previously joined events (beid#230), for rejoining one without retyping its code.",
       "localizations": {
@@ -2598,9 +2609,6 @@
     },
     "Open Bluetooth Settings": {
       "comment": "Accessibility label for the Account Bluetooth-off recovery control."
-    },
-    "Organizer tools": {
-      "comment": "Account navigation row opening venue operator tools."
     },
     "Sensing is paused until Bluetooth is on. Tap to open Settings.": {},
     "Venue broadcast": {},

@@ -580,7 +580,8 @@ jobs:
     needs: [plan, build]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.plan.outputs.mode == 'full' }}
     runs-on: xcode-27
-    timeout-minutes: 35
+    # Step limit plus setup, evidence and cleanup; see the test step below.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       # One unit job plus at most five UI shards start after the build.
@@ -642,8 +643,10 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: Execute full-mode test lane
-        # UI shards take 21-25 minutes on xcode-27; 30 is containment.
-        timeout-minutes: 30
+        # UI shards plan at about 20 minutes of test-case time, but single tests stall
+        # for 2 to 5 minutes on hosted xcode-27 runners (2026-11-25); 40 is containment
+        # until the stalls are explained, not a speed target.
+        timeout-minutes: 40
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
