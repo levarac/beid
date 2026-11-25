@@ -271,7 +271,8 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     dismissBindingSheetToReachLiveRecording()
     signalLost.tap()
-    XCTAssertTrue(app.staticTexts["Signal lost"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "signal lost"))
+      .firstMatch.waitForExistence(timeout: 30))
     capture(named: "signal-lost-\(orientation)")
   }
 
