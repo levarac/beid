@@ -94,7 +94,7 @@ def ui_shard_lanes(shards):
     return {f"ui-{index + 1}": shard for index, shard in enumerate(shards)}
 
 
-def result_cases(payload):
+def result_case_nodes(payload):
     """Normalize case identifiers; retain duplicates so the ledger can reject them."""
     cases = []
 
@@ -118,16 +118,22 @@ def result_cases(payload):
                 identifier = f"{bundle}/{identifier}"
             unique_tests([identifier], bundle)
             status = node.get("result", node.get("testStatus"))
-            # A deliberately unexecuted case may have no duration field.
-            # Unknown skips still fail validate_lane; missing passed durations fail.
-            duration = (0.0 if status == "Skipped" and not any(
-                key in node for key in ("durationInSeconds", "duration")) else case_duration(node))
-            cases.append((identifier, status, duration))
+            cases.append((identifier, status, node))
         for key in ("children", "testNodes", "subtests"):
             if key in node:
                 walk(node[key], bundle, suite)
 
     walk(payload)
+    return cases
+
+
+def result_cases(payload):
+    cases = []
+    for identifier, status, node in result_case_nodes(payload):
+        # A deliberately skipped case can omit its duration.
+        missing_time = "durationInSeconds" not in node and "duration" not in node
+        duration = 0.0 if status == "Skipped" and missing_time else case_duration(node)
+        cases.append((identifier, status, duration))
     return cases
 
 
@@ -166,6 +172,20 @@ def classifier_skip(event, needs):
     outputs = changes.get("outputs", {})
     return (event == "pull_request" and changes.get("result") == "success"
             and outputs.get("ios") == "false" and outputs.get("error") == "false")
+
+
+def latest_evidence(root, current_attempt):
+    latest = {}
+    for folder in root.iterdir():
+        match = re.fullmatch(r"ios-evidence-([1-9][0-9]*)-(build|unit|ui-[1-9][0-9]*)", folder.name)
+        if not folder.is_dir() or match is None:
+            raise ValueError(f"unexpected evidence entry: {folder.name}")
+        attempt, lane = int(match[1]), match[2]
+        if attempt > current_attempt:
+            raise ValueError(f"evidence is from a future attempt: {folder.name}")
+        if lane not in latest or attempt > latest[lane][0]:
+            latest[lane] = (attempt, folder)
+    return latest
 
 
 def validate_aggregate(event, needs, manifest, evidence, sha):
@@ -261,7 +281,7 @@ def source_tests(source_root: Path, bundle="BeidUITests") -> list[str]:
     """Bind each method to its Swift class, ignoring comments and string literals."""
     available = set()
     tokens = re.compile(r'//[^\n]*|/\*.*?\*/|""".*?"""|"(?:\\.|[^"\\])*"', re.S)
-    for path in source_root.rglob("*.swift"):
+    for path in ([source_root] if source_root.is_file() else source_root.rglob("*.swift")):
         text = tokens.sub("", path.read_text(encoding="utf-8"))
         for match in re.finditer(r"\b(?:class|extension)\s+(\w+)[^{]*\{", text):
             start = match.end()
@@ -457,17 +477,7 @@ def main() -> int:
             return 0
         if args.command == "aggregate":
             needs = json.loads(args.needs_json.read_text())
-            latest = {}
-            for folder in args.evidence_root.iterdir():
-                match = re.fullmatch(r"ios-evidence-([1-9][0-9]*)-(build|unit|ui-[1-9][0-9]*)", folder.name)
-                if not folder.is_dir() or match is None:
-                    raise ValueError(f"unexpected evidence entry: {folder.name}")
-                attempt, lane = int(match[1]), match[2]
-                if attempt > args.attempt:
-                    raise ValueError(f"evidence is from a future attempt: {folder.name}")
-                if lane not in latest or attempt > latest[lane][0]:
-                    latest[lane] = (attempt, folder)
-
+            latest = latest_evidence(args.evidence_root, args.attempt)
             build = needs.get("build", {})
             build_attempt = 0
             if build.get("result") == "success":

@@ -486,6 +486,8 @@ lanes via `test-without-building`, each with fresh simulator/DerivedData/results
 `IOS_UI_SHARDS` in the workflow is the single count setting: 5 by default, 2–4
 also supported. At most six macOS jobs run together. Product SHA, Xcode build, SDK
 and architecture must match before extraction; permissions/symlinks survive tar.
+**Compare proposed UI test selection** uses full-run artifacts to compare a
+screen-based candidate list with observed UI failures. Its JSON is advisory.
 The aggregate requires every needed job to succeed, the UI shard union to equal
 the runtime enumeration without duplicates, and every enumerated test to be
 checked. Anything not on the per-environment skip list must pass. The three iPhone

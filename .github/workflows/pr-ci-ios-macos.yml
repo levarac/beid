@@ -73,6 +73,7 @@ jobs:
       ios: ${{ steps.classify.outputs.ios }}
       ios_full: ${{ steps.classify.outputs.ios_full }}
       error: ${{ steps.classify.outputs.error }}
+      shadow_paths: ${{ steps.shadow_paths.outputs.json }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -143,6 +144,17 @@ jobs:
         id: classify
         if: always()
         run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
+
+      # The collector writes compact single-line JSON. Missing or oversized
+      # inputs leave the advisory comparison on its conservative full default.
+      - name: Export paths for UI selection comparison
+        id: shadow_paths
+        shell: bash
+        run: |
+          file="$RUNNER_TEMP/beid-changed-files.json"
+          if [[ -f "$file" ]] && (( $(wc -c < "$file") <= 16384 )); then
+            printf 'json=%s\n' "$(cat "$file")" >> "$GITHUB_OUTPUT"
+          fi
 
   plan:
     name: Plan iOS test jobs
@@ -736,3 +748,45 @@ jobs:
           python3 -m scripts.ios_ui_smoke aggregate --event-name "$EVENT_NAME" \
             --needs-json "$RUNNER_TEMP/ios-needs.json" --evidence-root "$RUNNER_TEMP/ios-evidence" \
             --attempt "$GITHUB_RUN_ATTEMPT" --sha "$EXPECTED_SHA" --summary "$GITHUB_STEP_SUMMARY"
+
+  selection-shadow:
+    name: Compare proposed UI test selection
+    # Independent of the required iOS check and all test invocations.
+    needs: [changes, plan, build, tests]
+    if: ${{ always() && needs.plan.outputs.mode == 'full' && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Download full test evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: ios-evidence-*
+          merge-multiple: false
+          path: ${{ runner.temp }}/ios-evidence
+
+      - name: Compare proposed selection with executed tests
+        shell: bash
+        env:
+          CHANGE_INPUT: ${{ needs.changes.outputs.shadow_paths }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BUILD_ATTEMPT: ${{ needs.build.outputs.evidence_attempt }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$CHANGE_INPUT" > "$RUNNER_TEMP/changed-paths.json"
+          python3 -m scripts.ios_ui_selection_shadow --evidence "$RUNNER_TEMP/ios-evidence" \
+            --changes "$RUNNER_TEMP/changed-paths.json" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --build-attempt "$BUILD_ATTEMPT" --sha "$EXPECTED_SHA" --base-sha "$BASE_SHA" > "$RUNNER_TEMP/ui-selection.json"
+
+      - name: Upload proposed selection and comparison
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-ui-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ui-selection.json
+          if-no-files-found: error
+          retention-days: 14

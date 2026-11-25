@@ -231,6 +231,15 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     the most recent evidence for each lane within the same run. It requires
     evidence from the actual build attempt and rejects lanes older than that
     build.
+    After a full build, **Compare proposed UI test selection** publishes
+    `ios-ui-selection-<attempt>` for 14 days. The report records the proposed
+    screen and test-file matches, additional estimated seconds above smoke,
+    the final candidate IDs, and any observed failures outside either set.
+    Common or unknown inputs, unsafe or missing comparisons, and estimates
+    over 25 additional minutes propose the full UI inventory. Expected iPhone
+    skips remain listed at zero cost. Incomplete shard evidence is marked in
+    the report. The existing test commands and required check use the full
+    suite regardless of this comparison.
     Use “Re-run all jobs” to recreate expired artifacts.
     `scripts/ios_ci_timing.py` timestamps SPM resolution,
     KMP script start/end, and the observed Swift compile window. That window
