@@ -11,19 +11,19 @@ target Kotlin tests, from `android/`.
 
 `tools/beid-lab-cli` is a macOS SwiftPM executable that puts a Mac on the
 beid radio as an observer, a venue device or an extra participant for a
-device-lab measurement (beid#588) — see
+device-lab measurement (beid#588). See
 [`tools/beid-lab-cli/README.md`](tools/beid-lab-cli/README.md). It is the one
 part of this repository built with `swift build` rather than through the
 Xcode project, and it is Barnard-only: it contains no `shared/` code and
 decides nothing both apps must agree on. Its Barnard pin must equal
-`ios/project.yml`'s, and `scripts/check_lab_cli_barnard_pin.py` fails the two
-apart — a lab tool that measured a different SDK than the app ships produces
-unusable numbers silently. Its `observe` mode must never connect to what it
+`ios/project.yml`'s, and `scripts/check_lab_cli_barnard_pin.py` fails when the
+two differ, because a lab tool that measured a different SDK than the app ships
+silently produces unusable numbers. Its `observe` mode must never connect to what it
 measures, which `scripts/check_observe_never_connects.py` enforces.
 
 `tools/beid-lab-cli` の `venue` サブコマンドは発信端末の代役も務まるため、iOS 端末が
 1 台も無くても Android 側を実機検証できる（2026-09-18、iPad/iPhone 抜きで beid#584 を
-確認済み）。端末が揃わない時にまず試す選択肢。
+確認済み）。端末が揃わない時は、まずこの方法を試す。
 
 lab CLI の bundle id は `org.levarac.beid.lab-cli`（`tools/beid-lab-cli/scripts/bundle.sh`
 と `tools/beid-lab-cli/Sources/beid-lab-cli/EngineLogging.swift`）。PR #605 は 2026-09-18 に merge 済み
@@ -69,13 +69,13 @@ capture screenshot` を併用すると agent なしで確認できる）。iPad 
 
 ### バックグラウンドでのセンシングは OS で振る舞いが違う（beid#606）
 
-- **iOS は条件付きで継続する。** `UIBackgroundModes` に
+- iOS は条件付きで継続する。`UIBackgroundModes` に
   `bluetooth-central`/`bluetooth-peripheral` を宣言し（`ios/project.yml`、
   `ios/Beid/App/Info.plist`）、scan は service UUID 指定なので背面でも許可される。
   `ScanFlowView.swift` は背面遷移時に `checkpointOpenWindowForBackgrounding()`
   を呼ぶが、scan は止めない（`SensingCoordinator.swift`）。開いていたウィンドウはその瞬間までに
   切り詰めて保存される（喪失ではない）。
-- **Android は実質的にアプリを前面に置く必要がある。** foreground service も
+- Android は実質的にアプリを前面に置く必要がある。foreground service も
   `FOREGROUND_SERVICE*` 権限も無く（`android/app/src/main/AndroidManifest.xml`）、
   scan の開始/停止は Activity lifecycle ではなく discovery 状態で駆動され、dispose は
   `MainActivity.onDestroy()` のみ（`EventJoinCoordinator.kt`、
@@ -102,8 +102,8 @@ PR#609 は、hold された（再送不可な）窓が送信 ledger の先頭に
   （`WindowObservationAccumulator.kt` の
   `resolveEventDefinition(eventIdHex, nowEpochSeconds())`）。
 
-**帰結: 定義の有効期限が切れた後の drain では、送信設定が未解決のまま残った
-同一イベントの複数窓が、順に `TERMINAL_FAILED` となり自動送信の対象から外れうる。**
+その結果、定義の有効期限が切れた後の drain では、送信設定が未解決のまま残った
+同一イベントの複数窓が、順に `TERMINAL_FAILED` となり自動送信の対象から外れうる。
 設定を既に保存した窓は registry 再照会を通らないため、この条件だけで全キューの停止や
 保存済みバイトの削除までは言えない。新ビルドのインストール自体が停止の条件でもない。
 未送信窓を持つ端末で drain を走らせる前に、ledger snapshot だけでなく
@@ -118,15 +118,14 @@ Verified 2026-08-08 against `origin/main` at
 sensing and persistence implementations, the Android shared bridge and native
 ledger store, `ios/project.yml`, `Package.resolved`, the Android Gradle graph,
 and the current CI files.
-This is a last-checked record, not a substitute for refreshing the target ref
-before new work.
+This is a last-checked record, not a substitute for refreshing the target ref before new
+work.
 
 [`docs/kmp-shared-foundation.md`](docs/kmp-shared-foundation.md) is the
 implementation contract for moving a behavior into `shared/`. It is an
-ordered procedure, not a list of optional ideas: classify the behavior, fix
-its oracle or invariant, record RED evidence, implement the shared decision,
-add thin native adapters and production callers, then pass every ownership
-and build gate before moving on. Start at section 1 and work downward.
+ordered procedure, not a list of optional ideas: classify the behavior, fix its oracle or invariant, record
+RED evidence, implement the shared decision, add thin native adapters and
+production callers, then pass every ownership and build gate before moving on. Start at section 1 and work downward.
 
 This file summarizes the ownership boundary and repository-wide constraints;
 the foundation manual is authoritative for detailed KMP procedure. If the two
@@ -214,18 +213,18 @@ decision has not actually moved to `shared/`.
 
 Three decisions define this boundary:
 
-- **KMP-001 — `shared/` is project-internal.** Android and iOS build it from
+- KMP-001 says `shared/` is project-internal. Android and iOS build it from
   the same checkout instead of consuming a published Maven or SwiftPM
   artifact. The checked-out tree therefore identifies the shared code
   without a second version-resolution surface. Publishing it later is a
   change to this decision and requires artifact provenance in CI.
-- **KMP-002 — Barnard remains native on both platforms.** Barnard already
+- KMP-002 says Barnard remains native on both platforms. Barnard already
   owns BLE, B002-B005, owner-key/binding ceremonies, canonical Barnard
   messages, and their protocol invariants. Rechecking those semantics in
   beid shared code would create a second Barnard implementation. `shared/`
   may check only boundary shape such as nullability, byte length, and
   container form.
-- **KMP-003 — event scoring and event adoption are separate.** A pure time
+- KMP-003 says event scoring and event adoption are separate. A pure time
   filter and deterministic ranking may become shared so both platforms
   order candidates identically. Choosing a candidate, presenting it, and
   changing lifecycle state remain native/product behavior owned by Issue
@@ -236,7 +235,7 @@ Three decisions define this boundary:
 
 A PR that adds or moves a product feature must touch both platform call
 paths, or its description must state why one platform is intentionally
-untouched. A valid reason names the actual boundary or current gap—for
+untouched. A valid reason names the actual boundary or current gap, for
 example, a platform-only effect or an Android production flow that does not
 exist yet. Silence is not a reason. Shared tests alone also do not prove that
 either app calls the shared implementation.
@@ -248,19 +247,19 @@ names, so package placement is a public-API decision for this repository.
 Generated package namespaces are lowercase, and a local Swift binding with
 the same name shadows them.
 
-- Always module-qualify. **There are two correct spellings, and which one
+- Always module-qualify. There are two correct spellings, and which one
   applies is decided by where the Kotlin package sits relative to the shared
-  module's own root (`org/levarac/beid/shared`), not by preference:**
-  - **Inside that root** — `BeidSharedKit.<package>.<Type>`, e.g.
+  module's own root (`org/levarac/beid/shared`), not by preference.
+  - Inside that root, write `BeidSharedKit.<package>.<Type>`, e.g.
     `BeidSharedKit.report.SomeSharedType`.
-  - **Outside it** — the fully-qualified exported path,
+  - Outside it, write the fully-qualified exported path,
     `ExportedKotlinPackages.<full.kotlin.path>.<Type>`, e.g.
     `ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext`.
     `parallax` is exported this way precisely because it is not under the
     module root; the shorter spelling is not available for it.
 
   The test, so a case you have not seen can be classified rather than guessed:
-  **ask whether the declaration's Kotlin package begins with the module root.**
+  ask whether the declaration's Kotlin package begins with the module root.
   Both spellings are module-qualified and both satisfy the ownership gate; a
   reader who applies only the first form will wrongly conclude that every
   `parallax` call site is malformed.
@@ -273,73 +272,73 @@ the same name shadows them.
 
 ### Local and CI evidence traps
 
-- **Use a concrete iOS Simulator UDID.** Several installed simulators can
+- Use a concrete iOS Simulator UDID. Several installed simulators can
   share a name, so name-based destinations are ambiguous. A generic
   Simulator destination may add x86_64 even when every usable simulator on
   the host is arm64. If a link error names an architecture that no simulator
   on the host actually uses, inspect the destination before changing code or
   dependency symbols. See `ios/README.md` for the command form.
-- **Erase the Simulator before a run whose failures you intend to interpret.**
-  State accumulates across runs — completed onboarding, `UserDefaults`, an
-  existing `ProofStore` — and a dirty device produces failures that look like
+- Erase the Simulator before a run whose failures you intend to interpret.
+  State accumulates across runs (completed onboarding, `UserDefaults`, an
+  existing `ProofStore`), and a dirty device produces failures that look like
   code defects and reproduce consistently enough to be mistaken for them.
-  Observed 2026-08-21 on gh#250: two tests failed on the working simulator,
+  On 2026-08-21, in gh#250, two tests failed on the working simulator,
   were analyzed as pre-existing and unrelated (no diff touched either file),
   and both passed after `xcrun simctl erase`. The same two failure classes
   appear in PR #258's verification notes, from different work on the same
-  host, traced to the same cause. **Absence of a code diff rules out a
+  host, traced to the same cause. Absence of a code diff rules out a
   code-caused regression; it does not rule out an environment-caused
-  failure.** Before concluding "pre-existing", ask what else produces this
-  failure — and say which simulator state each reported number came from,
+  failure. Before concluding "pre-existing", ask what else produces this
+  failure, and say which simulator state each reported number came from,
   because a test count means nothing without it. Note that #244 (UI-test
   `ProofStore` contamination) is a *within-run* instance of the same family.
-- **XcodeGen without its `SettingPresets` writes a broken project and exits
-  0.** XcodeGen loads its build-setting presets from a `SettingPresets/`
+- XcodeGen without its `SettingPresets` writes a broken project and exits
+  0. XcodeGen loads its build-setting presets from a `SettingPresets/`
   directory next to the binary (`../share/xcodegen/SettingPresets`;
   Homebrew and Mint both place it there, extracting only `bin/xcodegen`
   from a release archive does not). An installation missing it still
   generates a project, still exits 0, and silently omits every
-  preset-derived setting — for this repository, 161 lines including
+  preset-derived setting; for this repository, 161 lines including
   `BUNDLE_LOADER`, `SDKROOT`, `LD_RUNPATH_SEARCH_PATHS` and
   `TARGETED_DEVICE_FAMILY`. The project then fails with `Could not find
   test host for BeidTests` and `Multiple commands produce '.../.app'`. The
   only signal is `No "..." settings found` warnings printed next to a
-  success message. **`scripts/xcodegen_generate_checked.sh` now fails on
+  success message. `scripts/xcodegen_generate_checked.sh` now fails on
   those warnings, and every CI/delivery path calls it instead of
-  `xcodegen generate`** — use it locally too. Observed 2026-09-02 on
-  gh#320: this was first diagnosed as the pinned 2.45.3 being unable to
+  `xcodegen generate`, so use it locally too. On 2026-09-02 (gh#320)
+  this was first diagnosed as the pinned 2.45.3 being unable to
   generate the current `project.yml`, and recorded that way in the issue
-  and in `DECISIONS.md`. It was wrong. Running **2.46.0** without its
+  and in `DECISIONS.md`. It was wrong. Running 2.46.0 without its
   presets drops the same 161 lines, and the pinned 2.45.3 on CI generates
-  them correctly. **Do not "fix" a preset-less generation by bumping
-  `XCODEGEN_VERSION` or by deleting settings from `project.yml`.** The
+  them correctly. Do not "fix" a preset-less generation by bumping
+  `XCODEGEN_VERSION` or by deleting settings from `project.yml`. The
   general lesson is the one already recorded for `--is-ancestor`: when two
   runs differ, confirm which variable actually changed before recording a
-  reason — the two runs here also differed in how XcodeGen was installed,
+  reason. The two runs here also differed in how XcodeGen was installed,
   and that was the one that mattered.
-- **`xcode-select` may point at CommandLineTools, breaking `simctl` and
-  `xcodebuild` with no obvious connection to your change.** Do not
-  `sudo xcode-select -s` — that is a host-wide change affecting every
+- `xcode-select` may point at CommandLineTools, breaking `simctl` and
+  `xcodebuild` with no obvious connection to your change. Do not
+  `sudo xcode-select -s`, because that is a host-wide change affecting every
   worktree and session. Resolve a valid active `DEVELOPER_DIR` or an existing
   full Xcode installation per invocation, using `xcode-select -p` only to read
   the current selection; do not change the host-wide selection.
-- **Resolve a supported local JDK through
-  `scripts/resolve_kmp_java_home.sh`.** Canonical commands must not hardcode a
+- Resolve a supported local JDK through
+  `scripts/resolve_kmp_java_home.sh`. Canonical commands must not hardcode a
   machine path. The resolver accepts a supported `KMP_JAVA_HOME`, then tries
   Android Studio JBR 21 (commonly
   `/Applications/Android Studio.app/Contents/jbr/Contents/Home`), Homebrew
   JDK 17, and macOS's Java 17 resolver. The ambient system Java 25 breaks this
-  build; CI selects its own pinned JDK 17. The symptom varies by machine — an
+  build; CI selects its own pinned JDK 17. The symptom varies by machine. An
   ambient Java 25 on `PATH` is one form, and a machine with no ambient JDK at
-  all is another (observed 2026-08-19). Both resolve the same way, so do not
+  all (observed 2026-08-19) is another. Both resolve the same way, so do not
   conclude from a different error message that the trap does not apply and
   start improvising a JDK.
-- **Read Gradle task outcomes, not only the final green line.** `NO-SOURCE`
+- Read Gradle task outcomes, not only the final green line. `NO-SOURCE`
   means that task executed zero sources or tests. For every test task that
   was expected to run, require a non-`NO-SOURCE` outcome and report the test
   count; otherwise an empty test lane can look successful.
-- **Use `scripts/run_local_tests.py` when a local test log would overwhelm an
-  agent turn.** The wrapper keeps the full child output under
+- Use `scripts/run_local_tests.py` when a local test log would overwhelm an
+  agent turn. The wrapper keeps the full child output under
   `build/local-test-runs/` and prints its path, while a successful run shows
   only task/target outcomes, test totals, evidence warnings, and iOS Simulator
   state. `NO-SOURCE`, zero tests, missing or stale result files, and malformed
@@ -408,12 +407,12 @@ the same name shadows them.
   compile-failed is not evidence of test protection. Existing test-result XML
   for the requested tasks is deleted before each run, including the baseline,
   so prior results cannot be reused. It then restores the file from a byte
-  snapshot taken up front and verified by reading the file back — not `git checkout --`,
+  snapshot taken up front and verified by reading the file back, not `git checkout --`,
   so it runs against untracked and dirty targets, which is the normal state
   of the code you are adding tests for. It exists because three rounds of
   manually rebuilding this check by hand during PR #109's review each
   produced a list of "verified behaviors" that looked complete and was later
-  found short — and every time, by someone who rebuilt the check from
+  found short, and every time by someone who rebuilt the check from
   scratch rather than trusting the existing list, not by someone reading it.
   It also catches a blind spot that manual review missed three times: a test
   that asserts against a production constant *by reference* rather than a
@@ -423,7 +422,7 @@ the same name shadows them.
   any other. It is a line/regex-based text scanner over Kotlin source, not a
   Kotlin AST mutation engine (see its own `--help`/docstring for exactly
   what that does and doesn't catch), and it is a manually run, on-demand
-  developer/reviewer tool — it is deliberately **not** wired into
+  developer/reviewer tool. It is deliberately not wired into
   `.github/workflows/pr-ci.yml`, since one full test-suite run per mutation
   site is too expensive to run unconditionally on every PR.
 
