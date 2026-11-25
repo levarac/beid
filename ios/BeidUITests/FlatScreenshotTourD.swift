@@ -457,9 +457,12 @@ final class FlatScreenshotTourD: XCTestCase {
     let bar = app.navigationBars["Account"]
     let done = bar.buttons["Done"]
     XCTAssertTrue(done.exists)
-    XCTAssertGreaterThanOrEqual(done.frame.width + 0.01, 44)
     XCTAssertTrue(done.isHittable)
-    // A 44pt-tall region centered on Done's own center must sit inside the bar.
+    // The system confirm button can be drawn smaller than its touch area (a 36pt circle on a
+    // fresh iOS 27.0 simulator), so check the 44pt square centered on Done instead of its drawn
+    // frame: that square must sit inside the bar in both directions.
+    XCTAssertGreaterThanOrEqual(done.frame.midX - 22 + 0.01, bar.frame.minX)
+    XCTAssertLessThanOrEqual(done.frame.midX + 22 - 0.01, bar.frame.maxX)
     XCTAssertGreaterThanOrEqual(done.frame.midY - 22 + 0.01, bar.frame.minY)
     XCTAssertLessThanOrEqual(done.frame.midY + 22 - 0.01, bar.frame.maxY)
   }
