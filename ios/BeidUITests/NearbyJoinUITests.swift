@@ -67,6 +67,41 @@ final class NearbyJoinUITests: XCTestCase {
 final class NowNavigationUITests: XCTestCase {
   private let app = XCUIApplication()
 
+  func testNowShowsPendingRecordsUntilSubmissionSucceeds() {
+    launchHome(["-beid-home-frame-04b", "-beid-pending-record-fixture"])
+    let notice = app.otherElements["home.unsent-notice"]
+    XCTAssertFalse(notice.exists, "A normal send must not display the notice")
+    app.buttons["home.pending-fixture.advance60"].tap()
+    XCTAssertFalse(notice.exists, "Exactly 60 seconds is still inside the grace period")
+    app.buttons["home.pending-fixture.advance1"].tap()
+    XCTAssertTrue(notice.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["NOT SENT YET"].exists)
+    XCTAssertTrue(app.staticTexts[
+      "Part of your Record is saved on this device but not sent yet. beid sends it when the app is open and online."
+    ].exists)
+    capture("Now-unsent-records")
+    let accept = app.buttons["home.pending-fixture.accept"]
+    accept.assertHittable()
+    accept.tap()
+    let disappeared = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: notice
+    )
+    XCTAssertEqual(XCTWaiter.wait(for: [disappeared], timeout: 5), .completed)
+  }
+
+  func testNowHidesWaitingNoticeDuringActiveSession() {
+    launchHome(["-beid-home-frame-04", "-beid-pending-record-fixture"])
+    app.buttons["home.pending-fixture.advance60"].tap()
+    app.buttons["home.pending-fixture.advance1"].tap()
+    app.otherElements["home.active-event"].assertExists()
+    XCTAssertFalse(app.otherElements["home.unsent-notice"].exists)
+  }
+
+  func testNowHasNoWaitingNoticeWithoutPendingRecords() {
+    launchHome(["-beid-home-frame-04b"])
+    XCTAssertFalse(app.otherElements["home.unsent-notice"].exists)
+  }
+
   override func setUpWithError() throws {
     continueAfterFailure = false
   }

@@ -34,6 +34,12 @@ final class DesignTokensTests: XCTestCase {
     ("statusOff", DS.Color.statusOff, "#FF453A"),
   ]
 
+  func testSilentRadarNodeOpacity() {
+    XCTAssertEqual(DS.Opacity.radarSilentNode, 0.45)
+    XCTAssertEqual(BeidConfig.detectedNowDimAfter, 30)
+    XCTAssertEqual(BeidConfig.detectedNowTimeout, 300)
+  }
+
   func testColorTokensResolveToFlat2bLibraryHexInLightAndDark() {
     for style in [UIUserInterfaceStyle.light, .dark] {
       let traits = UITraitCollection(userInterfaceStyle: style)

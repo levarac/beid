@@ -1965,7 +1965,17 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   top-trailing toolbar. The primary nearby candidate card on Now presents
   the announced name and registration status, and the whole card joins
   after verification. Its accessibility label starts with the localized
-  join action. Empty state (04b) follows the §3 do/don't. **[iOS-only as
+  join action. Outside an active session (standby and after stopping), a
+  pending-dot notice above Now's current content appears only after a send
+  attempt has failed or an item has waited more than 60 seconds. It says
+  "NOT SENT YET" / "Part of your Record is saved on this device but not sent
+  yet. beid sends it when the app is open and online." It follows the clock
+  notice's hairline and typography style, includes pending captures and
+  retryable submissions, and disappears once none qualify. Accepted records
+  and terminal failures never keep it visible. The completion text
+  "You can close the app" remains unchanged: records stay on the device and
+  sending retries when the app is next open and online. Empty state (04b)
+  follows the §3 do/don't. **[iOS-only as
   written — no Android counterpart. `Screen.kt`'s own comment: `EventJoin`
   "stands in for iOS's `.home`, since Android has no post-onboarding
   collection-home screen yet." Promoting a screen to this role is
@@ -1980,7 +1990,17 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   Only successful durable finalization may show the saved-record screen and
   say that the app can be closed. There is no threshold-based transition or
   countdown. While sensing, show devices heard and elapsed time without a
-  mutual count or an achievement state. DONE advances to the collected-record
+  mutual count or an achievement state. Radar nodes show devices heard in
+  the last 300 seconds, refreshed once per second, with the caption
+  "HEARD IN THE LAST 5 MINUTES" below the radar and the same time scope in
+  its VoiceOver summary. A node dims at 30 seconds of silence using
+  `DS.Opacity.radarSilentNode` (0.45), and disappears at 300 seconds.
+  Both durations in `BeidConfig` are provisional until measured with locked
+  iOS and Android peers. Each device's last detection or signal update
+  restarts its rolling timer; observation-window boundaries never expire
+  nodes. Expiry changes only this
+  live display; DEVICES HEARD remains the session total, and earlier window
+  observations and signed records remain intact. DONE advances to the collected-record
   screen, and View collection opens Records. Returning to Now resumes nearby
   discovery without joining another event.
   **[Android retains its native event-join surface for this release; the

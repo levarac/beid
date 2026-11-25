@@ -69,6 +69,11 @@ enum DS {
     static let statusOff = SwiftUI.Color(.semanticRed)
   }
 
+  enum Opacity {
+    /// Retained radar nodes that have not been heard recently (#855).
+    static let radarSilentNode: Double = 0.45
+  }
+
   // MARK: - Space
   //
   // 4 pt base scale. See DESIGN.md §7.

@@ -49,6 +49,23 @@ protocol EventDefinitionContextProvider: AnyObject {
     eventIdHex: String,
     completion: @escaping (VerifiedSubmissionDefinition?) -> Void
   )
+
+  /// Same lookup, but a failed lookup also reports the registry's terminal
+  /// error code when retrying later cannot succeed (for example no definition
+  /// is valid at the current time). `nil` means success or a retryable failure.
+  func resolveReportingTerminalCode(
+    eventIdHex: String,
+    completion: @escaping (VerifiedSubmissionDefinition?, String?) -> Void
+  )
+}
+
+extension EventDefinitionContextProvider {
+  func resolveReportingTerminalCode(
+    eventIdHex: String,
+    completion: @escaping (VerifiedSubmissionDefinition?, String?) -> Void
+  ) {
+    resolve(eventIdHex: eventIdHex) { completion($0, nil) }
+  }
 }
 
 /// Native adapter from the registry module's verified EventDefinitionContext
@@ -58,8 +75,11 @@ protocol EventDefinitionContextProvider: AnyObject {
 final class RegistryEventDefinitionContextProvider: EventDefinitionContextProvider {
   private let resolveByCanonicalEventId: (
     String,
-    @escaping (VerifiedSubmissionDefinition?) -> Void
+    @escaping (VerifiedSubmissionDefinition?, String?) -> Void
   ) -> Void
+
+  /// Registry error codes after which a later lookup cannot succeed.
+  static let terminalDefinitionErrorCodes: Set<String> = ["definition_validity_mismatch"]
 
   init(
     client: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient,
@@ -80,10 +100,13 @@ final class RegistryEventDefinitionContextProvider: EventDefinitionContextProvid
                       allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
                     )
           else {
-            completion(nil)
+            let code = resolution.errorCode.flatMap {
+              Self.terminalDefinitionErrorCodes.contains($0) ? $0 : nil
+            }
+            completion(nil, code)
             return
           }
-          completion(VerifiedSubmissionDefinition(configuration: configuration))
+          completion(VerifiedSubmissionDefinition(configuration: configuration), nil)
         }
       }
     }
@@ -98,15 +121,24 @@ final class RegistryEventDefinitionContextProvider: EventDefinitionContextProvid
       @escaping (VerifiedSubmissionDefinition?) -> Void
     ) -> Void
   ) {
-    self.resolveByCanonicalEventId = lookup
+    self.resolveByCanonicalEventId = { eventIdHex, completion in
+      lookup(eventIdHex) { completion($0, nil) }
+    }
   }
 
   func resolve(
     eventIdHex: String,
     completion: @escaping (VerifiedSubmissionDefinition?) -> Void
   ) {
+    resolveReportingTerminalCode(eventIdHex: eventIdHex) { verified, _ in completion(verified) }
+  }
+
+  func resolveReportingTerminalCode(
+    eventIdHex: String,
+    completion: @escaping (VerifiedSubmissionDefinition?, String?) -> Void
+  ) {
     guard let normalized = eventIdHex.normalizedCanonicalEventIdHex else {
-      completion(nil)
+      completion(nil, nil)
       return
     }
     resolveByCanonicalEventId(normalized, completion)
@@ -598,10 +630,18 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       Self.log.error("Deferred canonical submission without a canonical Event ID")
       return
     }
-    definitionProvider.resolve(eventIdHex: eventIdHex) { [weak self] verified in
+    definitionProvider.resolveReportingTerminalCode(eventIdHex: eventIdHex) { [weak self] verified, terminalCode in
       Task { @MainActor [weak self] in
         guard let self, !self.retryController.isStopped else { return }
         self.resolvingCaptures.remove(capture.id)
+        if verified == nil, let terminalCode {
+          // Saved evidence stays; only the unsent notice stops counting it.
+          do {
+            try self.store.markCaptureDefinitionUnavailable(id: capture.id, code: terminalCode)
+          } catch {
+            Self.log.error("Unable to record a terminal definition outcome: \(String(describing: error), privacy: .public)")
+          }
+        }
         self.prepareAndQueueWindow(capture: capture, verified: verified, signingCryptography: signingCryptography)
       }
     }
@@ -940,6 +980,11 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     }
     let isNoResponseTransportFailure = result.statusCode == 0 && result.errorCode == "http_error"
     if result.isRetryable || isNoResponseTransportFailure {
+      do {
+        try store.markRetryableSendFailure(for: record.id)
+      } catch {
+        Self.log.error("Unable to persist waiting-notice metadata")
+      }
       if let origin = submissionOperatorOrigin(record.endpoint) {
         retryController.retry(operatorOrigin: origin) { [weak self] in self?.submitPending() }
       }
