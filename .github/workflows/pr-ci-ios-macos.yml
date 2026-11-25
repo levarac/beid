@@ -263,6 +263,30 @@ jobs:
             printf 'jdk=%s\n' "$("$kmp_java_home/bin/java" -version 2>&1 | shasum -a 256 | awk '{print $1}')"
           } >> "$GITHUB_OUTPUT"
 
+      # The checked-in wrapper verifies the distribution SHA on download.
+      # Its distribution survives unrelated Xcode, SDK and KMP cache misses.
+      - name: Restore Gradle distribution
+        id: distribution
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: beid-ios-gradle-dist-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle/wrapper/gradle-wrapper.jar') }}
+
+      - name: Prepare Gradle distribution
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Retry a cold download once before spending time on the simulator.
+          ./gradlew --version || ./gradlew --version
+
+      - name: Save Gradle distribution
+        if: ${{ steps.distribution.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: ${{ steps.distribution.outputs.cache-primary-key }}
+
       - name: Cache KMP dependencies
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -270,7 +294,6 @@ jobs:
             ~/.gradle/caches
             !~/.gradle/caches/build-cache-*
             !~/.gradle/caches/*/executionHistory
-            ~/.gradle/wrapper
             ~/.konan
           # The Kotlin version is declared in android/build.gradle.kts today.
           # No prefix restore: a toolchain/configuration mismatch stays cold.
@@ -581,7 +604,7 @@ jobs:
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.plan.outputs.mode == 'full' }}
     runs-on: xcode-27
     # Step limit plus setup, evidence and cleanup; see the test step below.
-    timeout-minutes: 45
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       # One unit job plus at most five UI shards start after the build.
@@ -643,6 +666,7 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: Execute full-mode test lane
+        id: run_tests
         # UI shards plan at about 20 minutes of test-case time, but single tests stall
         # for 2 to 5 minutes on hosted xcode-27 runners (2026-11-25); 40 is containment
         # until the stalls are explained, not a speed target.
@@ -667,6 +691,7 @@ jobs:
             "${test_args[@]}"
 
       - name: Collect shard structured results
+        id: structured
         if: always()
         shell: bash
         run: |
@@ -691,6 +716,40 @@ jobs:
             ${{ env.CI_OUTPUT_ROOT }}/manifest.json
           if-no-files-found: error
           retention-days: 14
+
+      # Preserve a partial bundle too when the test step reaches its time limit.
+      # A job terminated by the runner cannot execute any remaining steps.
+      - name: Archive failed UI test result
+        id: archive
+        if: ${{ always() && startsWith(matrix.lane, 'ui-') && steps.run_tests.outcome != 'skipped' && (steps.run_tests.outcome != 'success' || steps.structured.outcome == 'failure') }}
+        timeout-minutes: 3
+        env:
+          MAX_ARCHIVE_BYTES: '262144000'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CI_OUTPUT_ROOT"
+          if [[ ! -d Tests.xcresult ]]; then
+            echo "::notice::No Tests.xcresult was written."
+            exit 0
+          fi
+          tar -czf Tests.xcresult.tar.gz Tests.xcresult
+          if (( $(wc -c < Tests.xcresult.tar.gz) > MAX_ARCHIVE_BYTES )); then
+            echo "::warning::Compressed Tests.xcresult exceeds the upload limit."
+            exit 0
+          fi
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
+      - name: Upload failed UI test result
+        if: ${{ always() && steps.archive.outputs.ready == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        timeout-minutes: 4
+        with:
+          name: ios-xcresult-${{ github.run_attempt }}-${{ matrix.lane }}
+          path: ${{ env.CI_OUTPUT_ROOT }}/Tests.xcresult.tar.gz
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
 
       - name: Delete shard-owned simulator
         if: ${{ always() && steps.simulator.outputs.udid != '' }}
