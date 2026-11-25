@@ -1013,17 +1013,6 @@
         }
       }
     },
-    "Stop and keep record" : {
-      "comment" : "Alert button: stops sensing and keeps the record already created for this event.",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stop and keep record"
-          }
-        }
-      }
-    },
     "Stop sensing": {
       "comment": "Collection Home action that stops the active sensing session.",
       "localizations": {
@@ -1031,6 +1020,102 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop sensing"
+          }
+        }
+      }
+    },
+    "stop.confirm.action" : {
+      "comment" : "Stop alert confirm button. Ends the sensing session at this event.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop sensing"
+          }
+        }
+      }
+    },
+    "stop.confirm.message.record" : {
+      "comment" : "Stop alert message when a Record already exists. A Record is the item kept in the Records tab.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This ends your sensing session at this event. Any saved Record stays in Records on this device."
+          }
+        }
+      }
+    },
+    "stop.confirm.message.noRecord" : {
+      "comment" : "Stop alert message before any Record exists.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This ends your sensing session at this event. No Record has been created yet."
+          }
+        }
+      }
+    },
+    "home.stopped.title" : {
+      "comment" : "Now after an explicit Stop: the session has ended and nothing is being recorded.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sensing stopped"
+          }
+        }
+      }
+    },
+    "home.stopped.body.record" : {
+      "comment" : "Now after Stop when a Record was saved. A Record is kept in the Records tab on this device.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your Record is saved in Records on this device. You can close the app."
+          }
+        }
+      }
+    },
+    "home.stopped.body.noRecord" : {
+      "comment" : "Now after Stop when no Record was created during the session.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Record was created for this session."
+          }
+        }
+      }
+    },
+    "home.look-for-events.title" : {
+      "comment" : "Button on Now after Stop. Starts searching for nearby events again.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Look for events"
+          }
+        }
+      }
+    },
+    "record.explainer" : {
+      "comment" : "One-line explanation of what a Record is, shown where people first meet one.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Record lets you revisit what this device observed during a sensing session at an event."
           }
         }
       }
@@ -1466,30 +1551,7 @@
     "Sensing": {},
     "Sensing details": {},
     "Event name": {},
-    "Any record created will be saved on this device." : {
-      "comment" : "Stop alert message when no record exists yet; sensing continues while the alert is open, so one may still be created.",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Any record created will be saved on this device."
-          }
-        }
-      }
-    },
-    "Your record will be saved on this device." : {
-      "comment" : "Stop alert message when a record already exists for this event.",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your record will be saved on this device."
-          }
-        }
-      }
-    },
     "Your record is saved on this device. You'll find it in Records.": {},
-    "Your record is saved on this device. You can close the app.": {},
     "Record saved": {},
     "Can't join": {},
     "Sensing paused": {

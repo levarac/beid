@@ -26,7 +26,9 @@ final class RecordingBindingSheetUITests: XCTestCase {
     let alert = app.alerts["Stop sensing?"]
     alert.assertExists()
     XCTAssertTrue(app.navigationBars["Sensing"].exists)
-    XCTAssertTrue(alert.buttons["Stop and keep record"].exists)
+    XCTAssertTrue(alert.buttons["Stop sensing"].exists)
+    XCTAssertTrue(alert.staticTexts.matching(NSPredicate(
+      format: "label BEGINSWITH %@", "This ends your sensing session at this event.")).firstMatch.exists)
     alert.buttons["Cancel"].tap()
     app.buttons["scan.stop-sensing"].assertHittable()
     XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
@@ -52,9 +54,10 @@ final class RecordingBindingSheetUITests: XCTestCase {
     reachRecording()
     app.buttons["scan.stop-sensing"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
-    app.buttons["Stop and keep record"].tap()
+    app.alerts.buttons["Stop sensing"].tap()
     XCTAssertTrue(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["Your record is saved on this device. You'll find it in Records."].exists)
+    XCTAssertTrue(app.staticTexts["A Record lets you revisit what this device observed during a sensing session at an event."].exists)
     XCTAssertTrue(app.staticTexts[SensingVisualOracle.savedCaption].waitForExistence(timeout: 5))
     SensingVisualOracle.assertSavedCaption(in: app, test: self, name: "saved-live")
     app.buttons["Done"].tap()
@@ -62,10 +65,11 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.buttons["View records"].tap()
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     app.tabButton("Now").tap()
-    XCTAssertTrue(app.staticTexts["You’re done."].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts["Your record is saved on this device. You can close the app."].exists)
+    XCTAssertTrue(app.staticTexts["Sensing stopped"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Your Record is saved in Records on this device. You can close the app."].exists)
     XCTAssertTrue(app.buttons["home.saved.view-record"].exists)
-    XCTAssertTrue(app.staticTexts["home.listening"].exists)
+    XCTAssertFalse(app.staticTexts["home.listening"].exists, "Now stays quiet after an explicit stop")
+    XCTAssertTrue(app.buttons["home.look-for-events"].exists)
     let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     shot.name = "N3-saved-record"
     shot.lifetime = .keepAlways
@@ -119,6 +123,10 @@ final class RecordingBindingSheetUITests: XCTestCase {
     confirmStop()
     app.staticTexts["stop.outcome.message"].assertExists()
     app.buttons["stop.outcome.action"].tap()
+    // After an explicit stop Now stays quiet until the person asks again.
+    let look = app.buttons["home.look-for-events"]
+    look.scrollToHittable(in: app)
+    look.tap()
     let join = app.buttons["home.demo.join"]
     join.scrollToHittable(in: app)
     join.tap()
@@ -220,7 +228,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
     let alert = app.alerts["Stop sensing?"]
     alert.assertExists()
     let stop = alert.buttons.matching(
-      NSPredicate(format: "label IN %@", ["Stop and keep record", "Stop sensing"])
+      NSPredicate(format: "label == %@", "Stop sensing")
     ).firstMatch
     stop.assertHittable()
     stop.tap()

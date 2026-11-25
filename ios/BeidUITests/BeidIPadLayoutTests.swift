@@ -233,7 +233,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
     app.buttons["scan.stop-sensing"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
-    app.buttons["Stop and keep record"].tap()
+    app.alerts.buttons["Stop sensing"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     capture(named: "sealed-\(orientation)")
     app.buttons["Done"].tap()
@@ -257,6 +257,9 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.selectRecordsGrouping("All records")
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     app.tabButton("Now").tap()
+    // After an explicit stop, Now stays quiet until Look for events reopens discovery.
+    app.buttons["home.look-for-events"].assertHittable()
+    app.buttons["home.look-for-events"].tap()
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
@@ -268,7 +271,8 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     dismissBindingSheetToReachLiveRecording()
     signalLost.tap()
-    XCTAssertTrue(app.staticTexts["Signal lost"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "signal lost"))
+      .firstMatch.waitForExistence(timeout: 30))
     capture(named: "signal-lost-\(orientation)")
   }
 
@@ -518,7 +522,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     reachRecordingScreen()
     app.buttons["scan.stop-sensing"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
-    app.buttons["Stop and keep record"].tap()
+    app.alerts.buttons["Stop sensing"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     app.buttons["Done"].tap()
     XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))

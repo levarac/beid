@@ -87,61 +87,67 @@ struct SensingSealedView: View {
   var sigilInput: BeidSharedKit.sigil.SigilInput? = nil
 
   var body: some View {
-    GeometryReader { geometry in
+    GeometryReader { _ in
       ScrollView {
         BeidAdaptiveContent {
-          VStack(alignment: .leading, spacing: 0) {
-            Text(verbatim: snapshot.event.name)
-              .beidTextStyle(DS.Font.Library.title19)
-              .foregroundStyle(DS.Color.labelOnActionPrimary)
-              .fixedSize(horizontal: false, vertical: true)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .accessibilityAddTraits(.isHeader)
-
-            Text(verbatim: sealedSubtitle)
-              .beidTextStyle(DS.Font.Library.body15)
-              .foregroundStyle(DS.Color.textSecondaryOnInk)
-              .padding(.top, DS.Space.s)
-
-            RecordSigilSlot(input: sigilInput, placement: .sensingSealed, isDeviceRecord: true)
-              .frame(maxWidth: .infinity)
-              .padding(.top, DS.Space.xl)
-
-            Spacer(minLength: DS.Space.l)
-            SensingWindowBars(
-              aggregate: snapshot.aggregate,
-              firstSightingAt: snapshot.firstSightingAt,
-              endsSession: true
-            )
-
-            Rectangle()
-              .fill(DS.Color.strokeHairlineOnInk)
-              .frame(height: DS.Size.hairline)
-              .padding(.top, DS.Space.l)
-
-            metrics
-              .padding(.top, DS.Space.m)
-
-            Spacer(minLength: DS.Space.m)
-            VStack(alignment: .leading, spacing: DS.Space.s) {
-              Text("DONE · YOU CAN CLOSE THE APP")
-                .beidTextStyle(DS.Font.Library.labelMono10)
+          BeidLiveSessionPanel {
+            VStack(alignment: .leading, spacing: 0) {
+              Text(verbatim: snapshot.event.name)
+                .beidTextStyle(DS.Font.Library.title19)
                 .foregroundStyle(DS.Color.labelOnActionPrimary)
-              Text("Your record is saved on this device. You'll find it in Records.")
-                .beidTextStyle(DS.Font.Library.body13)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+
+              Text(verbatim: sealedSubtitle)
+                .beidTextStyle(DS.Font.Library.body15)
                 .foregroundStyle(DS.Color.textSecondaryOnInk)
+                .padding(.top, DS.Space.s)
+
+              RecordSigilSlot(input: sigilInput, placement: .sensingSealed, isDeviceRecord: true)
+                .frame(maxWidth: .infinity)
+                .padding(.top, DS.Space.xl)
+
+              Spacer(minLength: DS.Space.l)
+              SensingWindowBars(
+                aggregate: snapshot.aggregate,
+                firstSightingAt: snapshot.firstSightingAt,
+                endsSession: true
+              )
+
+              Rectangle()
+                .fill(DS.Color.strokeHairlineOnInk)
+                .frame(height: DS.Size.hairline)
+                .padding(.top, DS.Space.l)
+
+              metrics
+                .padding(.top, DS.Space.m)
+
+              Spacer(minLength: DS.Space.m)
+              VStack(alignment: .leading, spacing: DS.Space.s) {
+                Text("DONE · YOU CAN CLOSE THE APP")
+                  .beidTextStyle(DS.Font.Library.labelMono10)
+                  .foregroundStyle(DS.Color.labelOnActionPrimary)
+                Text("Your record is saved on this device. You'll find it in Records.")
+                  .beidTextStyle(DS.Font.Library.body13)
+                  .foregroundStyle(DS.Color.textSecondaryOnInk)
+                Text("record.explainer", comment: "One-line explanation of what a Record is, shown where people first meet one.")
+                  .beidTextStyle(DS.Font.Library.body13)
+                  .foregroundStyle(DS.Color.textSecondaryOnInk)
+                  .accessibilityIdentifier("scan.sealed.explainer")
+              }
+              .padding(DS.Space.m)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .background(DS.Color.strokeHairlineOnInk, in: RoundedRectangle(cornerRadius: DS.Radius.card))
+              .padding(.vertical, DS.Space.l)
             }
-            .padding(DS.Space.m)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(DS.Color.strokeHairlineOnInk, in: RoundedRectangle(cornerRadius: DS.Radius.card))
-            .padding(.vertical, DS.Space.l)
           }
-          .frame(minHeight: geometry.size.height, alignment: .top)
           .padding(.horizontal, DS.Space.pageMargin)
+          .padding(.vertical, DS.Space.m)
         }
       }
     }
-    .background(DS.Color.textPrimary.ignoresSafeArea())
+    .beidScreenBackground(DS.Color.surfaceCanvas)
     .accessibilityIdentifier("scan.sealed")
   }
 

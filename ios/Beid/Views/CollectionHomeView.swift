@@ -75,9 +75,8 @@ private struct NowHomeView: View {
     return false
   }
 
-  private var usesInk: Bool { !isIdle || sensing.isAdvertising }
-  private var foreground: Color { usesInk ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary }
-  private var secondary: Color { usesInk ? DS.Color.textSecondaryOnInk : DS.Color.textSecondary }
+  private let foreground = DS.Color.textPrimary
+  private let secondary = DS.Color.textSecondary
 
   var body: some View {
     NavigationStack {
@@ -86,7 +85,7 @@ private struct NowHomeView: View {
           BeidLargeTitleContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
             VStack(alignment: .leading, spacing: DS.Space.l) {
               HomeUnsentNotice(
-                store: coordinator.reportSubmissionStore, usesInk: usesInk,
+                store: coordinator.reportSubmissionStore,
                 now: coordinator.unsentNoticeNow(context.date), isSessionActive: !isIdle
               )
               #if DEBUG
@@ -108,6 +107,8 @@ private struct NowHomeView: View {
                 activeSummary(event: event, now: context.date)
               } else if isIdle, let saved = coordinator.sealedSnapshot {
                 savedSummary(saved)
+              } else if isIdle && coordinator.homeDiscoveryHeldAfterStop {
+                stoppedWithoutRecordSummary
               } else if isIdle && sensing.isAdvertising {
                 continuingSummary
               } else if !isIdle {
@@ -127,15 +128,15 @@ private struct NowHomeView: View {
           }
         }
         .accessibilityIdentifier("home.now")
-        .background(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, ignoresSafeAreaEdges: .bottom)
+        .background(DS.Color.surfaceCanvas, ignoresSafeAreaEdges: .bottom)
       }
-      .background(DS.Color.surfaceCanvas.ignoresSafeArea())
-      .beidScreenBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
+      .beidScreenBackground(DS.Color.surfaceCanvas)
       .modifier(HomeAccountToolbar(title: "home.now.title", iconColor: DS.Color.textPrimary))
-      .toolbarBackground(usesInk ? DS.Color.textPrimary : DS.Color.surfaceCanvas, for: .tabBar)
-      .toolbarBackground(.hidden, for: .navigationBar)
+      .toolbarBackground(DS.Color.surfaceCanvas, for: .tabBar)
+      // The ink panel scrolls under the bar; the bar keeps a light ground.
+      .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
       .toolbarColorScheme(.light, for: .navigationBar)
-      .toolbarColorScheme(usesInk ? .dark : .light, for: .tabBar)
+      .toolbarColorScheme(.light, for: .tabBar)
       .navigationDestination(isPresented: $showAboutSensing) { AboutSensingView() }
       .navigationDestination(isPresented: $showWhatWeSend) { WhatWeSendView() }
       .navigationDestination(isPresented: $coordinator.scanPresented) {
@@ -384,52 +385,68 @@ private struct NowHomeView: View {
 
   private var continuingSummary: some View {
     VStack(alignment: .leading, spacing: DS.Space.l) {
-      Text("Sensing continues")
-        .beidTextStyle(DS.Font.Library.display46)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityIdentifier("collection.continuous-sensing")
+      BeidLiveSessionPanel {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+          Text("Sensing continues")
+            .beidTextStyle(DS.Font.Library.title19)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("collection.continuous-sensing")
+          openDetails
+        }
+      }
+      .accessibilityIdentifier("home.live-panel")
       instructionTile(title: "now.keep-open.title", body: "Nearby devices can keep observing each other.")
-      openDetails
     }
     .foregroundStyle(foreground)
   }
 
   private var joiningSummary: some View {
     VStack(alignment: .leading, spacing: DS.Space.l) {
-      if let registration = coordinator.nowEventRegistration {
-        Text("JOINING").beidTextStyle(DS.Font.Library.labelMono11)
-        Text(verbatim: registration.name).beidTextStyle(DS.Font.Library.display46)
-      } else {
-        Text("Joining event…").beidTextStyle(DS.Font.Library.display46)
+      BeidLiveSessionPanel {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+          if let registration = coordinator.nowEventRegistration {
+            Text("JOINING").beidTextStyle(DS.Font.Library.labelMono11)
+            Text(verbatim: registration.name).beidTextStyle(DS.Font.Library.title19)
+          } else {
+            Text("Joining event…").beidTextStyle(DS.Font.Library.title19)
+          }
+          openDetails
+        }
       }
+      .accessibilityIdentifier("home.live-panel")
       instructionTile(title: "now.keep-open.title", body: "beid is starting sensing for the event you chose.")
-      openDetails
     }
     .foregroundStyle(foreground)
   }
 
   private func activeSummary(event: EventSession, now: Date) -> some View {
     VStack(alignment: .leading, spacing: DS.Space.l) {
-      Text(activeStatusTitle)
-        .beidTextStyle(DS.Font.Library.labelMono11)
-        .foregroundStyle(secondary)
-      Text(verbatim: event.name)
-        .beidTextStyle(DS.Font.Library.display46)
-        .accessibilityAddTraits(.isHeader)
-      let metricLayout = dynamicTypeSize.isAccessibilitySize
-        ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.l))
-        : AnyLayout(HStackLayout(alignment: .top, spacing: DS.Space.xl))
-      metricLayout {
-        metric(value: "\(sensing.devicesVerified)", label: "DEVICES HEARD")
-        metric(value: elapsedString(sensing.firstSightingAt.map {
-          sensing.sensingPresentationNow(now).timeIntervalSince($0)
-        } ?? 0), label: "ELAPSED")
+      BeidLiveSessionPanel {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+          Text(activeStatusTitle)
+            .beidTextStyle(DS.Font.Library.labelMono11)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+          Text(verbatim: event.name)
+            .beidTextStyle(DS.Font.Library.title19)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+          let metricLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.l))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: DS.Space.xl))
+          metricLayout {
+            metric(value: "\(sensing.devicesVerified)", label: "DEVICES HEARD")
+            metric(value: elapsedString(sensing.firstSightingAt.map {
+              sensing.sensingPresentationNow(now).timeIntervalSince($0)
+            } ?? 0), label: "ELAPSED")
+          }
+          openDetails
+        }
       }
+      .accessibilityIdentifier("home.live-panel")
       instructionTile(
         title: "Stay nearby. Keep the app open.",
         body: "Keeping beid open helps nearby devices observe each other and keep signed records."
       )
-      openDetails
       if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
     }
     .foregroundStyle(foreground)
@@ -437,15 +454,55 @@ private struct NowHomeView: View {
     .accessibilityIdentifier("home.active-event")
   }
 
+  private var stoppedWithoutRecordSummary: some View {
+    VStack(alignment: .leading, spacing: DS.Space.l) {
+      Text("home.stopped.title", comment: "Now after an explicit Stop: the session has ended and nothing is being recorded.")
+        .beidTextStyle(DS.Font.Library.display46)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("home.stopped.title")
+      if let recordID = coordinator.stoppedSessionRecordID,
+        let record = coordinator.proofStore.proof(withId: recordID) {
+        Text("home.stopped.body.record", comment: "Now after Stop when a Record was saved. A Record is kept in the Records tab on this device.")
+          .beidTextStyle(DS.Font.Library.body15)
+          .foregroundStyle(secondary)
+        BeidTextControl("VIEW RECORD", glyph: .trailing("→", announcing: "View record")) {
+          coordinator.openProof(record)
+        }
+        .accessibilityIdentifier("home.saved.view-record")
+      } else {
+        Text("home.stopped.body.noRecord", comment: "Now after Stop when no Record was created during the session.")
+          .beidTextStyle(DS.Font.Library.body15)
+          .foregroundStyle(secondary)
+      }
+      BeidTextControl("WHAT WE SEND", glyph: .trailing("→", announcing: "What we send")) {
+        showWhatWeSend = true
+      }
+      .accessibilityIdentifier("home.saved.what-was-sent")
+      lookForEventsButton
+    }
+    .foregroundStyle(foreground)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("home.stopped")
+  }
+
+  private var lookForEventsButton: some View {
+    BeidPrimaryButton("home.look-for-events.title") {
+      coordinator.lookForEvents()
+      refreshStandby()
+    }
+    .accessibilityIdentifier("home.look-for-events")
+  }
+
   private func savedSummary(_ snapshot: SensingSealedSnapshot) -> some View {
     VStack(alignment: .leading, spacing: DS.Space.l) {
       Text(verbatim: snapshot.event.name)
         .beidTextStyle(DS.Font.Library.labelMono11)
         .foregroundStyle(secondary)
-      Text("You’re done.")
+      Text("home.stopped.title", comment: "Now after an explicit Stop: the session has ended and nothing is being recorded.")
         .beidTextStyle(DS.Font.Library.display46)
-        .accessibilityIdentifier("home.saved.title")
-      Text("Your record is saved on this device. You can close the app.")
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("home.stopped.title")
+      Text("home.stopped.body.record", comment: "Now after Stop when a Record was saved. A Record is kept in the Records tab on this device.")
         .beidTextStyle(DS.Font.Library.body15)
         .foregroundStyle(secondary)
       if let recordID = snapshot.recordID, let record = coordinator.proofStore.proof(withId: recordID) {
@@ -459,13 +516,7 @@ private struct NowHomeView: View {
       }
       .accessibilityIdentifier("home.saved.what-was-sent")
       if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
-      listeningStrip
-      if coordinator.homeHasDemoCandidate {
-        demoCandidate
-      } else if let first = nearby.cards.first {
-        candidateCard(first)
-        if nearby.cards.count > 1 { additionalCandidates }
-      }
+      lookForEventsButton
     }
     .foregroundStyle(foreground)
     .accessibilityElement(children: .contain)
@@ -475,7 +526,7 @@ private struct NowHomeView: View {
   private func metric(value: String, label: LocalizedStringKey) -> some View {
     VStack(alignment: .leading, spacing: DS.Space.xs) {
       Text(verbatim: value).beidTextStyle(DS.Font.Library.displayNumber40)
-      Text(label).beidTextStyle(DS.Font.Library.labelMono10).foregroundStyle(secondary)
+      Text(label).beidTextStyle(DS.Font.Library.labelMono10).foregroundStyle(DS.Color.textSecondaryOnInk)
     }
   }
 
@@ -495,10 +546,11 @@ private struct NowHomeView: View {
           .accessibilityHidden(true)
       }
       .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget, alignment: .leading)
+      .contentShape(Rectangle())
     }
     .font(DS.Font.Library.title16.font)
-    .buttonStyle(.bordered)
-    .tint(foreground)
+    .buttonStyle(.plain)
+    .foregroundStyle(DS.Color.labelOnActionPrimary)
     .accessibilityIdentifier("home.open-details")
   }
 
@@ -509,7 +561,7 @@ private struct NowHomeView: View {
     }
     .padding(DS.Space.m)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(usesInk ? DS.Color.strokeHairlineOnInk : DS.Color.surfaceTile,
+    .background(DS.Color.surfaceTile,
                 in: RoundedRectangle(cornerRadius: DS.Radius.control))
   }
 
@@ -526,7 +578,7 @@ private struct NowHomeView: View {
     }
     .padding(DS.Space.m)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(usesInk ? DS.Color.strokeHairlineOnInk : DS.Color.surfaceTile,
+    .background(DS.Color.surfaceTile,
                 in: RoundedRectangle(cornerRadius: DS.Radius.control))
   }
 
@@ -604,10 +656,12 @@ private struct RecordsHomeView: View {
         BeidLargeTitleContent(regularMaxWidth: DS.Layout.recordsContentMaxWidth) {
           VStack(alignment: .leading, spacing: DS.Space.l) {
             if eventGroups.isEmpty {
-              BeidEmptyState(
-                "No records yet",
-                description: "Saved records appear here after sensing."
-              )
+              BeidEmptyState("No records yet", description: "Saved records appear here after sensing.") {
+                Text("record.explainer", comment: "One-line explanation of what a Record is, shown where people first meet one.")
+                  .beidTextStyle(DS.Font.Library.body13)
+                  .foregroundStyle(DS.Color.textSecondary)
+                  .accessibilityIdentifier("records.explainer")
+              }
             } else if grouping == .byEvent {
               eventList
             } else {
@@ -733,7 +787,6 @@ private struct HomeRecordDetail: View {
 
 private struct HomeUnsentNotice: View {
   @ObservedObject var store: ReportSubmissionStore
-  let usesInk: Bool
   let now: Date
   let isSessionActive: Bool
 
@@ -748,12 +801,12 @@ private struct HomeUnsentNotice: View {
             .accessibilityHidden(true)
           Text("home.unsent.title")
             .beidTextStyle(DS.Font.Library.labelMono11)
-            .foregroundStyle(usesInk ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
+            .foregroundStyle(DS.Color.textPrimary)
             .accessibilityAddTraits(.isHeader)
         }
         Text("home.unsent.message")
           .beidTextStyle(DS.Font.Library.body13)
-          .foregroundStyle(usesInk ? DS.Color.textSecondaryOnInk : DS.Color.textSecondary)
+          .foregroundStyle(DS.Color.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
         hairline
       }
@@ -764,7 +817,7 @@ private struct HomeUnsentNotice: View {
 
   private var hairline: some View {
     Rectangle()
-      .fill(usesInk ? DS.Color.strokeHairlineOnInk : DS.Color.strokeHairline)
+      .fill(DS.Color.strokeHairline)
       .frame(height: DS.Size.hairline)
   }
 }

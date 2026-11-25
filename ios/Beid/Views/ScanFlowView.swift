@@ -26,7 +26,7 @@ struct ScanFlowView: View {
           .layoutPriority(1)
       }
     }
-      .beidScreenBackground(usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
+      .beidScreenBackground(DS.Color.surfaceCanvas)
       .environment(\.showsFirstSensingHint, showsFirstTimeHint ?? false)
       .onAppear {
         if showsFirstTimeHint == nil { showsFirstTimeHint = !hasShownFirstTimeHint }
@@ -36,9 +36,9 @@ struct ScanFlowView: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar(proofCollectedForDisplay == nil ? .visible : .hidden, for: .navigationBar)
       .toolbar(.hidden, for: .tabBar)
-      .toolbarBackground(usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas, for: .navigationBar)
+      .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
       .toolbarBackground(.visible, for: .navigationBar)
-      .toolbarColorScheme(usesInkGround ? .dark : .light, for: .navigationBar)
+      .toolbarColorScheme(.light, for: .navigationBar)
       .toolbar {
         if proofCollectedForDisplay == nil {
           if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
@@ -79,15 +79,9 @@ struct ScanFlowView: View {
 
   private var stopFooter: some View {
     BeidAdaptiveContent {
-      Button {
+      BeidPrimaryButton("Stop sensing") {
         coordinator.requestScanClose()
-      } label: {
-        Text("Stop sensing")
-          .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
       }
-      .font(DS.Font.Library.title16.font)
-      .buttonStyle(.bordered)
-      .tint(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
       .accessibilityIdentifier("scan.stop-sensing")
       .padding(.horizontal, DS.Space.pageMargin)
     }
@@ -106,7 +100,7 @@ struct ScanFlowView: View {
       Text(verbatim: snapshot.copy.body)
     }
     .padding(.vertical, DS.Space.s)
-    .background(usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas)
+    .background(DS.Color.surfaceCanvas)
   }
 
   @ViewBuilder private var doneButton: some View {
@@ -157,19 +151,6 @@ struct ScanFlowView: View {
     case .eventFound, .recording, .signalLost: return true
     case .sensing: return joinedEventCode != nil
     case .idle: return false
-    }
-  }
-
-  private var usesInkGround: Bool {
-    if proofCollectedForDisplay != nil { return false }
-    if coordinator.sealedSnapshot != nil { return true }
-    #if DEBUG
-    if sensing.sensingScreenshotFixture != nil { return true }
-    #endif
-    if sensing.joinRefusalReasonKey != nil { return true }
-    switch sensing.phase {
-    case .eventFound, .recording: return true
-    case .idle, .sensing, .signalLost: return false
     }
   }
 

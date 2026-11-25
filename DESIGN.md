@@ -604,9 +604,14 @@ Rules:
 **Flat 2b palette (owner decision 2026-09-22, beid#627,
 [D-627](docs/decisions/issue-627-flat-2b.md)).** Principles (spec §2):
 
-- **Black is "what is happening now"** — a state, not a theme. Sensing is
-  full-screen black; on Home only the in-progress event is a black card;
-  the Account sheet is black as the layer being operated.
+- **The live-session panel is ink; page and navigation appearance remain stable.**
+  On Now and Sensing, a compact, clearly bounded ink panel carries the live
+  session through listening, detection, recording and signal loss. Only its
+  labels and measurements change with the phase. Page, navigation bar,
+  status bar and tab bar remain light. Stop stays on the light page, outside
+  scrolling content, using the normal primary button. The Account sheet is
+  still ink as the layer being operated (maintainer decision 2026-11-24,
+  [beid#883](https://github.com/levarac/beid/issues/883)).
 - **Black, white and grays only**, plus **three semantic colors, each with
   one meaning**: red = destructive / off, amber = verifying / pending,
   green = active / on.
@@ -620,8 +625,8 @@ are named by role (§4), so one variable may back several tokens (#628).
 
 | Library variable | Hex | Role | Allowed use | Forbidden use | DS token |
 | --- | --- | --- | --- | --- | --- |
-| `ink` | `#0B0B0F` | Ink; the "now" ground | Text, primary button fill, black-screen ground, Sigil | Decorative fills unrelated to "now" | `textPrimary` (text and marks on the page ground); `actionPrimary` (`Button/Primary` Tone=Primary fill, app-level tint); `labelOnActionInverse` (label on an `actionInverse` fill) |
-| `bg` | `#FFFFFF` | Page ground | Screen ground; text and Sigil on `ink` | — | `surfaceCanvas` (page ground); `labelOnActionPrimary` (label on an `actionPrimary` fill); `actionInverse` (`Button/Primary` Tone=Inverse fill, on black screens and the black sheet) |
+| `ink` | `#0B0B0F` | Ink; the "now" ground | Text, primary button fill, live-session panel and sheet ground, Sigil | Decorative fills unrelated to "now" | `textPrimary` (text and marks on the page ground); `actionPrimary` (`Button/Primary` Tone=Primary fill, app-level tint); `labelOnActionInverse` (label on an `actionInverse` fill) |
+| `bg` | `#FFFFFF` | Page ground | Screen ground; text and Sigil on `ink` | — | `surfaceCanvas` (page ground); `labelOnActionPrimary` (label on an `actionPrimary` fill); `actionInverse` (`Button/Primary` Tone=Inverse fill, on ink panels and the ink sheet) |
 | `sub` | `#6E6E78` | Secondary text on `bg` | Secondary text, section labels | Primary CTAs | `textSecondary` |
 | `line` | `#ECECF1` | Hairline | 1px row and list dividers | Text | `strokeHairline` |
 | `line-dashed` | `#C9C9CF` | Empty-state frame | Dashed 1px empty-block frame | Text | `strokeEmptyState` |
@@ -1268,8 +1273,14 @@ static Figma geometry when fitting the available space or preserving actions.
   `on-ink/line`.
 - MUST: The empty state is a dashed 1px `line-dashed` frame, radius 16,
   with 40pt vertical padding (`Block/Empty`).
-- The now-sensing card on Home is an `ink` card, radius 20 (#635). The
-  primary button is a pill (`Button/Primary`). The Account sheet uses the
+- The live-session panel on Now and Sensing is an `ink` card, radius 20
+  (#635, #883). Both panels use Title/19 for the event name. Sensing's
+  radar fits inside its padded bounds; the 240pt field preserves the graph's
+  proportions and leaves room for measurements. Saved Record content also
+  keeps a bounded ink card on the light page; a refused join uses the light
+  page palette.
+  Content can scroll at large Dynamic Type sizes without covering Stop.
+  The primary button is a pill (`Button/Primary`). The Account sheet uses the
   OS sheet (drawn with a 36 top radius in Figma; #642). Screen corners
   belong to the OS.
 - Radius values (#628, 2026-09-23): the empty block is
@@ -2100,11 +2111,20 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
 - **Sensing detail (05–07)**: push from the Now tab's `NavigationStack`.
   The native Back button and interactive pop gesture return to Now without
   ending participation, changing the live session, or stopping its radio.
-  The lower `STOP SENSING` control opens the stop confirmation. `Keep sensing`
-  returns to the unchanged session; `Stop and keep record` finalizes the
-  record and ends participation, including participant advertising and relay.
-  Only successful durable finalization may show the saved-record screen and
-  say that the app can be closed. There is no threshold-based transition or
+  The `Stop sensing` button sits on the light page outside the scrolling
+  content and opens the stop confirmation: title "Stop sensing?", buttons
+  `Stop sensing` and `Cancel` (beid#892). Message with a Record: "This ends
+  your sensing session at this event. Any saved Record stays in Records on
+  this device."; before any Record exists: "This ends your sensing session
+  at this event. No Record has been created yet." There is one stop action
+  because the app cannot discard a Record. `Cancel` returns to the
+  unchanged session; `Stop sensing` finalizes the Record and ends
+  participation, including participant advertising and relay. Only
+  successful durable finalization may show the saved-record screen and say
+  that the app can be closed. A stop before the first detection, while the
+  session is still waiting and no Record can exist, ends participation
+  immediately with no confirmation (`AppCoordinator.requestScanClose`).
+  There is no threshold-based transition or
   countdown. While sensing, show devices heard and elapsed time without a
   mutual count or an achievement state. Radar nodes show devices heard in
   the last 300 seconds, refreshed once per second, with the caption
@@ -2117,8 +2137,14 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   nodes. Expiry changes only this
   live display; DEVICES HEARD remains the session total, and earlier window
   observations and signed records remain intact. DONE advances to the collected-record
-  screen, and View collection opens Records. Returning to Now resumes nearby
-  discovery without joining another event.
+  screen, and View collection opens Records. After an explicit stop Now
+  stays quiet: "Sensing stopped" with "Your Record is saved in Records on
+  this device. You can close the app." (or "No Record was created for this
+  session.") and a `Look for events` button. Nearby-event discovery is gated
+  off, across foreground and tab changes, until the person taps `Look for
+  events` or joins an event. The one-line Record explanation ("A Record
+  lets you revisit what this device observed during a sensing session at an
+  event.") appears on the Record saved screen and the empty Records state.
   **[Android retains its native event-join surface for this release; the
   corresponding navigation and stop-confirmation changes are deferred to
   its next application flow.]**
@@ -2551,10 +2577,11 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 
 - MUST: The app has one appearance and does not follow the OS dark-mode
   setting. A device in dark mode shows the same intended design.
-- Black is a **state, not a theme**: a screen is black because something
-  is happening now (sensing, the in-progress event card, the Account
-  sheet as the layer being operated — §5).
-- An `ink` screen may opt its own presentation into light *content* — the
+- **The live-session panel is ink; page and navigation appearance remain stable.**
+  The Now and Sensing pages and their navigation, status and tab bars stay
+  light in every phase (§5, maintainer decision 2026-11-24, #883).
+- Remaining ink presentations (the venue link scanner and Account sheet)
+  may opt their own presentation into light *content* — the
   status-bar and toolbar glyphs drawn on the ink ground — with a
   bar-scoped modifier such as
   `.toolbarColorScheme(.dark, for: .navigationBar)`. That is not the
@@ -3034,6 +3061,7 @@ to.]**
 | `size.button.primary.compact.width` | `DS.Size.compactPrimaryButtonWidth` | 140 pt | `Button/Primary` Size=Small width (Home's Scan) |
 | `size.step.badge` | `DS.Size.stepBadge` | 28 pt | `BeidNumberedStepList` index badge (from `BeidDesign`) |
 | `size.radar.field` | `DS.Size.radarField` | 362 pt | Flat 2b 05 sensing graph frame; also read by the interim `SensingView` pulse until integration |
+| `size.radar.field.compact` | `DS.Size.liveSessionRadarField` | 240 pt | Compact radar field inside the bounded live-session panel (beid#883); radar geometry still scales from the 362 pt field |
 | `size.radar.rings` | `DS.Size.radarRingInner` / `radarRingMiddle` / `radarRingOuter` | 133.22 / 233.12 / 333.04 pt | Three circle path diameters measured from the 05 graph SVG |
 | `size.radar.core` | `DS.Size.radarCore` | 38 pt | White centre disc in the 05 sensing graph |
 | `size.radar.coreSeparation` | `DS.Size.radarCoreSeparation` | 48 pt | Ink separation around the white centre disc |
@@ -3177,6 +3205,8 @@ inventory evidence. Naming remains governed by §12.
 | 2026-09-23 | **Flat 2b type ramp landed** (beid#629): the three OFL families (Bricolage Grotesque ExtraBold, DM Sans Bold/Regular, DM Mono Medium) are bundled, and `DS.Font` becomes two tiers — `DS.Font.Library`, the 17 Library text styles as `DS.Font.Style` values, and the 8 role tokens Views use, re-pointed onto them with no call site changed (§6). `ceremonyTitle` removed (no Swift call site). Text styles: nearest-default-size per style, `.largeTitle` for all five Display styles — `UIFontMetrics` applies one constant multiplier per (text style, content size category), quantised to 1/3 pt, and that multiplier is not the style's own size ratio; measured at AX3 on iOS 26.5, `.largeTitle` is about 1.49 against `.body`'s 2.18 and `.caption2`'s 2.69, so Display/60 reaches 89.33 pt at AX3 and 102.33 pt at AX5, versus 131.0 pt and 169.0 pt on `.body`'s curve. Uppercase: the three mono *label* styles only — the mono *value* styles stay mixed-case because EIP-55 addresses carry their checksum in letter case. Tabular figures: `Display/Number 40` only. `beidTextStyle(_:)` in `Tokens.swift` applies a whole style (tracking and line height scaled with Dynamic Type, case); plain `.font(DS.Font.x)` call sites still get family/size/Dynamic Type only — a named transitional gap. Display's 100% line height is **not** applied: `lineSpacing` is additive and nonnegative and `View.lineHeight(_:)` is iOS 26+, above the iOS 17 deployment target — also a named gap. #24 (button capitalization) untouched: #629 uppercases no existing string | Adopted — text-style, uppercase-scope and tabular-figure choices delegated to #629 by §6/D-627 |
 | 2026-10-15 | **Flat 2b v2 navigation** (Figma `333:73`, beid#730 / #731): §12's no-icons rule is narrowed to content. Navigation-bar and toolbar items are OS-standard — the `NavigationStack` back button, the system `.close` / `.done` items, and SF Symbol + title for screen-specific actions (Rejoin `arrow.clockwise`, Copy `doc.on.doc`, Account `person.crop.circle`) — rendered by the OS, Liquid Glass on iOS 26. The 2026-09-25 suppression of that glass (#631) is withdrawn (§8). `Bar/Nav` is not built. Content keeps no icons and no app-drawn glass, materials, blur, shadows or gradients | Adopted — owner decision 2026-10-15 (A2) |
 | 2026-11-22 | §12 records the native Record event-name disclosure as an exception to uppercase DM Mono controls. | Adopted — maintainer preference for system controls |
+| 2026-11-24 | **Stop alert and quiet Now after Stop** (maintainer decision [beid#892](https://github.com/levarac/beid/issues/892)): one stop action, `Look for events` gates nearby-event discovery after an explicit stop, Record explained once where first met. Adopted |
+| 2026-11-24 | **Bounded live-session panels** (maintainer decision [beid#883](https://github.com/levarac/beid/issues/883)): Now and every Sensing phase use the same radius-20 ink panel on a light page. Page and system bar appearance never switch with the phase. Stop uses the light-page primary style outside scrolling content. The radar is reduced inside the panel to keep measurements readable; larger text scrolls above the fixed Stop footer. This supersedes full-screen sensing ink in §§5/14 and extends §9's Now card to Sensing. iOS-only implementation; Android's native surface is outside this assigned change. | Adopted |
 
 ### D. Deprecated patterns
 

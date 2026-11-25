@@ -119,7 +119,16 @@ struct SensingView: View {
     self.clockPreflight = clockPreflight
   }
 
-  var body: some View {
+  @ViewBuilder var body: some View {
+    if isListeningAfterJoin {
+      SensingSessionSurface(sensing: sensing, event: nil, presentation: .waiting)
+        .accessibilityIdentifier("scan.sensing")
+    } else {
+      prejoinContent
+    }
+  }
+
+  private var prejoinContent: some View {
     ZStack {
       DS.Color.surfaceCanvas
         .ignoresSafeArea()
@@ -537,6 +546,8 @@ struct SensingSessionSurface: View {
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @AppStorage("beid.sensing.firstTimeHintShown") private var hasShownFirstTimeHint = false
   enum Presentation: Equatable {
+    case waiting
+    case signalLost
     case detecting
     case detectingLong
     case detectingFirstTime
@@ -544,17 +555,18 @@ struct SensingSessionSurface: View {
 
     var showsEdges: Bool {
       switch self {
-      case .detecting, .detectingLong, .detectingFirstTime: false
+      case .waiting, .signalLost, .detecting, .detectingLong, .detectingFirstTime: false
       case .steady: true
       }
     }
   }
 
   @ObservedObject var sensing: SensingCoordinator
-  let event: EventSession
+  let event: EventSession?
   let presentation: Presentation
   var diagnosticCaption: String? = nil
   var onRetryVerification: () -> Void = {}
+  var onResume: () -> Void = {}
 
   var body: some View {
     TimelineView(.periodic(from: .now, by: 1)) { timeline in
@@ -562,88 +574,78 @@ struct SensingSessionSurface: View {
       GeometryReader { geometry in
         let layoutWidth = horizontalSizeClass == .regular
           ? min(geometry.size.width, DS.Layout.stateContentMaxWidth) : geometry.size.width
-        let contentWidth = max(0, layoutWidth - 2 * DS.Space.pageMargin)
-        let radarSize = min(DS.Size.radarField, contentWidth)
+        let contentWidth = max(0, layoutWidth - 2 * (DS.Space.pageMargin + DS.Space.m))
+        let radarSize = min(DS.Size.liveSessionRadarField, contentWidth)
         ScrollView {
           BeidAdaptiveContent {
-            VStack(alignment: .leading, spacing: 0) {
-              if presentation == .steady {
-                eventHeading
-              } else {
-                eventHeading.accessibilityIdentifier("scan.event-found")
-              }
-
-              if let eventSubtitle = eventSubtitle {
-                Text(verbatim: eventSubtitle)
-                  .beidTextStyle(DS.Font.Library.body15)
-                  .foregroundStyle(DS.Color.textSecondaryOnInk)
-                  .padding(.top, DS.Space.s)
-              }
-
-              SensingRadarView(
-                peers: radarPeers(at: now),
-                mutualDeviceCount: 0,
-                observedWindowCount: observedWindowCount ?? 0,
-                showsEdges: false,
-                size: radarSize,
-                recordedWindowMarkDiameter: recordedWindowMarkDiameter(at: now, size: radarSize)
-              )
-              // Keep the measured radar centered without widening the inset content.
-              .frame(width: contentWidth)
-              .padding(.top, DS.Space.m)
-
-              Text("HEARD IN THE LAST 5 MINUTES")
-                .beidTextStyle(DS.Font.Library.labelMono11)
-                .foregroundStyle(DS.Color.textSecondaryOnInk)
-                .frame(width: contentWidth)
-                .padding(.top, DS.Space.s)
-
-              metrics(at: now)
-                .padding(.top, DS.Space.m)
-
-              SensingWindowBars(aggregate: sensing.sessionAggregate, firstSightingAt: sensing.firstSightingAt)
-                .accessibilityHidden(true)
-                .frame(width: contentWidth)
-                .padding(.top, DS.Space.l)
-
-              Rectangle()
-                .fill(DS.Color.strokeHairlineOnInk)
-                .frame(width: contentWidth, height: DS.Size.hairline)
-                .padding(.top, DS.Space.l)
-
-              if EventIdentityVerificationPresentation.forStatus(event.identityVerification) != nil {
-                BeidPanel {
-                  EventIdentityVerificationRow(
-                    status: event.identityVerification,
-                    onRetry: onRetryVerification
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+              BeidLiveSessionPanel {
+                VStack(alignment: .leading, spacing: DS.Space.m) {
+                  Text(presentation == .signalLost ? LocalizedStringKey("Signal lost") : LocalizedStringKey("Sensing"))
+                    .beidTextStyle(DS.Font.Library.labelMono11)
+                    .foregroundStyle(DS.Color.textSecondaryOnInk)
+                  if presentation == .steady || presentation == .waiting || presentation == .signalLost {
+                    eventHeading
+                  } else {
+                    eventHeading.accessibilityIdentifier("scan.event-found")
+                  }
+                  if let eventSubtitle {
+                    Text(verbatim: eventSubtitle)
+                      .beidTextStyle(DS.Font.Library.body15)
+                      .foregroundStyle(DS.Color.textSecondaryOnInk)
+                  }
+                  SensingRadarView(
+                    peers: radarPeers(at: now),
+                    mutualDeviceCount: 0,
+                    observedWindowCount: observedWindowCount ?? 0,
+                    showsEdges: false,
+                    size: radarSize,
+                    recordedWindowMarkDiameter: recordedWindowMarkDiameter(at: now, size: radarSize)
                   )
+                  .frame(maxWidth: .infinity)
+                  Text("HEARD IN THE LAST 5 MINUTES")
+                    .beidTextStyle(DS.Font.Library.labelMono11)
+                    .foregroundStyle(DS.Color.textSecondaryOnInk)
+                    .frame(maxWidth: .infinity)
+                  if presentation == .waiting {
+                    Text("LOOKING FOR PEERS · STAY NEARBY")
+                      .beidTextStyle(DS.Font.Library.labelMono10)
+                      .foregroundStyle(DS.Color.textSecondaryOnInk)
+                      .fixedSize(horizontal: false, vertical: true)
+                      .accessibilityIdentifier("scan.detecting.caption")
+                  }
+                  metrics(at: now)
+                  SensingWindowBars(aggregate: sensing.sessionAggregate, firstSightingAt: sensing.firstSightingAt)
+                    .accessibilityHidden(true)
                 }
-                .padding(.top, DS.Space.m)
               }
+              .accessibilityIdentifier("scan.live-panel")
 
+              if let event, EventIdentityVerificationPresentation.forStatus(event.identityVerification) != nil {
+                BeidPanel {
+                  EventIdentityVerificationRow(status: event.identityVerification, onRetry: onRetryVerification)
+                }
+              }
               if let diagnosticCaption {
                 Text(verbatim: diagnosticCaption)
                   .beidTextStyle(DS.Font.Library.body13)
-                  .foregroundStyle(DS.Color.textSecondaryOnInk)
-                  .padding(.top, DS.Space.s)
+                  .foregroundStyle(DS.Color.textSecondary)
               }
-
-              Spacer(minLength: DS.Space.m)
               footer(at: now)
                 .frame(maxWidth: .infinity)
             }
-            .frame(minHeight: geometry.size.height, alignment: .top)
             .padding(.horizontal, DS.Space.pageMargin)
+            .padding(.vertical, DS.Space.m)
           }
         }
       }
     }
-    .background(DS.Color.textPrimary.ignoresSafeArea())
+    .beidScreenBackground(DS.Color.surfaceCanvas)
     .accessibilityIdentifier("scan.sensing-session")
   }
 
   private var eventHeading: some View {
-    Text(verbatim: event.name)
+    Text(verbatim: event?.name ?? String(localized: "Listening for nearby devices…"))
       .beidTextStyle(DS.Font.Library.title19)
       .foregroundStyle(DS.Color.labelOnActionPrimary)
       .fixedSize(horizontal: false, vertical: true)
@@ -660,7 +662,7 @@ struct SensingSessionSurface: View {
 
   private var eventSubtitle: String? {
     let since = sensing.firstSightingAt?.formatted(date: .omitted, time: .shortened)
-    switch (event.venue, since) {
+    switch (event?.venue, since) {
     case (let venue?, let time?): return "\(venue) · since \(time)"
     case (let venue?, nil): return venue
     case (nil, let time?): return "Since \(time)"
@@ -707,9 +709,23 @@ struct SensingSessionSurface: View {
 
   private func footer(at _: Date) -> some View {
     VStack(alignment: .leading, spacing: DS.Space.m) {
-      Text("Keep the app open nearby to help devices observe each other and keep signed records.")
-        .beidTextStyle(DS.Font.Library.body13)
-        .foregroundStyle(DS.Color.textSecondaryOnInk)
+      if presentation == .signalLost, let event {
+        Text("beid lost the connection to \(event.name). Move closer, then try again.")
+          .beidTextStyle(DS.Font.Library.body13)
+          .foregroundStyle(DS.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+        BeidSecondaryButton(title: "Try again", action: onResume)
+      }
+      Group {
+        if presentation == .waiting {
+          Text("Keep the app open. Sensing starts when beid hears another device at this event.")
+        } else {
+          Text("Keep the app open nearby to help devices observe each other and keep signed records.")
+        }
+      }
+      .beidTextStyle(DS.Font.Library.body13)
+      .foregroundStyle(DS.Color.textSecondary)
+      .fixedSize(horizontal: false, vertical: true)
       if showsFirstSensingHint || presentation != .steady {
         NavigationLink {
           AboutSensingView()
@@ -717,7 +733,7 @@ struct SensingSessionSurface: View {
           BeidTextControlLabel(
             showsFirstSensingHint || presentation == .detectingFirstTime ? "FIRST TIME? HOW THIS WORKS" : "HOW SENSING WORKS",
             glyph: .trailing("→", announcing: "How sensing works"),
-            labelColor: DS.Color.labelOnActionPrimary
+            labelColor: DS.Color.textPrimary
           )
         }
         .buttonStyle(.plain)
@@ -931,7 +947,7 @@ struct SensingCantJoinView: View {
         VStack(alignment: .leading, spacing: 0) {
           Text(verbatim: event?.name ?? code ?? "Can't join")
             .beidTextStyle(DS.Font.Library.display46)
-            .foregroundStyle(DS.Color.labelOnActionPrimary)
+            .foregroundStyle(DS.Color.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: 220, alignment: .leading)
             .accessibilityAddTraits(.isHeader)
@@ -939,24 +955,24 @@ struct SensingCantJoinView: View {
           if let venue = event?.venue {
             Text(verbatim: "\(venue) · found nearby")
               .beidTextStyle(DS.Font.Library.body15)
-              .foregroundStyle(DS.Color.textSecondaryOnInk)
+              .foregroundStyle(DS.Color.textSecondary)
               .padding(.top, DS.Space.s)
           }
 
           Text("Why")
             .beidTextStyle(DS.Font.Library.labelMono10)
-            .foregroundStyle(DS.Color.textSecondaryOnInk)
+            .foregroundStyle(DS.Color.textSecondary)
             .padding(.top, DS.Space.l)
 
           Text(reason.title)
             .beidTextStyle(DS.Font.Library.title19)
-            .foregroundStyle(DS.Color.labelOnActionPrimary)
+            .foregroundStyle(DS.Color.textPrimary)
             .padding(.top, DS.Space.s)
             .accessibilityIdentifier("scan.join-refusal")
 
           Text(reason.message)
             .beidTextStyle(DS.Font.Library.body15)
-            .foregroundStyle(DS.Color.textSecondaryOnInk)
+            .foregroundStyle(DS.Color.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, DS.Space.s)
 
@@ -968,14 +984,14 @@ struct SensingCantJoinView: View {
           Spacer(minLength: DS.Space.xl)
           if reason.isStorageRefusal, let onRetry {
             Button(action: onRetry) {
-              BeidTextControlLabel("Try again", labelColor: DS.Color.labelOnActionPrimary)
+              BeidTextControlLabel("Try again", labelColor: DS.Color.textPrimary)
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("scan.storage-retry")
           } else if !reason.isStorageLoading {
             ScanFlowEventCodeEntryLink {
-              BeidTextControlLabel("Enter event code instead", labelColor: DS.Color.labelOnActionPrimary)
+              BeidTextControlLabel("Enter event code instead", labelColor: DS.Color.textPrimary)
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
@@ -986,14 +1002,14 @@ struct SensingCantJoinView: View {
       }
       .accessibilityIdentifier("scan.cant-join")
     }
-    .background(DS.Color.textPrimary.ignoresSafeArea())
+    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
   }
 
   private var eventIdentity: some View {
     VStack(alignment: .leading, spacing: 0) {
       Text("Event identity")
         .beidTextStyle(DS.Font.Library.labelMono10)
-        .foregroundStyle(DS.Color.textSecondaryOnInk)
+        .foregroundStyle(DS.Color.textSecondary)
         .padding(.bottom, DS.Space.s)
 
       if let event {
@@ -1011,14 +1027,14 @@ struct SensingCantJoinView: View {
   private func identityRow(_ title: String, value: String) -> some View {
     VStack(spacing: 0) {
       Rectangle()
-        .fill(DS.Color.strokeHairlineOnInk)
+        .fill(DS.Color.strokeHairline)
         .frame(height: DS.Size.hairline)
       HStack {
         Text(verbatim: title)
-          .foregroundStyle(DS.Color.textSecondaryOnInk)
+          .foregroundStyle(DS.Color.textSecondary)
         Spacer()
         Text(verbatim: value)
-          .foregroundStyle(DS.Color.labelOnActionPrimary)
+          .foregroundStyle(DS.Color.textPrimary)
       }
       .beidTextStyle(DS.Font.Library.labelMono10)
       .frame(minHeight: DS.Size.minHitTarget)

@@ -44,7 +44,8 @@ final class EventIdentityVerificationUITests: XCTestCase {
     XCTAssertFalse(identityVerificationRow.exists)
     simulateSignalLost.tap()
 
-    XCTAssertTrue(app.staticTexts["Signal lost"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "signal lost"))
+      .firstMatch.waitForExistence(timeout: 5))
     XCTAssertFalse(identityVerificationRow.exists)
   }
 

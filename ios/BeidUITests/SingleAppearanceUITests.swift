@@ -4,86 +4,9 @@
 import CoreGraphics
 import XCTest
 
-// MARK: - Why this file currently contains no tests
-//
-// thegreeting/beid#632 (DESIGN.md §14): beid has a single appearance and does
-// not follow the OS dark-mode setting.
-//
-// This file held two pixel-comparison tests,
-// `testWelcomeLooksTheSameWithTheDeviceInDarkMode` and
-// `testAccountSheetLooksTheSameWithTheDeviceInDarkMode`. They were **deleted on
-// 2026-09-23**, not skipped and not left green, because they could not fail.
-// A test that cannot fail is worse than a missing test: it gets pointed at as
-// evidence. These two claimed to prove the exact property #632 exists to
-// establish, and cost ~55 s of every run to prove nothing. An `XCTSkip` would
-// have left a skip that could never un-skip.
-//
-// Forwarding address for reviving this: **beid#670**.
-//
-// ## The cause: `XCUIDevice.shared.appearance` is a no-op on this host
-//
-// Assigning to `XCUIDevice.shared.appearance` has no effect at all here
-// (iPhone 17 Pro / iOS 26.5 / Xcode 27A266a) — in **both** directions.
-// `xcrun simctl ui <udid> appearance` works correctly on the same machine.
-// So both tests captured one screen, "switched" to dark, captured the same
-// screen again, and compared it with itself.
-//
-// Three measurements, taken 2026-09-23. The third is the one that proves it
-// rather than merely suggesting it:
-//
-// 1. **Dark mode itself works.** With `simctl ui <udid> appearance dark`,
-//    Apple's own Settings app renders fully dark. (Clock identical, 10:05, in
-//    both captures, so the difference is not the clock.)
-//
-// 2. **The device never went dark while these tests ran.** Running
-//    `--only-testing BeidUITests/SingleAppearanceUITests` while sampling
-//    `simctl ui <udid> appearance` once a second from outside the test process:
-//        light 102 | unknown 3 (the erase/reboot window) | dark 0
-//    Both tests passed.
-//
-// 3. **The setter cannot move the device in either direction.** The device was
-//    set dark with simctl first (confirmed `dark`), then the same two tests were
-//    run with `--keep-simulator-state`. `setUpWithError` assigned `.light` and
-//    the test body assigned `.dark`; the samples were:
-//        dark 63 | light 0
-//    The device stayed dark for the whole run, and **both tests passed again**.
-//    The same green from the opposite starting state is something a working
-//    switch cannot produce, and is exactly what a no-op produces.
-//
-// ## The comparison logic below is sound — it is the driver that is dead
-//
-// The machinery kept in this file was never the problem, so it is kept rather
-// than deleted. Driving the appearance with simctl instead (outside the test
-// process) and capturing the app directly:
-//
-//   - declaration present, device dark  -> app renders light (correct)
-//   - declaration removed, device dark  -> app follows dark, and **the "beid"
-//     wordmark disappears**: it turns white on a still-white background. The
-//     subtitle and the Get Started button survive; the wordmark simply goes.
-//
-// Measured with CoreGraphics, status bar excluded so the clock cannot
-// contribute:
-//
-//     differing pixels: 15613 of 2930580 (0.53%)
-//     bounding box:     x = 153...247 pt, y = 394...429 pt   (the wordmark)
-//
-// 15613 px is far above `channelTolerance` (2 of 255), so `contentDifference`
-// would have caught this instantly had the appearance actually changed. The
-// test design is worth reviving; only the way it was driven needs replacing.
-//
-// This is not specific to #632: **any** UI test written against
-// `XCUIDevice.shared.appearance` is vacuous on arrival on this host, which
-// includes #633/#643 and anything else appearance-dependent.
-//
-// ## What is kept below, and why
-//
-// `RGBAPixels` (the whole struct), `settledCapture` and `assertSameAppearance`
-// are the proven-sound comparison machinery a simctl-driven harness would reuse
-// unchanged; `launch()` is trivial but goes with them. Removed with the tests:
-// `assertLooksTheSameInDarkMode` and `setUpWithError`, both of which were built
-// around switching the appearance from inside the test process — the thing that
-// does not work.
-
+/// The live panel stays ink while its page and navigation stay light.
+/// These tests inspect real pixels and layout, not the ineffective
+/// XCUIDevice.appearance setter. OS appearance is set by the external runner.
 final class SingleAppearanceUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -96,6 +19,136 @@ final class SingleAppearanceUITests: XCTestCase {
   private static let channelTolerance = 2
   /// Largest allowed change in the status bar's darkest-pixel luminance.
   private static let statusBarLuminanceTolerance = 0.15
+
+  override func setUpWithError() throws {
+    continueAfterFailure = false
+    XCUIDevice.shared.orientation = .portrait
+  }
+
+  func testNowJoinedHasLightPageAroundInkPanel() throws {
+    launchHome(["-beid-home-frame-04"])
+    app.otherElements["home.active-event"].assertExists()
+    try assertLightPage()
+    try assertInkPanel("home.live-panel")
+    capture("now-joined")
+  }
+
+  func testDetectedSensingHasLightPageAroundInkPanel() throws {
+    launchHome(["-beid-sensing-shot", "05a"])
+    app.buttons["home.demo.join"].tap()
+    app.staticTexts["ETH Tokyo 2026"].assertExists()
+    try assertLightPage()
+    try assertInkPanel("scan.live-panel")
+    capture("sensing-after-detection")
+  }
+
+  func testStopAlertAppearsOverTheLightPageWithDecidedCopy() throws {
+    launchHome(["-beid-sensing-shot", "05a"])
+    app.buttons["home.demo.join"].tap()
+    app.buttons["scan.stop-sensing"].assertHittable()
+    app.buttons["scan.stop-sensing"].tap()
+    let alert = app.alerts["Stop sensing?"]
+    alert.assertExists()
+    XCTAssertTrue(alert.buttons["Stop sensing"].exists)
+    XCTAssertTrue(alert.buttons["Cancel"].exists)
+    XCTAssertTrue(alert.staticTexts.matching(NSPredicate(
+      format: "label BEGINSWITH %@", "This ends your sensing session at this event.")).firstMatch.exists)
+    capture("stop-alert")
+    alert.buttons["Cancel"].tap()
+    app.buttons["scan.stop-sensing"].assertHittable()
+  }
+
+  func testJoinedWaitingUsesTheSameInkPanel() throws {
+    launchHome(["-beid-nearby-join-fixture"])
+    let join = app.buttons["home.nearby.join.9adc61d60dda843e"]
+    join.assertHittable()
+    join.tap()
+    app.staticTexts["scan.detecting.caption"].assertExists()
+    try assertLightPage()
+    try assertInkPanel("scan.live-panel")
+    app.buttons["scan.stop-sensing"].assertHittable()
+    capture("sensing-before-detection")
+  }
+
+  func testRecordingAndSignalLossKeepLightPageAndInkPanel() throws {
+    launchHome(["-beid-threshold-override", "1"])
+    app.buttons["home.demo.join"].tap()
+    let loseSignal = app.buttons["Simulate Signal Lost"]
+    XCTAssertTrue(loseSignal.waitForExistence(timeout: 30))
+    try assertLightPage()
+    try assertInkPanel("scan.live-panel")
+    loseSignal.tap()
+    app.staticTexts.matching(NSPredicate(
+      format: "label CONTAINS[c] 'signal lost' OR label BEGINSWITH 'beid lost the connection'")).firstMatch.assertExists()
+    try assertLightPage()
+    try assertInkPanel("scan.live-panel")
+    app.buttons["scan.stop-sensing"].assertHittable()
+    let retry = app.buttons["Try again"]
+    retry.scrollToHittable(in: app)
+    retry.tap()
+    app.buttons["scan.stop-sensing"].assertHittable()
+    capture("sensing-after-retry")
+  }
+
+  func testAccessibility3KeepsStopFixedAndGuidanceReachable() throws {
+    launchHome(["-beid-sensing-shot", "05a3", "-beid.sensing.firstTimeHintShown", "NO",
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXL"])
+    app.buttons["home.demo.join"].tap()
+    let stop = app.buttons["scan.stop-sensing"]
+    stop.assertHittable()
+    let originalStop = stop.frame
+    let guidance = app.buttons["scan.first-time.about"]
+    guidance.scrollToHittable(in: app)
+    let scroll = app.scrollViews.firstMatch.frame.intersection(app.windows.firstMatch.frame)
+    XCTAssertGreaterThanOrEqual(guidance.frame.minY, scroll.minY)
+    XCTAssertLessThanOrEqual(guidance.frame.maxY, min(scroll.maxY, stop.frame.minY))
+    XCTAssertEqual(stop.frame, originalStop, "Stop must not scroll with the content")
+    stop.assertHittable()
+    try assertLightPage()
+    capture("sensing-ax3-guidance")
+  }
+
+  private func assertInkPanel(_ identifier: String, file: StaticString = #filePath, line: UInt = #line) throws {
+    let panel = app.otherElements[identifier]
+    panel.assertExists()
+    let pixels = try XCTUnwrap(RGBAPixels(XCUIScreen.main.screenshot()))
+    // Inside the left padding, far enough below the rounded top corner.
+    let point = CGPoint(x: panel.frame.minX + 8, y: panel.frame.minY + 32)
+    XCTAssertLessThan(pixels.luminance(at: point), 0.1,
+                      "The bounded live panel must remain ink", file: file, line: line)
+    XCTAssertGreaterThan(panel.frame.minX, app.windows.firstMatch.frame.minX)
+    XCTAssertLessThan(panel.frame.maxX, app.windows.firstMatch.frame.maxX)
+  }
+
+  private func capture(_ name: String) {
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+
+  private func launchHome(_ arguments: [String]) {
+    app.launchArguments = ["-beid-ui-test"] + arguments
+    app.launch()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
+    app.tabButton("Now").assertExists()
+  }
+
+  private func assertLightPage(file: StaticString = #filePath, line: UInt = #line) throws {
+    let pixels = try XCTUnwrap(RGBAPixels(XCUIScreen.main.screenshot()))
+    let frame = app.windows.firstMatch.frame
+    XCTAssertGreaterThan(pixels.luminance(at: CGPoint(x: frame.minX + 4, y: frame.midY)), 0.9,
+                         "The outer page must stay light beside the live panel", file: file, line: line)
+    XCTAssertGreaterThan(pixels.luminance(at: CGPoint(x: frame.minX + 4, y: frame.minY + 16)), 0.9,
+                         "The status bar ground must remain light", file: file, line: line)
+    for bar in app.navigationBars.allElementsBoundByIndex + app.tabBars.allElementsBoundByIndex where bar.exists && !bar.frame.isEmpty {
+      XCTAssertGreaterThan(pixels.luminance(at: CGPoint(x: frame.minX + 4, y: bar.frame.midY)), 0.9,
+                           "System bars must remain light", file: file, line: line)
+    }
+  }
 
   // MARK: - Launch
 
@@ -194,6 +247,14 @@ final class SingleAppearanceUITests: XCTestCase {
       height = pixelHeight
       scale = screenshot.image.scale
       bytes = pixels
+    }
+
+    func luminance(at point: CGPoint) -> Double {
+      let x = min(width - 1, max(0, Int(point.x * scale)))
+      let y = min(height - 1, max(0, Int(point.y * scale)))
+      let offset = (y * width + x) * 4
+      return (0.2126 * Double(bytes[offset]) + 0.7152 * Double(bytes[offset + 1])
+        + 0.0722 * Double(bytes[offset + 2])) / 255
     }
 
     /// First pixel row below the status-bar strip.

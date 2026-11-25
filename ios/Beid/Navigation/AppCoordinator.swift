@@ -218,6 +218,16 @@ final class AppCoordinator: ObservableObject {
   @Published var selectedHomeTab: HomeTab = .now
   @Published private(set) var homeStandby = HomeStandbyState()
   @Published private(set) var homeStandbyDiscoveryActive = false
+  /// True after an explicit Stop until the person taps Look for events or
+  /// joins an event. While true, Now never restarts nearby-event discovery,
+  /// across foreground/background and tab changes (beid#892).
+  @Published private(set) var homeDiscoveryHeldAfterStop = false {
+    didSet { if !homeDiscoveryHeldAfterStop { stoppedSessionRecordID = nil } }
+  }
+  /// The durable Record the explicit Stop left behind, whether or not it was
+  /// signed. Now uses it to tell a saved Record from no Record; the sealed
+  /// screen still depends on `sealedSnapshot` alone.
+  @Published private(set) var stoppedSessionRecordID: UUID?
   @Published private(set) var nowEventRegistration: HomeEventRegistration?
   #if DEBUG
   @Published private(set) var homeStandbyFixtureTime: TimeInterval = 0
@@ -819,6 +829,7 @@ final class AppCoordinator: ObservableObject {
   /// button, so the join itself must start sensing and show the sensing
   /// screen from the Now tab.
   private func startSensingAfterSuccessfulJoin() {
+    homeDiscoveryHeldAfterStop = false
     stopOutcome = nil
     homeEventCodeSheetPresented = false
     eventCodeEntrySheetPresented = false
@@ -1255,9 +1266,14 @@ final class AppCoordinator: ObservableObject {
   func updateHomeStandby(isVisible: Bool, isSceneActive: Bool) {
     let isIdle: Bool
     if case .idle = sensingCoordinator.phase { isIdle = true } else { isIdle = false }
+    // A new session ends the hold; the previous session's advertising callback does not.
+    if homeDiscoveryHeldAfterStop && !isIdle {
+      homeDiscoveryHeldAfterStop = false
+    }
     let isEnabled = isVisible && isSceneActive && screen == .home
       && selectedHomeTab == .now && !scanPresented && !accountSheetPresented
       && !homeEventCodeSheetPresented && !homeBluetoothIsOff && isIdle && !sensingCoordinator.isAdvertising
+      && !homeDiscoveryHeldAfterStop
     if isEnabled && !homeStandbyDiscoveryActive {
       homeStandbyDiscoveryActive = true
       #if DEBUG
@@ -1286,8 +1302,15 @@ final class AppCoordinator: ObservableObject {
     )
   }
 
+  /// Ends the stopped state and lets Now search for nearby events again.
+  func lookForEvents() {
+    homeDiscoveryHeldAfterStop = false
+    sealedSnapshot = nil
+  }
+
   func joinNearbyEventFromHome(_ card: NearbyEventCard) {
     guard card.joinActionEventCodeHashHex != nil else { return }
+    homeDiscoveryHeldAfterStop = false
     stopOutcome = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
@@ -1335,6 +1358,7 @@ final class AppCoordinator: ObservableObject {
   #endif
 
   func startScan() {
+    homeDiscoveryHeldAfterStop = false
     stopOutcome = nil
     selectedHomeTab = .now
     stopConfirmSnapshot = nil
@@ -1427,6 +1451,8 @@ final class AppCoordinator: ObservableObject {
   }
 
   private func resetAndDismissScan() {
+    homeDiscoveryHeldAfterStop = true
+    stoppedSessionRecordID = nil
     stopConfirmSnapshot = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
@@ -1496,6 +1522,8 @@ final class AppCoordinator: ObservableObject {
     case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
       event = currentEvent
     case .idle, .sensing:
+      homeDiscoveryHeldAfterStop = true
+      stoppedSessionRecordID = nil
       scanPresented = false
       return
     }
@@ -1506,13 +1534,16 @@ final class AppCoordinator: ObservableObject {
     let detectedDeviceCount = sensingCoordinator.devicesVerified
     let firstSightingAt = sensingCoordinator.firstSightingAt
     let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
+    homeDiscoveryHeldAfterStop = true
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
     let stopResult = sensingCoordinator.stopSensingWithResult()
+    let storedRecordID = proofID.flatMap { proofStore.proof(withId: $0)?.id }
+    stoppedSessionRecordID = storedRecordID
     let presentation = Self.stopPresentation(
       attemptedRecordID: proofID,
       signedRecordID: stopResult.selfProof?.proofId,
-      storedRecordID: proofID.flatMap { proofStore.proof(withId: $0)?.id },
+      storedRecordID: storedRecordID,
       hasExplainingAlert: stopResult.hasExplainingAlert
     )
     if presentation == .noRecordSaved {

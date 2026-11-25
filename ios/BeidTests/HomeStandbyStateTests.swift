@@ -88,6 +88,92 @@ final class HomeStandbyStateTests: XCTestCase {
 
 @MainActor
 final class HomeStandbyLifecycleTests: XCTestCase {
+  func testExplicitStopBeforeDetectionBlocksDiscoveryAcrossForegroundAndTabs() {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    sensing.useDemoEventMode = true
+    sensing.startSensing()
+    let app = makeApp(sensing: sensing)
+    app.requestScanClose()
+    XCTAssertEqual(sensing.phase, .idle)
+    sensing.useDemoEventMode = false
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    app.updateHomeStandby(isVisible: true, isSceneActive: false)
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    app.selectedHomeTab = .records
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    app.selectedHomeTab = .now
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertFalse(app.homeStandbyDiscoveryActive)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 0)
+    XCTAssertNil(app.homeStandby.listeningStartedAt)
+  }
+
+  func testExplicitStopCancelsAPendingDiscoveryRestart() async {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    sensing.useDemoEventMode = false
+    let app = makeApp(sensing: sensing)
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    await deliverScanState(true, through: engine, to: sensing)
+    app.updateHomeStandby(isVisible: true, isSceneActive: false)
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    app.requestScanClose()
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    await deliverScanState(false, through: engine, to: sensing)
+    XCTAssertFalse(app.homeStandbyDiscoveryActive)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 1, "A late stop callback must not restart explicit stopped discovery")
+    XCTAssertNil(app.homeStandby.listeningStartedAt)
+  }
+
+  func testAdvertisingOffAfterExplicitStopDoesNotRestartDiscovery() async {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    sensing.useDemoEventMode = true
+    sensing.startSensing()
+    await deliverAdvertisingState(true, through: engine, to: sensing)
+    let app = makeApp(sensing: sensing)
+    app.requestScanClose()
+    sensing.useDemoEventMode = false
+    // Stop reached idle while the radio still reports advertising.
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertTrue(app.homeDiscoveryHeldAfterStop)
+    await deliverAdvertisingState(false, through: engine, to: sensing)
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertTrue(app.homeDiscoveryHeldAfterStop, "A late advertising-off report must not release the hold")
+    XCTAssertFalse(app.homeStandbyDiscoveryActive)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 0)
+  }
+
+  func testLookForEventsReleasesTheGateAndSearchStartsAgain() {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    sensing.useDemoEventMode = true
+    sensing.startSensing()
+    let app = makeApp(sensing: sensing)
+    app.requestScanClose()
+    sensing.useDemoEventMode = false
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertTrue(app.homeDiscoveryHeldAfterStop)
+    XCTAssertFalse(app.homeStandbyDiscoveryActive)
+    app.lookForEvents()
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertFalse(app.homeDiscoveryHeldAfterStop)
+    XCTAssertTrue(app.homeStandbyDiscoveryActive)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 1)
+  }
+
+  func testStartingASessionEndsTheStoppedState() {
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: RecordingEventJoinControl())
+    sensing.useDemoEventMode = true
+    sensing.startSensing()
+    let app = makeApp(sensing: sensing)
+    app.requestScanClose()
+    XCTAssertTrue(app.homeDiscoveryHeldAfterStop)
+    app.startScan()
+    XCTAssertFalse(app.homeDiscoveryHeldAfterStop)
+  }
+
   func testVisibleIdleHomeStartsOnlyDiscoveryAndLeavingStopsItsScan() {
     let engine = RecordingEventJoinControl()
     let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
@@ -254,6 +340,19 @@ final class HomeStandbyLifecycleTests: XCTestCase {
     await fulfillment(of: [delivered], timeout: 1)
     observation.cancel()
     XCTAssertEqual(sensing.isScanning, isScanning)
+  }
+
+  private func deliverAdvertisingState(
+    _ isAdvertising: Bool,
+    through engine: RecordingEventJoinControl,
+    to sensing: SensingCoordinator
+  ) async {
+    let delivered = expectation(description: "The engine reports advertising=\(isAdvertising)")
+    let observation = sensing.$isAdvertising.dropFirst().prefix(1).sink { _ in delivered.fulfill() }
+    engine.emitState(isScanning: false, isAdvertising: isAdvertising)
+    await fulfillment(of: [delivered], timeout: 1)
+    observation.cancel()
+    XCTAssertEqual(sensing.isAdvertising, isAdvertising)
   }
 
   private func makeApp(sensing: SensingCoordinator) -> AppCoordinator {

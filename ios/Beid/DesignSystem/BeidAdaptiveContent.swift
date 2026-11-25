@@ -53,3 +53,22 @@ struct BeidLargeTitleContent<Content: View>: View {
     .padding(.horizontal, horizontalSizeClass == .regular ? DS.Space.m + DS.Space.xs : DS.Space.m)
   }
 }
+
+/// The same bounded ink treatment for a live session on Now and Sensing.
+/// Its surrounding page and system bars keep their light appearance.
+struct BeidLiveSessionPanel<Content: View>: View {
+  private let content: Content
+
+  init(@ViewBuilder content: () -> Content) {
+    self.content = content()
+  }
+
+  var body: some View {
+    content
+      .foregroundStyle(DS.Color.labelOnActionPrimary)
+      .padding(DS.Space.m)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(DS.Color.textPrimary, in: RoundedRectangle(cornerRadius: DS.Radius.nowCard))
+      .accessibilityElement(children: .contain)
+  }
+}
