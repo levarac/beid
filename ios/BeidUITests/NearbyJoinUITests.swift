@@ -138,7 +138,7 @@ final class NowNavigationUITests: XCTestCase {
 
   func testRecordsByEventArtworkAnnouncesUnavailableMutuality() {
     openSavedDemoRecords()
-    app.buttons["By event"].tap()
+    app.selectRecordsGrouping("By event")
     let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.past-event.")).firstMatch
     row.assertExists()
     XCTAssertNotNil(row.label.range(
