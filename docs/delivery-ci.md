@@ -236,10 +236,12 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     KMP script start/end, and the observed Swift compile window. That window
     includes overlapping/link work; `-showBuildTimingSummary` in `build.log`
     gives actual task durations. Job timeouts are 50 minutes for build/smoke and
-    35 per test lane. Step timeouts are 35 minutes for build (the Release Kotlin
+    45 per test lane. Step timeouts are 35 minutes for build (the Release Kotlin
     framework alone takes about 12 minutes on `xcode-27`), 10 for smoke tests,
-    and 30 for each full-mode test lane (UI shards take 21-25 minutes on
-    `xcode-27`), leaving time for evidence and cleanup.
+    and 40 for each full-mode test lane, leaving time for evidence and cleanup.
+    UI shards plan at about 20 minutes of test-case time, but on 2026-11-25
+    single tests stalled for 2 to 5 minutes on hosted runners, and 30 minutes
+    was not enough for a shard with two stalls.
     These are containment, not claimed speed; hosted full and smoke timing and
     artifact portability still need measurement on the final SHA.
 
