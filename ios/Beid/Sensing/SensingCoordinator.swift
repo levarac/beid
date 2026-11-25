@@ -353,6 +353,27 @@ final class SensingCoordinator: ObservableObject {
   /// A phase alone cannot establish that a durable Proof actually exists.
   var currentProofID: UUID? { activeProofId }
 
+  #if DEBUG
+  private var adaptiveContinuityMetrics = AdaptiveContinuityMetrics()
+
+  /// Actual session state and lifecycle call-site counters; resize commands
+  /// cannot write these values. Counters intentionally survive session reset.
+  var adaptiveContinuityReceipt: [String: Any] {
+    [
+      "owner": adaptiveContinuityMetrics.owner,
+      "session": currentBindingEvent?.sessionID.uuidString ?? "",
+      "record": currentProofID?.uuidString ?? "",
+      "phase": String(describing: ScanFlowContent.route(for: phase)),
+      "elapsed": firstSightingAt.map { Date().timeIntervalSince($0) } ?? 0,
+      "observations": Int(aggregationRuntime.observations.observationCount),
+      "starts": adaptiveContinuityMetrics.starts,
+      "stops": adaptiveContinuityMetrics.stops,
+      "finalizations": adaptiveContinuityMetrics.finalizations,
+      "savedRecord": adaptiveContinuityMetrics.savedRecord,
+    ]
+  }
+  #endif
+
   /// Uses the live wall clock for display. A guarded screenshot fixture may
   /// substitute a fixed instant so elapsed copy cannot race capture.
   func sensingPresentationNow(_ liveNow: Date) -> Date {
@@ -2767,6 +2788,9 @@ final class SensingCoordinator: ObservableObject {
     demoEvent: EventSession? = nil,
     demoScenario: DemoScenario? = nil
   ) {
+    #if DEBUG
+    if AdaptiveLayoutUITestFixture.isEnabled() { adaptiveContinuityMetrics.starts += 1 }
+    #endif
     let selectedEventCode = eventCode ?? joinedEventCode
     let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     guard prepareForSessionAdmission(retry: { [weak self] in
@@ -2801,6 +2825,9 @@ final class SensingCoordinator: ObservableObject {
       if let demoEvent {
         selectedScenario = selectedScenario.replacingEvent(demoEvent)
       }
+      #if DEBUG
+      selectedScenario = AdaptiveLayoutUITestFixture.extending(selectedScenario)
+      #endif
       runDemoScenario(selectedScenario, stepDelayNanos: demoStepDelayNanos)
     } else {
       guard prepareDeviceSecret(suppressAcknowledgedOutage: true) else { return }
@@ -3248,6 +3275,9 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func endSensing(stopEngine: Bool) -> StopResult {
+    #if DEBUG
+    if AdaptiveLayoutUITestFixture.isEnabled() { adaptiveContinuityMetrics.stops += 1 }
+    #endif
     var result = finalizeSelfProofIfNeeded()
     persistSessionAggregateSnapshotIfNeeded()
     persistSigilPresenceIfNeeded()
@@ -5117,6 +5147,9 @@ final class SensingCoordinator: ObservableObject {
   /// it is stale and must not be reconciled again on a later launch.
   @discardableResult
   private func finalizeSelfProofIfNeeded() -> StopResult {
+    #if DEBUG
+    if AdaptiveLayoutUITestFixture.isEnabled() { adaptiveContinuityMetrics.finalizations += 1 }
+    #endif
     var result = StopResult()
     let onExplainingAlert = { result.hasExplainingAlert = true }
     checkpointSelfProofStateIfNeeded(onExplainingAlert: onExplainingAlert)
@@ -5143,6 +5176,11 @@ final class SensingCoordinator: ObservableObject {
         onExplainingAlert: onExplainingAlert
       ) else { return result }
       result.selfProof = persistSelfProofRecord(record, onExplainingAlert: onExplainingAlert)
+      #if DEBUG
+      if AdaptiveLayoutUITestFixture.isEnabled(), let saved = result.selfProof {
+        adaptiveContinuityMetrics.savedRecord = saved.proofId.uuidString
+      }
+      #endif
     } catch let error as EventSigningKeyContinuityError {
       discardSelfProofCheckpoint(proofId: proofId, reason: error.discardReason, onExplainingAlert: onExplainingAlert)
     } catch {
@@ -5758,6 +5796,9 @@ final class SensingCoordinator: ObservableObject {
   /// being unable to say it.
   @discardableResult
   private func observeOneDemoDevice(displayId: String?, rpid: String, enin: Int) -> Bool {
+    #if DEBUG
+    rememberFirstSighting(at: AdaptiveLayoutUITestFixture.observationTimestamp())
+    #endif
     demoDeviceSequence += 1
     demoWindowEnin = enin
     demoWindowRpids.insert(rpid)

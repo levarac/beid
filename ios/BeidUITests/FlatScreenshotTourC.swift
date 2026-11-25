@@ -400,7 +400,7 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
     let rung = app.staticTexts["RECORDED ON THIS DEVICE"]
     rung.scrollToHittable(in: app)
-    if UIDevice.current.userInterfaceIdiom == .phone {
+    if !app.hasRegularWidthLayout {
       // Reproduce a fling that leaves the rung behind the navigation bar.
       let navigationBar = app.navigationBars.firstMatch
       let scrollView = app.scrollViews.firstMatch

@@ -396,7 +396,7 @@ final class FlatScreenshotTourA: XCTestCase {
     let window = app.windows.firstMatch.frame
     XCTAssertTrue(window.contains(control.frame))
     let actionInScrollView = app.scrollViews.firstMatch.buttons[control.identifier]
-    if UIDevice.current.userInterfaceIdiom == .phone {
+    if !app.hasRegularWidthLayout {
       XCTAssertFalse(actionInScrollView.exists, "The compact-width action belongs in the footer.")
       XCTAssertLessThan(window.maxY - control.frame.maxY, 72, "The action must sit near the bottom safe area.")
     } else {
