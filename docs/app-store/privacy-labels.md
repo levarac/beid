@@ -35,7 +35,7 @@ iOS に関わる点は次のとおり。
 - wallet は `.deeplinking` による端末内の往復で、network relay は無い。
 - 送信先は検証済み Event Definition が決める。O1〜O3 は現行 operator の説明であり、固定の受信者ではない。
 - commitment は owner key と結びつく（`EventCommitment.swift:7`）。Linked = Yes の根拠になる。
-- `PrivacyInfo.xcprivacy` は無い。この PR の範囲外。
+- `ios/Beid/PrivacyInfo.xcprivacy` を追加済み（tracking なし、収集データ種類は上の分類案と同じ、required-reason API は UserDefaults CA92.1・system boot time 35F9.1・file timestamp C617.1）。承認前の分類案を宣言しているので、承認結果が変わったらこのファイルも合わせる。
 
 ## 調査対象と限界
 
