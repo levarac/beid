@@ -56,7 +56,7 @@ final class AdaptiveContinuityUITests: XCTestCase {
     app.alerts["Stop sensing?"].assertExists()
     try exerciseLayoutChanges(from: initial) {
       self.app.alerts["Stop sensing?"].assertExists()
-      self.app.alerts.buttons["Stop and keep record"].assertHittable()
+      self.app.alerts.buttons["Stop sensing"].assertHittable()
     }
     app.alerts.buttons["Cancel"].tap()
     try assertContinuing(initial)
@@ -204,8 +204,8 @@ final class AdaptiveContinuityUITests: XCTestCase {
   private func stopExactlyOnce(_ initial: Receipt) throws {
     app.buttons["scan.stop-sensing"].assertHittable()
     app.buttons["scan.stop-sensing"].tap()
-    app.alerts.buttons["Stop and keep record"].assertHittable()
-    app.alerts.buttons["Stop and keep record"].tap()
+    app.alerts.buttons["Stop sensing"].assertHittable()
+    app.alerts.buttons["Stop sensing"].tap()
     try waitForReceipt { $0.finalizations == 1 && $0.stops == 1 }
     let stopped = try readReceipt()
     XCTAssertEqual(stopped.owner, initial.owner)

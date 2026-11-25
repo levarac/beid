@@ -257,6 +257,9 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.selectRecordsGrouping("All records")
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     app.tabButton("Now").tap()
+    // After an explicit stop, Now stays quiet until Look for events reopens discovery.
+    app.buttons["home.look-for-events"].assertHittable()
+    app.buttons["home.look-for-events"].tap()
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()

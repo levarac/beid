@@ -212,8 +212,8 @@ final class NowNavigationUITests: XCTestCase {
     app.buttons["home.demo.join"].tap()
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
     app.buttons["scan.stop-sensing"].tap()
-    app.buttons["Stop and keep record"].assertHittable()
-    app.buttons["Stop and keep record"].tap()
+    app.alerts.buttons["Stop sensing"].assertHittable()
+    app.alerts.buttons["Stop sensing"].tap()
     app.buttons["Done"].assertHittable()
     // A persisted artwork is required: a neutral ring would make the
     // absence of numeric narration a vacuous pass at the later grid/row.
