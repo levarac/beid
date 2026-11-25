@@ -221,7 +221,13 @@ final class AppCoordinator: ObservableObject {
   /// True after an explicit Stop until the person taps Look for events or
   /// joins an event. While true, Now never restarts nearby-event discovery,
   /// across foreground/background and tab changes (beid#892).
-  @Published private(set) var homeDiscoveryHeldAfterStop = false
+  @Published private(set) var homeDiscoveryHeldAfterStop = false {
+    didSet { if !homeDiscoveryHeldAfterStop { stoppedSessionRecordID = nil } }
+  }
+  /// The durable Record the explicit Stop left behind, whether or not it was
+  /// signed. Now uses it to tell a saved Record from no Record; the sealed
+  /// screen still depends on `sealedSnapshot` alone.
+  @Published private(set) var stoppedSessionRecordID: UUID?
   @Published private(set) var nowEventRegistration: HomeEventRegistration?
   #if DEBUG
   @Published private(set) var homeStandbyFixtureTime: TimeInterval = 0
@@ -1446,6 +1452,7 @@ final class AppCoordinator: ObservableObject {
 
   private func resetAndDismissScan() {
     homeDiscoveryHeldAfterStop = true
+    stoppedSessionRecordID = nil
     stopConfirmSnapshot = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
@@ -1516,6 +1523,7 @@ final class AppCoordinator: ObservableObject {
       event = currentEvent
     case .idle, .sensing:
       homeDiscoveryHeldAfterStop = true
+      stoppedSessionRecordID = nil
       scanPresented = false
       return
     }
@@ -1530,10 +1538,12 @@ final class AppCoordinator: ObservableObject {
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
     let stopResult = sensingCoordinator.stopSensingWithResult()
+    let storedRecordID = proofID.flatMap { proofStore.proof(withId: $0)?.id }
+    stoppedSessionRecordID = storedRecordID
     let presentation = Self.stopPresentation(
       attemptedRecordID: proofID,
       signedRecordID: stopResult.selfProof?.proofId,
-      storedRecordID: proofID.flatMap { proofStore.proof(withId: $0)?.id },
+      storedRecordID: storedRecordID,
       hasExplainingAlert: stopResult.hasExplainingAlert
     )
     if presentation == .noRecordSaved {

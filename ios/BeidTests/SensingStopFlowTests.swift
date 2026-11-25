@@ -605,6 +605,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(fixture.sensingCoordinator.ownerKeyOperationFailure)
     XCTAssertNotNil(app.stopOutcome)
     XCTAssertNil(app.sealedSnapshot)
+    XCTAssertNil(app.stoppedSessionRecordID, "No stored Record means Now says so")
     XCTAssertNil(app.proofCollectedSnapshot)
     let artifacts = try fixtureArtifacts(fixture)
     let writes = fixture.recordWriteCount
@@ -697,6 +698,8 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(app.proofCollectedSnapshot)
     XCTAssertEqual(fixture.signingCallCount, 1)
     XCTAssertNil(app.stopOutcome, "A durable unsigned Record needs no new outcome")
+    XCTAssertEqual(app.stoppedSessionRecordID, proofID, "Now must report the saved unsigned Record, not a missing one")
+    XCTAssertTrue(app.homeDiscoveryHeldAfterStop)
     XCTAssertEqual(fixture.recordWriteCount, writes)
     XCTAssertEqual(try fixtureArtifacts(fixture), artifacts)
   }
@@ -791,6 +794,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(coordinator.proofCollectedSnapshot)
     XCTAssertNotNil(proofStore.lastPersistenceError, "stopping must preserve the save failure")
     XCTAssertNotNil(coordinator.stopOutcome)
+    XCTAssertNil(coordinator.stoppedSessionRecordID)
   }
 
   func testPrejoinStopBypassesConfirmationAndEndsParticipantTransport() {

@@ -460,9 +460,20 @@ private struct NowHomeView: View {
         .beidTextStyle(DS.Font.Library.display46)
         .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier("home.stopped.title")
-      Text("home.stopped.body.noRecord", comment: "Now after Stop when no Record was created during the session.")
-        .beidTextStyle(DS.Font.Library.body15)
-        .foregroundStyle(secondary)
+      if let recordID = coordinator.stoppedSessionRecordID,
+        let record = coordinator.proofStore.proof(withId: recordID) {
+        Text("home.stopped.body.record", comment: "Now after Stop when a Record was saved. A Record is kept in the Records tab on this device.")
+          .beidTextStyle(DS.Font.Library.body15)
+          .foregroundStyle(secondary)
+        BeidTextControl("VIEW RECORD", glyph: .trailing("→", announcing: "View record")) {
+          coordinator.openProof(record)
+        }
+        .accessibilityIdentifier("home.saved.view-record")
+      } else {
+        Text("home.stopped.body.noRecord", comment: "Now after Stop when no Record was created during the session.")
+          .beidTextStyle(DS.Font.Library.body15)
+          .foregroundStyle(secondary)
+      }
       BeidTextControl("WHAT WE SEND", glyph: .trailing("→", announcing: "What we send")) {
         showWhatWeSend = true
       }
