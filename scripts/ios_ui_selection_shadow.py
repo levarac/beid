@@ -61,8 +61,6 @@ def propose(changes, manifest, weights):
         else:
             reasons.append(f"{file}.swift: {', '.join(sorted(suites))}")
             matched.update(matches)
-    if full:
-        matched = ui
     extra = round(sum(weights.get(test, 20.0) for test in sorted(matched - smoke - skips)), 3)
     if extra > MAX_EXTRA_SECONDS:
         reasons.append("additional test time exceeds 25 minutes")

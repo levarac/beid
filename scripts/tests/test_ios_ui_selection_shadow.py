@@ -53,6 +53,13 @@ class ShadowSelectionTests(unittest.TestCase):
                 self.assertEqual(result["mode"], "full")
                 self.assertTrue(result["reasons"])
 
+    def test_shared_changes_preserve_screen_matches_before_full_fallback(self):
+        result = self.select(HISTORIES["907"]["files"])
+        self.assertEqual(result["mode"], "full")
+        self.assertIn(CAMERA, result["candidates"])
+        self.assertNotIn(CAMERA, result["matched"])
+        self.assertIn(SMOKE, result["matched"])
+
     def test_changed_file_includes_both_test_classes(self):
         result = self.select(["ios/BeidUITests/NearbyJoinUITests.swift"])
         for suite in ("NearbyJoinUITests", "NowNavigationUITests"):

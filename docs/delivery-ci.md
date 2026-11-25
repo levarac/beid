@@ -235,11 +235,17 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     `ios-ui-selection-<attempt>` for 14 days. The report records the proposed
     screen and test-file matches, additional estimated seconds above smoke,
     the final candidate IDs, and any observed failures outside either set.
-    Common or unknown inputs, unsafe or missing comparisons, and estimates
-    over 25 additional minutes propose the full UI inventory. Expected iPhone
-    skips remain listed at zero cost. Incomplete shard evidence is marked in
-    the report. The existing test commands and required check use the full
-    suite regardless of this comparison.
+    The hand-written `VIEWS` and `TEST_FILES` tables match changed screen and
+    UI test sources. Unmapped iOS inputs (including shared helpers), missing
+    or malformed changed-path data, renames/deletions flagged by the collector,
+    or an estimate over 25 additional minutes expand the final proposal to the
+    full UI inventory. The report retains the original matches so a fallback
+    can be distinguished from what the mapping itself covered. Expected iPhone
+    skips remain listed at zero cost. Missing shard results are marked as
+    incomplete evidence and do not alter the proposal. This Linux job runs
+    after the full test jobs when the full build succeeded, including when
+    tests failed. Smoke runs skip it. It has its own check result and the
+    required iOS check has no dependency on it.
     Use “Re-run all jobs” to recreate expired artifacts.
     `scripts/ios_ci_timing.py` timestamps SPM resolution,
     KMP script start/end, and the observed Swift compile window. That window
