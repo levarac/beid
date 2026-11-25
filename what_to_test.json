@@ -1,6 +1,10 @@
 [
   {
+    "language": "ja",
+    "text": "1.1 の画面の手直しがすべて本線に入った確認用ビルドです。前回の確認用ビルドからの変更:\n- 記録を止めたあと、Look for events を押すまで近くのイベントを探し始めないか\n- 記録の途中で止めたとき、Now が記録を保存したことを伝え、VIEW RECORD から開けるか\n- 信号が切れたとき、目立つボタンが Stop sensing だけになっているか\n- しばらく聞こえない端末がレーダーで薄くなり、5 分で消えるか。レーダーの下に HEARD IN THE LAST 5 MINUTES と出るか\n- 送れていない記録があるとき、参加していない間の Now に NOT SENT YET が出るか\n- Bluetooth の許可やオン・オフを変えたとき、画面が今の状態に合うか\n前回の 4 件（後ろに白が見えない、アカウント画面、記録の切り替えと空の表示、参加中のパネル）も引き続き見てください。"
+  },
+  {
     "language": "en-US",
-    "text": "This build sends your signed attendance observations to the event's server while you take part, as Android already does. Join the test event from the nearby card, keep the app in front and the screen unlocked for about ten minutes next to the other test phones, and check that Recording starts and the record grows. Tell us if the app says it could not send, or if anything looks different from the last build."
+    "text": "A check build with all of the 1.1 screen fixes now in the main line. Changes since the last check build:\n- After you stop, Now does not look for nearby events until you tap Look for events\n- When you stop partway through, Now says the Record was saved and opens it from VIEW RECORD\n- When the signal is lost, Stop sensing is the only prominent button\n- A device that goes quiet fades on the radar and disappears after 5 minutes; the radar caption reads HEARD IN THE LAST 5 MINUTES\n- When a Record has not been sent yet, Now shows NOT SENT YET while you are not taking part\n- After you change the Bluetooth permission or turn Bluetooth off or on, the screen matches the current state\nPlease keep checking the four points from the last build: no white behind screens, the Account screen, the Records switch and empty state, and the live session panel."
   }
 ]
