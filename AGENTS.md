@@ -23,7 +23,7 @@ measures, which `scripts/check_observe_never_connects.py` enforces.
 
 `tools/beid-lab-cli` の `venue` サブコマンドは発信端末の代役も務まるため、iOS 端末が
 1 台も無くても Android 側を実機検証できる（2026-09-18、iPad/iPhone 抜きで beid#584 を
-確認済み）。端末が揃わない時は、まずこの方法を試す。
+確認済み）。端末が揃わない時にまず試す選択肢。
 
 lab CLI の bundle id は `org.levarac.beid.lab-cli`（`tools/beid-lab-cli/scripts/bundle.sh`
 と `tools/beid-lab-cli/Sources/beid-lab-cli/EngineLogging.swift`）。PR #605 は 2026-09-18 に merge 済み
