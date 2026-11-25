@@ -56,6 +56,23 @@ final class RecordSigilPresentationTests: XCTestCase {
     }
   }
 
+  func testRecordSummaryPreservesHeardAndWindowCountsAtAffectedPlacements() {
+    let input = BeidSharedKit.sigil.createSigilInput(windowCount: 3)
+    XCTAssertTrue(BeidSharedKit.sigil.addSigilPresence(
+      input: input, peerKey: "heard", windowIndex: 0, presence: 1
+    ))
+    for placement: RecordSigilPlacement in [.recordsGrid, .homePastRow, .sensingSealed] {
+      let layout = BeidSharedKit.sigil.layoutSigil(
+        input: input, size: Double(placement.size), ground: placement.sigilGround
+      )
+      XCTAssertEqual(
+        SigilDrawing.recordAccessibilitySummary(for: layout),
+        "Devices heard: 1. Window 3. Mutual check not available yet.",
+        "\(placement) must retain measured information without claiming mutuality"
+      )
+    }
+  }
+
   // MARK: - No data keeps the ring
 
   func testNoInputDrawsTheNeutralRingAndAnInputDrawsTheSigil() {

@@ -84,6 +84,24 @@ private struct NowHomeView: View {
         ScrollView {
           BeidLargeTitleContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
             VStack(alignment: .leading, spacing: DS.Space.l) {
+              HomeUnsentNotice(
+                store: coordinator.reportSubmissionStore,
+                now: coordinator.unsentNoticeNow(context.date), isSessionActive: !isIdle
+              )
+              #if DEBUG
+              if coordinator.isPendingRecordFixture {
+                Button("Advance pending fixture clock 60 seconds") {
+                  coordinator.advancePendingRecordClockForUITesting(by: 60)
+                }
+                .accessibilityIdentifier("home.pending-fixture.advance60")
+                Button("Advance pending fixture clock 1 second") {
+                  coordinator.advancePendingRecordClockForUITesting(by: 1)
+                }
+                .accessibilityIdentifier("home.pending-fixture.advance1")
+                Button("Accept pending fixture record") { coordinator.acceptPendingRecordForUITesting() }
+                  .accessibilityIdentifier("home.pending-fixture.accept")
+              }
+              #endif
               if !isIdle && coordinator.homeBluetoothIsOff { bluetoothOff }
               if let event = activeEvent {
                 activeSummary(event: event, now: context.date)
@@ -112,7 +130,7 @@ private struct NowHomeView: View {
         .accessibilityIdentifier("home.now")
         .background(DS.Color.surfaceCanvas, ignoresSafeAreaEdges: .bottom)
       }
-      .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+      .beidScreenBackground(DS.Color.surfaceCanvas)
       .modifier(HomeAccountToolbar(title: "home.now.title", iconColor: DS.Color.textPrimary))
       .toolbarBackground(DS.Color.surfaceCanvas, for: .tabBar)
       // The ink panel scrolls under the bar; the bar keeps a light ground.
@@ -626,20 +644,12 @@ private struct RecordsHomeView: View {
       ScrollView {
         BeidLargeTitleContent(regularMaxWidth: DS.Layout.recordsContentMaxWidth) {
           VStack(alignment: .leading, spacing: DS.Space.l) {
-            Picker("Record grouping", selection: $grouping) {
-              Text("All records").tag(Grouping.allRecords)
-              Text("By event").tag(Grouping.byEvent)
-            }
-            .pickerStyle(.segmented)
             if eventGroups.isEmpty {
-              BeidEmptyBlock {
-                VStack(alignment: .leading, spacing: DS.Space.s) {
-                  Text("Saved records appear here after sensing.")
-                  Text("record.explainer", comment: "One-line explanation of what a Record is, shown where people first meet one.")
-                    .accessibilityIdentifier("records.explainer")
-                }
-                .beidTextStyle(DS.Font.Library.body13)
-                .foregroundStyle(DS.Color.textSecondary)
+              BeidEmptyState("No records yet", description: "Saved records appear here after sensing.") {
+                Text("record.explainer", comment: "One-line explanation of what a Record is, shown where people first meet one.")
+                  .beidTextStyle(DS.Font.Library.body13)
+                  .foregroundStyle(DS.Color.textSecondary)
+                  .accessibilityIdentifier("records.explainer")
               }
             } else if grouping == .byEvent {
               eventList
@@ -655,8 +665,28 @@ private struct RecordsHomeView: View {
         }
       }
       .accessibilityIdentifier(grouping == .byEvent ? "records.events" : "records.grid")
-      .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+      .beidScreenBackground(DS.Color.surfaceCanvas)
       .modifier(HomeAccountToolbar(title: "records.title", iconColor: DS.Color.textPrimary))
+      .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Menu {
+            Picker("Record grouping", selection: $grouping) {
+              Text("All records").tag(Grouping.allRecords)
+                .accessibilityIdentifier("records.grouping.all")
+              Text("By event").tag(Grouping.byEvent)
+                .accessibilityIdentifier("records.grouping.event")
+            }
+            .pickerStyle(.inline)
+          } label: {
+            // The title is the native menu title (overflow, expanded display,
+            // VoiceOver); the bar shows only the symbol.
+            Label("Record view options", systemImage: "rectangle.grid.1x2")
+              .labelStyle(.iconOnly)
+              .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget)
+          }
+          .accessibilityIdentifier("records.grouping")
+        }
+      }
       .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.light, for: .navigationBar)
       .navigationDestination(item: $selectedRecord) { HomeRecordDetail(proof: $0) }
@@ -668,7 +698,9 @@ private struct RecordsHomeView: View {
       selectedRecord = proof
     } label: {
       VStack(alignment: .leading, spacing: DS.Space.s) {
-        RecordSigilSlot(input: sensing.sigilInput(forProofId: proof.id), placement: .recordsGrid)
+        RecordSigilSlot(
+          input: sensing.sigilInput(forProofId: proof.id), placement: .recordsGrid, isDeviceRecord: true
+        )
         Text(verbatim: proof.eventName)
           .beidTextStyle(DS.Font.Library.title17)
           .fixedSize(horizontal: false, vertical: true)
@@ -696,7 +728,9 @@ private struct RecordsHomeView: View {
                             submissionStore: coordinator.reportSubmissionStore)
           } label: {
             HStack(spacing: DS.Space.m) {
-              RecordSigilSlot(input: sensing.sigilInput(forProofId: proof.id), placement: .homePastRow)
+              RecordSigilSlot(
+                input: sensing.sigilInput(forProofId: proof.id), placement: .homePastRow, isDeviceRecord: true
+              )
               VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text(verbatim: proof.eventName).beidTextStyle(DS.Font.Library.title17)
                 Text(String(
@@ -737,6 +771,43 @@ private struct HomeRecordDetail: View {
     #else
     ItemDetailView(proof: proof)
     #endif
+  }
+}
+
+private struct HomeUnsentNotice: View {
+  @ObservedObject var store: ReportSubmissionStore
+  let now: Date
+  let isSessionActive: Bool
+
+  var body: some View {
+    if store.hasRecordsWaitingToSend(at: now, isSessionActive: isSessionActive) {
+      VStack(alignment: .leading, spacing: DS.Space.s) {
+        hairline
+        HStack(spacing: DS.Space.s) {
+          Circle()
+            .fill(DS.Color.statusPending)
+            .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+            .accessibilityHidden(true)
+          Text("home.unsent.title")
+            .beidTextStyle(DS.Font.Library.labelMono11)
+            .foregroundStyle(DS.Color.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+        }
+        Text("home.unsent.message")
+          .beidTextStyle(DS.Font.Library.body13)
+          .foregroundStyle(DS.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+        hairline
+      }
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("home.unsent-notice")
+    }
+  }
+
+  private var hairline: some View {
+    Rectangle()
+      .fill(DS.Color.strokeHairline)
+      .frame(height: DS.Size.hairline)
   }
 }
 

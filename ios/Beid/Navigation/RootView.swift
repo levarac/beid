@@ -24,6 +24,8 @@ struct RootView: View {
         CollectionHomeView()
       }
     }
+    // Home's visible tab/destination owns its state-colored backing instead.
+    .beidScreenBackground(DS.Color.surfaceCanvas, updatesBacking: coordinator.screen != .home)
     .modifier(OwnerKeyRestorationNoticePresenter(
       sensingCoordinator: coordinator.sensingCoordinator
     ))
@@ -34,7 +36,14 @@ struct RootView: View {
     ))
     .tint(DS.Color.actionPrimary)
     .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: coordinator.screen)
-
+    #if DEBUG
+    .background {
+      if ProcessInfo.processInfo.arguments.contains("-beid-ui-test") {
+        AdaptiveLayoutUITestHost(sensing: coordinator.sensingCoordinator)
+          .allowsHitTesting(false)
+      }
+    }
+    #endif
   }
 }
 

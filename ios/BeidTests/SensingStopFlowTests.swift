@@ -1055,6 +1055,41 @@ final class SensingStopFlowTests: XCTestCase {
     _ = sensing.reset()
   }
 
+  func testScanRouteDisappearanceDuringRecordingAndConfirmationDoesNotFinalize() async throws {
+    let engine = RecordingEventJoinControl()
+    let crypto = DeterministicSensingCryptography()
+    let sensing = makeIsolatedSensingCoordinator(for: self, sensingCryptography: crypto, eventJoinControl: engine)
+    let coordinator = makeCoordinator(sensingCoordinator: sensing)
+    await reachRecording(coordinator)
+    let proofID = try XCTUnwrap(sensing.currentProofID)
+    let phase = sensing.phase
+    let routeID = coordinator.scanRouteID
+    let calls = crypto.calls
+
+    // A view departure is not a session-end command, even while a Stop
+    // confirmation is presented or after a native Back has popped the route.
+    coordinator.scanRouteDidDisappear(routeID)
+    coordinator.requestScanClose()
+    let confirmation = try XCTUnwrap(coordinator.stopConfirmSnapshot)
+    coordinator.scanRouteDidDisappear(routeID)
+    XCTAssertEqual(coordinator.stopConfirmSnapshot?.proofID, confirmation.proofID)
+    XCTAssertEqual(coordinator.stopConfirmSnapshot?.event, confirmation.event)
+    coordinator.scanPresented = false
+    coordinator.scanRouteDidDisappear(routeID)
+    XCTAssertEqual(sensing.currentProofID, proofID)
+    XCTAssertEqual(sensing.phase, phase)
+    XCTAssertEqual(crypto.calls, calls)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
+
+    coordinator.confirmStopSensing()
+    coordinator.scanRouteDidDisappear(routeID)
+    coordinator.confirmStopSensing()
+    let signatures = crypto.calls.filter { if case .signSelfProof = $0 { return true }; return false }
+    XCTAssertEqual(signatures.count, 1)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
+    XCTAssertEqual(sensing.selfProofRecord(forProofId: proofID)?.proofId, proofID)
+  }
+
   func testNilSelfProofDoesNotClaimRecordWasSaved() async {
     let crypto = DeterministicSensingCryptography(selfProofSignature: nil)
     let sensing = makeIsolatedSensingCoordinator(for: self, sensingCryptography: crypto)

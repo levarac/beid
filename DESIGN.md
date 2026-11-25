@@ -460,14 +460,14 @@ as-is.
 | **Ledger Trace** | A verifiable record exists behind this artifact | Metadata rows in `ItemDetailView`, address row in `AccountSheetView`, monospaced identifiers | Blockchain jargon, wallet chrome, explorer-link prominence |
 | **Event Artifact** | A record is a collectible memory of a real event | `ProofCardView` cards, `CollectionHomeView` grid, event recap | NFT-marketplace aesthetics, price/rarity framing |
 
-Concrete do/don't pair (the empty state of `CollectionHomeView`):
+Concrete do/don't pair (the Records empty state in `RecordsHomeView`):
 
 ```
 DO:
-Empty state uses the `encounter-field-empty` Encounter Field asset,
+Empty state uses BeidEmptyState with the dashed DS frame (§10),
 title "No records yet",
-body "Start sensing at an event to collect your first record.",
-CTA "Sense Event",
+body "Saved records appear here after sensing.",
+grouping remains available in the navigation-bar menu,
 background DS.Color.surfaceCanvas.
 
 DON'T:
@@ -481,18 +481,20 @@ or any wallet/crypto iconography.
 (no `CollectionHomeView` counterpart — §11). Android's closest analogue,
 `RecordsScreen`'s empty state, uses a plain centered `Text` with no icon
 and no CTA at all (verified, `RecordsScreen.kt`) — it is not this do/don't
-pair's target. Also note the CTA text itself: Android's actual join
+pair's target. For the historical CTA comparison, Android's join
 button string is `"Join event"` (`event_join_button`,
 `strings.xml`), not `"Sense Event"` — the two platforms do not currently
 share this grandfathered string; see #24's treatment in
 `docs/decisions/issue-339-design-md-android-scope.md`.]**
 
 > **Annotation 2026-09-22 (Flat 2b, beid#627,
-> [D-627](docs/decisions/issue-627-flat-2b.md)).** In the pair above, the
-> `encounter-field-empty` asset, `DS.Color.surfaceCanvas` and the icon
-> DON'T are superseded by 04b's dashed empty block (`NO EVENTS YET`; §8,
-> §12; #635). The rest of the pair (specific title and body, no generic
-> "No data", no system blue, no wallet/crypto iconography) still holds.
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** The former example used
+> `encounter-field-empty`; Flat 2b replaced that asset with 04b's dashed
+> empty block (§8, §12; #635). The current pair above reflects Records
+> after #889: its saved-record explanation and toolbar grouping replace
+> the historical first-record prompt and "Sense Event" CTA. Specific
+> copy, no generic "No data", no system blue, and no wallet/crypto
+> iconography remain the rules.
 > The four motifs themselves are unchanged. **Open item 6:** the Flat 2b
 > sensing graph's concentric rings sit next to Encounter Field's "avoid
 > radar/sonar clichés"; that is open, not settled (#634).
@@ -1161,10 +1163,11 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   display cutouts) — `Scaffold`'s `innerPadding`, which `EventJoinScreen`/
   `AccountScreen`/`ManualEventCodeScreen` already thread through
   (verified). Keyboard avoidance uses standard Compose/`Scaffold` behavior.]**
-- SHOULD: Grid layouts use `DS.Space.m` (16) gutters (the
-  `CollectionHomeView` `LazyVGrid` pattern). **[iOS-only as written: no
+- SHOULD: Records grids use `DS.Space.l` (24) gutters, matching the
+  `RecordsHomeView` `LazyVGrid` in `CollectionHomeView.swift`. The former
+  16-point recommendation did not match the implementation. **[iOS-only as written: no
   `CollectionHomeView`/grid layout exists on Android today (§11) — the
-  gutter *value* recommendation (`BeidSpacing.m`) would carry over to a
+  gutter *value* recommendation (`BeidSpacing.l`) would carry over to a
   future Compose `LazyVerticalGrid`, but there is no current screen this
   rule governs.]**
 - SHOULD: Vertical rhythm inside a state screen (icon → title → body → CTA)
@@ -1172,6 +1175,73 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   counterpart: `Arrangement.spacedBy(BeidSpacing.l)` — verified as the
   actual spacing `BeidStateScreen`/`BeidScreen` use internally
   (`ui/designsystem/BeidStateScreen.kt`, `BeidScreen.kt`).]**
+
+### Adaptive layout and live-session continuity (iOS, #894)
+
+This is the implementation contract for the staged adaptive-layout work,
+not a claim that the regular-width arrangements below have shipped. The
+first slice adds continuity tests and corrects this contract without a
+visible iPhone layout change. Android keeps its existing native navigation;
+this slice exercises UIKit traits, SwiftUI presentation and iOS scene geometry.
+The reference is Apple's [iPhone Duo HIG](https://developer.apple.com/design/human-interface-guidelines/designing-for-iphone-duo)
+and [ArrangementView documentation](https://developer.apple.com/documentation/swiftui/arrangementview).
+
+- MUST: Choose layout using horizontal size class **and available container
+  space**, including safe areas, reserved regions and Dynamic Type. Device
+  idiom, device name and orientation MUST NOT choose a layout. A narrow
+  multitasking window uses the compact layout regardless of its device.
+- MUST: Keep state and navigation owners stable across resizing. Do not
+  switch entire stack/split roots with `if horizontalSizeClass` or key a
+  screen by width. Use one collapsing `NavigationSplitView` for Records,
+  with explicit selection, compact-column behavior and detail-path ownership.
+  Selecting a different Record clears the old detail path; resizing preserves
+  an intentional selection, scroll anchor, sheet and its inner navigation path.
+  No selection means a selection prompt, never implicit newest-Record selection.
+- MUST: Keep Stop outside scrolling content and accessible at every supported
+  size. Stop and other essential actions MUST NOT exist only in a secondary
+  pane: `ArrangementView` can hide that pane in closed Duo landscape. Lay out
+  the remaining content around persistent actions. Use `ArrangementView` on
+  iOS 27.1+ and identity-preserving `AnyLayout` below it, including iOS 27.0.
+  `ViewThatFits` can test fit but does not itself preserve state between
+  alternative subtrees. Avoid competing containers around the arrangement.
+- MUST: Derive Records columns from the **pane's usable width**, after its
+  actual horizontal insets, not the whole window or an assumed 320-point
+  sidebar. For usable width `U`, minimum card width `M` and gutter `G`, use
+  `max(1, floor((U + G) / (M + G)))`, with one column at accessibility text
+  sizes. Two 150-point cards require at least 324 usable points at the current
+  24-point gutter; a 320-point pane cannot fit them even before padding.
+  Permit one column or a readable list when tiles are cramped. The split-grid
+  slice must explicitly adopt or retire **both** existing minimum-width tokens;
+  merely using the compact token leaves the regular token unused.
+- MUST: Keep the two-tab bar and system placement; no `sidebarAdaptable`.
+  `Tab` and `.tabBarOnly` need an iOS 18 availability branch because the app
+  still supports iOS 17. Toolbar actions use meaningful labels and symbols;
+  the Records grouping action must not take the system overflow ellipsis.
+- MUST: Keep sheets as sheets and preserve their presentation owner and path
+  while their size changes. Account and event-code entry use form sizing on
+  supported OS versions, with the standard iOS 17 fallback. The scanner may
+  use page sizing. Verify keyboard avoidance and accessibility text.
+- MUST: A resize must preserve the live session and Record identity, advancing
+  elapsed time, observations and animation phase, without extra start, stop
+  or finalization calls. Explicit Stop finalizes exactly once. The modifier
+  calling `scanRouteDidDisappear` is on the destination in `CollectionHomeView`;
+  the method only releases a matching alert handoff after `scanPresented` is
+  false. It does **not** stop sensing. Back preserves participation (§11).
+- MUST: Test compact → regular → compact while recording, during Stop
+  confirmation, with a sheet and its inner route open, and with a Record
+  detail open. Trait overrides alone do not reproduce window geometry,
+  reserved regions, scene transitions or a physical fold. Exercise real
+  window resizing and Duo display/pose transitions where supported and list
+  unavailable cases separately. Real BLE continuity remains a hardware check.
+
+Implement in this order: (1) continuity instrumentation/tests and this
+contract; (2) availability-safe shell/navigation state; (3) Records split;
+(4) Sensing arrangement with persistent Stop; (5) Record collected, Now and
+venue adaptation; (6) sheets, state screens and scanner. Each affected slice
+includes available Duo/Split View checks and documentation. Keep Sensing
+pushed from Now for 1.1 and ordinary-iPhone portrait support unchanged.
+These adjustments to the original layout proposal take precedence over
+static Figma geometry when fitting the available space or preserving actions.
 
 ## 8. Shape, Material, Elevation
 
@@ -1255,9 +1325,11 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   dash `DS.Size.emptyBlockDash` (4, as [4, 4]; from the 2026-09-23 Figma
   read, §0), padding `DS.Space.l` horizontal and
   `DS.Space.emptyBlockVertical` (40) vertical, no fill, content centered.
-  It replaces `BeidPanel` at two empty states, `CollectionHomeView`'s
-  (04b) and `DailySummaryView`'s empty day; their content is unchanged
-  (the 04b copy is #635's, the glyph #631's).
+  Since #889, screens use `BeidEmptyState` (§10), which owns this frame
+  and the common title/description/action layout. `BeidEmptyBlock` is
+  its frame implementation, not a second screen-level empty-state API.
+  The former reference here to `DailySummaryView` described a removed
+  screen; it is not a current empty-state caller.
 
 Radii in `DS.Radius`: `control 12 / card 16 / seal 28 / pill 999 /
 glyph 24 / emptyBlock 16 / nowCard 20`. All rounded rectangles use
@@ -1528,6 +1600,46 @@ Real components in this codebase. Each entry is the contract for reuse.
 > path, and `BeidGlassGroup` and the glass button styles are gone (§8
 > "Surfaces (#630)"). Where an entry below names `beidSurface`, it is that
 > flat surface, no longer migration debt.
+
+### Component: BeidEmptyState
+
+**Platform scope:** iOS presentation only (#889, maintainer decision
+2026-11-24). Android native components and shared behavior are unchanged.
+
+Use this component whenever a screen or section has no content to show:
+an empty collection, missing stored content, or an unavailable result.
+It accepts a short localized title, an optional localized description,
+an optional SF Symbol, and optional actions. Keep existing factual copy;
+an unavailable value must not become a zero, a successful save, or a
+delivery/verification claim. A title may be added above existing explanatory
+copy to make the state easy to scan. One sentence may be split between title
+and description without changing its words.
+
+`BeidEmptyState` lives in `ios/Beid/DesignSystem.swift`. It uses the
+`BeidEmptyBlock` dashed frame (§8), centered `DS.Font.Library.title17`
+and `body13`, `DS.Color.textPrimary` / `textSecondary`, and `DS.Space`
+spacing. Text wraps at Dynamic Type sizes; it has no fixed height or line
+limit. Children remain separate accessibility elements, with existing text
+and action identifiers retained. The optional symbol is decorative and hidden
+from accessibility; current callers need no symbol.
+Copy is passed as `LocalizedStringKey`. Callers that hold runtime values or a
+translator comment pass prebuilt `Text` through the `text:` initializers.
+
+This follows the title/description/actions structure of SwiftUI's
+[`ContentUnavailableView`](https://developer.apple.com/documentation/swiftui/contentunavailableview).
+A small DS component is used because the same state must fit inline report
+sections as well as empty screens while retaining the existing dashed frame,
+bundled type ramp and DS insets. This is an explicit adjustment from the old
+Figma-only empty-block title convention; native navigation, menus and buttons
+keep their OS behavior.
+
+Callers cover Records (both groupings), Past events, nearby-event search,
+Event detail's empty records, Session measurements/artwork/time bands/reports,
+missing Report detail, Record delivery/receipt/result sections, empty or
+unreadable saved venue packs, Venue broadcast before a pack is loaded, and
+the unsaved-record stop outcome. Preserve empty versus unreadable distinctions.
+Individual unavailable metadata values, zero counters, live status/guidance,
+and deliberately omitted empty sections are not empty-state layouts.
 
 ### Component: ProofCardView
 
@@ -1973,10 +2085,24 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   `AppNavHost.kt`'s composable body).]**
 - **Collection home (04)**: Now handles current participation and Records
   holds saved records and events. Both tabs have an account entry in their
-  top-trailing toolbar. The primary nearby candidate card on Now presents
+  top-trailing toolbar. Records also has a native view-options menu in the
+  navigation bar, with an inline grouping picker (§12). Selecting either
+  grouping changes the same screen, including when it has no saved records;
+  the by-event rows retain their date, session count and record count.
+  The primary nearby candidate card on Now presents
   the announced name and registration status, and the whole card joins
   after verification. Its accessibility label starts with the localized
-  join action. Empty state (04b) follows the §3 do/don't. **[iOS-only as
+  join action. Outside an active session (standby and after stopping), a
+  pending-dot notice above Now's current content appears only after a send
+  attempt has failed or an item has waited more than 60 seconds. It says
+  "NOT SENT YET" / "Part of your Record is saved on this device but not sent
+  yet. beid sends it when the app is open and online." It follows the clock
+  notice's hairline and typography style, includes pending captures and
+  retryable submissions, and disappears once none qualify. Accepted records
+  and terminal failures never keep it visible. The completion text
+  "You can close the app" remains unchanged: records stay on the device and
+  sending retries when the app is next open and online. Empty state (04b)
+  follows the §3 do/don't. **[iOS-only as
   written — no Android counterpart. `Screen.kt`'s own comment: `EventJoin`
   "stands in for iOS's `.home`, since Android has no post-onboarding
   collection-home screen yet." Promoting a screen to this role is
@@ -1997,7 +2123,17 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   successful durable finalization may show the saved-record screen and say
   that the app can be closed. There is no threshold-based transition or
   countdown. While sensing, show devices heard and elapsed time without a
-  mutual count or an achievement state. DONE advances to the collected-record
+  mutual count or an achievement state. Radar nodes show devices heard in
+  the last 300 seconds, refreshed once per second, with the caption
+  "HEARD IN THE LAST 5 MINUTES" below the radar and the same time scope in
+  its VoiceOver summary. A node dims at 30 seconds of silence using
+  `DS.Opacity.radarSilentNode` (0.45), and disappears at 300 seconds.
+  Both durations in `BeidConfig` are provisional until measured with locked
+  iOS and Android peers. Each device's last detection or signal update
+  restarts its rolling timer; observation-window boundaries never expire
+  nodes. Expiry changes only this
+  live display; DEVICES HEARD remains the session total, and earlier window
+  observations and signed records remain intact. DONE advances to the collected-record
   screen, and View collection opens Records. After an explicit stop Now
   stays quiet: "Sensing stopped" with "Your Record is saved in Records on
   this device. You can close the app." (or "No Record was created for this
@@ -2079,6 +2215,39 @@ visual language).
 > shape any future convergence follows; see
 > `docs/decisions/issue-339-design-md-android-scope.md`.
 
+### Regular-width screen plan (iOS, #894)
+
+The table is the target for subsequent slices, subject to §7's continuity
+rules. Compact windows retain the current flows through the same state
+owners. Caps bound readable content; they do not force a pane count.
+
+| Screen / surface | Regular-width plan | Compact / fit and continuity requirements |
+| --- | --- | --- |
+| Tabs and shell | Two system tabs; retain platform bar placement | Availability-safe legacy shell on iOS 17; no extra sidebar |
+| Now, standby and nearby events | Content within 960 pt; nearby cards use computed columns; joined card may arrange its contents side by side | Account for gutters; an adaptive minimum alone does not guarantee an even column count; preserve card order and live session |
+| Sensing / recording | Radar and facts in two panes when both fit; persistent Stop outside the arrangement and scroll view | One column when space/text requires it; radar avoids reserved regions; keep pushed route and session |
+| Stop confirmation | System alert on the same live session | Remains open across resize; Cancel continues that session; explicit Stop finalizes once |
+| Sealed Record / Record saved / collected | Sigil and facts side by side when they fit; essential CTA remains accessible independently of the secondary pane | Tall/narrow layouts use the readable 600-point column |
+| Records, All records / By event | One balanced `NavigationSplitView`; same grid/list in its primary pane, selected content in detail | Computed columns, one at AX sizes; explicit compact navigation; grouping stays with its content |
+| Records empty / no selection | Existing empty block in the primary pane; shared selection prompt in detail | Do not auto-select a Record; preserve an existing intentional selection |
+| Record / Event detail | Selected detail in a detail-owned `NavigationStack`, leading-aligned within 600 pt | Preserve Record/Event identity; clear nested path only when selection changes |
+| Session / observation / report detail | Push within the selected detail's stack, readable 600-point content | Preserve nested path across collapse and expansion |
+| Welcome, Bluetooth permission/off/denied | Centered 600-point state column with CTA inside the column | Compact body scrolls above pinned CTA; verify short windows and AX text |
+| Signal lost, Can't join | Readable state content with accessible recovery action | Keep recovery semantics; the existing 220-point heading cap belongs to **Can't join**, not live Sensing; changing it is a separate visible-layout slice |
+| Clock notice | Keep the system alert and its pending-join owner | Preserve the alert and recovery action across resizing |
+| Account, Organizer tools, About sensing, Past events | Form-sized sheet, same navigation stack, readable rows within 600 pt | Keep modal and nested route; preserve ink treatment and standard dismissal |
+| Privacy policy | Keep the existing external link and system browser presentation | The link is not a native sheet destination; retain the return path to Account |
+| Event-code entry | Form-sized sheet with field and CTA in one keyboard-safe column | Keep entry and validation state; standard cancel action |
+| Venue broadcast / signed serving | Fit-based two-pane status and instructions inside the form sheet | Use one column when needed; Start/Stop broadcast never only in secondary pane |
+| Venue link scanner | Page-sized sheet; aspect-fit preview with reserved-region-aware reticle where supported | Keep scanner lifecycle and dismissal across resize; hardware camera checks remain separate |
+
+**Current implementation corrections (baseline `691c9501`).** Records uses
+two flexible columns, or **one at accessibility sizes**, and 24-point
+`DS.Space.l` gutters. Neither grid-minimum token is currently consumed.
+Records uses the 680-point cap listed in §17 A; Now uses 960 and state
+content 600. The permission screen's 440-point literal and Can't join's
+220-point heading cap remain unchanged by the continuity-only slice.
+
 ## 12. Iconography and Illustration
 
 > **Platform scope:** iOS-specific mechanism — Android counterpart named
@@ -2108,7 +2277,8 @@ visual language).
 toolbars and Now / Records tabs (the 1.1 screen specification).**
 
 - MUST: App-drawn content uses text and the existing Sigil artwork, with
-  the Bluetooth illustration exception below. Controls inside a screen are
+  the Bluetooth illustration exception below and `BeidEmptyState`'s optional
+  decorative symbol (§10). Controls inside a screen are
   monospaced uppercase text in DM Mono (§6): `COPY`, `PASTE`, `OPEN →`,
   `ENTER EVENT CODE →`. Native Bluetooth primary actions follow §10.
 - **Record event-name disclosure.** The native SwiftUI `DisclosureGroup`
@@ -2119,9 +2289,21 @@ toolbars and Now / Records tabs (the 1.1 screen specification).**
   the role of Bluetooth. The illustration is noninteractive and hidden
   from accessibility because the adjacent text conveys the same
   information. The symbols stay within the 32 pt decorative cap (§12).
-- **Records grouping (#853).** Records uses a native segmented picker for
-  `All records` and `By event`. The system styles the labels and selected
-  state, and changing the grouping keeps the same Records screen.
+- **Records grouping (#888, #853).** A native navigation-bar `Menu` uses
+  `rectangle.grid.1x2` and the accessible title `Record view options`.
+  Its inline `Picker` offers `All records` and `By event`, with the OS
+  checking the current choice. Test the toolbar's 44×44pt touch region
+  with corner taps; its accessibility frame is not a hit-area
+  measurement. Menu-row sizing belongs to the OS. Changing grouping
+  keeps the same Records screen.
+  The scroll-view identifiers stay `records.grid` and `records.events`;
+  the button is `records.grouping`. The options declare
+  `records.grouping.all` and `records.grouping.event`, but iOS 27's native
+  menu does not expose those option identifiers. UI tests use the visible
+  English option labels and verify selection and the resulting scroll view.
+  This replaces the
+  segmented control by maintainer decision (2026-11-24); the system owns
+  menu presentation and selection styling on iPhone and iPad.
 - MUST: The Now / Records tab bar uses `TabView` with system symbols and
   titles. Its labels use the system font and its appearance belongs to the OS.
 - MUST: Navigation-bar and toolbar items are OS-standard items, not
@@ -2297,7 +2479,9 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 > - Flat 2b's own accessibility ask is adopted as part of the contract
 >   (spec §9): graphs and Sigils carry information, not decoration, so
 >   each carries a VoiceOver summary (for example, "7 mutual, 13 detected,
->   window 6"; #633, #634, #640).
+>   window 6"; #633, #634, #640). Device records cannot establish
+>   mutuality, so their summary says "Devices heard: 13. Window 6. Mutual
+>   check not available yet." instead (#837).
 > - Open item 4 (D-627): non-text contrast under WCAG 1.4.11 is not
 >   covered by this section today, which covers text; recorded, no new
 >   rule.
@@ -2402,6 +2586,24 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 - MUST: Previews show the single appearance; light *and* dark preview
   pairs are no longer required. #632 removed the `.preferredColorScheme`
   preview variants.
+
+### iOS transition backing (#890)
+
+Screen roots use `beidScreenBackground` in `ios/Beid/DesignSystem.swift`:
+the existing `DS.Color.surfaceCanvas` or `DS.Color.textPrimary` fills the
+safe areas and the native navigation backing. A small UIKit containment
+bridge gives the window, hosting roots and tab container the same ground
+before a screen appears, and restores it on pop, tab changes and sheet
+dismissal. It does not change `UIUserInterfaceStyle = Light` or introduce
+another theme. RootView supplies the onboarding canvas; Home's visible
+screen owns its backing, so an offscreen tab cannot recolor it.
+
+The current Now title region remains white above its ink participation
+body; #883 owns any change to that screen's intended palette. Sensing is
+pushed, and Account already uses an ink presentation background. These
+current paths supersede §8's old cover/interim-canvas examples. Rounded
+transition corners remain OS-owned; background color must also cover the
+layers exposed outside them, not just a screen's scroll content.
 
 Kept unchanged:
 
@@ -2824,8 +3026,9 @@ to.]**
 | `radius.nowCard` | `DS.Radius.nowCard` | 20 pt | The now-sensing `ink` card on Home (#635) |
 | `layout.state.content.maxWidth` | `DS.Layout.stateContentMaxWidth` | 600 pt | Readable state-screen and CTA width in regular size classes |
 | `layout.collection.content.maxWidth` | `DS.Layout.collectionContentMaxWidth` | 960 pt | Maximum collection width in regular size classes |
-| `layout.grid.card.minimum.regular` | `DS.Layout.regularGridCardMinimumWidth` | 260 pt | Minimum proof-card width in regular grids |
-| `layout.grid.card.minimum.compact` | `DS.Layout.compactGridCardMinimumWidth` | 150 pt | Minimum proof-card width in compact grids |
+| `layout.records.content.maxWidth` | `DS.Layout.recordsContentMaxWidth` | 680 pt | Current Records content cap in regular size classes |
+| `layout.grid.card.minimum.regular` | `DS.Layout.regularGridCardMinimumWidth` | 260 pt | Defined but unused; adaptive Records slice must adopt or retire explicitly |
+| `layout.grid.card.minimum.compact` | `DS.Layout.compactGridCardMinimumWidth` | 150 pt | Defined but unused; current Records has two columns, one at AX sizes |
 | `size.status.dot` | `DS.Size.statusDot` | 8 pt | `BeidStatusPill` dot diameter |
 | `size.hairline` | `DS.Size.hairline` | 1 pt | The hairline rule's thickness |
 | `size.emptyBlock.dash` | `DS.Size.emptyBlockDash` | 4 pt | `Block/Empty` dash and gap length ([4, 4]; #630) |
@@ -2913,7 +3116,11 @@ values, which is not a violation until an Android follow-up is scheduled
   `motion.proof.resolve` and `motion.screen.transition` (no
   `DS.Motion`-equivalent namespace exists — §9).
 
-### B. Asset inventory
+### B. Historical asset inventory
+
+The retained snapshot below is not a current caller inventory. Records now
+uses `BeidEmptyState` (§10), with no `encounter-field-empty` image. Refer to
+`Illustrations.xcassets` and current Swift callers when checking asset use.
 
 > **Platform scope:** iOS-only as written for now. **[Android counterpart:
 > no custom drawable/illustration assets exist under

@@ -11,6 +11,7 @@ import SwiftUI
 struct SensingRadarPeer: Identifiable, Equatable {
   let id: String
   let signalStrength: NodeSignalStrength
+  var isDimmed = false
 }
 
 struct SensingRadarNode: Equatable {
@@ -18,6 +19,7 @@ struct SensingRadarNode: Equatable {
   let point: CGPoint
   let angleDegrees: Int
   let radius: CGFloat
+  let isDimmed: Bool
 }
 
 struct SensingRadarEdge: Equatable {
@@ -117,7 +119,8 @@ enum SensingRadarProjection {
           y: center.y - CGFloat(cos(radians)) * radius
         ),
         angleDegrees: angle,
-        radius: radius
+        radius: radius,
+        isDimmed: peer.isDimmed
       )
     }
     // 05a/05a2/05a3 show detected nodes without edges. When enabled, each
@@ -135,7 +138,10 @@ enum SensingRadarProjection {
     mutualDeviceCount _: Int,
     observedWindowCount _: Int
   ) -> String {
-    "\(peers.count) devices heard"
+    String(
+      localized: "radar.accessibility.devicesHeard",
+      defaultValue: "\(peers.count) devices heard in the last 5 minutes"
+    )
   }
 
 }
@@ -214,6 +220,7 @@ struct SensingRadarView: View {
 
       ForEach(projection.nodes, id: \.peerID) { node in
         detectedGlyph(scale: scale)
+          .opacity(node.isDimmed ? DS.Opacity.radarSilentNode : 1)
           .position(node.point)
           .animation(reduceMotion ? nil : DS.Motion.standard, value: node.point)
       }

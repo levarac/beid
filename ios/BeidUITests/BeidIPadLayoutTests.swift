@@ -11,17 +11,14 @@ final class BeidIPadLayoutTests: XCTestCase {
     continueAfterFailure = false
   }
 
-  func testPrimaryFlowInPortrait() {
+  func testPrimaryFlowInPortrait() throws {
     XCUIDevice.shared.orientation = .portrait
-    capturePrimaryFlow(orientation: "portrait")
+    try capturePrimaryFlow(orientation: "portrait")
   }
 
   func testPrimaryFlowInLandscape() throws {
-    guard UIDevice.current.userInterfaceIdiom == .pad else {
-      throw XCTSkip("Requires an iPad to exercise the landscape primary flow")
-    }
     XCUIDevice.shared.orientation = .landscapeLeft
-    capturePrimaryFlow(orientation: "landscape")
+    try capturePrimaryFlow(orientation: "landscape")
   }
 
   func testRecordCardsNavigateIndependentlyInPortrait() throws {
@@ -33,15 +30,20 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   private func captureRecordNavigation(orientation: UIDeviceOrientation, name: String) throws {
-    // This coverage exercises the tablet grid and its native navigation controls.
-    guard UIDevice.current.userInterfaceIdiom == .pad else {
-      throw XCTSkip("Requires an iPad to exercise the tablet Records layout")
-    }
     let initialOrientation = XCUIDevice.shared.orientation
     defer { XCUIDevice.shared.orientation = initialOrientation }
     XCUIDevice.shared.orientation = orientation
     app.launchArguments = ["-beid-ui-test", "-beid-home-frame-04"]
     app.launch()
+    // The geometry under test, not the hardware family, selects this coverage.
+    // A Duo inner display can qualify; a narrow iPad window cannot.
+    let viewport = app.windows.firstMatch.frame
+    guard app.hasRegularWidthLayout, viewport.width >= 600 else {
+      throw XCTSkip("Requires regular width and at least 600 points for the wide Records checks")
+    }
+    if orientation == .landscapeLeft, viewport.width <= viewport.height {
+      throw XCTSkip("The current window did not become wider than tall")
+    }
     let welcome = app.buttons["Continue"]
     XCTAssertTrue(welcome.waitForExistence(timeout: 5))
     welcome.tap()
@@ -160,13 +162,17 @@ final class BeidIPadLayoutTests: XCTestCase {
     add(hierarchy)
   }
 
-  private func capturePrimaryFlow(orientation: String) {
-    let checksSensingFit = UIDevice.current.userInterfaceIdiom == .pad && orientation == "portrait"
+  private func capturePrimaryFlow(orientation: String) throws {
     let fitArguments = [
       "-beid.sensing.firstTimeHintShown", "NO",
       "-UIPreferredContentSizeCategoryName", UIContentSizeCategory.large.rawValue
     ]
-    app.launchControlledDemo(extraArguments: checksSensingFit ? fitArguments : [])
+    app.launchControlledDemo(extraArguments: fitArguments)
+    let viewport = app.windows.firstMatch.frame
+    if orientation == "landscape", viewport.width <= viewport.height {
+      throw XCTSkip("The current window did not become wider than tall")
+    }
+    let checksSensingFit = app.hasRegularWidthLayout && viewport.width >= 600 && viewport.height >= viewport.width
 
     assertWelcomeLayout(named: "welcome-\(orientation)")
     app.buttons["Continue"].tap()
@@ -248,8 +254,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.navigationBars.buttons.firstMatch.tap()
     app.scrollViews["records.events"].assertExists()
-    app.buttons["All records"].assertHittable()
-    app.buttons["All records"].tap()
+    app.selectRecordsGrouping("All records")
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     app.tabButton("Now").tap()
 

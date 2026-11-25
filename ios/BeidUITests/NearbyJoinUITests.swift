@@ -106,6 +106,41 @@ final class NearbyJoinUITests: XCTestCase {
 final class NowNavigationUITests: XCTestCase {
   private let app = XCUIApplication()
 
+  func testNowShowsPendingRecordsUntilSubmissionSucceeds() {
+    launchHome(["-beid-home-frame-04b", "-beid-pending-record-fixture"])
+    let notice = app.otherElements["home.unsent-notice"]
+    XCTAssertFalse(notice.exists, "A normal send must not display the notice")
+    app.buttons["home.pending-fixture.advance60"].tap()
+    XCTAssertFalse(notice.exists, "Exactly 60 seconds is still inside the grace period")
+    app.buttons["home.pending-fixture.advance1"].tap()
+    XCTAssertTrue(notice.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["NOT SENT YET"].exists)
+    XCTAssertTrue(app.staticTexts[
+      "Part of your Record is saved on this device but not sent yet. beid sends it when the app is open and online."
+    ].exists)
+    capture("Now-unsent-records")
+    let accept = app.buttons["home.pending-fixture.accept"]
+    accept.assertHittable()
+    accept.tap()
+    let disappeared = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: notice
+    )
+    XCTAssertEqual(XCTWaiter.wait(for: [disappeared], timeout: 5), .completed)
+  }
+
+  func testNowHidesWaitingNoticeDuringActiveSession() {
+    launchHome(["-beid-home-frame-04", "-beid-pending-record-fixture"])
+    app.buttons["home.pending-fixture.advance60"].tap()
+    app.buttons["home.pending-fixture.advance1"].tap()
+    app.otherElements["home.active-event"].assertExists()
+    XCTAssertFalse(app.otherElements["home.unsent-notice"].exists)
+  }
+
+  func testNowHasNoWaitingNoticeWithoutPendingRecords() {
+    launchHome(["-beid-home-frame-04b"])
+    XCTAssertFalse(app.otherElements["home.unsent-notice"].exists)
+  }
+
   override func setUpWithError() throws {
     continueAfterFailure = false
   }
@@ -119,7 +154,7 @@ final class NowNavigationUITests: XCTestCase {
     XCTAssertTrue(app.buttons["home.account"].exists)
     app.tabButton("Records").tap()
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
-    app.buttons["By event"].tap()
+    app.selectRecordsGrouping("By event")
     app.scrollViews["records.events"].assertExists()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
     XCTAssertTrue(app.buttons["home.account"].isHittable)
@@ -130,21 +165,167 @@ final class NowNavigationUITests: XCTestCase {
     capture("now-active")
   }
 
+  func testRecordsGridExposedLabelDoesNotAnnounceNumericMutuality() {
+    openSavedDemoRecords()
+    app.scrollViews["records.grid"].assertExists()
+    let tile = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record.")).firstMatch
+    tile.assertExists()
+    // The tile intentionally replaces its children's labels with the event action.
+    XCTAssertEqual(tile.label, "Record for ETHGlobal Tokyo")
+    assertNoNumericMutualLabel(in: app.scrollViews["records.grid"])
+  }
+
+  func testRecordsByEventArtworkAnnouncesUnavailableMutuality() {
+    openSavedDemoRecords()
+    app.buttons["By event"].tap()
+    let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.past-event.")).firstMatch
+    row.assertExists()
+    XCTAssertNotNil(row.label.range(
+      of: #"Devices heard: \d+\. Window \d+\. Mutual check not available yet\."#, options: .regularExpression
+    ))
+    XCTAssertTrue(row.label.contains("ETHGlobal Tokyo"))
+    assertNoNumericMutualLabel(in: app.scrollViews["records.events"])
+  }
+
+  func testSealedRecordArtworkAnnouncesUnavailableMutuality() {
+    launchSealedDemoRecord()
+    let artwork = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label CONTAINS[c] %@", "mutual")
+    ).firstMatch
+    artwork.assertExists()
+    XCTAssertTrue(artwork.label.hasPrefix("Devices heard:"))
+    XCTAssertTrue(artwork.label.contains("Window"))
+    XCTAssertTrue(artwork.label.contains("Mutual check not available yet."))
+    assertNoNumericMutualLabel(in: app)
+  }
+
+  private func openSavedDemoRecords() {
+    launchSealedDemoRecord()
+    app.buttons["Done"].tap()
+    app.buttons["View records"].assertHittable()
+    app.buttons["View records"].tap()
+    app.tabButton("Records").tap()
+  }
+
+  private func launchSealedDemoRecord() {
+    launchHome([])
+    app.buttons["home.demo.join"].tap()
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    app.buttons["scan.stop-sensing"].tap()
+    app.buttons["Stop and keep record"].assertHittable()
+    app.buttons["Stop and keep record"].tap()
+    app.buttons["Done"].assertHittable()
+    // A persisted artwork is required: a neutral ring would make the
+    // absence of numeric narration a vacuous pass at the later grid/row.
+    app.descendants(matching: .any).matching(
+      NSPredicate(format: "label CONTAINS[c] %@", "mutual")
+    ).firstMatch.assertExists()
+  }
+
+  /// One predicate query (one accessibility snapshot). Reading `.label` from
+  /// every element of `allElementsBoundByIndex` re-resolves each element and
+  /// costs one snapshot apiece.
+  private func assertNoNumericMutualLabel(
+    in container: XCUIElement, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    let numeric = container.descendants(matching: .any).matching(
+      NSPredicate(format: "label MATCHES[c] %@", #"(?s).*\d+\s+mutual.*"#)
+    )
+    XCTAssertEqual(numeric.count, 0, "A label announces a numeric mutual count", file: file, line: line)
+  }
+
   func testEmptyRecordsExplainsBothGroupingsInPlace() {
     launchHome(["-beid-home-frame-04b"])
     app.tabButton("Records").tap()
     let explanation = app.staticTexts["Saved records appear here after sensing."]
     app.scrollViews["records.grid"].assertExists()
     explanation.assertHittable()
+    capture("records-empty")
     XCTAssertTrue(app.staticTexts["A Record lets you revisit what this device observed during a sensing session at an event."].exists)
-    app.buttons["By event"].tap()
+    app.selectRecordsGrouping("By event")
     app.scrollViews["records.events"].assertExists()
     explanation.assertHittable()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
     XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.past-event.")).count, 0)
-    app.buttons["All records"].tap()
+    app.selectRecordsGrouping("All records")
     app.scrollViews["records.grid"].assertExists()
     explanation.assertHittable()
+  }
+
+  func testRecordsGroupingToolbarKeepsSelectionAndMeetsHitTarget() {
+    launchHome(["-beid-home-frame-04"])
+    app.tabButton("Records").tap()
+    let options = app.navigationBars.buttons["records.grouping"]
+    options.assertHittable()
+    XCTAssertEqual(options.label, "Record view options")
+    XCTAssertEqual(app.segmentedControls.count, 0)
+    options.tap()
+    // Native Picker menu items omit identifiers, so use the English UI-test labels.
+    let allRecords = app.buttons["All records"]
+    let byEvent = app.buttons["By event"]
+    allRecords.assertHittable()
+    byEvent.assertHittable()
+    XCTAssertTrue(allRecords.isSelected)
+    XCTAssertFalse(byEvent.isSelected)
+    capture("records-grouping-menu")
+    byEvent.tap()
+    byEvent.assertDisappears()
+    app.scrollViews["records.events"].assertExists()
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
+    options.tap()
+    XCTAssertTrue(byEvent.isSelected)
+    XCTAssertFalse(allRecords.isSelected)
+    allRecords.tap()
+    allRecords.assertDisappears()
+    app.scrollViews["records.grid"].assertExists()
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
+    // DESIGN.md requires a 44x44 pt touch region. The accessibility frame is not
+    // a hit-area measurement, so tap the four corners (inset 2 points) of a
+    // 44x44 region centered on the button; a smaller hit target misses the menu.
+    let inset = 44.0 / 2 - 2.0
+    for dx in [-inset, inset] {
+      for dy in [-inset, inset] {
+        options.assertHittable()
+        options.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+          .withOffset(CGVector(dx: dx, dy: dy)).tap()
+        allRecords.assertHittable()
+        allRecords.tap()
+        allRecords.assertDisappears()
+        app.scrollViews["records.grid"].assertExists()
+      }
+    }
+  }
+
+  func testEmptyRecordsUsesSharedTitleAndExplanationAtAccessibilitySize() {
+    launchHome([
+      "-beid-home-frame-04b",
+      "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+    ])
+    app.tabButton("Records").tap()
+    let title = app.staticTexts["No records yet"]
+    let description = app.staticTexts["Saved records appear here after sensing."]
+    title.assertHittable()
+    description.assertHittable()
+    let viewport = app.scrollViews["records.grid"].frame
+    XCTAssertTrue(viewport.contains(title.frame))
+    XCTAssertTrue(viewport.contains(description.frame))
+    XCTAssertLessThanOrEqual(title.frame.maxY, description.frame.minY)
+    capture("records-empty-accessibility")
+  }
+
+  func testEmptyPastEventsKeepsItsExplanation() {
+    launchHome(["-beid-home-frame-04b"])
+    app.buttons["home.account"].tap()
+    let pastEvents = app.buttons["Past events"]
+    pastEvents.assertHittable()
+    pastEvents.tap()
+    app.staticTexts["No past events yet."].assertHittable()
+    let explanation = app.staticTexts["Only events you have a saved record for are listed here."]
+    explanation.assertHittable()
+    XCTAssertEqual(app.staticTexts.matching(NSPredicate(
+      format: "label == %@", "Only events you have a saved record for are listed here."
+    )).count, 1)
+    capture("past-events-empty")
   }
 
   func testRecordsGridHasOneAttendancePerEventAndKeepsSessions() {

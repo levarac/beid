@@ -26,7 +26,7 @@ struct ScanFlowView: View {
           .layoutPriority(1)
       }
     }
-      .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+      .beidScreenBackground(DS.Color.surfaceCanvas)
       .environment(\.showsFirstSensingHint, showsFirstTimeHint ?? false)
       .onAppear {
         if showsFirstTimeHint == nil { showsFirstTimeHint = !hasShownFirstTimeHint }
@@ -202,15 +202,13 @@ struct ScanFlowView: View {
     ScrollView {
       BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
         VStack(spacing: DS.Space.l) {
-          BeidEmptyBlock {
-            Text("stop.outcome.message")
-              .beidTextStyle(DS.Font.Library.body15)
-              .foregroundStyle(DS.Color.textPrimary)
-              .fixedSize(horizontal: false, vertical: true)
-              .accessibilityIdentifier("stop.outcome.message")
+          BeidEmptyState(
+            "stop.outcome.title", description: "stop.outcome.message",
+            descriptionIdentifier: "stop.outcome.message"
+          ) {
+            BeidPrimaryButton("stop.outcome.action") { coordinator.dismissStopOutcome() }
+              .accessibilityIdentifier("stop.outcome.action")
           }
-          BeidPrimaryButton("stop.outcome.action") { coordinator.dismissStopOutcome() }
-            .accessibilityIdentifier("stop.outcome.action")
         }
         .padding(DS.Space.pageMargin)
       }

@@ -8,6 +8,15 @@ import XCTest
 final class SensingRadarViewTests: XCTestCase {
   private let size = DS.Size.radarField
 
+  func testProjectionPreservesSilentNodeDimming() {
+    let peers = [
+      SensingRadarPeer(id: "fresh", signalStrength: .unmeasured),
+      SensingRadarPeer(id: "silent", signalStrength: .unmeasured, isDimmed: true)
+    ]
+    let projection = SensingRadarProjection.project(peers, size: 362)
+    XCTAssertEqual(projection.nodes.map(\.isDimmed), [false, true])
+  }
+
   func testHashMatchesFrozenSigilVectors() {
     XCTAssertEqual(SensingRadarProjection.stablePeerHash("peer-a"), 0xb1df888881737297)
     XCTAssertEqual(SensingRadarProjection.stablePeerHash("a"), 0xaf63dc4c8601ec8c)
@@ -134,8 +143,12 @@ final class SensingRadarViewTests: XCTestCase {
       observedWindowCount: 6
     )
 
-    XCTAssertEqual(zeroSummary, "2 devices heard")
-    XCTAssertEqual(mutualSummary, "2 devices heard")
+    XCTAssertEqual(zeroSummary, "2 devices heard in the last 5 minutes")
+    XCTAssertEqual(mutualSummary, "2 devices heard in the last 5 minutes")
+    XCTAssertEqual(
+      SensingRadarProjection.accessibilitySummary(
+        peers: Array(peers.prefix(1)), mutualDeviceCount: 0, observedWindowCount: 6),
+      "1 device heard in the last 5 minutes")
     XCTAssertFalse(zeroSummary.contains(privateID))
     XCTAssertFalse(mutualSummary.contains(privateID))
     XCTAssertFalse(mutualSummary.contains("other"))

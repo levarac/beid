@@ -55,6 +55,21 @@ private final class DemoScenarioSubmissionRuntimeSpy: WindowReportSubmissionRunt
 final class DemoScenarioInvariantTests: XCTestCase {
   private let controlledDemoArguments = ["-beid-ui-test", "-beid-controlled-demo"]
 
+  func testAdaptiveLayoutInstrumentationRequiresBothUITestArguments() {
+    let emittedAt = Date(timeIntervalSince1970: 1_800_000_000)
+    for arguments in [[], ["-beid-ui-test"], ["-beid-adaptive-continuity"]] {
+      XCTAssertFalse(AdaptiveLayoutUITestFixture.isEnabled(arguments: arguments))
+      XCTAssertNil(AdaptiveLayoutUITestFixture.observationTimestamp(arguments: arguments, now: { emittedAt }))
+    }
+    XCTAssertTrue(AdaptiveLayoutUITestFixture.isEnabled(arguments: ["-beid-ui-test", "-beid-adaptive-continuity"]))
+    XCTAssertEqual(AdaptiveLayoutUITestFixture.observationTimestamp(
+      arguments: ["-beid-ui-test", "-beid-adaptive-continuity"], now: { emittedAt }
+    ), emittedAt)
+    let scenario = DemoScenario.appReviewGolden
+    XCTAssertEqual(AdaptiveLayoutUITestFixture.extending(scenario), scenario,
+                   "An ordinary Debug/unit-test run must keep the normal demo sequence")
+  }
+
   func testControlledDemoRequiresBothArgumentsAndDemoMode() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.useDemoEventMode = true
@@ -78,6 +93,7 @@ final class DemoScenarioInvariantTests: XCTestCase {
     XCTAssertNil(coordinator.demoAdvanceToken)
     XCTAssertEqual(ScanFlowContent.route(for: coordinator.phase), .recording)
     XCTAssertEqual(coordinator.devicesVerified, BeidConfig.eventConfirmThreshold + 2)
+    XCTAssertNil(coordinator.firstSightingAt, "Ordinary demo observations have no Barnard timestamp")
     let record = coordinator.stopSensing()
     XCTAssertEqual(record?.eninEnd, 4)
   }

@@ -35,22 +35,21 @@ struct PastEventsView: View {
     List {
       Section {
         if pastEvents.isEmpty {
-          Text(
-            "No past events yet.",
-            comment: "Empty state on the Past events screen, shown when this device has never recorded a Proof for any event."
+          BeidEmptyState(
+            text: Text(
+              "No past events yet.",
+              comment: "Empty state on the Past events screen, shown when this device has never recorded a Proof for any event."
+            ),
+            description: explanation
           )
-          .font(DS.Font.supporting)
-          .foregroundStyle(DS.Color.textSecondary)
+          .listRowSeparator(.hidden)
         } else {
           ForEach(pastEvents) { proof in
             row(for: proof)
           }
         }
       } footer: {
-        Text(
-          "Only events you have a saved record for are listed here.",
-          comment: "Footer under the Past events list, clarifying that a code that was typed and abandoned before recording completed does not appear."
-        )
+        if !pastEvents.isEmpty { explanation }
       }
     }
     .listStyle(.plain)
@@ -58,6 +57,13 @@ struct PastEventsView: View {
     .background(DS.Color.surfaceCanvas)
     .navigationTitle(navigationTitle)
     .navigationBarTitleDisplayMode(.inline)
+  }
+
+  private var explanation: Text {
+    Text(
+      "Only events you have a saved record for are listed here.",
+      comment: "Explains why a code abandoned before recording completed does not appear in Past events."
+    )
   }
 
   /// Reuses `account.pastEvents.label` rather than a second, separately

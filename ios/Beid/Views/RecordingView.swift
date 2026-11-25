@@ -104,7 +104,7 @@ struct SensingSealedView: View {
                 .foregroundStyle(DS.Color.textSecondaryOnInk)
                 .padding(.top, DS.Space.s)
 
-              RecordSigilSlot(input: sigilInput, placement: .sensingSealed)
+              RecordSigilSlot(input: sigilInput, placement: .sensingSealed, isDeviceRecord: true)
                 .frame(maxWidth: .infinity)
                 .padding(.top, DS.Space.xl)
 
@@ -147,7 +147,7 @@ struct SensingSealedView: View {
         }
       }
     }
-    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+    .beidScreenBackground(DS.Color.surfaceCanvas)
     .accessibilityIdentifier("scan.sealed")
   }
 

@@ -334,9 +334,45 @@ final class SensingCoordinator: ObservableObject {
   /// signal strength is persisted. All peers remain detected-only until a
   /// reciprocal observation source exists (DECISIONS 2026-09-26).
   @Published private(set) var detectedDisplayIDs: Set<String> = []
+  private var detectedLastHeardAt: [String: Date] = [:]
+
+  /// Presentation-only liveness. The caller supplies its clock; observation
+  /// windows, session totals and signed records retain every earlier sighting.
+  func currentlyDetectedDisplayIDs(at now: Date) -> Set<String> {
+    Set(detectedDisplayIDs.filter { id in
+      guard let lastHeard = detectedLastHeardAt[id] else { return false }
+      return now.timeIntervalSince(lastHeard) < BeidConfig.detectedNowTimeout
+    })
+  }
+
+  func isDetectedDeviceDimmed(_ id: String, at now: Date) -> Bool {
+    guard let lastHeard = detectedLastHeardAt[id] else { return true }
+    return now.timeIntervalSince(lastHeard) >= BeidConfig.detectedNowDimAfter
+  }
   /// Read-only linkage to the Proof created at the recording threshold.
   /// A phase alone cannot establish that a durable Proof actually exists.
   var currentProofID: UUID? { activeProofId }
+
+  #if DEBUG
+  private var adaptiveContinuityMetrics = AdaptiveContinuityMetrics()
+
+  /// Actual session state and lifecycle call-site counters; resize commands
+  /// cannot write these values. Counters intentionally survive session reset.
+  var adaptiveContinuityReceipt: [String: Any] {
+    [
+      "owner": adaptiveContinuityMetrics.owner,
+      "session": currentBindingEvent?.sessionID.uuidString ?? "",
+      "record": currentProofID?.uuidString ?? "",
+      "phase": String(describing: ScanFlowContent.route(for: phase)),
+      "elapsed": firstSightingAt.map { Date().timeIntervalSince($0) } ?? 0,
+      "observations": Int(aggregationRuntime.observations.observationCount),
+      "starts": adaptiveContinuityMetrics.starts,
+      "stops": adaptiveContinuityMetrics.stops,
+      "finalizations": adaptiveContinuityMetrics.finalizations,
+      "savedRecord": adaptiveContinuityMetrics.savedRecord,
+    ]
+  }
+  #endif
 
   /// Uses the live wall clock for display. A guarded screenshot fixture may
   /// substitute a fixed instant so elapsed copy cannot race capture.
@@ -1371,6 +1407,7 @@ final class SensingCoordinator: ObservableObject {
     isEventDetailFixture = arguments.contains("-beid-ui-test") &&
       (arguments.contains("-beid-event-detail-frame-08") ||
         arguments.contains("-beid-event-detail-frame-08c") ||
+        arguments.contains("-beid-pending-record-fixture") ||
         arguments.contains("-beid-observation-frame-11"))
     #else
     isEventDetailFixture = false
@@ -2067,6 +2104,7 @@ final class SensingCoordinator: ObservableObject {
         rpid: rpid,
         detectedDisplayId: detectedDisplayId,
         reporterRpid: reporterRpid,
+        observedAt: observedAt,
         for: session
       )
       rememberFirstSighting(at: observedAt)
@@ -2076,6 +2114,7 @@ final class SensingCoordinator: ObservableObject {
         rpid: rpid,
         detectedDisplayId: detectedDisplayId,
         reporterRpid: reporterRpid,
+        observedAt: observedAt,
         for: session
       )
       rememberFirstSighting(at: observedAt)
@@ -2085,6 +2124,7 @@ final class SensingCoordinator: ObservableObject {
         rpid: rpid,
         detectedDisplayId: detectedDisplayId,
         reporterRpid: reporterRpid,
+        observedAt: observedAt,
         for: session
       )
       rememberFirstSighting(at: observedAt)
@@ -2141,6 +2181,7 @@ final class SensingCoordinator: ObservableObject {
     rpid: String,
     detectedDisplayId: String?,
     reporterRpid: String?,
+    observedAt: Date?,
     for session: EventSession
   ) {
     advanceWindowBookkeepingIfNeeded(enin: enin, eventCode: session.id)
@@ -2149,7 +2190,9 @@ final class SensingCoordinator: ObservableObject {
     }
     currentWindowRpids.insert(rpid)
 
-    let deviceCountChanged = recordDeviceIdentity(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId)
+    let deviceCountChanged = recordDeviceIdentity(
+      enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId, observedAt: observedAt
+    )
 
     let result = applyPhaseDecision(
       coPresentDeviceCount: currentWindowRpids.count,
@@ -2421,15 +2464,18 @@ final class SensingCoordinator: ObservableObject {
   /// is untouched from before beid#109/#162: it is a deliberately different
   /// quantity from anything `BeidSharedKit.aggregation` reports (see
   /// `unidentifiedRpidCount`'s doc comment), so it stays purely native.
-  private func recordDeviceIdentity(enin: Int, rpid: String, detectedDisplayId: String?) -> Bool {
+  private func recordDeviceIdentity(
+    enin: Int, rpid: String, detectedDisplayId: String?, observedAt: Date? = nil
+  ) -> Bool {
     // Canonicalization (lowercasing) is `BeidSharedKit.sensing
     // .normalizedDisplayIdOrNull` (beid#231) — the same `shared/` decision
     // Android's `ScanDeviceAccounting.record` applies, not a native
     // `.lowercased()` check owned here.
     let displayId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(detectedDisplayId: detectedDisplayId)
 
-    if let displayId, !detectedDisplayIDs.contains(displayId) {
-      detectedDisplayIDs.insert(displayId)
+    if let displayId {
+      if !detectedDisplayIDs.contains(displayId) { detectedDisplayIDs.insert(displayId) }
+      rememberDetectedDevice(displayId, at: observedAt ?? sensingPresentationNow(Date()))
     }
 
     if displayId == nil {
@@ -2582,6 +2628,7 @@ final class SensingCoordinator: ObservableObject {
     guard let nodeId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(
       detectedDisplayId: detectedDisplayId
     ) else { return }
+    if detectedDisplayIDs.contains(nodeId) { rememberDetectedDevice(nodeId, at: timestamp) }
     guard rssi < BeidConfig.nodeSignalUsableUpperBoundDbm else { return }
 
     let sample = Double(rssi)
@@ -2597,6 +2644,11 @@ final class SensingCoordinator: ObservableObject {
     guard isFirstMeasurement || shouldRepublishNodeSignalStrengths(at: timestamp) else { return }
     lastNodeSignalPublishAt = timestamp
     nodeSignalStrengths = smoothedNodeSignalDbm.mapValues { NodeSignalStrength.measured(dBm: $0) }
+  }
+
+  private func rememberDetectedDevice(_ id: String, at timestamp: Date) {
+    // Reordered callbacks must not make a recently heard device expire early.
+    detectedLastHeardAt[id] = max(detectedLastHeardAt[id] ?? timestamp, timestamp)
   }
 
   /// Whether enough event time has passed since the last republish. Compares
@@ -2736,6 +2788,9 @@ final class SensingCoordinator: ObservableObject {
     demoEvent: EventSession? = nil,
     demoScenario: DemoScenario? = nil
   ) {
+    #if DEBUG
+    if AdaptiveLayoutUITestFixture.isEnabled() { adaptiveContinuityMetrics.starts += 1 }
+    #endif
     let selectedEventCode = eventCode ?? joinedEventCode
     let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     guard prepareForSessionAdmission(retry: { [weak self] in
@@ -2770,6 +2825,9 @@ final class SensingCoordinator: ObservableObject {
       if let demoEvent {
         selectedScenario = selectedScenario.replacingEvent(demoEvent)
       }
+      #if DEBUG
+      selectedScenario = AdaptiveLayoutUITestFixture.extending(selectedScenario)
+      #endif
       runDemoScenario(selectedScenario, stepDelayNanos: demoStepDelayNanos)
     } else {
       guard prepareDeviceSecret(suppressAcknowledgedOutage: true) else { return }
@@ -3217,6 +3275,9 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func endSensing(stopEngine: Bool) -> StopResult {
+    #if DEBUG
+    if AdaptiveLayoutUITestFixture.isEnabled() { adaptiveContinuityMetrics.stops += 1 }
+    #endif
     var result = finalizeSelfProofIfNeeded()
     persistSessionAggregateSnapshotIfNeeded()
     persistSigilPresenceIfNeeded()
@@ -3249,6 +3310,7 @@ final class SensingCoordinator: ObservableObject {
     sessionAggregate = nil
     firstSightingAt = nil
     detectedDisplayIDs = []
+    detectedLastHeardAt = [:]
     #if DEBUG
     sensingScreenshotNow = nil
     sensingScreenshotFixture = nil
@@ -5085,6 +5147,9 @@ final class SensingCoordinator: ObservableObject {
   /// it is stale and must not be reconciled again on a later launch.
   @discardableResult
   private func finalizeSelfProofIfNeeded() -> StopResult {
+    #if DEBUG
+    if AdaptiveLayoutUITestFixture.isEnabled() { adaptiveContinuityMetrics.finalizations += 1 }
+    #endif
     var result = StopResult()
     let onExplainingAlert = { result.hasExplainingAlert = true }
     checkpointSelfProofStateIfNeeded(onExplainingAlert: onExplainingAlert)
@@ -5111,6 +5176,11 @@ final class SensingCoordinator: ObservableObject {
         onExplainingAlert: onExplainingAlert
       ) else { return result }
       result.selfProof = persistSelfProofRecord(record, onExplainingAlert: onExplainingAlert)
+      #if DEBUG
+      if AdaptiveLayoutUITestFixture.isEnabled(), let saved = result.selfProof {
+        adaptiveContinuityMetrics.savedRecord = saved.proofId.uuidString
+      }
+      #endif
     } catch let error as EventSigningKeyContinuityError {
       discardSelfProofCheckpoint(proofId: proofId, reason: error.discardReason, onExplainingAlert: onExplainingAlert)
     } catch {
@@ -5726,6 +5796,9 @@ final class SensingCoordinator: ObservableObject {
   /// being unable to say it.
   @discardableResult
   private func observeOneDemoDevice(displayId: String?, rpid: String, enin: Int) -> Bool {
+    #if DEBUG
+    rememberFirstSighting(at: AdaptiveLayoutUITestFixture.observationTimestamp())
+    #endif
     demoDeviceSequence += 1
     demoWindowEnin = enin
     demoWindowRpids.insert(rpid)

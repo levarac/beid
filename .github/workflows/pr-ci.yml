@@ -139,6 +139,36 @@ jobs:
           packages: platforms;android-36 build-tools;36.0.0
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Compute Robolectric SDK cache inputs
+        id: robolectric-cache
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+
+          source = Path("android/app/build.gradle.kts").read_text()
+          sdk_map = re.search(r"val robolectricSdkVersions = mapOf\((.*?)\n\)", source, re.S)
+          if sdk_map is None:
+              raise SystemExit("Missing robolectricSdkVersions map")
+          versions = re.findall(r'^\s*\d+ to "([A-Za-z0-9.-]+)",?\s*$', sdk_map.group(1), re.M)
+          if not versions or len(versions) != len(set(versions)):
+              raise SystemExit("Missing or duplicate Robolectric SDK versions")
+          base = "~/.gradle/caches/modules-2/files-2.1/org.robolectric/android-all-instrumented"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print("versions=" + "-".join(versions), file=output)
+              print("paths<<EOF", file=output)
+              for version in versions:
+                  print(f"{base}/{version}/*/android-all-instrumented-{version}.jar", file=output)
+              print("EOF", file=output)
+          PY
+      # Unlike setup-gradle's PR cache, this cache saves after a successful PR job.
+      # Restore after setup-gradle; cache only these jars, never test/build outputs.
+      - name: Cache Robolectric SDK jars
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ steps.robolectric-cache.outputs.paths }}
+          key: beid-robolectric-sdk-v1-${{ runner.os }}-${{ steps.robolectric-cache.outputs.versions }}
       - name: Build and test Android app
         working-directory: android
         run: |

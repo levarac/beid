@@ -322,7 +322,8 @@ final class AppCoordinator: ObservableObject {
     let reportArguments = ProcessInfo.processInfo.arguments
     if reportArguments.contains("-beid-ui-test") &&
       (reportArguments.contains("-beid-event-detail-frame-08") ||
-        reportArguments.contains("-beid-event-detail-frame-08c"))
+        reportArguments.contains("-beid-event-detail-frame-08c") ||
+        reportArguments.contains("-beid-pending-record-fixture"))
     {
       // Screenshot records stay in an isolated file that normal launches cannot read.
       let reportURL = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -491,6 +492,7 @@ final class AppCoordinator: ObservableObject {
       // beid#653: stored presence belongs to records; it is reset with them.
       self.sensingCoordinator.resetSigilPresenceForUITesting()
       seedHomeFrameForUITesting()
+      seedPendingRecordForUITesting()
       seedEventDetailFrameForUITesting()
     }
     self.sensingCoordinator.onProofCollected = { [weak self] proof in
@@ -578,6 +580,62 @@ final class AppCoordinator: ObservableObject {
     ))
     if isEvents {
       sensingCoordinator.injectHomeRecordingForUITesting()
+    }
+    #endif
+  }
+
+  func unsentNoticeNow(_ liveNow: Date) -> Date {
+    #if DEBUG
+    if isPendingRecordFixture { return Self.pendingFixtureCreatedAt + pendingRecordClockOffset }
+    #endif
+    return liveNow
+  }
+
+  #if DEBUG
+  @Published private var pendingRecordClockOffset: TimeInterval = 0
+  private static let pendingFixtureCreatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+
+  func advancePendingRecordClockForUITesting(by seconds: TimeInterval) {
+    guard isPendingRecordFixture else { return }
+    pendingRecordClockOffset += seconds
+  }
+
+  var isPendingRecordFixture: Bool {
+    let arguments = ProcessInfo.processInfo.arguments
+    return arguments.contains("-beid-ui-test") && arguments.contains("-beid-pending-record-fixture")
+  }
+
+  private static let pendingFixtureID = UUID(uuidString: "00000000-0000-4000-8000-000000000857")!
+
+  func acceptPendingRecordForUITesting() {
+    guard isPendingRecordFixture else { return }
+    // Simulates the store write following a verified receipt, not a network
+    // response or signature check. The fixture has no submission runtime.
+    do {
+      try reportSubmissionStore.storeReceipt(for: Self.pendingFixtureID, signedReceiptHex: "aabb")
+    } catch {
+      assertionFailure("Unable to accept isolated pending record fixture: \(error)")
+    }
+  }
+  #endif
+
+  private func seedPendingRecordForUITesting() {
+    #if DEBUG
+    guard isPendingRecordFixture else { return }
+    let record = ReportSubmissionRecord(
+      id: Self.pendingFixtureID, eventCode: "PENDING-RECORD",
+      endpoint: "https://example.invalid/observations",
+      receiptPublicKeyHex: String(repeating: "a", count: 64),
+      eventIdHex: String(repeating: "b", count: 64),
+      eventDefinitionDigestHex: String(repeating: "c", count: 64),
+      validFrom: nil, validUntil: nil, signedObservationHex: "d28440a04040",
+      observationDigestHex: String(repeating: "d", count: 64), submissionState: .prepared,
+      createdAt: Self.pendingFixtureCreatedAt
+    )
+    do {
+      try reportSubmissionStore.add(record)
+    } catch {
+      assertionFailure("Unable to seed isolated pending record fixture: \(error)")
     }
     #endif
   }
@@ -1085,7 +1143,11 @@ final class AppCoordinator: ObservableObject {
       } else {
         state = await bluetoothMonitor.waitForAuthorizationResolution()
       }
-      self?.applyBluetoothState(state)
+      // A newer callback can arrive after the waiter captures its result,
+      // including while the denied-screen recovery sink is not active yet.
+      // Read the monitor after suspension so that stale completions cannot win.
+      let latestState = bluetoothMonitor.state
+      self?.applyBluetoothState(latestState == .notDetermined ? state : latestState)
     }
   }
 

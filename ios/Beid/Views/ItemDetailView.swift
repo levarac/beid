@@ -221,7 +221,7 @@ struct ItemDetailView: View {
       }
     }
     .accessibilityIdentifier("proof.detail.content")
-    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+    .beidScreenBackground(DS.Color.surfaceCanvas)
     .navigationTitle(Text(verbatim: proof.eventName))
     .navigationBarTitleDisplayMode(.inline)
   }
@@ -369,7 +369,7 @@ private struct RecordEvidenceLadder: View {
     if number == 1 {
       Text("Kept on this device").beidTextStyle(DS.Font.Library.body13)
     } else if number == 4 {
-      Text("NOT YET AVAILABLE").beidTextStyle(DS.Font.Library.body13)
+      BeidEmptyState("NOT YET AVAILABLE")
     } else if let reports, !reports.isEmpty {
       ForEach(reports, id: \.record.id) { report in
         let record = report.record
@@ -397,10 +397,10 @@ private struct RecordEvidenceLadder: View {
         .accessibilityIdentifier("record.ladder.\(number).report.\(record.id.uuidString)")
       }
     } else {
-      Text("NOT YET AVAILABLE").beidTextStyle(DS.Font.Library.body13)
-      if reports == nil {
-        Text("REPORT STATUS UNAVAILABLE").beidTextStyle(DS.Font.Library.body13)
-      }
+      BeidEmptyState(
+        "NOT YET AVAILABLE",
+        description: reports == nil ? "REPORT STATUS UNAVAILABLE" : nil
+      )
     }
   }
 

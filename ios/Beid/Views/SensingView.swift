@@ -309,17 +309,7 @@ struct SensingView: View {
         .foregroundStyle(DS.Color.textPrimary)
 
       if presentation.isSearching {
-        BeidPanel {
-          VStack(alignment: .leading, spacing: DS.Space.s) {
-            Text(searchingTitle)
-              .font(DS.Font.cardTitle)
-              .foregroundStyle(DS.Color.textPrimary)
-            Text(rescueGuidance)
-              .font(DS.Font.supporting)
-              .foregroundStyle(DS.Color.textSecondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-        }
+        BeidEmptyState(text: Text(searchingTitle), description: Text(rescueGuidance))
       } else {
         ForEach(presentation.cards) { card in
           nearbyEventCard(
@@ -605,7 +595,7 @@ struct SensingSessionSurface: View {
                       .foregroundStyle(DS.Color.textSecondaryOnInk)
                   }
                   SensingRadarView(
-                    peers: radarPeers,
+                    peers: radarPeers(at: now),
                     mutualDeviceCount: 0,
                     observedWindowCount: observedWindowCount ?? 0,
                     showsEdges: false,
@@ -613,6 +603,10 @@ struct SensingSessionSurface: View {
                     recordedWindowMarkDiameter: recordedWindowMarkDiameter(at: now, size: radarSize)
                   )
                   .frame(maxWidth: .infinity)
+                  Text("HEARD IN THE LAST 5 MINUTES")
+                    .beidTextStyle(DS.Font.Library.labelMono11)
+                    .foregroundStyle(DS.Color.textSecondaryOnInk)
+                    .frame(maxWidth: .infinity)
                   if presentation == .waiting {
                     Text("LOOKING FOR PEERS · STAY NEARBY")
                       .beidTextStyle(DS.Font.Library.labelMono10)
@@ -646,7 +640,7 @@ struct SensingSessionSurface: View {
         }
       }
     }
-    .background(DS.Color.surfaceCanvas.ignoresSafeArea())
+    .beidScreenBackground(DS.Color.surfaceCanvas)
     .accessibilityIdentifier("scan.sensing-session")
   }
 
@@ -676,9 +670,12 @@ struct SensingSessionSurface: View {
     }
   }
 
-  private var radarPeers: [SensingRadarPeer] {
-    sensing.detectedDisplayIDs.sorted().map { id in
-      SensingRadarPeer(id: id, signalStrength: sensing.signalStrength(forNodeId: id))
+  private func radarPeers(at now: Date) -> [SensingRadarPeer] {
+    sensing.currentlyDetectedDisplayIDs(at: now).sorted().map { id in
+      SensingRadarPeer(
+        id: id, signalStrength: sensing.signalStrength(forNodeId: id),
+        isDimmed: sensing.isDetectedDeviceDimmed(id, at: now)
+      )
     }
   }
 

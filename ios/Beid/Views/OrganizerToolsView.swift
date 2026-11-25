@@ -236,10 +236,17 @@ struct OrganizerToolsView: View {
         .padding(.top, DS.Space.xl)
         .padding(.bottom, DS.Space.s)
       savedPackHairline
-      savedPackRow(Text("Status")) {
-        savedPackStatusLabel
-          .beidTextStyle(DS.Font.Library.labelMono11)
-          .accessibilityIdentifier("organizer.savedPack.status")
+      if savedPackIsEmpty {
+        BeidEmptyState(
+          text: savedPackStatusLabel, description: savedPackNote.map { Text($0) },
+          titleIdentifier: "organizer.savedPack.status", descriptionIdentifier: "organizer.savedPack.note"
+        )
+      } else {
+        savedPackRow(Text("Status")) {
+          savedPackStatusLabel
+            .beidTextStyle(DS.Font.Library.labelMono11)
+            .accessibilityIdentifier("organizer.savedPack.status")
+        }
       }
       switch savedPack {
       case .saved(let source, let storedAt):
@@ -256,7 +263,7 @@ struct OrganizerToolsView: View {
       case .unreadable, .none:
         EmptyView()
       }
-      if let note = savedPackNote {
+      if !savedPackIsEmpty, let note = savedPackNote {
         Text(note)
           .beidTextStyle(DS.Font.Library.body13)
           .foregroundStyle(DS.Color.textSecondary)
@@ -322,6 +329,13 @@ struct OrganizerToolsView: View {
         "No saved pack",
         comment: "Status of the stored venue pack: nothing is stored on this device."
       )
+    }
+  }
+
+  private var savedPackIsEmpty: Bool {
+    switch savedPack {
+    case .none, .unreadable: return true
+    case .saved, .notSaved: return false
     }
   }
 

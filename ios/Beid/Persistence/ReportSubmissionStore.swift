@@ -71,6 +71,9 @@ struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
   let eventSigningPublicKey: Data?
   let finalizedAt: TimeInterval
   let createdAt: Date
+  /// Set when the registry reports that no definition can ever be resolved for
+  /// this window. Presentation metadata only: the saved inputs stay untouched.
+  var definitionUnavailableCode: String?
 
   init(
     id: UUID,
@@ -129,6 +132,8 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
   var submissionState: ReportSubmissionState
   var acceptanceReceiptHex: String?
   var terminalErrorCode: String?
+  /// Presentation metadata only; never part of the signed Observation bytes.
+  var hasFailedSendAttempt = false
   let createdAt: Date
 
   init(
@@ -180,6 +185,7 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
     case submissionState
     case acceptanceReceiptHex
     case terminalErrorCode
+    case hasFailedSendAttempt
     case createdAt
   }
 
@@ -208,6 +214,7 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
     ) ?? .prepared
     acceptanceReceiptHex = try container.decodeIfPresent(String.self, forKey: .acceptanceReceiptHex)
     terminalErrorCode = try container.decodeIfPresent(String.self, forKey: .terminalErrorCode)
+    hasFailedSendAttempt = try container.decodeIfPresent(Bool.self, forKey: .hasFailedSendAttempt) ?? false
     createdAt = try container.decode(Date.self, forKey: .createdAt)
   }
 
@@ -227,6 +234,7 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
     try container.encode(submissionState, forKey: .submissionState)
     try container.encodeIfPresent(acceptanceReceiptHex, forKey: .acceptanceReceiptHex)
     try container.encodeIfPresent(terminalErrorCode, forKey: .terminalErrorCode)
+    if hasFailedSendAttempt { try container.encode(true, forKey: .hasFailedSendAttempt) }
     try container.encode(createdAt, forKey: .createdAt)
   }
 
@@ -267,6 +275,19 @@ final class ReportSubmissionStore: ObservableObject {
   private var exclusionLoadError: Error?
 
   var hasReadableExclusions: Bool { exclusionLoadError == nil }
+
+  /// Now's notice is outside sessions only. An in-flight send alone is not a
+  /// failure; show only a failed attempt or an item older than the grace period.
+  /// The caller injects its presentation clock, including periodic UI refreshes.
+  func hasRecordsWaitingToSend(at now: Date, isSessionActive: Bool) -> Bool {
+    guard !isSessionActive else { return false }
+    let overdueCapture = pendingCaptures.contains {
+      record(id: $0.id) == nil && $0.definitionUnavailableCode == nil && now.timeIntervalSince($0.createdAt) > BeidConfig.unsentNoticeGracePeriod
+    }
+    return overdueCapture || pendingRecords.contains {
+      $0.hasFailedSendAttempt || now.timeIntervalSince($0.createdAt) > BeidConfig.unsentNoticeGracePeriod
+    }
+  }
 
   enum LabRecordProjectionError: Error, Equatable {
     case unreadable
@@ -417,6 +438,19 @@ final class ReportSubmissionStore: ObservableObject {
     exclusions = updated
   }
 
+  /// Keeps the saved inputs but stops the unsent notice from counting a window
+  /// whose definition lookup can never succeed.
+  func markCaptureDefinitionUnavailable(id: UUID, code: String) throws {
+    try ensureWritable()
+    guard let index = pendingCaptures.firstIndex(where: { $0.id == id }),
+          pendingCaptures[index].definitionUnavailableCode != code
+    else { return }
+    var updated = pendingCaptures
+    updated[index].definitionUnavailableCode = code
+    try persistPendingCaptures(updated)
+    pendingCaptures = updated
+  }
+
   func removePendingCapture(id: UUID) throws {
     try ensureWritable()
     guard let index = pendingCaptures.firstIndex(where: { $0.id == id }) else { return }
@@ -434,6 +468,21 @@ final class ReportSubmissionStore: ObservableObject {
     records.filter {
       !$0.isReceiptStored && !$0.isTerminal && $0.submissionState != .accepted
     }
+  }
+
+  /// Preserve a retryable failure across relaunches without changing delivery state.
+  func markRetryableSendFailure(for id: UUID) throws {
+    try ensureWritable()
+    guard let index = records.firstIndex(where: { $0.id == id }) else {
+      throw ReportSubmissionStoreError.missingObservation
+    }
+    guard !records[index].isTerminal, !records[index].isReceiptStored,
+          records[index].submissionState != .accepted else { return }
+    guard !records[index].hasFailedSendAttempt else { return }
+    var updated = records
+    updated[index].hasFailedSendAttempt = true
+    try persist(updated)
+    records = updated
   }
 
   /// Durably advances PREPARED to SUBMITTING before a POST is started.

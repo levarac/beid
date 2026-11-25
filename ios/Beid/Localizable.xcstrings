@@ -1,6 +1,66 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "HEARD IN THE LAST 5 MINUTES": {
+      "comment": "Caption below the sensing radar. Nodes represent devices heard within a rolling five minutes; the separate DEVICES HEARD metric is the whole session total.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HEARD IN THE LAST 5 MINUTES"
+          }
+        }
+      }
+    },
+    "radar.accessibility.devicesHeard": {
+      "comment": "VoiceOver summary of the sensing radar. The count is devices heard within the rolling last five minutes, not the session total. No device identifiers are spoken.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld device heard in the last 5 minutes"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld devices heard in the last 5 minutes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "home.unsent.title": {
+      "comment": "Now notice heading outside an active session, after a failed send attempt or more than 60 seconds waiting. Describes data saved locally and not sent yet, not lost data or a verification result.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NOT SENT YET"
+          }
+        }
+      }
+    },
+    "home.unsent.message": {
+      "comment": "Now notice outside active sessions for retryable unsent Record data. Preserve Record as the product term. Data remains saved if the app closes; sending retries when open and online. Do not ask the participant to keep the app open. Terminal failures are excluded.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Part of your Record is saved on this device but not sent yet. beid sends it when the app is open and online."
+          }
+        }
+      }
+    },
     "stop.outcome.action": {
       "extractionState": "manual",
       "localizations": {
@@ -3823,7 +3883,7 @@
       }
     },
     "All records": {
-      "comment": "Segmented control option for the saved record grid.",
+      "comment": "Records grouping menu option for the saved record grid.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3834,7 +3894,7 @@
       }
     },
     "By event": {
-      "comment": "Segmented control option for the saved event list.",
+      "comment": "Records grouping menu option for the saved event list.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3844,8 +3904,52 @@
         }
       }
     },
+    "No records yet": {
+      "comment": "Title of the empty Records tab.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No records yet"
+          }
+        }
+      }
+    },
+    "Record view options": {
+      "comment": "Title and accessibility label of the Records toolbar menu that switches between all records and records by event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record view options"
+          }
+        }
+      }
+    },
+    "No pack yet.": {
+      "comment": "Title of the empty state on the venue broadcast screen before a pack is loaded.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No pack yet."
+          }
+        }
+      }
+    },
+    "Paste the link the organizer gave you, or scan its QR code.": {
+      "comment": "Explanation under the empty venue broadcast title; tells the venue how to load a pack.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste the link the organizer gave you, or scan its QR code."
+          }
+        }
+      }
+    },
     "Record grouping": {
-      "comment": "Accessibility label for the Records grouping control."
+      "comment": "Title of the inline picker inside the Records grouping menu."
     },
     "Saved records appear here after sensing.": {
       "comment": "Empty Records tab.",

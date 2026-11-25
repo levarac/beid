@@ -59,7 +59,7 @@ struct EventDetailView: View {
         .padding(.bottom, DS.Space.xl)
       }
     }
-    .background(DS.Color.surfaceCanvas)
+    .beidScreenBackground(DS.Color.surfaceCanvas)
     .navigationTitle("Event")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
@@ -199,7 +199,7 @@ struct EventDetailView: View {
       }
     } else {
       Text("RECORDS · 0").beidTextStyle(DS.Font.Library.labelMono10)
-      Text("No records are stored for this event.").beidTextStyle(DS.Font.Library.body13)
+      BeidEmptyState("No records are stored for this event.")
     }
   }
 
