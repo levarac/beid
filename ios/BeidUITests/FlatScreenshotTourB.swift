@@ -39,7 +39,7 @@ final class FlatScreenshotTourB: XCTestCase {
     app.scrollViews["proof.detail.content"].assertExists()
     capture("background-07-record-detail")
     app.navigationBars.buttons.firstMatch.tap()
-    app.buttons["By event"].tap()
+    app.selectRecordsGrouping("By event")
     let event = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.past-event.")).firstMatch
     event.assertHittable()
     event.tap()
