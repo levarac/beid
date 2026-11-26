@@ -112,10 +112,22 @@ def pin(api, run_id, attempt):
     return valid_sha(ref["object"]["sha"])
 
 
-def previous(api, run_id):
-    # Only the immediately preceding scheduled observation can establish unchanged.
-    prior = next((r for r in api.runs(NIGHTLY, "event=schedule") if r["id"] < run_id), None)
-    return observation(api, prior["id"]) if prior else None
+class MissingObservation(ValueError):
+    pass
+
+
+def previous(api, run_number):
+    # Only this dedicated schedule uses the workflow's run numbers. A rerun
+    # keeps its number; never treat the current attempt as the previous night.
+    prior = next(
+        (r for r in api.runs(NIGHTLY, "event=schedule") if r["run_number"] == run_number - 1), None
+    )
+    if prior is None:
+        raise MissingObservation("preceding scheduled run absent")
+    sha = observation(api, prior["id"])
+    if not sha:
+        raise MissingObservation("preceding observation missing or expired")
+    return sha
 
 
 def inventory(manifest, sha, suite):
@@ -220,14 +232,19 @@ def exact_pass(api, sha, suite):
     return None
 
 
-def decide(api, sha, run_id, suite):
-    try:
-        prior = previous(api, run_id)
+def decide(api, sha, run_number, suite):
+    if run_number == 1:
+        reason = "first scheduled run"
+    else:
+        try:
+            prior = previous(api, run_number)
+        except MissingObservation as error:
+            return False, f"{error}; release change unverified"
+        except EVIDENCE_ERRORS:
+            return False, "previous scheduled observation unreadable; release change unverified"
         if prior == sha:
             return False, "unchanged since previous observation"
-        reason = f"head changed from {prior}" if prior else "no retained previous observation"
-    except EVIDENCE_ERRORS:
-        reason = "previous observation unreadable"
+        reason = f"head changed from {prior}"
     try:
         passed = exact_pass(api, sha, suite)
         if passed:
@@ -263,7 +280,7 @@ def main():
             run, reason = decide(
                 Actions(os.environ["GITHUB_REPOSITORY"]),
                 sha,
-                int(os.environ["GITHUB_RUN_ID"]),
+                int(os.environ["GITHUB_RUN_NUMBER"]),
                 suite,
             )
             output = f"run={str(run).lower()}"

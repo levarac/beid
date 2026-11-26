@@ -30,7 +30,10 @@ class NightlyPlanTests(unittest.TestCase):
 
     def test_unchanged_observation_skips_even_after_a_failed_night(self):
         api = Mock()
-        api.runs.return_value = [{"id": 9, "conclusion": "failure"}]
+        api.runs.return_value = [
+            {"id": 11, "run_number": 11},
+            {"id": 9, "run_number": 10, "conclusion": "failure"},
+        ]
         api.artifacts.return_value = {"release-observation-1": {"id": 10}}
         api.files.return_value = {
             "observation.json": {"branch": nightly.BRANCH, "sha": A, "run_id": 9, "attempt": 1}
@@ -39,14 +42,45 @@ class NightlyPlanTests(unittest.TestCase):
             self.assertFalse(nightly.decide(api, A, 11, None)[0])
             lookup.assert_not_called()
 
-    def test_missing_expired_or_unreadable_previous_observation_runs_without_full_proof(self):
-        for answer in (None, ValueError("unreadable")):
-            with (
-                self.subTest(answer=answer),
-                patch.object(nightly, "previous", return_value=None, side_effect=answer),
-                patch.object(nightly, "exact_pass", return_value=None),
-            ):
-                self.assertTrue(nightly.decide(Mock(), A, 5, None)[0])
+    def test_first_scheduled_run_executes_unless_exact_full_already_passed(self):
+        for proof, expected in [(None, True), (41, False)]:
+            api = Mock()
+            with self.subTest(proof=proof), patch.object(nightly, "exact_pass", return_value=proof):
+                run, reason = nightly.decide(api, A, 1, None)
+                self.assertEqual(run, expected)
+                self.assertIn("first" if expected else "verified full", reason)
+                api.runs.assert_not_called()
+
+    def test_known_previous_run_with_missing_expired_or_unreadable_receipt_skips(self):
+        for result, diagnostic in [(None, "missing or expired"), (OSError(), "unreadable")]:
+            with self.subTest(diagnostic=diagnostic):
+                api = Mock()
+                api.runs.return_value = [{"id": 7, "run_number": 4}]
+                with (
+                    patch.object(nightly, "observation", return_value=None, side_effect=result),
+                    patch.object(nightly, "exact_pass") as lookup,
+                ):
+                    run, reason = nightly.decide(api, A, 5, None)
+                    self.assertFalse(run)
+                    self.assertIn(diagnostic, reason)
+                    lookup.assert_not_called()
+
+    def test_deleted_previous_run_or_same_run_retry_cannot_establish_a_change(self):
+        api = Mock()
+        api.runs.return_value = [{"id": 99, "run_number": 5}, {"id": 90, "run_number": 3}]
+        run, reason = nightly.decide(api, A, 5, None)
+        self.assertFalse(run)
+        self.assertIn("absent", reason)
+        api.artifacts.assert_not_called()
+
+    def test_changed_release_runs_when_full_evidence_is_unreadable(self):
+        with (
+            patch.object(nightly, "previous", return_value=B),
+            patch.object(nightly, "exact_pass", side_effect=OSError()),
+        ):
+            run, reason = nightly.decide(Mock(), A, 5, None)
+            self.assertTrue(run)
+            self.assertIn("full-pass evidence unavailable", reason)
 
     def test_changed_head_skips_only_on_verified_full_proof(self):
         with (

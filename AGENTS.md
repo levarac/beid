@@ -469,8 +469,8 @@ The separate `.github/workflows/pr-ci-ios-macos.yml` runs **iOS simulator**:
 `BeidTests` plus the checked-in UI smoke list on ordinary PR events. A payload
 label `ci:full-ui` selects the full UI suite; merge groups, main pushes,
 and manual runs are full. The separate release nightly observes release/1.1.0 at
-17:23 UTC (02:23 JST). It runs full on a changed or unknown head when retained
-evidence cannot prove an exact full pass. See docs/delivery-ci.md.
+17:23 UTC (02:23 JST). On the first night or a verified change, it runs full unless
+retained evidence proves an exact full pass. A missing prior observation skips macOS. See docs/delivery-ci.md.
 The xcresult tree must prove exactly the listed UI cases Passed in smoke mode and every listed case
 Passed in full mode; skipped listed tests fail. Summary counts and per-bundle
 durations come from xcresult Test Case nodes, summed without suite totals.
