@@ -237,7 +237,6 @@ final class AppCoordinator: ObservableObject {
   @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
   @Published private(set) var stopOutcome: SensingStopOutcome?
   @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
-  @Published private(set) var proofCollectedSnapshot: ProofCollectedSnapshot?
   @Published var selectedProof: Proof?
   #if DEBUG
   /// Frame 09's display-only sample. It never enters ProofStore or a
@@ -836,7 +835,6 @@ final class AppCoordinator: ObservableObject {
     accountSheetPresented = false
     nowEventRegistration = nil
     sealedSnapshot = nil
-    proofCollectedSnapshot = nil
     selectedHomeTab = .now
     sensingCoordinator.startSensing()
     scanPresented = true
@@ -1313,7 +1311,6 @@ final class AppCoordinator: ObservableObject {
     homeDiscoveryHeldAfterStop = false
     stopOutcome = nil
     sealedSnapshot = nil
-    proofCollectedSnapshot = nil
     nowEventRegistration = homeRegistration(for: card)
     sensingCoordinator.joinNearbyEvent(card: card, clockPreflight: clockPreflight)
     scanPresented = true
@@ -1363,7 +1360,6 @@ final class AppCoordinator: ObservableObject {
     selectedHomeTab = .now
     stopConfirmSnapshot = nil
     sealedSnapshot = nil
-    proofCollectedSnapshot = nil
     #if DEBUG
     proofDetailScreenshotPresentation = nil
     let arguments = ProcessInfo.processInfo.arguments
@@ -1455,7 +1451,6 @@ final class AppCoordinator: ObservableObject {
     stoppedSessionRecordID = nil
     stopConfirmSnapshot = nil
     sealedSnapshot = nil
-    proofCollectedSnapshot = nil
     cancelPendingJoinAttempt()
     scanPresented = false
     sensingCoordinator.stopNearbyEventDiscovery()
@@ -1486,7 +1481,7 @@ final class AppCoordinator: ObservableObject {
   /// Returning with Back never calls this method. Only an explicit stop
   /// requests confirmation for the current participation.
   func requestScanClose() {
-    guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
+    guard sealedSnapshot == nil,
       stopConfirmSnapshot == nil, stopOutcome == nil else { return }
     let event: EventSession
     switch sensingCoordinator.phase {
@@ -1593,28 +1588,15 @@ final class AppCoordinator: ObservableObject {
     selectedHomeTab = .now
   }
 
-  /// DONE advances from the sealed frame to persistent frame 07. The record
-  /// is looked up again so its fields come from the actual stored Proof.
+  /// Close the sealed screen without saving or signing the record again.
   func doneWithSealedRecord() {
-    guard let sealedSnapshot, let recordID = sealedSnapshot.recordID else { return }
-    guard let proof = proofStore.proof(withId: recordID) else {
-      // A record removed since finalization cannot support frame 07's claim.
-      self.sealedSnapshot = nil
-      scanPresented = false
-      return
+    guard scanPresented, let recordID = sealedSnapshot?.recordID else { return }
+    if !proofStore.hasPersistedProof(withId: recordID) {
+      sealedSnapshot = nil
+      stoppedSessionRecordID = nil
     }
-    proofCollectedSnapshot = ProofCollectedSnapshot(
-      proof: proof,
-      detectedPeerCount: sealedSnapshot.detectedDeviceCount,
-      observedWindowCount: sealedSnapshot.aggregate.map { Int($0.windowCount) }
-    )
-  }
-
-  func viewCollectionAfterProofCollected() {
-    guard proofCollectedSnapshot != nil else { return }
-    proofCollectedSnapshot = nil
     scanPresented = false
-    selectedHomeTab = .records
+    selectedHomeTab = .now
   }
 
   // MARK: - Item detail

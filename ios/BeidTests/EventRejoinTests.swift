@@ -117,7 +117,7 @@ final class EventRejoinTests: XCTestCase {
     XCTAssertFalse(coordinator.accountSheetPresented)
     XCTAssertFalse(coordinator.eventCodeEntrySheetPresented)
     XCTAssertNil(coordinator.sealedSnapshot)
-    XCTAssertNil(coordinator.proofCollectedSnapshot)
+
     _ = coordinator.sensingCoordinator.reset()
   }
 

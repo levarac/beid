@@ -26,7 +26,6 @@ final class RecordSigilPresentationTests: XCTestCase {
       .homePastRow: Expected(size: 60, page: .canvas, sigilGround: .NONE),
       .recordsGrid: Expected(size: 104, page: .canvas, sigilGround: .DISC),
       .sensingSealed: Expected(size: 300, page: .ink, sigilGround: .NONE),
-      .proofCollected: Expected(size: 290, page: .canvas, sigilGround: .DISC),
       .eventDetailRow: Expected(size: 48, page: .canvas, sigilGround: .NONE),
       .proofDetail: Expected(size: 200, page: .canvas, sigilGround: .DISC),
       .reportDetailRow: Expected(size: 40, page: .canvas, sigilGround: .NONE),

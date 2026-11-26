@@ -34,27 +34,24 @@ struct ScanFlowView: View {
       .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: sensing.phase)
       .navigationTitle(statusTitle)
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar(proofCollectedForDisplay == nil ? .visible : .hidden, for: .navigationBar)
       .toolbar(.hidden, for: .tabBar)
       .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
       .toolbarBackground(.visible, for: .navigationBar)
       .toolbarColorScheme(.light, for: .navigationBar)
       .toolbar {
-        if proofCollectedForDisplay == nil {
-          if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
-            ToolbarItem(placement: .confirmationAction) { doneButton }
-          }
-          #if DEBUG
-          if sensing.isDemoAdvanceEnabled, let token = sensing.demoAdvanceToken,
-             coordinator.stopConfirmSnapshot == nil, coordinator.sealedSnapshot == nil {
-            ToolbarItem(placement: .topBarTrailing) {
-              Button("Advance demo") { sensing.advanceDemo(token: token) }
-                .accessibilityIdentifier("demo.advance.\(token.uuidString)")
-                .accessibilityValue(String(describing: ScanFlowContent.route(for: sensing.phase)))
-            }
-          }
-          #endif
+        if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
+          ToolbarItem(placement: .confirmationAction) { doneButton }
         }
+        #if DEBUG
+        if sensing.isDemoAdvanceEnabled, let token = sensing.demoAdvanceToken,
+           coordinator.stopConfirmSnapshot == nil, coordinator.sealedSnapshot == nil {
+          ToolbarItem(placement: .topBarTrailing) {
+            Button("Advance demo") { sensing.advanceDemo(token: token) }
+              .accessibilityIdentifier("demo.advance.\(token.uuidString)")
+              .accessibilityValue(String(describing: ScanFlowContent.route(for: sensing.phase)))
+          }
+        }
+        #endif
       }
       #if DEBUG
       .safeAreaInset(edge: .top) {
@@ -122,12 +119,12 @@ struct ScanFlowView: View {
   private var showsStopControl: Bool {
     // Keep the stop control mounted while it presents its confirmation alert.
     guard coordinator.sealedSnapshot == nil,
-      coordinator.stopOutcome == nil, proofCollectedForDisplay == nil else { return false }
+      coordinator.stopOutcome == nil else { return false }
     #if DEBUG
     if let fixture = sensing.sensingScreenshotFixture {
       switch fixture {
       case .sensing, .detecting, .detectingLong, .detectingFirstTime, .stopConfirm: return true
-      case .cantJoin, .sealed, .proofCollected: return false
+      case .cantJoin, .sealed: return false
       }
     }
     #endif
@@ -172,25 +169,9 @@ struct ScanFlowView: View {
     #endif
   }
 
-  private var proofCollectedForDisplay: ProofCollectedSnapshot? {
-    if let snapshot = coordinator.proofCollectedSnapshot { return snapshot }
-    #if DEBUG
-    if sensing.sensingScreenshotFixture == .proofCollected { return .screenshotFixture }
-    #endif
-    return nil
-  }
-
   @ViewBuilder private var content: some View {
     if coordinator.stopOutcome != nil {
       stopOutcomeView
-    } else if let collected = proofCollectedForDisplay {
-      ProofCollectedView(snapshot: collected, sigilInput: sensing.sigilInput(forProofId: collected.recordID)) {
-        if coordinator.proofCollectedSnapshot != nil {
-          coordinator.viewCollectionAfterProofCollected()
-        } else {
-          coordinator.finishScan()
-        }
-      }
     } else if let sealed = coordinator.sealedSnapshot {
       SensingSealedView(snapshot: sealed, sigilInput: sealed.recordID.flatMap { sensing.sigilInput(forProofId: $0) })
     } else {
@@ -346,8 +327,6 @@ enum ScanFlowContent {
         firstSightingAt: sensing.firstSightingAt,
         sealedAt: sensing.sensingPresentationNow(Date())
       ))
-    case .proofCollected:
-      ProofCollectedView(snapshot: .screenshotFixture, onViewCollection: {})
     }
   }
   #endif

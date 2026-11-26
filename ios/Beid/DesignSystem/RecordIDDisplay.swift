@@ -3,7 +3,7 @@
 
 import Foundation
 
-/// The visual shorthand used by both record screens. Accessibility and any
+/// The visual shorthand used for a Record ID. Accessibility and any
 /// future copy action use the full UUID instead.
 enum RecordIDDisplay {
   static func abbreviated(_ id: UUID) -> String {

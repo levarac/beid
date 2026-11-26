@@ -92,14 +92,9 @@ final class ProofDetailPresentationTests: XCTestCase {
     XCTAssertEqual(zero.withValue, "0 devices · 0 windows")
   }
 
-  func testRecordIDShorthandHasAFixedLiteralVectorOnBothScreens() {
+  func testRecordIDShorthandHasAFixedLiteralVector() {
     let id = UUID(uuidString: "9C410000-0000-4000-8000-00000000E2A7")!
     XCTAssertEqual(RecordIDDisplay.abbreviated(id), "9c41…e2a7")
-    let proof = Proof(id: id, eventName: "Event", date: Date(), peersVerified: 1)
-    let collected = ProofCollectedSnapshot(
-      proof: proof, detectedPeerCount: 1, observedWindowCount: nil
-    )
-    XCTAssertEqual(collected.shortRecordID, "9c41…e2a7")
   }
 
   private func makePresentation(

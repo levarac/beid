@@ -186,33 +186,26 @@ final class FlatScreenshotTourC: XCTestCase {
       app.terminate()
     }
   }
-  func testShot_07_ProofCollected() { capture("07") }
   func testShot_09_ProofDetail() { capture("09") }
 
-  func testCollectedRecordKeepsItsIDAndDisclosureRoute() {
-    let app = launchCollectedRecordForCopyAssertions()
-    let recordID = app.staticTexts["proof-collected.record-id"]
-    XCTAssertEqual(recordID.label, "Record ID 42110000-0000-4000-8000-000000000000")
-    XCTAssertTrue(app.buttons["View records"].exists)
+  func testRecordDetailKeepsItsIDAndDisclosureRoute() {
+    let app = launchSensingFixture("09")
+    let detail = app.scrollViews["proof.detail.content"]
+    detail.assertExists()
+    let recordID = app.staticTexts["Record ID 9C410000-0000-4000-8000-00000000E2A7"]
+    recordID.assertExists()
+    app.buttons["record.event-name.disclosure"].assertExists()
 
-    let disclosure = app.buttons["proof-collected.whatWeSend"]
-    disclosure.assertHittable()
-    let disclosureLabel = disclosure.label
+    let disclosure = app.buttons["record.detail.what-we-send"]
+    disclosure.scrollToHittable(in: app, within: detail)
+    app.staticTexts["DATE"].assertExists()
+    app.staticTexts["WITH"].assertExists()
+    XCTAssertTrue(disclosure.label.localizedCaseInsensitiveContains("what we send"))
     disclosure.tap()
     app.descendants(matching: .any)["whatWeSend.firstRow"].assertExists()
     app.navigationBars.buttons.firstMatch.assertHittable()
     app.navigationBars.buttons.firstMatch.tap()
-    recordID.assertExists()
-
-    XCTAssertTrue(
-      disclosureLabel.localizedCaseInsensitiveContains("what we send"),
-      "The general disclosure must say WHAT WE SEND; got: \(disclosureLabel)"
-    )
-    let title = app.staticTexts.matching(
-      NSPredicate(format: "label CONTAINS[c] %@", "collected")
-    ).firstMatch
-    title.assertExists()
-    XCTAssertEqual(title.label.replacingOccurrences(of: "\n", with: " "), "Record collected")
+    detail.assertExists()
   }
 
   func testEventDetailShowsOneRecordWithoutLosingSessions() {
@@ -564,9 +557,10 @@ final class FlatScreenshotTourC: XCTestCase {
   }
 
   func testDisclosureDescribesASignatureWithoutPresenceClaims() {
-    let app = launchCollectedRecordForCopyAssertions()
-    app.buttons["proof-collected.whatWeSend"].assertHittable()
-    app.buttons["proof-collected.whatWeSend"].tap()
+    let app = launchSensingFixture("09")
+    let disclosure = app.buttons["record.detail.what-we-send"]
+    disclosure.scrollToHittable(in: app, within: app.scrollViews["proof.detail.content"])
+    disclosure.tap()
     app.descendants(matching: .any)["whatWeSend.firstRow"].assertExists()
     let scroll = app.scrollViews["whatWeSend.scroll"]
     scroll.assertExists()
@@ -719,20 +713,6 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertFalse(app.staticTexts["FROM REPORTS"].exists)
   }
 
-  private func launchCollectedRecordForCopyAssertions() -> XCUIApplication {
-    let app = XCUIApplication()
-    app.launchArguments = ["-beid-ui-test", "-beid-sensing-shot", "07"]
-    app.launch()
-    app.buttons["Continue"].assertHittable()
-    app.buttons["Continue"].tap()
-    app.buttons["bluetooth.permission.continue"].assertHittable()
-    app.buttons["bluetooth.permission.continue"].tap()
-    app.buttons["home.demo.join"].assertHittable()
-    app.buttons["home.demo.join"].tap()
-    app.staticTexts["proof-collected.record-id"].assertExists()
-    return app
-  }
-
   private func assertFromReportsListsTheLinkedReport(
     _ app: XCUIApplication,
     file: StaticString = #filePath,
@@ -836,18 +816,7 @@ final class FlatScreenshotTourC: XCTestCase {
     if code == "06" {
       XCTAssertTrue(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].exists, file: file, line: line)
     }
-    if code == "07" {
-      XCTAssertTrue(app.buttons["View records"].exists, file: file, line: line)
-      let recordID = app.staticTexts["proof-collected.record-id"]
-      XCTAssertTrue(recordID.exists, file: file, line: line)
-      XCTAssertEqual(
-        recordID.label,
-        "Record ID 42110000-0000-4000-8000-000000000000",
-        file: file, line: line
-      )
-      XCTAssertGreaterThan(recordID.frame.width, 100, file: file, line: line)
-      XCTAssertEqual(app.staticTexts["proof-collected.status"].label, "SEALED", file: file, line: line)
-    } else if code == "09" {
+    if code == "09" {
       XCTAssertTrue(app.scrollViews["proof.detail.content"].exists, file: file, line: line)
       XCTAssertTrue(app.staticTexts["Self-signed on device"].exists, file: file, line: line)
       assertNoWalletOrBindingPresentation(app)

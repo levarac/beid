@@ -213,7 +213,6 @@ enum SensingScreenshotFixture: String {
   case cantJoin = "05d"
   case stopConfirm = "05e"
   case sealed = "06"
-  case proofCollected = "07"
 
   static var selected: SensingScreenshotFixture? {
     let arguments = ProcessInfo.processInfo.arguments
@@ -415,12 +414,12 @@ final class SensingCoordinator: ObservableObject {
     case .detectingFirstTime: elapsedSeconds = 2 * 60
     case .detectingLong: elapsedSeconds = 24
     case .cantJoin: elapsedSeconds = 0
-    case .sealed, .proofCollected: elapsedSeconds = 30 * 60
+    case .sealed: elapsedSeconds = 30 * 60
     }
-    firstSightingAt = fixture == .cantJoin || fixture == .proofCollected ? nil : start
+    firstSightingAt = fixture == .cantJoin ? nil : start
     sensingScreenshotNow = start.addingTimeInterval(elapsedSeconds)
 
-    if fixture != .cantJoin && fixture != .proofCollected {
+    if fixture != .cantJoin {
       let peerCounts = fixture == .sensing || fixture == .stopConfirm || fixture == .sealed
         ? [1, 4, 6, 9, 8, 13]
         : [5]
@@ -456,8 +455,6 @@ final class SensingCoordinator: ObservableObject {
     case .sensing, .stopConfirm, .sealed:
       recordingSurfaceReady = true
       phase = .recording(event: event, peersVerified: devicesVerified)
-    case .proofCollected:
-      phase = .idle
     case .detecting, .detectingLong, .detectingFirstTime:
       phase = .eventFound(event)
     case .cantJoin:

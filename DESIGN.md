@@ -1236,7 +1236,7 @@ and [ArrangementView documentation](https://developer.apple.com/documentation/sw
 
 Implement in this order: (1) continuity instrumentation/tests and this
 contract; (2) availability-safe shell/navigation state; (3) Records split;
-(4) Sensing arrangement with persistent Stop; (5) Record collected, Now and
+(4) Sensing arrangement with persistent Stop; (5) Record saved, Now and
 venue adaptation; (6) sheets, state screens and scanner. Each affected slice
 includes available Duo/Split View checks and documentation. Keep Sensing
 pushed from Now for 1.1 and ordinary-iPhone portrait support unchanged.
@@ -2108,7 +2108,7 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   collection-home screen yet." Promoting a screen to this role is
   explicitly deferred to #141 (per `Screen.kt`/`RecordsScreen.kt`'s own
   kdoc), not something this document should describe as already true.]**
-- **Sensing detail (05–07)**: push from the Now tab's `NavigationStack`.
+- **Sensing detail (05–06)**: push from the Now tab's `NavigationStack`.
   The native Back button and interactive pop gesture return to Now without
   ending participation, changing the live session, or stopping its radio.
   The `Stop sensing` button sits on the light page outside the scrolling
@@ -2147,8 +2147,10 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   "NOW" sits under it. When a seventh window begins, every slot shifts one
   place left and the oldest drops off. The left label is the start time of
   the oldest visible window. The sealed Record view has no wall clock, so
-  its rightmost slot is the last observed window and the label reads "END". DONE advances to the collected-record
-  screen, and View collection opens Records. After an explicit stop Now
+  its rightmost slot is the last observed window and the label reads "END".
+  Frame 06 is the only completion screen. Its Done button returns to Now.
+  Record ID, sealing status, event, date, device summary and What we send
+  are available in Record detail. After an explicit stop Now
   stays quiet: "Sensing stopped" with "Your Record is saved in Records on
   this device. You can close the app." (or "No Record was created for this
   session.") and a `Look for events` button. Nearby-event discovery is gated
@@ -3218,6 +3220,7 @@ inventory evidence. Naming remains governed by §12.
 | 2026-11-22 | §12 records the native Record event-name disclosure as an exception to uppercase DM Mono controls. | Adopted — maintainer preference for system controls |
 | 2026-11-24 | **Stop alert and quiet Now after Stop** (maintainer decision [beid#892](https://github.com/levarac/beid/issues/892)): one stop action, `Look for events` gates nearby-event discovery after an explicit stop, Record explained once where first met. Adopted |
 | 2026-11-24 | **Bounded live-session panels** (maintainer decision [beid#883](https://github.com/levarac/beid/issues/883)): Now and every Sensing phase use the same radius-20 ink panel on a light page. Page and system bar appearance never switch with the phase. Stop uses the light-page primary style outside scrolling content. The radar is reduced inside the panel to keep measurements readable; larger text scrolls above the fixed Stop footer. This supersedes full-screen sensing ink in §§5/14 and extends §9's Now card to Sensing. iOS-only implementation; Android's native surface is outside this assigned change. | Adopted |
+| 2026-11-26 | **Single completion** ([beid#898](https://github.com/levarac/beid/issues/898)): keep the sealed ink card in frame 06, return to Now on Done, and retire the separate frame 07. Record detail retains the ID and disclosure. | Adopted — maintainer decision and deviation from the two-screen Figma flow |
 
 ### D. Deprecated patterns
 

@@ -22,8 +22,6 @@ enum RecordSigilPlacement: CaseIterable {
   case recordsGrid
   /// Frame 06, Sensing — Sealed (node 184:65).
   case sensingSealed
-  /// Frame 07, Proof Collected (node 183:222).
-  case proofCollected
   /// Frame 08, an Event Detail session row (node 184:266).
   case eventDetailRow
   /// Frame 09, Proof Detail (node 204:36).
@@ -38,7 +36,6 @@ enum RecordSigilPlacement: CaseIterable {
     case .homePastRow: 60
     case .recordsGrid: DS.Size.recordsGridSigil
     case .sensingSealed: DS.Size.sensingSealedSigil
-    case .proofCollected: 290
     case .eventDetailRow: DS.Size.proofRowMinHeight - DS.Space.l
     case .proofDetail: DS.Size.proofDetailSigil
     case .reportDetailRow: 40
@@ -48,13 +45,13 @@ enum RecordSigilPlacement: CaseIterable {
   var page: RecordSigilSlot.Ground {
     switch self {
     case .homeActiveCard, .sensingSealed: .ink
-    case .homePastRow, .recordsGrid, .proofCollected, .eventDetailRow, .proofDetail, .reportDetailRow: .canvas
+    case .homePastRow, .recordsGrid, .eventDetailRow, .proofDetail, .reportDetailRow: .canvas
     }
   }
 
   var sigilGround: BeidSharedKit.sigil.SigilGround {
     switch self {
-    case .proofCollected, .proofDetail, .recordsGrid: .DISC
+    case .proofDetail, .recordsGrid: .DISC
     case .homeActiveCard, .homePastRow, .sensingSealed, .eventDetailRow, .reportDetailRow: .NONE
     }
   }

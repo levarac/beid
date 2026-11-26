@@ -285,9 +285,8 @@ cards or text-only stand-ins.
 
 `05 Sensing → 06a Event Found → 06b Recording`. The proof lands in
 `ProofStore` when recording starts. Recording stays live as the peer count
-grows. On confirmed stop, successful finalization shows 06 Sealed; DONE
-advances to persistent 07 Proof Collected, whose View records action
-returns to 04 home.
+grows. On confirmed stop, successful finalization shows 06 Sealed. Done
+returns to Now with discovery held. The saved Record is available in Records.
 
 Release configurations, including TestFlight and App Store archives, always
 report `useDemoEventMode == false` and ignore attempts to enable it. A future
@@ -460,7 +459,7 @@ Account and manual event-code entry presented as sheets. Stored event groups
 open Event Detail; individual records open Record detail (`ItemDetailView`).
 
 The Now flow presents sensing, Event Found, Recording, Signal Lost, stop
-confirmation, and the sealed/Record collected outcomes. These are flow
+confirmation, and the sealed outcome. These are flow
 states and presentations, not a numbered list of independent root screens.
 Wallet-connect and wallet-signing UI are absent from v1.1.
 

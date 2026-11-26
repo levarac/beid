@@ -15,7 +15,6 @@ final class SensingStopFlowTests: XCTestCase {
     app.requestScanClose()
     app.confirmStopSensing()
     app.doneWithSealedRecord()
-    app.viewCollectionAfterProofCollected()
     sensing.useDemoEventMode = false
     let startsAfterStop = engine.startDiscoveryScanCallCount
     app.selectedHomeTab = .now
@@ -46,7 +45,7 @@ final class SensingStopFlowTests: XCTestCase {
       XCTAssertFalse(app.canPresentRootEventSigningKeyFailure, "A requested pop is not a completed route departure")
       XCTAssertNil(app.stopOutcome)
       XCTAssertNil(app.sealedSnapshot)
-      XCTAssertNil(app.proofCollectedSnapshot)
+
       let artifacts = try fixtureArtifacts(fixture)
       let writes = fixture.recordWriteCount
       let signatures = fixture.signingCallCount
@@ -358,7 +357,10 @@ final class SensingStopFlowTests: XCTestCase {
     fixture.sensing.dismissEventSigningKeyFailure()
     XCTAssertEqual(try fixture.effects(), acknowledged)
     fixture.app.doneWithSealedRecord()
-    XCTAssertEqual(fixture.app.proofCollectedSnapshot?.recordID, proofID)
+    XCTAssertFalse(fixture.app.scanPresented)
+    XCTAssertEqual(fixture.app.selectedHomeTab, .now)
+    XCTAssertEqual(fixture.app.stoppedSessionRecordID, proofID)
+    XCTAssertEqual(try fixture.effects(), acknowledged)
   }
 
   func testPreexistingSameEventNoticeDoesNotExplainLaterSessionAndConsumptionDoesNotLeak() async throws {
@@ -606,7 +608,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNotNil(app.stopOutcome)
     XCTAssertNil(app.sealedSnapshot)
     XCTAssertNil(app.stoppedSessionRecordID, "No stored Record means Now says so")
-    XCTAssertNil(app.proofCollectedSnapshot)
+
     let artifacts = try fixtureArtifacts(fixture)
     let writes = fixture.recordWriteCount
     app.confirmStopSensing()
@@ -647,7 +649,7 @@ final class SensingStopFlowTests: XCTestCase {
     let aggregateURL = fixture.directory.appendingPathComponent("aggregate.json")
     let aggregateBytes = try Data(contentsOf: aggregateURL)
     XCTAssertNil(app.sealedSnapshot)
-    XCTAssertNil(app.proofCollectedSnapshot)
+
     XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
     XCTAssertNil(fixture.sensingCoordinator.ownerKeyOperationFailure)
     let outcome = try XCTUnwrap(app.stopOutcome)
@@ -695,7 +697,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
     XCTAssertNil(fixture.sensingCoordinator.ownerKeyOperationFailure)
     XCTAssertNil(app.sealedSnapshot)
-    XCTAssertNil(app.proofCollectedSnapshot)
+
     XCTAssertEqual(fixture.signingCallCount, 1)
     XCTAssertNil(app.stopOutcome, "A durable unsigned Record needs no new outcome")
     XCTAssertEqual(app.stoppedSessionRecordID, proofID, "Now must report the saved unsigned Record, not a missing one")
@@ -720,7 +722,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNotNil(fixture.selfProofStore.record(forProofId: proofID), "Preserve independently saved signature bytes")
     XCTAssertNotNil(fixture.sensingCoordinator.sessionAggregateSnapshot(forProofId: proofID))
     XCTAssertNil(app.sealedSnapshot)
-    XCTAssertNil(app.proofCollectedSnapshot)
+
     XCTAssertNil(app.stopOutcome)
     let artifacts = try fixtureArtifacts(fixture)
     let writes = fixture.recordWriteCount
@@ -757,7 +759,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(fixture.selfProofStore.record(forProofId: proofID))
     XCTAssertEqual(fixture.checkpointStore.checkpoint?.proofId, proofID)
     XCTAssertNil(app.sealedSnapshot)
-    XCTAssertNil(app.proofCollectedSnapshot)
+
     XCTAssertNil(app.stopOutcome)
     fixture.sensingCoordinator.dismissEventSigningKeyFailure()
     XCTAssertNil(fixture.sensingCoordinator.eventSigningKeyFailure)
@@ -791,7 +793,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertTrue(coordinator.scanPresented, "Keep the no-Record outcome reachable until acknowledged")
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.sealedSnapshot)
-    XCTAssertNil(coordinator.proofCollectedSnapshot)
+
     XCTAssertNotNil(proofStore.lastPersistenceError, "stopping must preserve the save failure")
     XCTAssertNotNil(coordinator.stopOutcome)
     XCTAssertNil(coordinator.stoppedSessionRecordID)
@@ -822,7 +824,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertFalse(coordinator.scanPresented)
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.sealedSnapshot)
-    XCTAssertNil(coordinator.proofCollectedSnapshot)
+
     XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
     XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
   }
@@ -846,7 +848,7 @@ final class SensingStopFlowTests: XCTestCase {
     _ = coordinator.sensingCoordinator.reset()
   }
 
-  func testStopFinalizesOnceThenDoneShowsPersistentRecordCollected() async throws {
+  func testStopFinalizesOnceThenDoneReturnsToNowWithoutResaving() async throws {
     let engine = RecordingEventJoinControl()
     let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
     let coordinator = makeCoordinator(sensingCoordinator: sensing)
@@ -864,28 +866,43 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertTrue(coordinator.scanPresented)
     XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
     let sealedAt = coordinator.sealedSnapshot?.sealedAt
-    let sealedDetectedCount = coordinator.sealedSnapshot?.detectedDeviceCount
-    let sealedWindowCount = coordinator.sealedSnapshot?.aggregate.map { Int($0.windowCount) }
     let storedProof = try XCTUnwrap(proofID.flatMap { coordinator.proofStore.proof(withId: $0) })
     coordinator.confirmStopSensing()
     XCTAssertEqual(coordinator.sealedSnapshot?.sealedAt, sealedAt)
-    coordinator.doneWithSealedRecord()
-    XCTAssertTrue(coordinator.scanPresented)
-    XCTAssertEqual(coordinator.sealedSnapshot?.recordID, proofID)
-    XCTAssertEqual(coordinator.proofCollectedSnapshot?.recordID, storedProof.id)
-    XCTAssertEqual(coordinator.proofCollectedSnapshot?.eventName, storedProof.eventName)
-    XCTAssertEqual(coordinator.proofCollectedSnapshot?.date, storedProof.date)
-    XCTAssertEqual(coordinator.proofCollectedSnapshot?.detectedPeerCount, sealedDetectedCount)
-    XCTAssertEqual(coordinator.proofCollectedSnapshot?.observedWindowCount, sealedWindowCount)
-    coordinator.doneWithSealedRecord()
-    XCTAssertNotNil(coordinator.proofCollectedSnapshot)
-    XCTAssertTrue(coordinator.scanPresented, "07 must persist until View records")
 
-    coordinator.viewCollectionAfterProofCollected()
+    coordinator.doneWithSealedRecord()
+
+    XCTAssertFalse(coordinator.scanPresented, "Done dismisses the only completion screen")
+    XCTAssertEqual(coordinator.selectedHomeTab, .now)
+    XCTAssertEqual(coordinator.sealedSnapshot?.recordID, storedProof.id)
+    XCTAssertEqual(coordinator.proofStore.proof(withId: storedProof.id)?.id, storedProof.id)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
+
+    coordinator.doneWithSealedRecord()
     XCTAssertFalse(coordinator.scanPresented)
-    XCTAssertNil(coordinator.proofCollectedSnapshot)
-    XCTAssertEqual(coordinator.selectedHomeTab, .records)
-    XCTAssertEqual(coordinator.sealedSnapshot?.recordID, proofID)
+    XCTAssertEqual(coordinator.selectedHomeTab, .now)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
+  }
+
+  func testDoneReturnsToNowWhenTheSealedRecordWasRemoved() async throws {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let coordinator = makeCoordinator(sensingCoordinator: sensing)
+    await reachRecording(coordinator)
+    coordinator.requestScanClose()
+    coordinator.confirmStopSensing()
+    let id = try XCTUnwrap(coordinator.sealedSnapshot?.recordID)
+    XCTAssertNotNil(coordinator.proofStore.proof(withId: id))
+    coordinator.proofStore.resetForUITesting()
+
+    coordinator.doneWithSealedRecord()
+
+    XCTAssertFalse(coordinator.scanPresented)
+    XCTAssertEqual(coordinator.selectedHomeTab, .now)
+    XCTAssertNil(coordinator.stoppedSessionRecordID)
+    XCTAssertNil(coordinator.sealedSnapshot)
+    XCTAssertNil(coordinator.proofStore.proof(withId: id))
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
   }
 
   func testHomeStopWithStoredProofCannotBypass05eAndStopsTransportAfterConfirmation() async {
@@ -905,7 +922,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertTrue(coordinator.scanPresented)
     XCTAssertEqual(coordinator.stopConfirmSnapshot?.proofID, proofID)
     XCTAssertNil(coordinator.sealedSnapshot)
-    XCTAssertNil(coordinator.proofCollectedSnapshot)
+
     XCTAssertEqual(coordinator.sensingCoordinator.currentProofID, proofID)
     XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
 
@@ -914,10 +931,9 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertEqual(coordinator.sealedSnapshot?.recordID, proofID)
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     coordinator.doneWithSealedRecord()
-    XCTAssertEqual(coordinator.proofCollectedSnapshot?.recordID, proofID)
-    XCTAssertTrue(coordinator.scanPresented)
-    coordinator.viewCollectionAfterProofCollected()
     XCTAssertFalse(coordinator.scanPresented)
+    XCTAssertEqual(coordinator.selectedHomeTab, .now)
+    XCTAssertEqual(coordinator.stoppedSessionRecordID, proofID)
   }
 
   func testKeepSensingAfterHomeStopStillRequiresExplicitStopLater() async {
@@ -955,7 +971,7 @@ final class SensingStopFlowTests: XCTestCase {
 
     XCTAssertFalse(coordinator.scanPresented)
     XCTAssertNil(coordinator.sealedSnapshot)
-    XCTAssertNil(coordinator.proofCollectedSnapshot)
+
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.stopOutcome)
   }
@@ -974,7 +990,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertTrue(coordinator.scanPresented)
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.sealedSnapshot)
-    XCTAssertNil(coordinator.proofCollectedSnapshot)
+
     guard case .recording = coordinator.sensingCoordinator.phase else {
       return XCTFail("a newer Proof must remain live")
     }
@@ -993,7 +1009,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertFalse(coordinator.scanPresented, "The existing persistence alert explains this missing Record")
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.sealedSnapshot)
-    XCTAssertNil(coordinator.proofCollectedSnapshot)
+
     XCTAssertNil(coordinator.sensingCoordinator.currentProofID)
     XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
     XCTAssertEqual(coordinator.sensingCoordinator.eventSigningKeyFailure, .discardFailed)
@@ -1027,17 +1043,6 @@ final class SensingStopFlowTests: XCTestCase {
       coordinator.sealedSnapshot?.aggregate?.deviceCount,
       Int32(laterCount)
     )
-  }
-
-  func testProofCollectedDoesNotTurnMissingAggregateIntoZeroWindows() {
-    let proof = Proof(eventName: "Real event", date: Date(), peersVerified: 2)
-    let snapshot = ProofCollectedSnapshot(
-      proof: proof, detectedPeerCount: 2, observedWindowCount: nil
-    )
-
-    XCTAssertEqual(snapshot.withValue, "2 devices")
-    XCTAssertFalse(snapshot.withValue.contains("window"))
-    XCTAssertEqual(snapshot.shortRecordID, RecordIDDisplay.abbreviated(proof.id))
   }
 
   func testBackPreservesRecordingWithoutFinalizationOrStoppingTransport() async {
@@ -1104,7 +1109,7 @@ final class SensingStopFlowTests: XCTestCase {
     coordinator.confirmStopSensing()
 
     XCTAssertNil(coordinator.sealedSnapshot)
-    XCTAssertNil(coordinator.proofCollectedSnapshot)
+
     XCTAssertFalse(coordinator.scanPresented)
   }
 
@@ -1119,7 +1124,7 @@ final class SensingStopFlowTests: XCTestCase {
     coordinator.confirmStopSensing()
 
     XCTAssertNil(coordinator.sealedSnapshot)
-    XCTAssertNil(coordinator.proofCollectedSnapshot)
+
     XCTAssertEqual(sensing.ownerKeyOperationFailure, .unavailable, "The real signing throw already has a root alert")
     XCTAssertNil(sensing.eventSigningKeyFailure, "Do not manufacture a second signing alert")
     XCTAssertNil(coordinator.stopOutcome, "The existing owner-key alert is the sole explanation")
@@ -1167,7 +1172,7 @@ final class SensingStopFlowTests: XCTestCase {
 
     XCTAssertNil(app.stopConfirmSnapshot)
     XCTAssertNil(app.sealedSnapshot)
-    XCTAssertNil(app.proofCollectedSnapshot)
+
     XCTAssertEqual(sensing.phase, .idle)
     XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
     XCTAssertFalse(app.scanPresented)

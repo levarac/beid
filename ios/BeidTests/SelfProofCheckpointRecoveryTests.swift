@@ -498,12 +498,12 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
     XCTAssertEqual(confirmation.event.sessionID, event.sessionID)
     XCTAssertEqual(sensing.currentProofID, proofID)
     XCTAssertNil(app.sealedSnapshot)
-    XCTAssertNil(app.proofCollectedSnapshot)
+
     app.confirmStopSensing()
     XCTAssertNil(app.stopConfirmSnapshot)
     XCTAssertFalse(app.scanPresented)
     XCTAssertNil(app.sealedSnapshot)
-    XCTAssertNil(app.proofCollectedSnapshot)
+
     XCTAssertNotNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
     _ = recoveryCoordinator(directory: directory, store: SelfProofStore(fileURL: selfProofURL),
                             checkpointURL: checkpointURL)

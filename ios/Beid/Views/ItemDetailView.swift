@@ -185,9 +185,16 @@ struct ItemDetailView: View {
                 comment: "VoiceOver reads the complete Proof UUID even though the visible record ID is abbreviated."
               )
             )
+            keyValueRow(String(localized: "DATE"), value: proof.date.formatted(date: .abbreviated, time: .omitted))
             keyValueRow(String(localized: "METHOD"), value: presentation.method)
             keyValueRow(String(localized: "SIGNATURE"), value: presentation.signature)
             keyValueRow(String(localized: "WITH"), value: presentation.withValue)
+            NavigationLink { WhatWeSendView() } label: {
+              BeidTextControlLabel("WHAT WE SEND", glyph: .trailing("→", announcing: "What we send"))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("record.detail.what-we-send")
+            .padding(.vertical, DS.Space.m)
           }
           .padding(.top, DS.Space.l)
 

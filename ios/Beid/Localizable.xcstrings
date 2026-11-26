@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "DATE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DATE"
+          }
+        }
+      }
+    },
     "HEARD IN THE LAST 5 MINUTES": {
       "comment": "Caption below the sensing radar. Nodes represent devices heard within a rolling five minutes; the separate DEVICES HEARD metric is the whole session total.",
       "extractionState": "manual",
@@ -248,16 +258,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "WINDOW %lld"
-          }
-        }
-      }
-    },
-    "Record\ncollected": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Record\ncollected"
           }
         }
       }
