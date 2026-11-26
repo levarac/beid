@@ -53,6 +53,7 @@ object NowScreenTestTags {
     const val ENTER_CODE = "home_enter_code"
     const val ALSO_NEARBY = "home_also_nearby"
     const val BLUETOOTH_OFF = "home_bluetooth_off"
+    const val BLUETOOTH_OFF_DOT = "home_bluetooth_off_dot"
     const val BLUETOOTH_FIX = "home_bluetooth_fix"
     const val BLUETOOTH_OPEN_SETTINGS = "home_bluetooth_open_settings"
 }
@@ -212,12 +213,7 @@ private fun ListeningStrip(elapsedSeconds: Long) {
             horizontalArrangement = Arrangement.spacedBy(BeidSpacing.s),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .size(BeidSize.statusDot)
-                    .background(BeidTheme.colors.textPrimary, CircleShape)
-                    .clearAndSetSemantics {},
-            )
+            NowStatusDot(BeidTheme.colors.textPrimary)
             NowStyledText(
                 text = stringResource(R.string.now_listening),
                 style = BeidFont.Library.labelMono10,
@@ -235,7 +231,12 @@ private fun ListeningStrip(elapsedSeconds: Long) {
     }
 }
 
-/** iOS `bluetoothOff` (integration/ios-1.1.1 `CollectionHomeView.swift` 244–264). */
+/**
+ * iOS `bluetoothOff` (integration/ios-1.1.1 `CollectionHomeView.swift` 244–264),
+ * except its notice: DESIGN.md §5 "dots carry color, words carry meaning" puts
+ * `statusOff` (under AA as text on the page ground) on a status dot before
+ * the words, and the words in `textPrimary`.
+ */
 @Composable
 private fun BluetoothOffBlock(onFix: () -> Unit, onOpenSettings: () -> Unit) {
     Column(
@@ -245,11 +246,17 @@ private fun BluetoothOffBlock(onFix: () -> Unit, onOpenSettings: () -> Unit) {
             .testTag(NowScreenTestTags.BLUETOOTH_OFF),
         verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
     ) {
-        NowStyledText(
-            text = stringResource(R.string.now_bluetooth_off_label),
-            style = BeidFont.Library.labelMono11,
-            color = BeidTheme.colors.statusOff,
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(BeidSpacing.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            NowStatusDot(BeidTheme.colors.statusOff, Modifier.testTag(NowScreenTestTags.BLUETOOTH_OFF_DOT))
+            NowStyledText(
+                text = stringResource(R.string.now_bluetooth_off_label),
+                style = BeidFont.Library.labelMono11,
+                color = BeidTheme.colors.textPrimary,
+            )
+        }
         NowTextControl(
             label = stringResource(R.string.now_bluetooth_fix),
             accessibilityLabel = stringResource(R.string.now_bluetooth_fix_accessibility),
@@ -269,6 +276,22 @@ private fun BluetoothOffBlock(onFix: () -> Unit, onOpenSettings: () -> Unit) {
             modifier = Modifier.testTag(NowScreenTestTags.BLUETOOTH_OPEN_SETTINGS),
         )
     }
+}
+
+/**
+ * A decorative status dot, `BeidStatusPill`'s size, placed as the pill places
+ * it: first in a vertically centered row spaced by [BeidSpacing.s]. It carries
+ * color only and the text beside it carries the meaning, so it has no
+ * semantics of its own.
+ */
+@Composable
+private fun NowStatusDot(color: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(BeidSize.statusDot)
+            .background(color, CircleShape)
+            .clearAndSetSemantics {},
+    )
 }
 
 /** iOS `instructionTile`: DO THIS NOW on a Flat 2b tile with the 12pt control radius. */
