@@ -12,7 +12,10 @@ from scripts.ios_ui_smoke import (
 
 
 VIEWS = {
-    "AccountSheetView": ("FlatScreenshotTourD", "EventMembershipUITests", "SingleAppearanceUITests"),
+    "AccountSheetView": (
+        "FlatScreenshotTourA", "FlatScreenshotTourD", "EventMembershipUITests", "SingleAppearanceUITests",
+        "SupportBundleUITests", "AdaptiveContinuityUITests",
+    ),
     "OrganizerToolsView": ("FlatScreenshotTourD",),
     "ItemDetailView": ("FlatScreenshotTourC", "NearbyJoinUITests", "BeidIPadLayoutTests", "AdaptiveContinuityUITests"),
     "CollectionHomeView": ("FlatScreenshotTourB", "NearbyJoinUITests", "BeidIPadLayoutTests", "AdaptiveContinuityUITests"),

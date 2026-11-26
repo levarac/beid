@@ -41,6 +41,14 @@ class ShadowSelectionTests(unittest.TestCase):
         self.assertNotIn(CAMERA, large["matched"])
         self.assertIn(CAMERA, large["candidates"])
 
+    def test_account_change_selects_every_class_using_account_identifiers(self):
+        result = self.select(["ios/Beid/Views/AccountSheetView.swift"])
+        self.assertEqual(result["mode"], "selected")
+        suites = {test.split("/")[1] for test in result["matched"]}
+        for suite in ("SupportBundleUITests", "AdaptiveContinuityUITests", "FlatScreenshotTourA",
+                      "FlatScreenshotTourD", "EventMembershipUITests"):
+            self.assertIn(suite, suites)
+
     def test_uncertain_or_shared_changes_cover_runtime_inventory(self):
         # #907 touched both screen code and shared navigation.
         for payload in ({"files": HISTORIES["907"]["files"]},
