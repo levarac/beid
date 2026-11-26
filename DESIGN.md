@@ -107,8 +107,8 @@ beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
   current actions; Records owns saved records and events. On iOS, the
   primary nearby candidate card is the join control (#858, maintainer
   decision 2026-11-23). It becomes tappable after registry verification
-  and retains the 20pt `DS.Radius.nowCard`. Now's DO THIS NOW and FROM THE
-  ORGANIZER tiles use Flat 2b fills and a 12pt radius (`DS.Radius.control`).
+  and retains the 20pt `DS.Radius.nowCard`. Now's DO THIS NOW tile uses
+  Flat 2b fills and a 12pt radius (`DS.Radius.control`).
   Records shows one Attendance per event, preserving its stored recording
   sessions inside the existing detail routes.
 - The earlier Flat 2b Screens and Liquid Glass-era Fixed layouts are
