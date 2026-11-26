@@ -11,22 +11,22 @@
         }
       }
     },
-    "The event operator receives signed Bluetooth observations between devices. Raw observations are available through a public verification API. Others can use them to reconstruct a graph of pseudonymous devices within the event.": {
+    "The event operator receives signed observations that participating devices make of one another with their sensors. Raw observations are available through a public verification API. Others can use them to reconstruct a graph of pseudonymous devices within the event.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The event operator receives signed Bluetooth observations between devices. Raw observations are available through a public verification API. Others can use them to reconstruct a graph of pseudonymous devices within the event."
+            "value": "The event operator receives signed observations that participating devices make of one another with their sensors. Raw observations are available through a public verification API. Others can use them to reconstruct a graph of pseudonymous devices within the event."
           }
         }
       }
     },
-    "Device counts and observed relationships are public even at small events. These records show devices observing one another over Bluetooth; they do not establish that a person attended.": {
+    "Device counts and observed relationships are public even at small events. These records show what nearby devices observed about one another. They do not establish that a person attended.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Device counts and observed relationships are public even at small events. These records show devices observing one another over Bluetooth; they do not establish that a person attended."
+            "value": "Device counts and observed relationships are public even at small events. These records show what nearby devices observed about one another. They do not establish that a person attended."
           }
         }
       }
