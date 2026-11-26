@@ -389,10 +389,13 @@ jobs:
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          OVERLAP_BOOT: ${{ github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark }}
         run: |
           set -euo pipefail
           xcrun simctl boot "$SIMULATOR_UDID"
-          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          if [[ "$OVERLAP_BOOT" != true ]]; then
+            xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          fi
 
       - name: Build for testing
         # Release Kotlin takes about 12 minutes on xcode-27 (Debug: about 7).
@@ -448,6 +451,12 @@ jobs:
             grep -qx 'Restored Kotlin Swift Export' "$CI_OUTPUT_ROOT/build.log"
             if grep -q ':shared:embedSwiftExportForXcode' "$CI_OUTPUT_ROOT/build.log"; then exit 1; fi
           fi
+
+      - name: Wait for the benchmark simulator before enumeration
+        if: github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: Enumerate built tests and compute shards
         id: enumerate
