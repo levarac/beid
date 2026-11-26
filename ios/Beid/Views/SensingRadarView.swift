@@ -84,24 +84,24 @@ enum SensingRadarProjection {
     Int(stablePeerHash(peerID) % 360)
   }
 
-  /// Stronger measured signals sit nearer the core. An unmeasured peer sits
-  /// outermost. Defensive handling of 0 and non-finite values ensures a
-  /// malformed producer cannot turn Barnard's never-measured sentinel into
-  /// a claim of proximity. The -40/-100 display anchors are provisional,
-  /// not hardware-verified calibration.
+  /// Nodes sit exactly on one of the three hairline rings, chosen by signal
+  /// band: the stronger third of the strong..weak display range lands on the
+  /// inner ring, the middle third on the middle ring, and the weaker third on
+  /// the outer ring. An unmeasured peer sits on the outer ring. Defensive
+  /// handling of 0, positive and non-finite values ensures a malformed
+  /// producer cannot turn Barnard's never-measured sentinel into a claim of
+  /// proximity. The -40/-100 display anchors are provisional, not
+  /// hardware-verified calibration, and the bands are display only.
   static func radius(for signal: NodeSignalStrength, size: CGFloat) -> CGFloat {
-    let scale = scale(for: size)
-    let inner = (DS.Size.radarCoreSeparation / 2 + SensingRadarMetrics.coreClearance) * scale
-    let outer = max(inner, size / 2 - SensingRadarMetrics.outerInset * scale)
+    let diameters = ringDiameters(size: size)
     guard case let .measured(dBm) = signal, dBm.isFinite, dBm < 0 else {
-      return outer
+      return diameters[2] / 2
     }
-    let fraction = min(max(
-      (SensingRadarMetrics.strongSignalDbm - dBm)
-        / (SensingRadarMetrics.strongSignalDbm - SensingRadarMetrics.weakSignalDbm),
-      0
-    ), 1)
-    return inner + (outer - inner) * CGFloat(fraction)
+    let fraction = (SensingRadarMetrics.strongSignalDbm - dBm)
+      / (SensingRadarMetrics.strongSignalDbm - SensingRadarMetrics.weakSignalDbm)
+    if fraction < 1.0 / 3.0 { return diameters[0] / 2 }
+    if fraction < 2.0 / 3.0 { return diameters[1] / 2 }
+    return diameters[2] / 2
   }
 
   static func project(_ peers: [SensingRadarPeer], size: CGFloat, showsEdges: Bool = true) -> (

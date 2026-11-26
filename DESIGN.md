@@ -2129,7 +2129,9 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   mutual count or an achievement state. Radar nodes show devices heard in
   the last 300 seconds, refreshed once per second, with the caption
   "HEARD IN THE LAST 5 MINUTES" below the radar and the same time scope in
-  its VoiceOver summary. A node dims at 30 seconds of silence using
+  its VoiceOver summary. Nodes sit on the three rings by signal
+  band (strong inner, medium middle, weak or unmeasured outer); this is
+  display only and the -40/-100 dBm anchors are provisional. A node dims at 30 seconds of silence using
   `DS.Opacity.radarSilentNode` (0.45), and disappears at 300 seconds.
   Both durations in `BeidConfig` are provisional until measured with locked
   iOS and Android peers. Each device's last detection or signal update

@@ -94,6 +94,42 @@ final class SensingRadarViewTests: XCTestCase {
     )
   }
 
+  func testSignalBandsLandExactlyOnTheirRings() {
+    let rings = SensingRadarProjection.ringDiameters(size: size).map { $0 / 2 }
+    func radius(_ signal: NodeSignalStrength) -> CGFloat {
+      SensingRadarProjection.radius(for: signal, size: size)
+    }
+    XCTAssertEqual(radius(.measured(dBm: -40)), rings[0])
+    XCTAssertEqual(radius(.measured(dBm: -55)), rings[0])
+    XCTAssertEqual(radius(.measured(dBm: -70)), rings[1])
+    XCTAssertEqual(radius(.measured(dBm: -85)), rings[2])
+    XCTAssertEqual(radius(.measured(dBm: -100)), rings[2])
+    XCTAssertEqual(radius(.unmeasured), rings[2])
+    XCTAssertEqual(radius(.measured(dBm: 0)), rings[2])
+    XCTAssertEqual(radius(.measured(dBm: .nan)), rings[2])
+    XCTAssertEqual(radius(.measured(dBm: 12)), rings[2])
+  }
+
+  func testEveryProjectedNodeSitsOnOneOfTheThreeRings() {
+    let rings = SensingRadarProjection.ringDiameters(size: size).map { $0 / 2 }
+    let signals: [NodeSignalStrength] = [
+      .unmeasured, .measured(dBm: -40), .measured(dBm: -62), .measured(dBm: -70),
+      .measured(dBm: -79), .measured(dBm: -90), .measured(dBm: -120), .measured(dBm: 0),
+      .measured(dBm: .nan),
+    ]
+    let peers = signals.enumerated().map {
+      SensingRadarPeer(id: "peer-\($0.offset)", signalStrength: $0.element)
+    }
+    let center = CGPoint(x: size / 2, y: size / 2)
+    for node in SensingRadarProjection.project(peers, size: size).nodes {
+      let distance = hypot(node.point.x - center.x, node.point.y - center.y)
+      XCTAssertTrue(
+        rings.contains { abs($0 - distance) < 0.000_1 },
+        "\(node.peerID) at \(distance) is not on a ring"
+      )
+    }
+  }
+
   func testEveryEdgeRunsFromMeToExactlyOnePeer() {
     let peers = [
       SensingRadarPeer(id: "peer-a", signalStrength: .unmeasured),
