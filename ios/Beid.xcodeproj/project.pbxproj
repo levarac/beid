@@ -94,6 +94,7 @@
 		388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C637EA719C58481853B15B91 /* LocalizationContractTests.swift */; };
 		38CAD17D57D299FA7D965524 /* VenueLinkScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE92EF984D449CFC86F97459 /* VenueLinkScannerView.swift */; };
 		39632B3CB8EDD1E05434D435 /* EventIdentityVerificationPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23F7FC4FB9C8848377685B64 /* EventIdentityVerificationPresentationTests.swift */; };
+		3986D296F3763566A550747B /* FirstUploadNoticeUITestFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 623E798EE27277A5C123858B /* FirstUploadNoticeUITestFixture.swift */; };
 		3997E2D0E7F054A9A7753D36 /* BluetoothOffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80A94378B0116CC976961AC /* BluetoothOffView.swift */; };
 		399BB79A30F6FD0DB230E86E /* VenueBundleVerification.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7AD88E0F753B2ED79B95DCB /* VenueBundleVerification.swift */; };
 		3A31E5A489683F265F9D2812 /* SigilPresenceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0465D08BCEA9E2BC7ABA05BF /* SigilPresenceStore.swift */; };
@@ -174,6 +175,7 @@
 		72A14A974B115CC1F5082D07 /* EventCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000D4B43F2D5A1703701E95 /* EventCardView.swift */; };
 		72B8A4CCCFFA734701CAA40A /* AccountSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */; };
 		737AD87C8947B5348871BBC6 /* ReportSubmissionOperatorIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 227F031B1D42A852CC6278C8 /* ReportSubmissionOperatorIntegrationTests.swift */; };
+		7393D08A59FCD7BFF24E9800 /* FirstUploadNoticeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0168FB60C743EFBBC74F60 /* FirstUploadNoticeUITests.swift */; };
 		73D38FD54E87835C190F79A9 /* VenueSignedServingViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1180BEAD30BF126D07BDE1 /* VenueSignedServingViewModelTests.swift */; };
 		7497B47A782675ECC1A62BFE /* ReportProofLinkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 406E26F0C45DB040AE808FE0 /* ReportProofLinkStore.swift */; };
 		74A66D42D8B3D3B3D03A7496 /* RegistryDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0412932757042A17306C358 /* RegistryDependencies.swift */; };
@@ -305,6 +307,7 @@
 		C1CFD69AC0A6474FD6149026 /* SelfProofCheckpointRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919973A9C0109AE49487AC11 /* SelfProofCheckpointRecoveryTests.swift */; };
 		C245ACDEBE37610E23901578 /* MetaMaskSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80A5B8C4B06C06990493D8FA /* MetaMaskSupport.swift */; };
 		C2CC6A8ED2D1B9007E5D9329 /* UITestWait.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2940405D4A9B5FF083A1CFAF /* UITestWait.swift */; };
+		C347EC49224F670B517E07AE /* FirstUploadNoticeUITestFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 623E798EE27277A5C123858B /* FirstUploadNoticeUITestFixture.swift */; };
 		C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */; };
 		C4C6576DE9D98B360C5CFE52 /* EventReportRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FE0C168E5F83607B27A60C2 /* EventReportRow.swift */; };
 		C5230CF6F018E2BB2B22B41E /* BricolageGrotesque-Display46ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4CA0816187A43323CA8F8587 /* BricolageGrotesque-Display46ExtraBold.ttf */; };
@@ -551,6 +554,7 @@
 		585ED83B70A07B98029AD182 /* EventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailView.swift; sourceTree = "<group>"; };
 		5F76E12B71ED26CFB7AF316F /* UnsentWindowLedgerRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsentWindowLedgerRuntime.swift; sourceTree = "<group>"; };
 		60E77803C6985E40A2719407 /* BricolageGrotesque-Display40ExtraBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-Display40ExtraBold.ttf"; sourceTree = "<group>"; };
+		623E798EE27277A5C123858B /* FirstUploadNoticeUITestFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstUploadNoticeUITestFixture.swift; sourceTree = "<group>"; };
 		62A19D8CAE2EEEEB0EDA6472 /* ClockPreflightController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockPreflightController.swift; sourceTree = "<group>"; };
 		64CB05B6DCBD1B33574B9347 /* ClockPreflightUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockPreflightUITests.swift; sourceTree = "<group>"; };
 		68701C5F3BB808E671A16E54 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
@@ -730,6 +734,7 @@
 		FCC678447413084162F17C12 /* VenueDeviceAssignmentRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceAssignmentRecord.swift; sourceTree = "<group>"; };
 		FE92EF984D449CFC86F97459 /* VenueLinkScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueLinkScannerView.swift; sourceTree = "<group>"; };
 		FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeEntryView.swift; sourceTree = "<group>"; };
+		FF0168FB60C743EFBBC74F60 /* FirstUploadNoticeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstUploadNoticeUITests.swift; sourceTree = "<group>"; };
 		FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -840,6 +845,7 @@
 			children = (
 				B4FE5A931CEAE1C522175B35 /* AppVersion.swift */,
 				A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */,
+				623E798EE27277A5C123858B /* FirstUploadNoticeUITestFixture.swift */,
 				F4EF63521813A9A66345C1DA /* Info.plist */,
 				C0412932757042A17306C358 /* RegistryDependencies.swift */,
 				C307E6ACEDA06F3CE4546F10 /* SharedRuntimeProbe.swift */,
@@ -894,6 +900,7 @@
 				D2FADCDE81137644238447E2 /* ContinuousSensingIndicatorUITests.swift */,
 				29B97F1CE6BE6E1A98E511D8 /* EventIdentityVerificationUITests.swift */,
 				6E780A92E950897B45BD16BD /* EventMembershipUITests.swift */,
+				FF0168FB60C743EFBBC74F60 /* FirstUploadNoticeUITests.swift */,
 				BE1B81EFECE0C1E386CE9F58 /* FlatScreenshotTourA.swift */,
 				F40FFA68DB22A0A4EC7580C9 /* FlatScreenshotTourB.swift */,
 				CBEAA9937CF848E00B20667D /* FlatScreenshotTourC.swift */,
@@ -1520,6 +1527,7 @@
 				BFBC6182C8C422DF5DC18011 /* ContinuousSensingIndicatorUITests.swift in Sources */,
 				40B872B82F4E3D4FEB48C9C0 /* EventIdentityVerificationUITests.swift in Sources */,
 				A270412A7278D241A8A344C7 /* EventMembershipUITests.swift in Sources */,
+				7393D08A59FCD7BFF24E9800 /* FirstUploadNoticeUITests.swift in Sources */,
 				30C9614DEA2F505D90FFFA41 /* FlatScreenshotTourA.swift in Sources */,
 				C0AFBBEF4311B55AFDA969FA /* FlatScreenshotTourB.swift in Sources */,
 				E315875FE3F04E987DE7C630 /* FlatScreenshotTourC.swift in Sources */,
@@ -1593,6 +1601,7 @@
 				D73B6341358666EAAAD9F200 /* EventJoinRegistry.swift in Sources */,
 				C4C6576DE9D98B360C5CFE52 /* EventReportRow.swift in Sources */,
 				71F154E7FBE8E63624DDC68F /* EventSession.swift in Sources */,
+				3986D296F3763566A550747B /* FirstUploadNoticeUITestFixture.swift in Sources */,
 				FBBB8A348F57C880C5F76EE7 /* FlatOnboardingLayout.swift in Sources */,
 				F40606D172255169BF541FC1 /* HomeStandbyState.swift in Sources */,
 				7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */,
@@ -1825,6 +1834,7 @@
 				7842FFE756FA4B6D2AC0F5AA /* EventJoinRegistry.swift in Sources */,
 				2580B10743E5EA1072F1C8C3 /* EventReportRow.swift in Sources */,
 				8B070F4CF50B92B64C38EED9 /* EventSession.swift in Sources */,
+				C347EC49224F670B517E07AE /* FirstUploadNoticeUITestFixture.swift in Sources */,
 				123D6133CA08CA05710BE1CA /* FlatOnboardingLayout.swift in Sources */,
 				66F26CA0680D0726723CD1FC /* HomeStandbyState.swift in Sources */,
 				3B577F9AB09055960C7E6F5A /* ItemDetailView.swift in Sources */,

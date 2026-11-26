@@ -34,6 +34,9 @@ struct RootView: View {
       sensingCoordinator: coordinator.sensingCoordinator,
       isActive: coordinator.canPresentRootEventSigningKeyFailure
     ))
+    .modifier(FirstUploadNoticePresenter(
+      coordinator: coordinator, sensingCoordinator: coordinator.sensingCoordinator
+    ))
     .tint(DS.Color.actionPrimary)
     .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: coordinator.screen)
     #if DEBUG
@@ -44,6 +47,71 @@ struct RootView: View {
       }
     }
     #endif
+  }
+}
+
+private struct FirstUploadNoticePresenter: ViewModifier {
+  @ObservedObject var coordinator: AppCoordinator
+  @ObservedObject var sensingCoordinator: SensingCoordinator
+  @Environment(\.scenePhase) private var scenePhase
+
+  private var canPresent: Bool {
+    scenePhase == .active && coordinator.canPresentRootEventSigningKeyFailure &&
+      !coordinator.accountSheetPresented && !coordinator.homeEventCodeSheetPresented &&
+      !coordinator.welcomeAboutSensingPresented &&
+      !coordinator.accountSheetUntilDismissed && !coordinator.homeEventCodeSheetUntilDismissed &&
+      !coordinator.welcomeAboutSensingUntilDismissed &&
+      sensingCoordinator.ownerKeyRestorationNotice == nil &&
+      sensingCoordinator.ownerKeyOperationFailure == nil && sensingCoordinator.eventSigningKeyFailure == nil
+  }
+
+  func body(content: Content) -> some View {
+    content.sheet(isPresented: Binding(
+      get: { canPresent && sensingCoordinator.firstUploadNoticeRequested },
+      set: { if !$0 && canPresent { sensingCoordinator.dismissFirstUploadNotice() } }
+    )) {
+      FirstUploadNoticeView(sensingCoordinator: sensingCoordinator)
+    }
+  }
+}
+
+private struct FirstUploadNoticeView: View {
+  @ObservedObject var sensingCoordinator: SensingCoordinator
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 20) {
+          Text("Before your first upload")
+            .font(.title.bold())
+            .accessibilityAddTraits(.isHeader)
+          Text("The event operator receives signed Bluetooth observations between devices. Raw observations are available through a public verification API. Others can use them to reconstruct a graph of pseudonymous devices within the event.")
+          Text("Device counts and observed relationships are public even at small events. These records show devices observing one another over Bluetooth; they do not establish that a person attended.")
+          Text("Records stay on your device until you delete the local data or delete the app. Backups may retain a copy, depending on your settings.")
+          Text("Deleting a Record on your device or deleting the app does not delete observations you already sent. The event operator has no automatic deletion period. We cannot guarantee removal of sent records, third-party copies, or records on public chains.")
+          Text("For access or deletion requests, contact hi@levarac.org.")
+          Link("Privacy Policy", destination: URL(string: "https://levarac.org/privacy")!)
+            .accessibilityIdentifier("firstUpload.privacyPolicy")
+          Button("Continue") {
+            sensingCoordinator.continueAfterFirstUploadNotice()
+            dismiss()
+          }
+          .buttonStyle(.borderedProminent)
+          .accessibilityIdentifier("firstUpload.continue")
+        }
+        .frame(maxWidth: 600, alignment: .leading)
+        .padding()
+      }
+      .accessibilityIdentifier("firstUpload.notice")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Close") { dismiss() }
+            .accessibilityIdentifier("firstUpload.close")
+        }
+      }
+    }
   }
 }
 

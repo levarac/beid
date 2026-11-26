@@ -17,14 +17,18 @@ struct CollectionHomeView: View {
         .tabItem { Label("records.title", systemImage: "square.grid.2x2") }
         .tag(HomeTab.records)
     }
-    .sheet(isPresented: $coordinator.accountSheetPresented) {
+    .sheet(isPresented: $coordinator.accountSheetPresented, onDismiss: {
+      if !coordinator.accountSheetPresented { coordinator.accountSheetUntilDismissed = false }
+    }) {
       AccountSheetView()
         .environmentObject(coordinator)
         .presentationDragIndicator(.visible)
         .tint(DS.Color.actionPrimary)
         .presentationBackground(DS.Color.textPrimary)
     }
-    .sheet(isPresented: $coordinator.homeEventCodeSheetPresented) {
+    .sheet(isPresented: $coordinator.homeEventCodeSheetPresented, onDismiss: {
+      if !coordinator.homeEventCodeSheetPresented { coordinator.homeEventCodeSheetUntilDismissed = false }
+    }) {
       HomeEventCodeEntrySheet().environmentObject(coordinator)
     }
   }
