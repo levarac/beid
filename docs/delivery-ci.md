@@ -344,6 +344,29 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
   上の KMP review gate を免除しない。KMP の independent review は作業上の
   gate、GitHub の approving review は merge button の設定で、別の条件である。
 
+### Offline report for a failed hosted UI shard
+
+Run `python3 -m scripts.ios_lifecycle_report <saved-job-directory>` with
+Python 3.12. The command reads local evidence and writes JSON to stdout.
+Its exit status describes report generation. The original job and required
+iOS check keep their recorded conclusions.
+
+Save the Actions API job response as `job.json` and its timestamped log as
+`job.log`. For the same run and attempt, save the artifact metadata responses
+for `ios-evidence-<attempt>-<ui shard>` and `ios-xcresult-<attempt>-<ui shard>`
+as `structured.json` and `bundle.json`. Retain their original downloaded ZIP
+bytes alongside them as `structured.zip` and `bundle.zip`. Repacking changes
+the GitHub SHA-256 digest. Keep a separate directory for each job and obtain
+the first attempt's artifacts before they expire.
+
+A comparison candidate requires an executed UI shard with a complete case
+ledger, exact expected skips, and agreement between the summary and test
+tree on every failure. All failures must have the same exact application
+launch-timeout or termination signature. The report records the original
+artifact IDs and digests, manifest digest, failed case IDs, runner image,
+simulator, and timings. Missing evidence or a mixed failure yields an
+ordinary failure. This offline report starts no jobs.
+
 ### Delivery security boundary
 
 TestFlight delivery runs only through Xcode Cloud Internal Build / Release Build.
