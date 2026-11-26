@@ -2806,11 +2806,12 @@ lives in `AGENTS.md`.
   > verbatim for history and for any future widening of the locale set;
   > the term choice itself was not overturned.
 
-- Welcome uses the exact headline "Record you were there." and subtitle
+- On iOS, Welcome uses the exact headline "Record you were there." and subtitle
   "Nearby devices say hello to each other, and keep a note anyone can verify."
-  These are the approved Welcome exception to the general presence-copy
-  caution. Other copy describes observations, explicit joining and foreground
-  sensing without promising background operation.
+  Android uses the exact line "Record you were there." (`welcome_subtitle`)
+  beneath the app name. These are the approved Welcome exceptions to the general
+  presence-copy caution. Other copy describes observations, explicit joining
+  and foreground sensing without promising background operation.
 - Vocabulary: "record", "participation record", "encounter", "event", "sense/sensing", "collect",
   "seal", "verify". A record is **collected** or **sealed**, never "minted",
   "dropped", or "claimed". **[Platform-neutral; Android's actual strings
