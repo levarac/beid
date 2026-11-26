@@ -47,6 +47,10 @@ on:
         description: Measure Kotlin export reuse with smoke tests (rerun all jobs for the warm sample)
         type: boolean
         default: false
+      split_smoke_benchmark:
+        description: Run the smoke benchmark on separate unit and UI simulators
+        type: boolean
+        default: false
   # 03:23 UTC avoids the busy top of the hour; scheduled workflows use main,
   # the default branch. Its separate group cannot cancel a main push.
   schedule:
@@ -172,8 +176,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       run: ${{ steps.plan.outputs.run }}
-      mode: ${{ steps.test-mode.outputs.mode }}
-      matrix: ${{ steps.plan.outputs.matrix }}
+      mode: ${{ github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark && inputs.split_smoke_benchmark && 'smoke-split' || steps.test-mode.outputs.mode }}
+      matrix: ${{ github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark && inputs.split_smoke_benchmark && '{"lane":["unit","ui-1"]}' || steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -470,7 +474,7 @@ jobs:
 
       - name: Package full-mode test products
         id: package
-        if: ${{ needs.plan.outputs.mode == 'full' }}
+        if: ${{ needs.plan.outputs.mode == 'full' || needs.plan.outputs.mode == 'smoke-split' }}
         shell: bash
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -483,7 +487,7 @@ jobs:
           printf 'artifact_name=ios-products-%s\n' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
 
       - name: Upload full-mode test products
-        if: ${{ needs.plan.outputs.mode == 'full' }}
+        if: ${{ needs.plan.outputs.mode == 'full' || needs.plan.outputs.mode == 'smoke-split' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.package.outputs.artifact_name }}
@@ -660,7 +664,7 @@ jobs:
   tests:
     name: iOS full tests (${{ matrix.lane }})
     needs: [plan, build]
-    if: ${{ !cancelled() && needs.build.result == 'success' && needs.plan.outputs.mode == 'full' }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && (needs.plan.outputs.mode == 'full' || needs.plan.outputs.mode == 'smoke-split') }}
     runs-on: xcode-27
     # Step limit plus setup, evidence and cleanup; see the test step below.
     timeout-minutes: 55

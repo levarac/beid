@@ -148,6 +148,23 @@ class AggregateContractTest(unittest.TestCase):
     def test_happy_path(self):
         self.verify()
 
+    def test_split_smoke_compares_both_lanes_to_the_serial_selection_on_dispatch(self):
+        self.needs["plan"]["outputs"]["mode"] = self.manifest["mode"] = "smoke-split"
+        self.manifest["smoke"] = [ONE, TWO]
+        self.manifest["unit"].append("BeidTests/ReportProofLinkContainmentTests/testDeferred")
+        self.evidence["ui-1"] = tree(unit=False)
+        del self.evidence["ui-2"]
+
+        def check(event):
+            return self.tool.validate_aggregate(event, self.needs, self.manifest, self.evidence, "a" * 40)
+
+        self.assertIn("all 3 cases accounted for", check("workflow_dispatch"))
+        with self.assertRaises(ValueError):
+            check("pull_request")
+        del self.evidence["ui-1"]
+        with self.assertRaisesRegex(ValueError, "missing or extra lane artifacts"):
+            check("workflow_dispatch")
+
     def add_ui_shards(self, total_count):
         for index in range(3, total_count + 1):
             case_identifier = f"FlowTests/testShard{index}"

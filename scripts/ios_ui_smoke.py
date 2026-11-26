@@ -198,9 +198,11 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
             raise ValueError("classifier skip has inconsistent job results")
         return "Classifier skip: no iOS-affecting changes."
     mode = plan.get("mode")
-    if plan.get("run") != "true" or mode not in ("full", "smoke"):
+    if plan.get("run") != "true" or mode not in ("full", "smoke", "smoke-split"):
         raise ValueError("missing or invalid test plan")
-    for job in ("build", "tests") if mode == "full" else ("build",):
+    if mode == "smoke-split" and event != "workflow_dispatch":
+        raise ValueError("split smoke is a manual benchmark")
+    for job in ("build",) if mode == "smoke" else ("build", "tests"):
         if needs.get(job, {}).get("result") != "success":
             raise ValueError(f"needed job did not succeed: {job}")
     if mode == "smoke" and needs.get("tests", {}).get("result") != "skipped":
@@ -213,10 +215,12 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
     skips = manifest.get("iphone_skips", [])
     if not isinstance(skips, list) or len(set(skips)) != len(skips) or not set(skips) <= set(ui):
         raise ValueError("invalid explicit iPhone skip list")
-    if mode == "smoke":
+    if mode in ("smoke", "smoke-split"):
         unit = smoke_unit_tests(unit)
         unit_skips = [test for test in unit_skips if test in unit]
         lanes = {"build": unit + manifest["smoke"]}
+        if mode == "smoke-split":
+            lanes = {"unit": unit, "ui-1": manifest["smoke"]}
     else:
         ui_lanes = ui_shard_lanes(manifest.get("shards"))
         if Counter(test for shard in ui_lanes.values() for test in shard) != Counter(ui):
@@ -381,7 +385,7 @@ def main() -> int:
     shards.add_argument("--enumeration", type=Path, required=True)
     shards.add_argument("--output", type=Path, required=True)
     shards.add_argument("--count", type=int, required=True)
-    shards.add_argument("--mode", choices=("full", "smoke"), required=True)
+    shards.add_argument("--mode", choices=("full", "smoke", "smoke-split"), required=True)
     shards.add_argument("--sha", required=True)
     shards.add_argument("--durations", type=Path, default=DEFAULT_DURATIONS)
     for command in ("lane-arguments", "verify-lane"):
@@ -428,7 +432,7 @@ def main() -> int:
                 if (identifier := line.partition("#")[0].strip())
             ], "BeidTests")
             validate_unit_skips(unit_skips, enumerated["BeidTests"])
-            if args.mode == "smoke":
+            if args.mode in ("smoke", "smoke-split"):
                 unit_suites = {test.split("/")[1] for test in enumerated["BeidTests"]}
                 missing = set(SMOKE_DEFERRED_UNIT_SUITES) - unit_suites
                 if missing:
@@ -447,6 +451,11 @@ def main() -> int:
             if args.lane == "build" and manifest["mode"] == "smoke":
                 selected = smoke_unit_tests(manifest["unit"]) + manifest["smoke"]
                 arguments = selection_arguments("smoke", manifest["smoke"])
+            elif manifest["mode"] == "smoke-split" and args.lane in ("unit", "ui-1"):
+                all_args = selection_arguments("smoke", manifest["smoke"])
+                selected = smoke_unit_tests(manifest["unit"]) if args.lane == "unit" else manifest["smoke"]
+                bundle = "BeidTests" if args.lane == "unit" else "BeidUITests"
+                arguments = [arg for arg in all_args if arg.partition(":")[2].split("/")[0] == bundle]
             elif args.lane == "unit" and manifest["mode"] == "full":
                 selected, arguments = manifest["unit"], ["-only-testing:BeidTests"]
             elif manifest["mode"] == "full":
