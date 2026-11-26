@@ -191,9 +191,10 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     absolute DerivedData/checkout references in `.xctestrun` are relocated.
     The matrix starts only after build finishes, has `fail-fast: false` and
     `max-parallel: 6`, and the iOS macOS jobs use the `xcode-27` label.
-    The default `env.IOS_UI_SHARDS` value of `5` gives one unit job and five UI
-    jobs. Set it to `4`, `3`, or `2` for smaller matrices. Values outside 2–5
-    fail planning.
+    The default `env.IOS_UI_SHARDS` value of `4` requests four UI jobs
+    and one unit job after the build. They can start together when five
+    macOS runners are free. A manual run can choose `ui_shards` from 2–5
+    to compare counts at the same revision. Values outside 2–5 fail planning.
 
     `scripts/ios_ui_smoke.py shards` balances methods longest-first using
     `scripts/ios-ui-durations.json`. The weights use hosted iPhone

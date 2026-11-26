@@ -21,7 +21,15 @@ class ShardWorkflowTest(unittest.TestCase):
             self.assertIn("runs-on: xcode-27", job)
             self.assertIn('= "Xcode 27.2"', job)
         self.assertIn('item.get("name") == "iOS 27.0"', build)
-        self.assertIn("IOS_UI_SHARDS: '5'", text)
+        from scripts.tests.workflow_yaml import workflow_data
+        workflow = workflow_data(text)
+        self.assertEqual(workflow["env"]["IOS_UI_SHARDS"], "${{ inputs.ui_shards || '4' }}")
+        sizes = workflow["on"]["workflow_dispatch"]["inputs"]["ui_shards"]
+        self.assertEqual(sizes["type"], "choice")
+        self.assertEqual(sizes["options"][0], "4")
+        self.assertEqual(set(sizes["options"]), {"2", "3", "4", "5"})
+        self.assertIn("os.environ['IOS_UI_SHARDS']", job_block(IOS, "plan"))
+        self.assertIn('--count "$IOS_UI_SHARDS"', build)
         self.assertIn("build-for-testing", build)
         self.assertNotIn("build-for-testing", tests)
 
