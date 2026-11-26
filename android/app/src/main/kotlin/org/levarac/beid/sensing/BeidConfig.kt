@@ -37,4 +37,16 @@ object BeidConfig {
      * accepting either would draw an unmeasured node at the radar's centre.
      */
     const val nodeSignalUsableUpperBoundDbm: Int = 0
+
+    // Radar peer liveness (iOS release/1.1.0 `detectedNowTimeout` /
+    // `detectedNowDimAfter`, #855/#901). Display only: the radar re-evaluates
+    // them once per second from a wall clock. Recording, windows, the ledger,
+    // presence and signatures never read them. Copied from iOS, which marks
+    // both provisional until measured with locked iOS and Android peers.
+
+    /** A peer leaves the radar once it has been silent this long (strict `<` keeps it). */
+    const val detectedNowTimeoutMillis: Long = 300_000
+
+    /** A retained peer is dimmed once it has been silent this long (inclusive). */
+    const val detectedNowDimAfterMillis: Long = 30_000
 }

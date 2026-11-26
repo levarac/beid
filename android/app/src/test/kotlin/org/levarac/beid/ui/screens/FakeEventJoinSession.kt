@@ -108,8 +108,19 @@ internal class FakeEventJoinSession(
         mutableState.value = next
     }
 
-    fun emitRadarPeers(peers: List<SensingRadarPeerSignal>) {
+    private val radarLastHeardAtMillis = HashMap<String, Long>()
+
+    override fun radarPeerLastHeardAtMillis(displayId: String): Long? = radarLastHeardAtMillis[displayId]
+
+    /** Publishes [peers], each last heard at [heardAtMillis] (wall clock, as Barnard stamps). */
+    fun emitRadarPeers(peers: List<SensingRadarPeerSignal>, heardAtMillis: Long = System.currentTimeMillis()) {
+        peers.forEach { hearRadarPeer(it.displayId, heardAtMillis) }
         mutableRadarPeers.value = peers
+    }
+
+    /** An RSSI-only refresh: moves lastHeard without publishing, as the coordinator does. */
+    fun hearRadarPeer(displayId: String, atMillis: Long) {
+        radarLastHeardAtMillis[displayId] = maxOf(radarLastHeardAtMillis[displayId] ?: atMillis, atMillis)
     }
 
     fun emitNearbyEventCards(cards: List<NearbyEventCard>) {

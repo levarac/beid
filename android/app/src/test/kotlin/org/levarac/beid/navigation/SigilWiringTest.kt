@@ -2,8 +2,10 @@ package org.levarac.beid.navigation
 
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -41,9 +43,11 @@ import org.levarac.beid.ui.screens.AccountScreenTestTags
 import org.levarac.beid.ui.screens.EventJoinScreenTestTags
 import org.levarac.beid.ui.screens.FakeEventJoinSession
 import org.levarac.beid.ui.screens.HomeScreenTestTags
+import org.levarac.beid.ui.screens.LocalSessionRadarClock
 import org.levarac.beid.ui.screens.RecordDetailScreenTestTags
 import org.levarac.beid.ui.screens.RecordsHomeScreenTestTags
 import org.levarac.beid.ui.screens.RecordsScreenTestTags
+import org.levarac.beid.ui.screens.SessionRadarDimmedPeers
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -99,8 +103,15 @@ class SigilWiringTest {
         eventName = name,
     ).also(store::add)
 
-    private fun launch(session: FakeEventJoinSession = FakeEventJoinSession()) {
-        compose.setContent { BeidAppTheme { AppNavHost(session, store, sigilPresenceStore = sigilStore) } }
+    private fun launch(
+        session: FakeEventJoinSession = FakeEventJoinSession(),
+        radarClock: () -> Long = System::currentTimeMillis,
+    ) {
+        compose.setContent {
+            CompositionLocalProvider(LocalSessionRadarClock provides radarClock) {
+                BeidAppTheme { AppNavHost(session, store, sigilPresenceStore = sigilStore) }
+            }
+        }
         compose.onNodeWithTag(HomeScreenTestTags.ROOT).assertIsDisplayed()
     }
 
@@ -254,6 +265,54 @@ class SigilWiringTest {
         compose.waitForIdle()
         assertEquals("3 devices heard in the last 5 minutes", node(SensingRadar.TEST_TAG).description())
         assertNoPeerIdShown(peers.map { it.displayId })
+    }
+
+    private fun dimmedFlags(): List<Boolean> = compose
+        .onNode(SemanticsMatcher.keyIsDefined(SessionRadarDimmedPeers), useUnmergedTree = true)
+        .fetchSemanticsNode().config[SessionRadarDimmedPeers]
+
+    /** Advances the radar's wall clock to [to] and lets its one-second ticker fire once. */
+    private fun tick(clock: LongArray, to: Long) {
+        clock[0] = to
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.mainClock.advanceTimeByFrame()
+    }
+
+    /**
+     * iOS release/1.1.0 `SensingView` re-evaluates the radar every second from
+     * a wall clock (#855/#901): with no new observation, a peer dims from 30 s
+     * of silence and leaves the radar at 300 s, and an RSSI-only refresh, which
+     * publishes nothing, still keeps a peer bright.
+     */
+    @Test
+    fun withNoNewObservationTheRadarDimsAndThenDropsSilentPeers() {
+        val heardAt = 1_764_000_000_000L
+        val clock = longArrayOf(heardAt)
+        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Recording(event, peersVerified = 2)))
+        session.markRecordingCeremonyShown()
+        session.emitRadarPeers(peers.take(2), heardAtMillis = heardAt)
+        launch(session, radarClock = { clock[0] })
+        compose.onNodeWithTag(SensingRadar.TEST_TAG).performScrollTo()
+        compose.mainClock.autoAdvance = false
+        assertEquals(listOf(false, false), dimmedFlags())
+
+        tick(clock, heardAt + 29_999)
+        assertEquals(listOf(false, false), dimmedFlags())
+        tick(clock, heardAt + 30_000)
+        assertEquals(listOf(true, true), dimmedFlags())
+
+        session.hearRadarPeer("d0000a02", heardAt + 290_000)
+        tick(clock, heardAt + 299_999)
+        assertEquals(listOf(true, false), dimmedFlags())
+        assertEquals("2 devices heard in the last 5 minutes", node(SensingRadar.TEST_TAG).description())
+
+        tick(clock, heardAt + 300_000)
+        assertEquals(listOf(false), dimmedFlags())
+        assertEquals("1 device heard in the last 5 minutes", node(SensingRadar.TEST_TAG).description())
+
+        tick(clock, heardAt + 590_000)
+        assertEquals(emptyList<Boolean>(), dimmedFlags())
+        assertEquals("0 devices heard in the last 5 minutes", node(SensingRadar.TEST_TAG).description())
     }
 
     @Test

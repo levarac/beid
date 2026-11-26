@@ -381,6 +381,107 @@ class EventJoinCoordinatorSigilPresenceTest {
         assertEquals(listOf(SensingRadarPeerSignal("d0000001", null)), coordinator.radarPeers.value, "no radius survives into the next session")
     }
 
+    // MARK: - Radar peer liveness (display only, iOS #855/#901)
+
+    @Test
+    fun aDetectionRecordsWhenItsPeerWasLastHeardAtTheBarnardTimestamp() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        engine.emitDetection(enin = 1, rpid = "r1", detectedDisplayId = "d0000001", timestampMs = 1_000)
+        assertNull(coordinator.radarPeerLastHeardAtMillis("d0000001"), "no joined session, nothing heard")
+
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        engine.emitDetection(enin = 1, rpid = "r1", detectedDisplayId = "D0000001", rssi = 0, timestampMs = 10_000)
+        engine.emitDetection(enin = 1, rpid = "r2", detectedDisplayId = "d0000002", timestampMs = 10_500)
+        engine.emitDetection(enin = 1, rpid = "r3", detectedDisplayId = null, timestampMs = 11_000)
+
+        assertEquals(10_000L, coordinator.radarPeerLastHeardAtMillis("d0000001"), "keyed by the normalized id")
+        assertEquals(10_500L, coordinator.radarPeerLastHeardAtMillis("d0000002"))
+        assertNull(coordinator.radarPeerLastHeardAtMillis("D0000001"))
+    }
+
+    @Test
+    fun anOlderObservationArrivingLateNeverMovesLastHeardBack() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        engine.emitDetection(enin = 1, rpid = "r1", detectedDisplayId = "d0000001", timestampMs = 20_000)
+        engine.emitDetection(enin = 1, rpid = "r1", detectedDisplayId = "d0000001", timestampMs = 15_000)
+        assertEquals(20_000L, coordinator.radarPeerLastHeardAtMillis("d0000001"))
+        engine.emitRssiUpdate(rssi = -40, detectedDisplayId = "d0000001", timestampMs = 18_000)
+        assertEquals(20_000L, coordinator.radarPeerLastHeardAtMillis("d0000001"))
+    }
+
+    @Test
+    fun anRssiUpdateRefreshesADetectedPeerWithoutRepublishingTheRadar() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        engine.emitDetection(enin = 1, rpid = "r1", detectedDisplayId = "d0000001", rssi = -60, timestampMs = 10_000)
+        val published = coordinator.radarPeers.value
+
+        engine.emitRssiUpdate(rssi = -40, detectedDisplayId = "D0000001", timestampMs = 10_400)
+        assertEquals(10_400L, coordinator.radarPeerLastHeardAtMillis("d0000001"))
+        assertSame(published, coordinator.radarPeers.value, "a folded sample moves lastHeard but publishes nothing")
+
+        // As iOS: refreshed before the usability check, so an unusable sample still counts as heard.
+        engine.emitRssiUpdate(rssi = 0, detectedDisplayId = "d0000001", timestampMs = 40_000)
+        assertEquals(40_000L, coordinator.radarPeerLastHeardAtMillis("d0000001"))
+        engine.emitRssiUpdate(rssi = 127, detectedDisplayId = "d0000001", timestampMs = 41_000)
+        assertEquals(41_000L, coordinator.radarPeerLastHeardAtMillis("d0000001"))
+    }
+
+    @Test
+    fun anRssiUpdateForAPeerNeverDetectedRecordsNothing() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        engine.emitRssiUpdate(rssi = -50, detectedDisplayId = "d0000009", timestampMs = 1_000)
+        engine.emitRssiUpdate(rssi = -50, detectedDisplayId = null, timestampMs = 1_000)
+        assertNull(coordinator.radarPeerLastHeardAtMillis("d0000009"))
+        assertEquals(emptyList(), coordinator.radarPeers.value)
+    }
+
+    @Test
+    fun anRssiUpdateOutsideALiveSessionDoesNotRefreshLastHeard() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        recordSession(engine)
+        engine.emitRssiUpdate(rssi = -70, detectedDisplayId = "d0000001", timestampMs = 5_000)
+        assertEquals(5_000L, coordinator.radarPeerLastHeardAtMillis("d0000001"))
+
+        coordinator.simulateSignalLost()
+        engine.emitRssiUpdate(rssi = -30, detectedDisplayId = "d0000001", timestampMs = 9_000)
+        assertEquals(5_000L, coordinator.radarPeerLastHeardAtMillis("d0000001"), "SignalLost is frozen")
+
+        coordinator.leaveEvent()
+        engine.emitRssiUpdate(rssi = -30, detectedDisplayId = "d0000001", timestampMs = 9_500)
+        assertNull(coordinator.radarPeerLastHeardAtMillis("d0000001"), "Idle: no session, nothing heard")
+    }
+
+    @Test
+    fun aNewSessionStartsWithNoLastHeard() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        engine.emitDetection(enin = 1, rpid = "r1", detectedDisplayId = "d0000001", timestampMs = 9_000)
+        assertEquals(9_000L, coordinator.radarPeerLastHeardAtMillis("d0000001"))
+
+        coordinator.leaveEvent()
+        assertNull(coordinator.radarPeerLastHeardAtMillis("d0000001"))
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        assertNull(coordinator.radarPeerLastHeardAtMillis("d0000001"), "nothing survives into the next session")
+        engine.emitDetection(enin = 1, rpid = "r1", detectedDisplayId = "d0000001", timestampMs = 9_100)
+        assertEquals(9_100L, coordinator.radarPeerLastHeardAtMillis("d0000001"))
+    }
+
     private fun TestScope.coordinator(
         engine: FakeEventJoinEngine,
         registry: FakeNearbyEventRegistry,

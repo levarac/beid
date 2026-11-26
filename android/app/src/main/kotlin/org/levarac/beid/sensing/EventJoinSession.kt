@@ -128,6 +128,14 @@ interface EventJoinSession {
      */
     val radarPeers: StateFlow<List<SensingRadarPeerSignal>> get() = emptyRadarPeers
 
+    /**
+     * iOS #855/#901: when the radar peer [displayId] (normalized) was last
+     * heard in the live session, in wall-clock epoch milliseconds, or `null`.
+     * Main thread only. Display only; it moves on RSSI samples without a
+     * [radarPeers] republish, so the radar reads it on its own one-second tick.
+     */
+    fun radarPeerLastHeardAtMillis(displayId: String): Long? = null
+
     /** The latest native permission answer used by onboarding navigation. */
     val bluetoothPermissionState: BluetoothPermissionState
 

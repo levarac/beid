@@ -110,6 +110,8 @@ fun HomeRoute(
     val uiState by viewModel.uiState.collectAsState()
     // A new list on every detection or signal republish, so Now's radar redraws with it.
     val radarPeers by session.radarPeers.collectAsState()
+    // Read live on the radar's own tick: RSSI samples move it without a republish.
+    val radarPeerLastHeardAtMillis: (String) -> Long? = remember(session) { session::radarPeerLastHeardAtMillis }
     val standby by standbyViewModel.presentation.collectAsState()
 
     var selectedTab by rememberSaveable { mutableStateOf(HomeTab.Now) }
@@ -161,6 +163,7 @@ fun HomeRoute(
                 onKeepSensing = viewModel::keepSensing,
                 onConfirmStopSensing = viewModel::confirmStopSensing,
                 radarPeers = radarPeers,
+                radarPeerLastHeardAtMillis = radarPeerLastHeardAtMillis,
                 modifier = contentModifier,
             )
         },

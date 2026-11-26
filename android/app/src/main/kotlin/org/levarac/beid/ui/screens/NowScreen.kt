@@ -99,6 +99,8 @@ fun NowContent(
     onConfirmStopSensing: () -> Unit = {},
     /** beid#722: the live session's detected peers for the EventFound / Recording radar. */
     radarPeers: List<SensingRadarPeerSignal> = emptyList(),
+    /** Display-only last-heard lookup for [radarPeers]; see `EventJoinSession.radarPeerLastHeardAtMillis`. */
+    radarPeerLastHeardAtMillis: (String) -> Long? = { null },
 ) {
     // System Back on the confirmation means "Keep sensing". Home is the
     // navigation root, so an unhandled Back would leave the activity instead.
@@ -137,6 +139,7 @@ fun NowContent(
                 onResumeSensing = onResumeSensing,
                 onStartWalletBinding = onStartWalletBinding,
                 radarPeers = radarPeers,
+                radarPeerLastHeardAtMillis = radarPeerLastHeardAtMillis,
             )
             return@Column
         }

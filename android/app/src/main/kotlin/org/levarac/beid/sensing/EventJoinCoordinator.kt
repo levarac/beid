@@ -259,6 +259,19 @@ class EventJoinCoordinator internal constructor(
     private var lastNodeSignalPublishAtMillis: Long? = null
 
     /**
+     * iOS `detectedLastHeardAt` (#855/#901): when each detected peer was last
+     * heard, on Barnard's wall-clock event timestamps. Never published: an
+     * update would otherwise republish [radarPeers] on every RSSI sample.
+     * The radar reads it through [radarPeerLastHeardAtMillis] on its own
+     * one-second tick and on every [radarPeers] change, as iOS's
+     * `TimelineView` reads the unpublished dictionary.
+     */
+    private val radarLastHeard = RadarPeerLastHeard()
+
+    /** Main thread only. Display only: see [radarLastHeard]. */
+    override fun radarPeerLastHeardAtMillis(displayId: String): Long? = radarLastHeard[displayId]
+
+    /**
      * The registry this join gate reads. `null` means the deployment has no
      * registry configured at all, which is a refusal like any other: an event
      * this host cannot verify must not be joined.
@@ -921,6 +934,7 @@ class EventJoinCoordinator internal constructor(
                     rpid = detection.rpid,
                     detectedDisplayId = detection.detectedDisplayId,
                     reporterRpid = detection.reporterRpid,
+                    observedAtMillis = detection.timestampMs,
                 )
                 // A SIBLING call after handleDetection (iOS beid#652), never an
                 // argument to it: signal strength stays out of lexical scope
@@ -993,7 +1007,13 @@ class EventJoinCoordinator internal constructor(
      * duplicating that "ignore" branch natively would be exactly the kind
      * of re-derived transition AGENTS.md's ownership boundary forbids.
      */
-    private fun handleDetection(enin: Long, rpid: String, detectedDisplayId: String?, reporterRpid: String?) {
+    private fun handleDetection(
+        enin: Long,
+        rpid: String,
+        detectedDisplayId: String?,
+        reporterRpid: String?,
+        observedAtMillis: Long,
+    ) {
         // No joined session, no counting and no phase (beid#374). The radio
         // keeps delivering detections whether or not this device joined --
         // discovery scanning runs before any join and continues after a
@@ -1017,6 +1037,9 @@ class EventJoinCoordinator internal constructor(
         val observationAccepted = aggregationRuntime.recordObservation(enin, rpid, detectedDisplayId)
         // As iOS's recordDeviceIdentity: after every observation, accepted or not.
         sigilPresence.topUpTokens()
+        // Display-only liveness (iOS recordDeviceIdentity -> rememberDetectedDevice):
+        // a sibling of the counting above, read by nothing that records.
+        normalizedDisplayIdOrNull(detectedDisplayId)?.let { radarLastHeard.remember(it, observedAtMillis) }
         publishRadarPeers()
         val aggregateSnapshot = aggregationRuntime.snapshotAggregate()
         val since = firstSightingAt
@@ -1378,6 +1401,9 @@ class EventJoinCoordinator internal constructor(
      * `SignalLost` is a frozen count, so the radar freezes with it; the phase
      * gates the display and the display gates nothing.
      *
+     * 0. Liveness: a sample for an already-detected peer refreshes its
+     *    last-heard time (iOS #855), usable or not, without a republish.
+     *
      * 1. Usability: only `rssi < nodeSignalUsableUpperBoundDbm` is a
      *    measurement; anything else creates no entry.
      * 2. Smoothing on every usable sample (EMA); the first sample seeds the
@@ -1393,6 +1419,10 @@ class EventJoinCoordinator internal constructor(
             is ScanPhase.Idle, is ScanPhase.SignalLost -> return
         }
         val nodeId = normalizedDisplayIdOrNull(detectedDisplayId) ?: return
+        // iOS order: after the phase gate and normalization, before usability,
+        // so an unusable sample still counts as heard. Detected peers only;
+        // not republished (see [radarLastHeard]).
+        if (nodeId in accounting.detectedDisplayIds) radarLastHeard.remember(nodeId, timestampMillis)
         if (rssi >= BeidConfig.nodeSignalUsableUpperBoundDbm) return
 
         val sample = rssi.toDouble()
@@ -1432,6 +1462,7 @@ class EventJoinCoordinator internal constructor(
         nodeSignalStrengths = emptyMap()
         smoothedNodeSignalDbm.clear()
         lastNodeSignalPublishAtMillis = null
+        radarLastHeard.clear()
         activeProofId = null
         bindingState = EventBindingState.None
         pendingBindingMessage = null
