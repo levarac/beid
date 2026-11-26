@@ -123,6 +123,7 @@ struct RecordSigilSlot: View {
         size: placement.size,
         ground: placement.sigilGround,
         page: placement.page.sigilPage,
+        style: placement == .sensingSealed ? .sealedOnInk : .standard,
         isDeviceRecord: isDeviceRecord
       )
     }
