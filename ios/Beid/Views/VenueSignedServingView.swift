@@ -401,11 +401,13 @@ struct VenueSignedServingView: View {
         statusMessage(refreshFailureMessage(failure))
       } else if viewModel.isRefreshing {
         statusMessage("Refreshing the pack. The current valid announcement stays in use until its end.")
+      } else if isBroadcasting && viewModel.noNewerPack {
+        statusMessage("No newer pack is available.")
       }
       if viewModel.storedSourceDescription != nil, fixtureCode == nil, !isReady {
-        textAction(isBroadcasting ? "Refresh pack" : "Load saved pack", identifier: "Refresh pack") {
+        textAction(isBroadcasting ? "Check for pack update" : "Load saved pack", identifier: "Refresh pack") {
           requestTask?.cancel()
-          requestTask = Task { await viewModel.restoreFromStorage() }
+          requestTask = Task { await viewModel.performPackAction() }
         }
       }
       if effectiveRadio.state == .advertisingRequested {
@@ -637,6 +639,7 @@ struct VenueSignedServingView: View {
 
   private func refreshFailureMessage(_ failure: VenueRefreshFailure) -> LocalizedStringKey {
     switch failure {
+    case .noUpdateSource: return "This saved pack has no source for checking updates."
     case .acquisition(let reason): return message(for: reason)
     case .rejected(let reason): return message(for: reason)
     case .anotherEvent: return "The refreshed pack is for another event. The loaded pack was kept."
