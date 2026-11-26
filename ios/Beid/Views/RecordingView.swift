@@ -75,6 +75,8 @@ struct SensingSealedSnapshot {
   let detectedDeviceCount: Int
   let firstSightingAt: Date?
   let sealedAt: Date?
+  var isDemo = false
+  var demoBarsFirstSightingAt: Date? = nil
 }
 
 /// Frame 06. Routing and the DONE action belong to #655's closure flow.
@@ -111,7 +113,9 @@ struct SensingSealedView: View {
               Spacer(minLength: DS.Space.l)
               SensingWindowBars(
                 aggregate: snapshot.aggregate,
-                endsSession: true
+                endsSession: true,
+                firstSightingAt: snapshot.demoBarsFirstSightingAt,
+                sealedDemo: snapshot.isDemo
               )
 
               Rectangle()

@@ -46,6 +46,29 @@ final class SensingWindowBarsTests: XCTestCase {
     XCTAssertEqual(SensingWindowBars.barHeight(peerCount: slots[5]), 4)
   }
 
+  func testDemoObservationsGrowBarsAndKeepAnEmptyCurrentWindow() {
+    let now = Date(timeIntervalSince1970: 1_800_000_017)
+    let end = SensingWindowTimeline.endIndex(now: now, lastObserved: 1, demoCurrent: 1, windowSeconds: 300)!
+    let before = SensingWindowBars.slotCounts(peerCountsByWindow: [1: 1], endWindowIndex: end)
+    let after = SensingWindowBars.slotCounts(peerCountsByWindow: [1: 3], endWindowIndex: end)
+    XCTAssertGreaterThan(
+      SensingWindowBars.barHeight(peerCount: after[5]), SensingWindowBars.barHeight(peerCount: before[5])
+    )
+    let next = SensingWindowTimeline.endIndex(now: now, lastObserved: 1, demoCurrent: 2, windowSeconds: 300)!
+    let empty = SensingWindowBars.slotCounts(peerCountsByWindow: [1: 3], endWindowIndex: next)
+    XCTAssertEqual(empty[4], 3)
+    XCTAssertNil(empty[5])
+  }
+
+  func testDemoSeventhWindowDropsFirstWithoutChangingIndices() {
+    let now = Date(timeIntervalSince1970: 1_800_000_017)
+    let end = SensingWindowTimeline.endIndex(now: now, lastObserved: 6, demoCurrent: 6, windowSeconds: 300)!
+    let counts: [Int64: Int] = [0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7]
+    XCTAssertEqual(
+      SensingWindowBars.slotCounts(peerCountsByWindow: counts, endWindowIndex: end), [2, 3, 4, 5, 6, 7]
+    )
+  }
+
   func testLeftLabelIsTheStartOfTheOldestVisibleWindow() {
     XCTAssertEqual(
       SensingWindowBars.oldestWindowStart(endWindowIndex: 100).timeIntervalSince1970,

@@ -1038,6 +1038,18 @@ final class SensingCoordinator: ObservableObject {
   /// `currentWindowEnin` so the self-proof layer (§2.2) is exercisable
   /// under demo mode too.
   private var demoWindowEnin = 0
+  private(set) var demoBarsFirstSightingAt: Date?
+
+  /// Synthetic window cursor for the chart only. Screenshot fixtures already
+  /// use wall-clock indices and must keep their frozen presentation.
+  var demoWindowBarsIndex: Int64? {
+    #if DEBUG
+    guard useDemoEventMode, sensingScreenshotFixture == nil else { return nil }
+    return Int64(demoWindowEnin)
+    #else
+    return nil
+    #endif
+  }
 
   // MARK: - Nearby event discovery state (B005 pre-join hints, gh#100 Stage 1)
   //
@@ -3340,6 +3352,7 @@ final class SensingCoordinator: ObservableObject {
     firstWindowEnin = nil
     lastWindowEnin = nil
     demoWindowEnin = 0
+    demoBarsFirstSightingAt = nil
     demoWindowRpids = []
     clearDemoInterpreterState()
     currentWindowRpids = []
@@ -5802,6 +5815,7 @@ final class SensingCoordinator: ObservableObject {
   private func observeOneDemoDevice(displayId: String?, rpid: String, enin: Int) -> Bool {
     #if DEBUG
     rememberFirstSighting(at: AdaptiveLayoutUITestFixture.observationTimestamp())
+    if demoBarsFirstSightingAt == nil { demoBarsFirstSightingAt = Date() }
     #endif
     demoDeviceSequence += 1
     demoWindowEnin = enin

@@ -622,7 +622,10 @@ struct SensingSessionSurface: View {
                       .accessibilityIdentifier("scan.detecting.caption")
                   }
                   metrics(at: now)
-                  SensingWindowBars(aggregate: sensing.sessionAggregate, now: now)
+                  SensingWindowBars(
+                    aggregate: sensing.sessionAggregate, now: now,
+                    demoCurrentWindowIndex: sensing.demoWindowBarsIndex, firstSightingAt: sensing.demoBarsFirstSightingAt
+                  )
                     .accessibilityHidden(true)
                 }
               }
@@ -779,15 +782,17 @@ struct SensingWindowBars: View {
   /// observed window ends the bars.
   var now: Date? = nil
   var endsSession = false
+  var demoCurrentWindowIndex: Int64? = nil
+  var firstSightingAt: Date? = nil
+  var sealedDemo = false
 
   /// ENIN window index of the rightmost slot, or nil when there is nothing
   /// to anchor on.
   static func endWindowIndex(now: Date?, lastObservedWindowIndex: Int64?) -> Int64? {
-    if let now {
-      return Int64(floor(now.timeIntervalSince1970
-        / TimeInterval(ClockPreflightController.barnardEngineEninSeconds)))
-    }
-    return lastObservedWindowIndex
+    SensingWindowTimeline.endIndex(
+      now: now, lastObserved: lastObservedWindowIndex, demoCurrent: nil,
+      windowSeconds: TimeInterval(ClockPreflightController.barnardEngineEninSeconds)
+    )
   }
 
   /// Device count per slot, oldest first. Nil marks a window with no
@@ -818,7 +823,10 @@ struct SensingWindowBars: View {
     if let aggregate, aggregate.windowCount > 0 {
       last = aggregate.windowAt(index: aggregate.windowCount - 1).map { Int64($0.windowIndex) }
     }
-    return Self.endWindowIndex(now: now, lastObservedWindowIndex: last)
+    return SensingWindowTimeline.endIndex(
+      now: now, lastObserved: last, demoCurrent: demoCurrentWindowIndex,
+      windowSeconds: TimeInterval(ClockPreflightController.barnardEngineEninSeconds)
+    )
   }
 
   var body: some View {
@@ -845,8 +853,15 @@ struct SensingWindowBars: View {
       .frame(height: 40)
 
       HStack {
-        if let end {
-          Text(Self.oldestWindowStart(endWindowIndex: end).formatted(date: .omitted, time: .shortened))
+        if let end, let oldestStart = SensingWindowTimeline.oldestStart(
+          end: end,
+          firstObserved: aggregate?.windowAt(index: 0).map { Int64($0.windowIndex) },
+          firstSighting: firstSightingAt,
+          isDemo: demoCurrentWindowIndex != nil || sealedDemo,
+          windowSeconds: TimeInterval(ClockPreflightController.barnardEngineEninSeconds),
+          slotCount: Self.slotCount
+        ) {
+          Text(oldestStart.formatted(date: .omitted, time: .shortened))
             .foregroundStyle(DS.Color.textSecondaryOnInk)
         }
         Spacer()

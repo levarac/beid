@@ -94,6 +94,8 @@ final class DemoScenarioInvariantTests: XCTestCase {
     XCTAssertEqual(ScanFlowContent.route(for: coordinator.phase), .recording)
     XCTAssertEqual(coordinator.devicesVerified, BeidConfig.eventConfirmThreshold + 2)
     XCTAssertNil(coordinator.firstSightingAt, "Ordinary demo observations have no Barnard timestamp")
+    XCTAssertNotNil(coordinator.demoBarsFirstSightingAt, "The chart has a presentation-only time anchor")
+    XCTAssertEqual(coordinator.demoWindowBarsIndex, 4)
     let record = coordinator.stopSensing()
     XCTAssertEqual(record?.eninEnd, 4)
   }
