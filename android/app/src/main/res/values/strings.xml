@@ -2,7 +2,7 @@
     <string name="app_name">beid</string>
     <!-- Screen 01: Welcome (mirrors iOS's WelcomeView). -->
     <string name="welcome_title">beid</string>
-    <string name="welcome_subtitle">Keep a record of what your device observes.</string>
+    <string name="welcome_subtitle">Record you were there.</string>
     <string name="welcome_get_started">Get Started</string>
 
     <!-- Screen 02: Bluetooth-permission explanation (mirrors iOS's BluetoothPermissionView). -->
