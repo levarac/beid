@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.Instant
 import java.time.ZoneId
@@ -132,10 +133,15 @@ internal fun VenueScreen(
             Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
                 // BeidTextField has a placeholder slot only; its persistent label is a
                 // caption above it, as iOS's "Link" caption sits above its field.
+                // TalkBack gets the label on the editable field itself (what
+                // release/1.1.0's Material `label` gave it), so the caption is
+                // cleared from semantics and the name is read once.
+                val linkLabel = stringResource(R.string.venue_link_label)
                 Text(
-                    BeidFont.Library.labelMono10.cased(stringResource(R.string.venue_link_label)),
+                    BeidFont.Library.labelMono10.cased(linkLabel),
                     style = BeidFont.Library.labelMono10.textStyle,
                     color = BeidTheme.colors.textSecondary,
+                    modifier = Modifier.clearAndSetSemantics {},
                 )
                 BeidTextField(
                     value = link,
@@ -143,6 +149,7 @@ internal fun VenueScreen(
                     placeholder = "",
                     isError = false,
                     enabled = canUseInput,
+                    accessibilityLabel = linkLabel,
                     modifier = Modifier.testTag("venue-link"),
                 )
             }
