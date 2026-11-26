@@ -599,8 +599,7 @@ struct SensingSessionSurface: View {
                     mutualDeviceCount: 0,
                     observedWindowCount: observedWindowCount ?? 0,
                     showsEdges: false,
-                    size: radarSize,
-                    recordedWindowMarkDiameter: recordedWindowMarkDiameter(at: now, size: radarSize)
+                    size: radarSize
                   )
                   .frame(maxWidth: .infinity)
                   Text("HEARD IN THE LAST 5 MINUTES")
@@ -677,25 +676,6 @@ struct SensingSessionSurface: View {
         isDimmed: sensing.isDetectedDeviceDimmed(id, at: now)
       )
     }
-  }
-
-  private func recordedWindowMarkDiameter(at now: Date, size: CGFloat) -> CGFloat? {
-    guard let aggregate = sensing.sessionAggregate, aggregate.windowCount > 0,
-      let lastObservedWindow = aggregate.windowAt(index: aggregate.windowCount - 1)
-    else { return nil }
-
-    let duration = TimeInterval(ClockPreflightController.barnardEngineEninSeconds)
-    let seconds = now.timeIntervalSince1970
-    var index = lastObservedWindow.windowIndex
-    #if DEBUG
-    // Screenshot fixtures use synthetic window IDs alongside their frozen clock.
-    if sensing.sensingScreenshotFixture != nil {
-      index = Int64(floor(seconds / duration))
-    }
-    #endif
-    return SensingRadarProjection.recordedWindowMarkDiameter(
-      observedWindowIndex: index, secondsSince1970: seconds, windowDuration: duration, size: size
-    )
   }
 
   private func metrics(at now: Date) -> some View {

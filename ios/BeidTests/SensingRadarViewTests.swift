@@ -37,29 +37,6 @@ final class SensingRadarViewTests: XCTestCase {
     XCTAssertEqual(DS.Size.radarCenterDot, 8)
   }
 
-  func testRecordedWindowMarkGrowsFromInnerToOuterRing() {
-    let windowIndex: Int64 = 42
-    let start = Double(windowIndex) * 300
-    func diameter(at offset: Double) -> CGFloat? {
-      SensingRadarProjection.recordedWindowMarkDiameter(
-        observedWindowIndex: windowIndex,
-        secondsSince1970: start + offset,
-        windowDuration: 300,
-        size: size
-      )
-    }
-
-    let rings = SensingRadarProjection.ringDiameters(size: size)
-    XCTAssertEqual(diameter(at: 0), rings.first)
-    XCTAssertEqual(diameter(at: 150), (rings[0] + rings[2]) / 2)
-    XCTAssertEqual(diameter(at: 300), rings.last)
-    XCTAssertNil(diameter(at: -1))
-    XCTAssertNil(diameter(at: 301), "An unobserved next window must not be drawn")
-    XCTAssertNil(SensingRadarProjection.recordedWindowMarkDiameter(
-      observedWindowIndex: nil, secondsSince1970: start, windowDuration: 300, size: size
-    ))
-  }
-
   func testAngleAndDirectionStayFixedAcrossSignalChanges() {
     let first = SensingRadarProjection.project(
       [SensingRadarPeer(id: "peer-a", signalStrength: .unmeasured)],

@@ -409,8 +409,7 @@ final class SensingCoordinator: ObservableObject {
     let elapsedSeconds: TimeInterval
     switch fixture {
     case .sensing:
-      let midpoint = ProcessInfo.processInfo.arguments.contains("-beid-sensing-window-midpoint")
-      elapsedSeconds = 25 * 60 + (midpoint ? 150 : 0)
+      elapsedSeconds = 25 * 60
     case .stopConfirm: elapsedSeconds = 25 * 60
     case .detecting: elapsedSeconds = 10
     case .detectingFirstTime: elapsedSeconds = 2 * 60

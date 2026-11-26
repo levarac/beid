@@ -15,29 +15,6 @@ final class FlatScreenshotTourC: XCTestCase {
 
   func testShot_05_Sensing() { capture("05") }
 
-  func testSensingDrawsRecordedWindowMarkAtMidpoint() throws {
-    let app = launchSensingFixture("05", extraArguments: ["-beid-sensing-window-midpoint"])
-    SensingVisualOracle.assertInitialMetrics(in: app, test: self, name: "05-window-midpoint", expected: ("13", "27:30"))
-    let radar = app.descendants(matching: .any)["sensing.radar"]
-    XCTAssertTrue(radar.isHittable)
-    let image = try XCTUnwrap(radar.screenshot().image.cgImage)
-    // At halfway the white mark overlays the middle guide (233.12pt on a
-    // 362pt field). Sample its top arc, well away from the center glyph.
-    let centerX = CGFloat(image.width) / 2
-    let topArcY = CGFloat(image.height) * (1 - 233.12 / 362) / 2
-    let sample = try XCTUnwrap(image.cropping(to: CGRect(x: centerX - 12, y: topArcY - 4, width: 24, height: 8).integral))
-    var pixels = [UInt8](repeating: 0, count: sample.width * sample.height)
-    let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
-      guard let context = CGContext(data: buffer.baseAddress, width: sample.width, height: sample.height,
-        bitsPerComponent: 8, bytesPerRow: sample.width, space: CGColorSpaceCreateDeviceGray(),
-        bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
-      context.draw(sample, in: CGRect(x: 0, y: 0, width: sample.width, height: sample.height))
-      return true
-    }
-    XCTAssertTrue(rendered)
-    XCTAssertGreaterThanOrEqual(pixels.filter { $0 >= 120 }.count, 12, "The middle arc must be brighter than its guide")
-  }
-
   func testShot_05a_Detecting() { capture("05a") }
   func testShot_05a2_Detecting20s() { capture("05a2") }
   func testShot_05a3_DetectingFirstTime() { capture("05a3") }
