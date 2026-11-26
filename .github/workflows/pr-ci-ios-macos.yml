@@ -332,6 +332,28 @@ jobs:
             ${{ env.SPM_SOURCE_ROOT }}/repositories
           key: beid-ios-spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
+      - name: Restore benchmark compiler cache
+        id: compiler-cache
+        if: github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/beid-compiler-cas
+          key: beid-cas-probe-v1-${{ github.run_id }}-${{ github.sha }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ hashFiles('ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
+      - name: Set up compiler cache benchmark
+        if: github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark
+        env:
+          RESTORED: ${{ steps.compiler-cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_RUN_ATTEMPT" == 1 ]]; then
+            [[ "$RESTORED" != true ]]
+          else
+            [[ "$RESTORED" == true ]]
+          fi
+          # The runner is fresh. Keep the build path stable between cold and warm attempts.
+          echo "CI_OUTPUT_ROOT=$RUNNER_TEMP/beid-cas-benchmark" >> "$GITHUB_ENV"
+
       - name: Install pinned XcodeGen
         shell: bash
         run: |
@@ -400,8 +422,14 @@ jobs:
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          CACHE_BENCHMARK: ${{ github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark }}
         run: |
           set -euo pipefail
+          cache_flags=()
+          if [[ "$CACHE_BENCHMARK" == true ]]; then
+            cache_flags=(COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES
+              "COMPILATION_CACHE_CAS_PATH=$RUNNER_TEMP/beid-compiler-cas")
+          fi
           mkdir -p "$CI_OUTPUT_ROOT"
           python3 -m scripts.ios_ci_timing --phase spm \
             --log "$CI_OUTPUT_ROOT/spm.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
@@ -418,11 +446,33 @@ jobs:
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" \
             -disableAutomaticPackageResolution \
+            ${cache_flags[@]+"${cache_flags[@]}"} \
             SWIFT_OPTIMIZATION_LEVEL=-O \
             BEID_SWIFT_EXPORT_KEY="${BEID_SWIFT_EXPORT_KEY:-}" \
             BEID_SWIFT_EXPORT_ENTRY="${BEID_SWIFT_EXPORT_ENTRY:-}" \
             BEID_KMP_BUILD_TYPE=Release \
             build-for-testing
+
+      - name: Measure compiler cache contents
+        if: github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          cache = Path(os.environ["RUNNER_TEMP"]) / "beid-compiler-cas"
+          sizes = [p.stat().st_size for p in cache.rglob("*") if p.is_file()]
+          if not sum(sizes):
+              raise SystemExit("Xcode wrote no data into the isolated compiler cache")
+          print(f"Compiler cache has {len(sizes)} files, {sum(sizes)} bytes")
+          PY
+
+      - name: Save cold compiler cache
+        if: github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark && steps.compiler-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/beid-compiler-cas
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
 
       - name: Publish newly built Swift Export
         id: export-save
