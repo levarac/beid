@@ -317,17 +317,17 @@ nightly observations. GitHub may delay a schedule or runner assignment.
 The Ubuntu planning job resolves `release/1.1.0` once. A 30-day observation
 artifact records the branch, commit, run ID and attempt before the decision
 or any macOS work. Even a skipped or failed test night therefore records the
-observed head. An unchanged head skips, including after a failed night. On the first scheduled run or a
-confirmed head change the planner looks for a successful full pass at
+observed head. An unchanged head skips, including after a failed night. On the first scheduled run, a confirmed head change or an
+unreadable previous observation, the planner looks for a successful full pass at
 that SHA. It compares the compiled enumeration, full manifest, unit and UI
 case ledgers and the release's expected skip lists. Prior sharded runs must
 retain all evidence and successful jobs from one attempt. A previous nightly
 can prove its release SHA even though GitHub records main as the scheduled
 event SHA. The preceding scheduled run is identified by workflow run number, which is unchanged on retries.
-When a prior run or its observation is missing, expired or unreadable, the planner
-records the reason and skips macOS for that night. The new observation is already
-saved for the next night. After a confirmed change, missing or unreadable full-pass
-evidence instead requires executing the tests.
+When the preceding run or its observation is missing, expired or unreadable, the planner
+records the reason and checks for an exact full pass before starting or skipping macOS.
+Without verified full evidence it runs the suite that night, before the next night
+can see an unchanged head.
 A retry of an observed night reuses that run's pinned commit. A retry without
 its original observation stops so that it cannot test a moved ref.
 

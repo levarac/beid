@@ -112,10 +112,6 @@ def pin(api, run_id, attempt):
     return valid_sha(ref["object"]["sha"])
 
 
-class MissingObservation(ValueError):
-    pass
-
-
 def previous(api, run_number):
     # Only this dedicated schedule uses the workflow's run numbers. A rerun
     # keeps its number; never treat the current attempt as the previous night.
@@ -123,10 +119,10 @@ def previous(api, run_number):
         (r for r in api.runs(NIGHTLY, "event=schedule") if r["run_number"] == run_number - 1), None
     )
     if prior is None:
-        raise MissingObservation("preceding scheduled run absent")
+        raise ValueError("preceding scheduled run absent")
     sha = observation(api, prior["id"])
     if not sha:
-        raise MissingObservation("preceding observation missing or expired")
+        raise ValueError("preceding observation missing or expired")
     return sha
 
 
@@ -238,17 +234,16 @@ def decide(api, sha, run_number, suite):
     else:
         try:
             prior = previous(api, run_number)
-        except MissingObservation as error:
-            return False, f"{error}; release change unverified"
         except EVIDENCE_ERRORS:
-            return False, "previous scheduled observation unreadable; release change unverified"
-        if prior == sha:
-            return False, "unchanged since previous observation"
-        reason = f"head changed from {prior}"
+            reason = "previous observation unreadable, checking exact full pass"
+        else:
+            if prior == sha:
+                return False, "unchanged since previous observation"
+            reason = f"head changed from {prior}"
     try:
         passed = exact_pass(api, sha, suite)
         if passed:
-            return False, f"verified full pass in run {passed}"
+            return False, f"{reason}, verified full pass in run {passed}"
         return True, f"{reason}, no verified full pass"
     except EVIDENCE_ERRORS:
         return True, f"{reason}, full-pass evidence unavailable"

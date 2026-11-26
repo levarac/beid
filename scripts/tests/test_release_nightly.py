@@ -51,26 +51,42 @@ class NightlyPlanTests(unittest.TestCase):
                 self.assertIn("first" if expected else "verified full", reason)
                 api.runs.assert_not_called()
 
-    def test_known_previous_run_with_missing_expired_or_unreadable_receipt_skips(self):
-        for result, diagnostic in [(None, "missing or expired"), (OSError(), "unreadable")]:
-            with self.subTest(diagnostic=diagnostic):
-                api = Mock()
-                api.runs.return_value = [{"id": 7, "run_number": 4}]
+    def test_unreadable_observation_uses_exact_full_pass_before_macOS(self):
+        api = Mock()
+        api.runs.return_value = [{"id": 7, "run_number": 4}]
+        for receipt in (None, OSError()):
+            for proof, expected in ((None, True), (41, False)):
                 with (
-                    patch.object(nightly, "observation", return_value=None, side_effect=result),
-                    patch.object(nightly, "exact_pass") as lookup,
+                    self.subTest(receipt=receipt, proof=proof),
+                    patch.object(nightly, "observation", return_value=None, side_effect=receipt),
+                    patch.object(nightly, "exact_pass", return_value=proof) as lookup,
                 ):
                     run, reason = nightly.decide(api, A, 5, None)
-                    self.assertFalse(run)
-                    self.assertIn(diagnostic, reason)
-                    lookup.assert_not_called()
+                    self.assertEqual(run, expected)
+                    self.assertIn(
+                        "previous observation unreadable, checking exact full pass", reason
+                    )
+                    lookup.assert_called_once_with(api, A, None)
 
-    def test_deleted_previous_run_or_same_run_retry_cannot_establish_a_change(self):
+    def test_unreadable_night_tests_head_before_the_next_unchanged_night(self):
+        api = Mock()
+        with (
+            patch.object(nightly, "previous", side_effect=[OSError(), A]),
+            patch.object(nightly, "exact_pass", return_value=None) as lookup,
+        ):
+            self.assertTrue(nightly.decide(api, A, 5, None)[0])
+            self.assertEqual(
+                nightly.decide(api, A, 6, None), (False, "unchanged since previous observation")
+            )
+            lookup.assert_called_once_with(api, A, None)
+
+    def test_deleted_preceding_run_never_uses_an_older_observation_or_same_run_retry(self):
         api = Mock()
         api.runs.return_value = [{"id": 99, "run_number": 5}, {"id": 90, "run_number": 3}]
-        run, reason = nightly.decide(api, A, 5, None)
-        self.assertFalse(run)
-        self.assertIn("absent", reason)
+        with patch.object(nightly, "exact_pass", return_value=None):
+            run, reason = nightly.decide(api, A, 5, None)
+        self.assertTrue(run)
+        self.assertIn("previous observation unreadable", reason)
         api.artifacts.assert_not_called()
 
     def test_changed_release_runs_when_full_evidence_is_unreadable(self):
@@ -88,7 +104,8 @@ class NightlyPlanTests(unittest.TestCase):
             patch.object(nightly, "exact_pass", return_value=41),
         ):
             self.assertEqual(
-                nightly.decide(Mock(), A, 100, None), (False, "verified full pass in run 41")
+                nightly.decide(Mock(), A, 100, None),
+                (False, f"head changed from {B}, verified full pass in run 41"),
             )
 
     def test_retry_reuses_its_record_or_fails_before_resolving(self):
