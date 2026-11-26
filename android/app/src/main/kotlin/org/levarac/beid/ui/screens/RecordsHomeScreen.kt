@@ -92,9 +92,9 @@ object RecordsHomeScreenTestTags {
  * title scrolls with the content, as iOS's `records.title` does.
  *
  * Each tile leads with the newest session's Sigil (beid#722, iOS
- * `RecordSigilSlot(..., placement: .recordsGrid)` without `isDeviceRecord`,
- * as on integration/ios-1.1.1), read through [sigilInput]; a record without a
- * stored row keeps the neutral ring.
+ * `RecordSigilSlot(..., placement: .recordsGrid, isDeviceRecord: true)`, as
+ * in release/1.1.0 `CollectionHomeView`), read through [sigilInput]; a record
+ * without a stored row keeps the neutral ring.
  *
  * **Android-only:** the TODAY control at the end. iOS #795 leaves Today
  * without an entry point; Android keeps one here, where main's iOS home
@@ -216,6 +216,7 @@ private fun AttendanceTile(
                 input = sigilInput(newest.id),
                 placement = RecordSigilPlacement.RecordsGrid,
                 modifier = Modifier.testTag(RecordsHomeScreenTestTags.attendanceSigil(newest.id)),
+                isDeviceRecord = true,
             )
             StyledText(stringResource(R.string.records_home_attendance), BeidFont.Library.title17)
             StyledText(
@@ -288,11 +289,12 @@ private fun ByEventRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BeidSpacing.m),
     ) {
-        // iOS #795 / 1.1.1 `eventList`: `.homePastRow`, no isDeviceRecord.
+        // iOS release/1.1.0 `CollectionHomeView` `eventList`: `.homePastRow`, isDeviceRecord: true.
         RecordSigilSlot(
             input = sigilInput(newest.id),
             placement = RecordSigilPlacement.HomePastRow,
             modifier = Modifier.testTag(RecordsHomeScreenTestTags.byEventSigil(newest.id)),
+            isDeviceRecord = true,
         )
         Column(
             modifier = Modifier

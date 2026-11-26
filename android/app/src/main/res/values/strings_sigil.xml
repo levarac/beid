@@ -9,9 +9,12 @@
     <!-- sigil.accessibilitySummary. Spoken in place of the Proof Sigil, the generated circular mark on a proof. It replaces the whole drawing, so it is the only thing a screen-reader user gets: keep all three numbers. %1$d counts nearby devices whose presence was mutual (both devices confirmed each other); %2$d counts devices this device merely detected, without that confirmation; the two never overlap and together they are every device drawn. %3$d is how many time windows the whole mark spans, not a position or an index: "window" is the unit of recorded time, roughly a few seconds each, not a GUI window. On current builds %1$d is always 0 because mutual confirmation is not measurable on the device yet; translate it as a real count of zero, never as "unknown" or "not available". Device records use sigil_record_accessibility_summary instead. -->
     <string name="sigil_accessibility_summary">%1$d mutual, %2$d detected, window %3$d</string>
 
-    <!-- sigil.record.accessibilitySummary (iOS draft integration/ios-1.1.1). Spoken in place of a device record's Sigil. Mutual confirmation is decided off device and is unavailable here; never translate this as a measured zero. %1$d is the detected-device count and %2$d the observed-window count of this exact rendered layout. -->
+    <!-- sigil.record.accessibilitySummary (iOS release/1.1.0). Spoken in place of a device record's Sigil. Mutual confirmation is decided off device and is unavailable here; never translate this as a measured zero. %1$d is the detected-device count and %2$d the observed-window count of this exact rendered layout. -->
     <string name="sigil_record_accessibility_summary">Devices heard: %1$d. Window %2$d. Mutual check not available yet.</string>
 
-    <!-- Sensing radar summary (iOS draft integration/ios-1.1.1 SensingRadarProjection.accessibilitySummary, which replaced the main key sensingRadar.accessibilitySummary). %1$d is the number of nearby devices drawn on the radar. Nearby observations do not establish whether another phone heard this one, so no mutual count is spoken, and no device identifier is ever included. -->
-    <string name="sensing_radar_accessibility_summary">%1$d devices heard</string>
+    <!-- radar.accessibility.devicesHeard (iOS release/1.1.0 SensingRadarProjection.accessibilitySummary, which replaced sensingRadar.accessibilitySummary). Spoken in place of the sensing radar. %1$d is the number of nearby devices drawn on the radar. Nearby observations do not establish whether another phone heard this one, so no mutual count is spoken, and no device identifier is ever included. -->
+    <plurals name="radar_accessibility_devices_heard">
+        <item quantity="one">%1$d device heard in the last 5 minutes</item>
+        <item quantity="other">%1$d devices heard in the last 5 minutes</item>
+    </plurals>
 </resources>

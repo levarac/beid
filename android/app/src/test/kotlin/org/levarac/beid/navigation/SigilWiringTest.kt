@@ -51,7 +51,8 @@ import org.robolectric.annotation.Config
 
 /**
  * beid#722 wiring, end to end through the production [AppNavHost]: a stored
- * Sigil row reaches every record site iOS draws one (integration/ios-1.1.1),
+ * Sigil row reaches every Android record site whose iOS counterpart draws
+ * one (release/1.1.0),
  * a record without one keeps the hidden neutral ring, and Now's EventFound /
  * Recording content draws the session's radar peers and redraws on a new
  * detection. No live Sigil is drawn anywhere (the iOS drafts read
@@ -138,8 +139,11 @@ class SigilWiringTest {
     fun anAttendanceTileDrawsItsStoredSigilAndATileWithoutOneKeepsTheRing() {
         launch()
         openRecordsTab()
-        // iOS draft: `.recordsGrid` without isDeviceRecord, so the generic summary.
-        assertSigil(RecordsHomeScreenTestTags.attendanceSigil(withSigil.id), "0 mutual, 8 detected, window 10")
+        // iOS release/1.1.0 CollectionHomeView: `.recordsGrid` with isDeviceRecord, so the device-record summary.
+        assertSigil(
+            RecordsHomeScreenTestTags.attendanceSigil(withSigil.id),
+            "Devices heard: 8. Window 10. Mutual check not available yet.",
+        )
         node(RecordsHomeScreenTestTags.attendanceSigil(withSigil.id)).assertWidthIsEqualTo(104.dp)
         assertRing(RecordsHomeScreenTestTags.attendanceSigil(otherWithout.id))
     }
@@ -148,7 +152,11 @@ class SigilWiringTest {
     fun aByEventRowDrawsTheNewestSessionsSigil() {
         launch()
         openByEvent()
-        assertSigil(RecordsHomeScreenTestTags.byEventSigil(withSigil.id), "0 mutual, 8 detected, window 10")
+        // iOS release/1.1.0 CollectionHomeView: `.homePastRow` with isDeviceRecord.
+        assertSigil(
+            RecordsHomeScreenTestTags.byEventSigil(withSigil.id),
+            "Devices heard: 8. Window 10. Mutual check not available yet.",
+        )
         node(RecordsHomeScreenTestTags.byEventSigil(withSigil.id)).assertWidthIsEqualTo(60.dp)
         assertRing(RecordsHomeScreenTestTags.byEventSigil(otherWithout.id))
     }
@@ -217,7 +225,7 @@ class SigilWiringTest {
         session.emitRadarPeers(peers)
         launch(session)
         compose.onNodeWithTag(SensingRadar.TEST_TAG).performScrollTo()
-        assertEquals("3 devices heard", node(SensingRadar.TEST_TAG).description())
+        assertEquals("3 devices heard in the last 5 minutes", node(SensingRadar.TEST_TAG).description())
         assertNoPeerIdShown(peers.map { it.displayId })
     }
 
@@ -240,11 +248,11 @@ class SigilWiringTest {
         session.emitRadarPeers(peers.take(2))
         launch(session)
         compose.onNodeWithTag(SensingRadar.TEST_TAG).performScrollTo()
-        assertEquals("2 devices heard", node(SensingRadar.TEST_TAG).description())
+        assertEquals("2 devices heard in the last 5 minutes", node(SensingRadar.TEST_TAG).description())
 
         session.emitRadarPeers(peers)
         compose.waitForIdle()
-        assertEquals("3 devices heard", node(SensingRadar.TEST_TAG).description())
+        assertEquals("3 devices heard in the last 5 minutes", node(SensingRadar.TEST_TAG).description())
         assertNoPeerIdShown(peers.map { it.displayId })
     }
 

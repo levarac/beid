@@ -8,6 +8,7 @@ import kotlin.math.sin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,12 +16,13 @@ import org.levarac.beid.shared.sigil.SigilGround
 import org.levarac.beid.shared.sigil.addSigilPresence
 import org.levarac.beid.shared.sigil.createSigilInput
 import org.levarac.beid.shared.sigil.layoutSigil
+import org.levarac.beid.ui.theme.BeidOpacity
 import org.levarac.beid.ui.theme.BeidSize
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Port of iOS `SensingRadarViewTests` (draft integration/ios-1.1.1), plus the
+ * Port of iOS `SensingRadarViewTests` (release/1.1.0), plus the
  * Android-only cross-check of the mirrored FNV-1a angle against shared's
  * public `layoutSigil` output.
  */
@@ -29,6 +31,21 @@ import org.robolectric.annotation.Config
 class SensingRadarProjectionTest {
     private val resources: Resources get() = ApplicationProvider.getApplicationContext<android.content.Context>().resources
     private val size = 362.0
+
+    @Test
+    fun projectionPreservesSilentNodeDimming() {
+        val peers = listOf(
+            SensingRadarPeer("fresh", null),
+            SensingRadarPeer("silent", null, isDimmed = true),
+        )
+        val projection = SensingRadarProjection.project(peers, 362.0)
+        assertEquals(listOf(false, true), projection.nodes.map { it.isDimmed })
+    }
+
+    @Test
+    fun silentNodeOpacityTokenMatchesIos() {
+        assertEquals(0.45f, BeidOpacity.radarSilentNode, 0f)
+    }
 
     @Test
     fun fieldTokensMatchTheMeasuredFigmaValues() {
@@ -83,6 +100,37 @@ class SensingRadarProjectionTest {
         assertEquals(66.61, half[0], 0.001)
         assertEquals(116.56, half[1], 0.001)
         assertEquals(166.52, half[2], 0.001)
+    }
+
+    @Test
+    fun recordedWindowMarkGrowsFromInnerToOuterRing() {
+        val windowIndex = 42L
+        val start = windowIndex.toDouble() * 300
+        fun diameter(offset: Double): Double? = SensingRadarProjection.recordedWindowMarkDiameter(
+            observedWindowIndex = windowIndex,
+            secondsSince1970 = start + offset,
+            windowDuration = 300.0,
+            size = size,
+        )
+
+        val rings = SensingRadarProjection.ringDiameters(size)
+        assertEquals(rings.first(), diameter(0.0)!!, 1e-9)
+        assertEquals((rings[0] + rings[2]) / 2, diameter(150.0)!!, 1e-9)
+        assertEquals(rings.last(), diameter(300.0)!!, 1e-9)
+        assertNull(diameter(-1.0))
+        assertNull("An unobserved next window must not be drawn", diameter(301.0))
+        assertNull(
+            SensingRadarProjection.recordedWindowMarkDiameter(
+                observedWindowIndex = null, secondsSince1970 = start, windowDuration = 300.0, size = size,
+            ),
+        )
+    }
+
+    /** A non-positive window duration draws nothing (iOS guard `windowDuration > 0`). */
+    @Test
+    fun recordedWindowMarkNeedsAPositiveDuration() {
+        assertNull(SensingRadarProjection.recordedWindowMarkDiameter(0L, 0.0, 0.0, size))
+        assertNull(SensingRadarProjection.recordedWindowMarkDiameter(0L, 0.0, -300.0, size))
     }
 
     /** inner = 48 / 2 + 14 = 38; outer = 362 / 2 - 12 = 169; -40 and -100 dBm are the anchors. */
@@ -170,18 +218,21 @@ class SensingRadarProjectionTest {
         val empty = SensingRadarProjection.project(emptyList(), size)
         assertTrue(empty.nodes.isEmpty())
         assertTrue(empty.edges.isEmpty())
-        assertEquals("0 devices heard", SensingRadarProjection.accessibilitySummary(emptyList(), 0, 0, resources))
+        assertEquals("0 devices heard in the last 5 minutes", SensingRadarProjection.accessibilitySummary(emptyList(), 0, 0, resources))
     }
 
-    /** Draft integration/ios-1.1.1: mutuality and windows are not spoken. */
+    /** iOS release/1.1.0: mutuality and windows are not spoken. */
     @Test
     fun accessibilitySummaryOmitsMutualCountsAndPrivateIdentifiers() {
         val privateId = "private-peer-identifier"
         val peers = listOf(SensingRadarPeer(privateId, null), SensingRadarPeer("other", -60.0))
         val zero = SensingRadarProjection.accessibilitySummary(peers, mutualDeviceCount = 0, observedWindowCount = 6, resources)
         val mutual = SensingRadarProjection.accessibilitySummary(peers, mutualDeviceCount = 1, observedWindowCount = 6, resources)
-        assertEquals("2 devices heard", zero)
-        assertEquals("2 devices heard", mutual)
+        assertEquals("2 devices heard in the last 5 minutes", zero)
+        assertEquals("2 devices heard in the last 5 minutes", mutual)
+        val one = SensingRadarProjection.accessibilitySummary(peers.take(1), mutualDeviceCount = 0, observedWindowCount = 6, resources)
+        assertEquals("1 device heard in the last 5 minutes", one)
+        assertFalse(one.contains(privateId))
         assertFalse(zero.contains(privateId))
         assertFalse(mutual.contains(privateId))
         assertFalse(mutual.contains("other"))

@@ -135,7 +135,7 @@ class SigilComponentsComposeTest {
         compose.onNodeWithTag(tag)
             .assertWidthIsEqualTo(362.dp)
             .assertHeightIsEqualTo(362.dp)
-            .assertContentDescriptionEquals("3 devices heard")
+            .assertContentDescriptionEquals("3 devices heard in the last 5 minutes")
         for (peer in peers) {
             compose.onAllNodesWithText(peer.id, substring = true, useUnmergedTree = true).assertCountEquals(0)
             compose.onAllNodesWithContentDescription(peer.id, substring = true, useUnmergedTree = true).assertCountEquals(0)
@@ -145,7 +145,7 @@ class SigilComponentsComposeTest {
     @Test
     fun theRadarCarriesTheIosAccessibilityIdentifierAsItsDefaultTag() {
         compose.setContent { BeidAppTheme { SensingRadar(emptyList(), 0, 0) } }
-        compose.onNodeWithTag(SensingRadar.TEST_TAG).assertContentDescriptionEquals("0 devices heard")
+        compose.onNodeWithTag(SensingRadar.TEST_TAG).assertContentDescriptionEquals("0 devices heard in the last 5 minutes")
         assertEquals("sensing.radar", SensingRadar.TEST_TAG)
     }
 
@@ -202,6 +202,50 @@ class SigilComponentsComposeTest {
         assertEquals("white core", bg, bitmap.at(181.0 + 10, 181.0))
         assertEquals("ink separation", ink, bitmap.at(181.0 + 22, 181.0))
         assertNotEquals("inner ring hairline", ink, bitmap.at(181.0, 181.0 - 133.22 / 2))
+    }
+
+    /** iOS draws the recorded-window mark as a `labelOnActionPrimary` hairline circle. */
+    @Test
+    fun theRecordedWindowMarkIsABgHairlineOfTheGivenDiameter() {
+        val without = compose.captureNode(tag) {
+            BeidAppTheme { SensingRadar(emptyList(), 0, 0, modifier = Modifier.testTag(tag)) }
+        }
+        val with = compose.captureNode(tag) {
+            BeidAppTheme {
+                SensingRadar(emptyList(), 0, 0, modifier = Modifier.testTag(tag), recordedWindowMarkDiameter = 300.dp)
+            }
+        }
+        assertEquals("no mark by default", ink, without.at(181.0, 31.0))
+        assertEquals("mark at radius 150", bg, with.at(181.0, 31.0))
+        assertEquals("the mark is only a hairline", ink, with.at(181.0, 36.0))
+    }
+
+    /**
+     * A silent node is the same glyph at [org.levarac.beid.ui.theme.BeidOpacity.radarSilentNode]
+     * over the ink field. peer-a sits at (340.79, 125.98); its outline spans radii 3.25 to 4.75.
+     */
+    @Test
+    fun aSilentNodeIsDrawnAtTheSilentNodeOpacity() {
+        fun outlinePixel(isDimmed: Boolean): Int = compose.captureNode(tag) {
+            BeidAppTheme {
+                SensingRadar(
+                    listOf(SensingRadarPeer("peer-a", null, isDimmed = isDimmed)),
+                    0,
+                    0,
+                    modifier = Modifier.testTag(tag),
+                    showsEdges = false,
+                )
+            }
+        }.at(340.79 + 4, 125.98)
+        val fresh = outlinePixel(isDimmed = false)
+        val silent = outlinePixel(isDimmed = true)
+        assertNotEquals("the outline is visible on ink", ink, fresh)
+        for (shift in listOf(16, 8, 0)) {
+            val f = (fresh shr shift) and 0xFF
+            val k = (ink shr shift) and 0xFF
+            val expected = k + 0.45 * (f - k)
+            assertEquals("channel at shift $shift", expected, ((silent shr shift) and 0xFF).toDouble(), 2.0)
+        }
     }
 
     // endregion

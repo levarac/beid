@@ -354,11 +354,17 @@ fun SignalLostScreen(session: ScanEventSession, peersVerified: Int, onResumeSens
  * - Peers: every detected peer of the live session, as
  *   [org.levarac.beid.sensing.EventJoinSession.radarPeers] publishes them;
  *   a new list per detection recomposes and redraws it. Ids place a node only.
- * - Edges: never. iOS integration/ios-1.1.1 hardcodes `showsEdges: false` for
- *   every presentation (an edge would suggest a two-way link no device
- *   measures); SubPM decision 2026-11-19, superseding main/#795's per-presentation edges.
- * - Counts: 0 and 0. The radar speaks only "N devices heard" (1.1.1) and draws
- *   neither count, and 1.1.1 itself passes `mutualDeviceCount: 0`. The live
+ * - Edges: never. iOS (integration/ios-1.1.1, still so in release/1.1.0
+ *   `SensingView`) hardcodes `showsEdges: false` for every presentation (an
+ *   edge would suggest a two-way link no device measures); SubPM decision
+ *   2026-11-19, superseding main/#795's per-presentation edges.
+ * - Counts: 0 and 0. The radar speaks only the number of devices heard
+ *   (release/1.1.0 `radar.accessibility.devicesHeard`) and draws neither
+ *   count, and iOS itself passes `mutualDeviceCount: 0`.
+ * - Not yet ported from release/1.1.0 `SensingView`: the five-minute expiry
+ *   and silent-node dimming of the peer list (#855/#901) and the
+ *   recorded-window mark; the component supports both, this caller passes
+ *   neither. The live
  *   window count sits behind `scanSessionMetrics`, whose aggregation is
  *   evaluated only while 05e is visible, so it is not run per detection for a
  *   value nothing reads.

@@ -106,3 +106,9 @@ object BeidSize {
     val radarDetectedNode: Dp = 8.dp
     val radarDetectedNodeStroke: Dp = 1.5.dp
 }
+
+/** Opacity tokens, equal to iOS `DS.Opacity`. */
+object BeidOpacity {
+    /** Retained radar nodes that have not been heard recently (iOS `DS.Opacity.radarSilentNode`, #855). */
+    const val radarSilentNode: Float = 0.45f
+}

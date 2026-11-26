@@ -11,6 +11,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.platform.LocalContext
@@ -25,13 +27,14 @@ import kotlin.math.max
 import kotlin.math.sin
 import org.levarac.beid.R
 import org.levarac.beid.ui.theme.BeidAppTheme
+import org.levarac.beid.ui.theme.BeidOpacity
 import org.levarac.beid.ui.theme.BeidSize
 import org.levarac.beid.ui.theme.BeidTheme
 
 /*
  * The sensing-time radar: port of iOS `ios/Beid/Views/SensingRadarView.swift`
- * as on the draft integration/ios-1.1.1 (whose summary speaks only the number
- * of devices heard).
+ * as on release/1.1.0 (whose summary speaks only the number of devices heard
+ * in the last five minutes).
  *
  * Distances are display-only and never reach a record or submission path.
  * Peer identifiers are only used to place a node; they are never shown or
@@ -42,8 +45,10 @@ import org.levarac.beid.ui.theme.BeidTheme
  * One display-only detected peer. [id] must be the normalized, session-stable
  * display id, not a rotating proximity id. [signalDbm] is null while the peer
  * is unmeasured; every detected peer is supplied, measured or not.
+ * [isDimmed] marks a retained peer that has not been heard recently (iOS
+ * #855); it only lowers the node's opacity.
  */
-data class SensingRadarPeer(val id: String, val signalDbm: Double?)
+data class SensingRadarPeer(val id: String, val signalDbm: Double?, val isDimmed: Boolean = false)
 
 /** A projected peer, in the field's dp space (origin top-left). */
 data class SensingRadarNode(
@@ -52,6 +57,7 @@ data class SensingRadarNode(
     val y: Double,
     val angleDegrees: Int,
     val radius: Double,
+    val isDimmed: Boolean,
 )
 
 /** An edge always runs from the centre ("me") to one peer; there is no peer-to-peer edge. */
@@ -88,6 +94,29 @@ object SensingRadarProjection {
         val scale = scale(size)
         return listOf(BeidSize.radarRingInner, BeidSize.radarRingMiddle, BeidSize.radarRingOuter)
             .map { it.value.toDouble() * scale }
+    }
+
+    /**
+     * Draws progress only for an observed window, using its actual clock
+     * boundary so a late first detection does not start a new five minutes.
+     * Null without an observed window, for a non-positive [windowDuration], or
+     * when [secondsSince1970] lies outside that window; otherwise grows
+     * linearly from the inner ring's diameter to the outer ring's, in the
+     * field's dp space (iOS release/1.1.0).
+     */
+    fun recordedWindowMarkDiameter(
+        observedWindowIndex: Long?,
+        secondsSince1970: Double,
+        windowDuration: Double,
+        size: Double,
+    ): Double? {
+        if (observedWindowIndex == null || windowDuration <= 0) return null
+        val elapsed = secondsSince1970 - observedWindowIndex.toDouble() * windowDuration
+        if (elapsed < 0 || elapsed > windowDuration) return null
+        val scale = scale(size)
+        val inner = BeidSize.radarRingInner.value.toDouble() * scale
+        val outer = BeidSize.radarRingOuter.value.toDouble() * scale
+        return inner + (outer - inner) * (elapsed / windowDuration)
     }
 
     /**
@@ -135,6 +164,7 @@ object SensingRadarProjection {
                 y = center - cos(radians) * radius,
                 angleDegrees = angle,
                 radius = radius,
+                isDimmed = peer.isDimmed,
             )
         }
         // 05a/05a2/05a3 show detected nodes without edges.
@@ -147,9 +177,10 @@ object SensingRadarProjection {
     }
 
     /**
-     * Draft integration/ios-1.1.1: nearby observations do not establish
-     * whether another phone heard this one, so only the number heard is
-     * spoken. The counts are accepted, as on iOS, but deliberately unused.
+     * iOS release/1.1.0 (`radar.accessibility.devicesHeard`): nearby
+     * observations do not establish whether another phone heard this one, so
+     * only the number heard is spoken. The counts are accepted, as on iOS, but
+     * deliberately unused. Peer identifiers are never spoken.
      */
     @Suppress("UNUSED_PARAMETER")
     fun accessibilitySummary(
@@ -157,14 +188,17 @@ object SensingRadarProjection {
         mutualDeviceCount: Int,
         observedWindowCount: Int,
         resources: Resources,
-    ): String = resources.getString(R.string.sensing_radar_accessibility_summary, peers.size)
+    ): String = resources.getQuantityString(R.plurals.radar_accessibility_devices_heard, peers.size, peers.size)
 }
 
 /**
  * A reusable sensing-time radar. [peers] must include unmeasured detections.
  * [mutualDeviceCount] and [observedWindowCount] come from the session
- * aggregate; neither changes node styling, and (draft integration/ios-1.1.1)
- * neither is spoken. The field defaults to the Figma 05 diameter.
+ * aggregate; neither changes node styling, and (iOS release/1.1.0) neither is
+ * spoken. The field defaults to the Figma 05 diameter.
+ * [recordedWindowMarkDiameter], when non-null, strokes a hairline progress
+ * circle of that diameter (see
+ * [SensingRadarProjection.recordedWindowMarkDiameter]).
  */
 object SensingRadar {
     /** iOS `accessibilityIdentifier("sensing.radar")`. */
@@ -190,6 +224,7 @@ object SensingRadar {
         modifier: Modifier = Modifier,
         showsEdges: Boolean = true,
         size: Dp = BeidSize.radarField,
+        recordedWindowMarkDiameter: Dp? = null,
     ) {
         val field = size.value.toDouble()
         val projection = remember(peers, field, showsEdges) { SensingRadarProjection.project(peers, field, showsEdges) }
@@ -222,6 +257,15 @@ object SensingRadar {
                 rings.forEach { diameter ->
                     drawCircle(colors.strokeHairlineOnInk, diameter.toFloat() / 2, center, style = Stroke(hairline))
                 }
+                // iOS order: rings, recorded-window mark, edges, core, nodes.
+                if (recordedWindowMarkDiameter != null) {
+                    drawCircle(
+                        colors.labelOnActionPrimary,
+                        recordedWindowMarkDiameter.value / 2,
+                        center,
+                        style = Stroke(hairline),
+                    )
+                }
                 if (projection.edges.isNotEmpty()) {
                     points.forEach { point -> drawLine(colors.strokeHairlineOnInk, center, point, hairline) }
                 }
@@ -232,10 +276,21 @@ object SensingRadar {
                 // Detected-only mark: ink fill, idle outline. No node gets mutual styling:
                 // the aggregate mutual count does not identify which peer was mutual.
                 val nodeRadius = BeidSize.radarDetectedNode.value * scale / 2
-                val nodeStroke = Stroke(BeidSize.radarDetectedNodeStroke.value * scale)
-                points.forEach { point ->
+                val nodeStrokeWidth = BeidSize.radarDetectedNodeStroke.value * scale
+                val nodeStroke = Stroke(nodeStrokeWidth)
+                projection.nodes.zip(points).forEach { (node, point) ->
+                    // iOS applies `.opacity` to the whole glyph, so a silent node is
+                    // composited as one layer rather than fading fill and outline separately.
+                    // Edges are not dimmed, as on iOS.
+                    if (node.isDimmed) {
+                        drawContext.canvas.saveLayer(
+                            Rect(point, nodeRadius + nodeStrokeWidth),
+                            Paint().apply { alpha = BeidOpacity.radarSilentNode },
+                        )
+                    }
                     drawCircle(colors.textPrimary, nodeRadius, point)
                     drawCircle(colors.graphNodeIdle, nodeRadius, point, style = nodeStroke)
+                    if (node.isDimmed) drawContext.canvas.restore()
                 }
             }
         }
