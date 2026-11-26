@@ -67,7 +67,10 @@ class PublicPrWorkflowTests(unittest.TestCase):
     def test_every_runner_is_hosted(self):
         for path in WORKFLOWS.glob("*.yml"):
             for runner in re.findall(r"(?m)^    runs-on: (.+)$", path.read_text()):
-                self.assertIn(runner, {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-26"})
+                allowed = {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-26"}
+                if path.name == "release-ios-nightly.yml":
+                    allowed.add("xcode-27")
+                self.assertIn(runner, allowed)
 
     def test_secret_lanes_are_main_only_and_environment_protected(self):
         for name, environment in (("internal-google-play.yml", "google-play-internal"),

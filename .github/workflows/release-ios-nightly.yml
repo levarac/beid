@@ -1,0 +1,154 @@
+name: Nightly release iOS tests
+run-name: Nightly release iOS tests — release/1.1.0
+
+on:
+  # GitHub loads this schedule from main. The observation pins the release checkout.
+  schedule:
+    - cron: '23 17 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-ios-nightly
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Observe release and check previous full evidence
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.observe.outputs.sha }}
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          persist-credentials: false
+      - name: Pin release commit
+        id: observe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 control/scripts/release_nightly.py pin --evidence "$RUNNER_TEMP/observation"
+      - name: Preserve observation before testing or skipping
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-observation-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/observation/observation.json
+          retention-days: 30
+          if-no-files-found: error
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ steps.observe.outputs.sha }}
+          path: release
+          persist-credentials: false
+      - name: Decide using the pinned release and retained evidence
+        id: decide
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.observe.outputs.sha }}
+        run: python3 ../control/scripts/release_nightly.py decide --evidence "$RUNNER_TEMP/observation"
+
+  full:
+    name: Test the pinned release on iOS Simulator
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 300
+    env:
+      RELEASE_SHA: ${{ needs.plan.outputs.sha }}
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    defaults:
+      run:
+        working-directory: release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          path: release
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: zulu
+          java-version: '17'
+      - name: Verify toolchain and release project
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(xcodebuild -version | head -n1)" = "Xcode 27.2"
+          echo "KMP_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          scripts/download_xcodegen.sh "$RUNNER_TEMP/xcodegen-pinned"
+          PATH="$RUNNER_TEMP/xcodegen-pinned/xcodegen/bin:$PATH" scripts/xcodegen_generate_checked.sh
+          test -z "$(git status --porcelain -- ios/Beid.xcodeproj)"
+          echo "EVIDENCE=$RUNNER_TEMP/evidence-$RELEASE_SHA" >> "$GITHUB_ENV"
+          echo "DDB=$RUNNER_TEMP/derived-$RELEASE_SHA" >> "$GITHUB_ENV"
+      - name: Create and boot a fresh iPhone
+        id: simulator
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE"
+          udid="$(python3 scripts/ci_simulator.py --name "nightly-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+      - name: Build and enumerate both test bundles
+        timeout-minutes: 55
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          xcodebuild -quiet -hideShellScriptEnvironment -project ios/Beid.xcodeproj -scheme Beid \
+            -configuration Debug -sdk iphonesimulator -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$DDB" -onlyUsePackageVersionsFromResolvedFile \
+            SWIFT_OPTIMIZATION_LEVEL=-O BEID_KMP_BUILD_TYPE=Release build-for-testing
+          run_file="$(python3 -c 'from pathlib import Path; import os; from scripts.ios_ci_products import test_run; print(test_run(Path(os.environ["DDB"])))')"
+          echo "RUN_FILE=$run_file" >> "$GITHUB_ENV"
+          xcodebuild -quiet test-without-building -xctestrun "$run_file" \
+            -destination "platform=iOS Simulator,id=$UDID" -enumerate-tests \
+            -test-enumeration-style hierarchical -test-enumeration-format json \
+            -test-enumeration-output-path "$EVIDENCE/enumerated-tests.json"
+          python3 -m scripts.ios_ui_smoke shards --mode full --sha "$RELEASE_SHA" --count 2 \
+            --enumeration "$EVIDENCE/enumerated-tests.json" --output "$EVIDENCE/manifest.json"
+      - name: Run every unit and UI test
+        timeout-minutes: 210
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          xcodebuild -quiet -xctestrun "$RUN_FILE" -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$DDB" -resultBundlePath "$RUNNER_TEMP/Tests.xcresult" \
+            -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 test-without-building
+      - name: Verify every runtime case and the permitted skips
+        id: verify
+        run: |
+          set -euo pipefail
+          xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/Tests.xcresult" \
+            --compact > "$EVIDENCE/test-tree.json"
+          python3 ../control/scripts/release_nightly.py verify --evidence "$EVIDENCE"
+      - name: Delete the owned simulator
+        if: always() && steps.simulator.outputs.udid != ''
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          xcrun simctl shutdown "$UDID" || true
+          xcrun simctl delete "$UDID"
+      - name: Preserve exact full-pass evidence
+        if: success() && steps.verify.outputs.verified == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-full-${{ needs.plan.outputs.sha }}
+          path: ${{ env.EVIDENCE }}/*.json
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: true

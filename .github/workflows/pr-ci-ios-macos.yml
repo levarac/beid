@@ -35,10 +35,7 @@ on:
   # Escape hatch: run this lane against any ref on demand. `paths` does not
   # apply to workflow_dispatch, so a manual run always executes.
   workflow_dispatch:
-  # 03:23 UTC avoids the busy top of the hour; scheduled workflows use main,
-  # the default branch. Its separate group cannot cancel a main push.
-  schedule:
-    - cron: "23 3 * * *"
+  # The release nightly has its own schedule in release-ios-nightly.yml.
 
 permissions:
   contents: read

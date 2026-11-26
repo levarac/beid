@@ -371,7 +371,7 @@ the same name shadows them.
   builds both bundles on a clean owned simulator. Ordinary PR runs execute all
   `BeidTests` plus `ios/ci/ui-smoke-tests.txt`; a `ci:full-ui` label in the event
   payload selects the full UI suite. All other events run full, including
-  `merge_group`, main pushes, nightly and manual dispatch. With the main merge
+  `merge_group`, main pushes and manual dispatch. With the main merge
   queue enabled, the merge step is to add the PR to the queue; the queue's
   completed full-mode `iOS simulator` pass on the exact merge result satisfies
   the merge requirement. The queue lane never skips for paths. For a full run
@@ -468,7 +468,9 @@ The separate `.github/workflows/pr-ci-ios-macos.yml` runs **iOS simulator**:
 `build-for-testing` compiles both bundles; `test-without-building` executes all
 `BeidTests` plus the checked-in UI smoke list on ordinary PR events. A payload
 label `ci:full-ui` selects the full UI suite; merge groups, main pushes,
-nightly (03:23 UTC, separate concurrency group) and manual runs are full.
+and manual runs are full. The separate release nightly observes release/1.1.0 at
+17:23 UTC (02:23 JST). It runs full on a changed or unknown head when retained
+evidence cannot prove an exact full pass. See docs/delivery-ci.md.
 The xcresult tree must prove exactly the listed UI cases Passed in smoke mode and every listed case
 Passed in full mode; skipped listed tests fail. Summary counts and per-bundle
 durations come from xcresult Test Case nodes, summed without suite totals.
