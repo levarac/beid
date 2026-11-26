@@ -25,6 +25,26 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertIn("build-for-testing", build)
         self.assertNotIn("build-for-testing", tests)
 
+    def test_selected_plan_drives_build_matrix_and_aggregate(self):
+        from scripts.tests.workflow_yaml import workflow_data
+        jobs = workflow_data(IOS.read_text())["jobs"]
+        planner = jobs["plan"]
+        for output in ("mode", "matrix", "proposal"):
+            self.assertEqual(planner["outputs"][output], "${{ steps.plan.outputs." + output + " }}")
+        select = next(step for step in planner["steps"] if step.get("id") == "plan")
+        self.assertIn("scripts.ios_ui_pr_plan", select["run"])
+        self.assertEqual(select["env"]["INITIAL_MODE"], "${{ steps.test-mode.outputs.mode }}")
+        upload = next(step for step in planner["steps"] if "upload-artifact@" in step.get("uses", ""))
+        self.assertIn("steps.plan.outputs.mode == 'selected'", upload["if"])
+        self.assertEqual(upload["with"]["name"], "ios-ui-selection-${{ github.run_attempt }}")
+        self.assertIn("needs.plan.outputs.mode == 'selected'", jobs["tests"]["if"])
+        for name in ("Package full-mode test products", "Upload full-mode test products"):
+            step = next(step for step in jobs["build"]["steps"] if step.get("name") == name)
+            self.assertIn("needs.plan.outputs.mode == 'selected'", step["if"])
+        enumerate_step = next(step for step in jobs["build"]["steps"] if step.get("id") == "enumerate")
+        self.assertEqual(enumerate_step["env"]["PROPOSAL"], "${{ needs.plan.outputs.proposal }}")
+        self.assertIn('--proposal "$RUNNER_TEMP/ui-selection.json"', enumerate_step["run"])
+
     def test_release_kmp_is_scoped_to_the_debug_test_build(self):
         build = job_block(IOS, "build")
         build_step = build.split("      - name: Build for testing\n", 1)[1].split("      - name:", 1)[0]

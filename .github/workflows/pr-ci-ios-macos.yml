@@ -146,7 +146,7 @@ jobs:
         run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
 
       # The collector writes compact single-line JSON. Missing or oversized
-      # inputs leave the advisory comparison on its conservative full default.
+      # inputs select full coverage for release pull requests.
       - name: Export paths for UI selection comparison
         id: shadow_paths
         shell: bash
@@ -164,7 +164,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       run: ${{ steps.plan.outputs.run }}
-      mode: ${{ steps.test-mode.outputs.mode }}
+      mode: ${{ steps.plan.outputs.mode }}
+      proposal: ${{ steps.plan.outputs.proposal }}
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -193,24 +194,23 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           CHANGES_JSON: ${{ toJSON(needs.changes) }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json, os
-          from scripts.ios_ui_smoke import UI_SHARD_COUNTS, classifier_skip
-          count = int(os.environ['IOS_UI_SHARDS'])
-          if count not in UI_SHARD_COUNTS:
-              raise SystemExit('IOS_UI_SHARDS must be 2 through 5')
-          skip = classifier_skip(os.environ['EVENT_NAME'], {'changes': json.loads(os.environ['CHANGES_JSON'])})
-          print(f'run={str(not skip).lower()}')
-          print('matrix=' + json.dumps({'lane': ['unit'] + [f'ui-{i + 1}' for i in range(count)]}))
-          PY
+          INITIAL_MODE: ${{ steps.test-mode.outputs.mode }}
+        run: python3 -m scripts.ios_ui_pr_plan >> "$GITHUB_OUTPUT"
+
+      - name: Publish selected UI test plan
+        if: ${{ steps.plan.outputs.mode == 'selected' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-ui-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ui-selection.json
+          if-no-files-found: error
+          retention-days: 14
 
   build:
     name: Build iOS test bundles
     needs: [changes, plan]
     # A failed/missing classifier runs the lane. Smoke builds and tests here;
-    # full builds once here, then runs the artifact on independent test jobs.
+    # selected and full build once and pass the products to the test jobs.
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' }}
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
@@ -408,6 +408,7 @@ jobs:
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
           TEST_MODE: ${{ needs.plan.outputs.mode }}
+          PROPOSAL: ${{ needs.plan.outputs.proposal }}
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
@@ -417,13 +418,14 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -enumerate-tests -test-enumeration-style hierarchical -test-enumeration-format json \
             -test-enumeration-output-path "$CI_OUTPUT_ROOT/enumerated-tests.json"
-          python3 -m scripts.ios_ui_smoke shards --mode "$TEST_MODE" \
+          printf '%s\n' "$PROPOSAL" > "$RUNNER_TEMP/ui-selection.json"
+          python3 -m scripts.ios_ui_smoke shards --proposal "$RUNNER_TEMP/ui-selection.json" --mode "$TEST_MODE" \
             --enumeration "$CI_OUTPUT_ROOT/enumerated-tests.json" --count "$IOS_UI_SHARDS" \
             --sha "$EXPECTED_SHA" --output "$CI_OUTPUT_ROOT/manifest.json"
 
       - name: Package full-mode test products
         id: package
-        if: ${{ needs.plan.outputs.mode == 'full' }}
+        if: ${{ needs.plan.outputs.mode == 'full' || needs.plan.outputs.mode == 'selected' }}
         shell: bash
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -436,7 +438,7 @@ jobs:
           printf 'artifact_name=ios-products-%s\n' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
 
       - name: Upload full-mode test products
-        if: ${{ needs.plan.outputs.mode == 'full' }}
+        if: ${{ needs.plan.outputs.mode == 'full' || needs.plan.outputs.mode == 'selected' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.package.outputs.artifact_name }}
@@ -611,15 +613,15 @@ jobs:
           xcrun simctl delete "$SIMULATOR_UDID"
 
   tests:
-    name: iOS full tests (${{ matrix.lane }})
+    name: iOS ${{ needs.plan.outputs.mode }} tests (${{ matrix.lane }})
     needs: [plan, build]
-    if: ${{ !cancelled() && needs.build.result == 'success' && needs.plan.outputs.mode == 'full' }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && (needs.plan.outputs.mode == 'full' || needs.plan.outputs.mode == 'selected') }}
     runs-on: xcode-27
     # Step limit plus setup, evidence and cleanup; see the test step below.
     timeout-minutes: 55
     strategy:
       fail-fast: false
-      # One unit job plus at most five UI shards start after the build.
+      # Full runs a separate unit job. Selected includes smoke units in its first UI job.
       max-parallel: 6
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:

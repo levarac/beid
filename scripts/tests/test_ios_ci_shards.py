@@ -109,6 +109,28 @@ class ShardContractTest(unittest.TestCase):
             enum.write_text(json.dumps(payload))
             result = subprocess.run(smoke_command, cwd=ROOT, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
+            # Plan from Swift on Linux, then bind that plan to Xcode's enumeration.
+            from scripts.ios_ui_pr_plan import execution_plan
+            plan = execution_plan("smoke", "pull_request", {"pull_request": {
+                "base": {"ref": "release/1.1.0"}, "head": {"ref": "feat/ui", "sha": "a" * 40}}},
+                {"files": ["ios/Beid/Views/OrganizerToolsView.swift"]}, 5)
+            plan_path = root / "proposal.json"
+            plan_path.write_text(json.dumps(plan["proposal"]))
+            selected_command = smoke_command.copy()
+            selected_command[selected_command.index("smoke")] = "selected"
+            selected_command.extend(["--proposal", str(plan_path)])
+            result = subprocess.run(selected_command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(manifest.read_text())
+            self.assertEqual(data["shards"], plan["proposal"]["shards"])
+            args = subprocess.check_output([sys.executable, "-m", "scripts.ios_ui_smoke", "lane-arguments",
+                "--manifest", str(manifest), "--lane", "ui-1"], cwd=ROOT, text=True).splitlines()
+            self.assertEqual(args, self.tool.selection_arguments("smoke", plan["proposal"]["candidates"]))
+            plan["proposal"]["shards"][0].pop()
+            plan_path.write_text(json.dumps(plan["proposal"]))
+            result = subprocess.run(selected_command, cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("selected assignments differ", result.stderr)
             del unit_suites[-3:]
             unit_suites.pop()
             enum.write_text(json.dumps(payload))
@@ -146,6 +168,34 @@ class AggregateContractTest(unittest.TestCase):
                                             self.evidence, "a" * 40)
 
     def test_happy_path(self):
+        self.verify()
+
+    def test_selected_union_matches_independent_plan_and_skips(self):
+        self.needs["plan"]["outputs"].update(mode="selected")
+        planned = [[ONE, TWO]]
+        self.manifest.update(mode="selected", smoke=[ONE], shards=planned)
+        self.manifest["ui"].append("BeidUITests/OtherTests/testOutside")
+        proposal = {"mode": "selected", "sha": self.manifest["sha"], "candidates": [ONE, TWO], "shards": planned}
+        self.needs["plan"]["outputs"]["proposal"] = json.dumps(proposal)
+        self.evidence = {"ui-1": tree()}
+        self.verify()
+        for shards in ([[ONE]], [[ONE, TWO, TWO]], [[ONE, TWO, self.manifest["ui"][-1]]]):
+            self.manifest["shards"] = shards
+            with self.subTest(shards=shards), self.assertRaises(ValueError):
+                self.verify()
+        self.manifest["shards"] = planned
+        for payload in (tree(unit=False), tree([])):
+            self.evidence["ui-1"] = payload
+            with self.assertRaises(ValueError):
+                self.verify()
+        self.evidence["ui-1"] = tree()
+        self.manifest["iphone_skips"] = [self.manifest["ui"][-1]]
+        with self.assertRaises(ValueError):
+            self.verify()
+        self.manifest["iphone_skips"] = [ONE]
+        with self.assertRaisesRegex(ValueError, "did not skip"):
+            self.verify()
+        self.evidence["ui-1"]["testNodes"][0]["children"][1]["children"][0]["children"][0]["result"] = "Skipped"
         self.verify()
 
     def add_ui_shards(self, total_count):

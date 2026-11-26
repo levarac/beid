@@ -1,7 +1,7 @@
 """Compare a proposed screen-based selection with full hosted iOS UI results."""
 
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 import json
 from pathlib import Path
 
@@ -38,7 +38,12 @@ def propose(changes, manifest, weights):
     paths = changes.get("files") if isinstance(changes, dict) else None
     reasons = []
     full = False
-    files = set()
+    files = defaultdict(list)
+    sources = defaultdict(list)
+    for test in smoke:
+        sources[test].append("smoke")
+    for test in skips:
+        sources[test].append("iPhone skip")
     if (not isinstance(paths, list) or not paths or not all(isinstance(path, str) for path in paths)
             or changes.get("ios_force_run", False) is not False or "error" in changes):
         reasons.append("missing or unsafe changed paths")
@@ -49,9 +54,10 @@ def propose(changes, manifest, weights):
             if not classify([path])["ios"]:
                 continue
             if path == f"ios/Beid/Views/{item.stem}.swift" and item.stem in VIEWS:
-                files.update(VIEWS[item.stem])
+                for test_file in VIEWS[item.stem]:
+                    files[test_file].append(path)
             elif path == f"ios/BeidUITests/{item.stem}.swift" and item.stem in TEST_FILES:
-                files.add(item.stem)
+                files[item.stem].append(path)
             else:
                 reasons.append(f"unmapped or shared input: {path}")
                 full = True
@@ -64,6 +70,8 @@ def propose(changes, manifest, weights):
         else:
             reasons.append(f"{file}.swift: {', '.join(sorted(suites))}")
             matched.update(matches)
+            for test in matches:
+                sources[test].extend(files[file])
     extra = round(sum(weights.get(test, 20.0) for test in sorted(matched - smoke - skips)), 3)
     if extra > MAX_EXTRA_SECONDS:
         reasons.append("additional test time exceeds 25 minutes")
@@ -72,6 +80,7 @@ def propose(changes, manifest, weights):
         "mode": "full" if full else "selected",
         "reasons": reasons or ["smoke and environment skips"],
         "matched": sorted(matched),
+        "matched_reasons": {test: sorted(sources[test]) for test in sorted(matched)},
         "extra_seconds": extra,
         "candidates": sorted(ui if full else matched),
     }

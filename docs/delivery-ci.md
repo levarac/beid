@@ -161,7 +161,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     with `BEID_KMP_BUILD_TYPE=Release` for the Beid target's Gradle invocation.
     Smoke runs the checked-in UI list and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`; full runs both complete bundles.
     Deferred coverage paths, uncertain classifications, and the `ci:full-ui` label
-    select full mode. Merge groups, push,
+    select full mode. For release-targeted PRs eligible for smoke, the screen selection below also applies. Merge groups, push,
     nightly and manual events always run full. On `merge_group`, the optional
     classifier is skipped and the required iOS job always executes, including
     documentation-only changes. This reuses the existing non-PR condition and
@@ -210,8 +210,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Debug Simulator unit exclusions are listed with reasons in
     `scripts/ios-unit-debug-simulator-skips.txt`: guestFirst onboarding, the
     Release-only demo-mode assertion, and the opt-in local reference-operator
-    integration (not configured in CI). Both modes keep these tests selected;
-    each must exist and report Skipped. A listed test that passes fails as stale.
+    integration (not configured in CI). Each listed case must exist in the built bundle and report Skipped when its suite runs. A listed test that passes fails as stale.
 
     The exact required name `iOS simulator` belongs to an `if: always()` Ubuntu
     aggregate. Full requires successful plan/build/matrix jobs, every expected
@@ -236,6 +235,21 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     bundle and its compressed archive fits within 250 MiB. A test step reaching
     its time limit can leave a partial bundle. Runner loss or expiration of the
     whole job can prevent upload. The aggregate reads only structured evidence.
+    On an ordinary PR targeting `release/*`, the Linux planner applies the same
+    screen and test-file maps to the pinned changes before allocating macOS.
+    The existing independent-path skip still applies. A proposal with no extra
+    UI tests keeps smoke. Unknown inputs, more than 25 additional UI minutes
+    or a selection that cannot fit the configured job limit run full. Selected
+    mode builds once and runs the smoke list, mapped methods and all iPhone
+    exclusions. It uses the fewest UI jobs whose longest-first assignments each
+    fit 20 minutes of estimated UI time. The first job also runs the smoke
+    unit tests. Runtime enumeration must agree with the source inventory.
+    The required check compares the exact assignments, evidence and expected
+    skips with the original plan. The planner publishes its IDs, per-test
+    reasons, source revisions, assignments and estimated seconds in
+    `ios-ui-selection-<attempt>` for 14 days. Ship PRs and explicitly full
+    events keep full coverage.
+
     After a full build, **Compare proposed UI test selection** publishes
     `ios-ui-selection-<attempt>` for 14 days. The report records the proposed
     screen and test-file matches, additional estimated seconds above smoke,

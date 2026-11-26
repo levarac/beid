@@ -369,8 +369,11 @@ the same name shadows them.
   it even under those paths; a failed classification also runs it. It checks out the PR head explicitly and
   builds both bundles on a clean owned simulator. Smoke runs `ios/ci/ui-smoke-tests.txt`
   and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`.
-  PRs keep smoke only when every iOS-affecting changed path is a UI or CI-selection
-  path defined by `scripts/ci_change_filter.py`. Other iOS-affecting paths or failed
+  PRs are eligible for smoke only when every iOS-affecting changed path is a UI or CI-selection
+  path defined by `scripts/ci_change_filter.py`. On release-targeted PRs the screen map
+  then selects smoke plus affected UI tests and iPhone exclusions. Unmapped or
+  uncertain input and more than 25 extra planned minutes require full coverage.
+  Other iOS-affecting paths or failed
   classification select full mode. A `ci:full-ui` label in the event payload
   selects the full UI suite. All other events run full, including
   `merge_group`, main pushes, nightly and manual dispatch. With the main merge
@@ -480,15 +483,22 @@ from an always-running aggregate on `ubuntu-24.04-arm`. **Plan iOS test jobs**
 selects mode once from the event. **Build iOS test bundles** runs
 `build-for-testing` once, enumerates both compiled bundles, and in smoke mode
 runs the checked-in UI list and `BeidTests` minus the three deferred suites in that macOS job. Deferred coverage and uncertain changed paths select full mode.
-In full mode it uploads a tar of `Build/Products` (including `.xctestrun`), then
-**iOS full tests (${{ matrix.lane }})** runs a unit lane and duration-balanced UI
-lanes via `test-without-building`, each with fresh simulator/DerivedData/results.
+In full and selected modes it uploads a tar of `Build/Products` (including `.xctestrun`), then
+**iOS ${{ needs.plan.outputs.mode }} tests (${{ matrix.lane }})** runs the full unit suite and duration-balanced UI
+shards in full mode, or selected UI shards with the smoke unit suites in the first job via `test-without-building`, each with fresh simulator/DerivedData/results.
 `IOS_UI_SHARDS` in the workflow is the single count setting: 5 by default, 2–4
 also supported. At most six macOS jobs run together. Product SHA, Xcode build, SDK
 and architecture must match before extraction; permissions/symlinks survive tar.
+Release PRs eligible for smoke use the reviewed screen and test-file maps.
+If they add UI cases within 25 extra minutes, selected mode uses the fewest
+UI jobs whose estimated loads fit 20 minutes each (one to the configured full
+count). The first also runs the smoke unit selection. The plan artifact records
+the reasons and assignments. The aggregate checks the exact selected union
+against that plan, including required skips. Unknown or over-budget inputs
+run full. The existing independent-path skip still applies.
 **Compare proposed UI test selection** uses full-run artifacts to compare a
 screen-based candidate list with observed UI failures. Its JSON is advisory.
-The aggregate requires every needed job to succeed, the UI shard union to equal
+In full mode the aggregate requires every needed job to succeed, the UI shard union to equal
 the runtime enumeration without duplicates, and every enumerated test to be
 checked. Anything not on the per-environment skip list must pass. The four iPhone
 UI exclusions in `scripts/ios-ui-iphone-skips.txt` and the Debug Simulator unit

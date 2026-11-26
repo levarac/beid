@@ -66,11 +66,12 @@ def parse_enumeration(payload):
     return {bundle: unique_tests(items, bundle) for bundle, items in tests.items()}
 
 
-def shard_tests(tests, durations, count):
+def shard_tests(tests, durations, count, *, selected=False):
     """Longest-first scheduling, with identifier and shard index as tie breakers."""
     tests = unique_tests(tests, "BeidUITests")
-    if isinstance(count, bool) or count not in UI_SHARD_COUNTS:
-        raise ValueError("UI shard count must be 2 through 5")
+    allowed = (1, *UI_SHARD_COUNTS) if selected else UI_SHARD_COUNTS
+    if isinstance(count, bool) or count not in allowed:
+        raise ValueError(f"UI shard count must be in {allowed}")
     weights = {}
     for test in tests:
         # New methods always get a positive weight and exactly one assignment.
@@ -88,8 +89,9 @@ def shard_tests(tests, durations, count):
     return [sorted(shard) for shard in shards]
 
 
-def ui_shard_lanes(shards):
-    if not isinstance(shards, list) or len(shards) not in UI_SHARD_COUNTS or any(not shard for shard in shards):
+def ui_shard_lanes(shards, *, selected=False):
+    allowed = (1, *UI_SHARD_COUNTS) if selected else UI_SHARD_COUNTS
+    if not isinstance(shards, list) or len(shards) not in allowed or any(not shard for shard in shards):
         raise ValueError("missing UI shards")
     return {f"ui-{index + 1}": shard for index, shard in enumerate(shards)}
 
@@ -188,6 +190,16 @@ def latest_evidence(root, current_attempt):
     return latest
 
 
+def selected_inventory(proposal, manifest, sha):
+    if not isinstance(proposal, dict) or proposal.get("mode") != "selected" or proposal.get("sha") != sha:
+        raise ValueError("missing selected plan or head mismatch")
+    selected = unique_tests(proposal.get("candidates"), "BeidUITests")
+    baseline = set(manifest["smoke"]) | set(manifest["iphone_skips"])
+    if not baseline < set(selected) <= set(manifest["ui"]):
+        raise ValueError("selected tests differ from the runtime inventory or omit required tests")
+    return selected
+
+
 def validate_aggregate(event, needs, manifest, evidence, sha):
     if needs.get("plan", {}).get("result") != "success":
         raise ValueError("test plan did not succeed")
@@ -198,9 +210,9 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
             raise ValueError("classifier skip has inconsistent job results")
         return "Classifier skip: no iOS-affecting changes."
     mode = plan.get("mode")
-    if plan.get("run") != "true" or mode not in ("full", "smoke"):
+    if plan.get("run") != "true" or mode not in ("full", "selected", "smoke"):
         raise ValueError("missing or invalid test plan")
-    for job in ("build", "tests") if mode == "full" else ("build",):
+    for job in ("build", "tests") if mode != "smoke" else ("build",):
         if needs.get(job, {}).get("result") != "success":
             raise ValueError(f"needed job did not succeed: {job}")
     if mode == "smoke" and needs.get("tests", {}).get("result") != "skipped":
@@ -213,22 +225,31 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
     skips = manifest.get("iphone_skips", [])
     if not isinstance(skips, list) or len(set(skips)) != len(skips) or not set(skips) <= set(ui):
         raise ValueError("invalid explicit iPhone skip list")
-    if mode == "smoke":
+    if mode in ("smoke", "selected"):
         unit = smoke_unit_tests(unit)
         unit_skips = [test for test in unit_skips if test in unit]
+    if mode == "smoke":
         lanes = {"build": unit + manifest["smoke"]}
     else:
-        ui_lanes = ui_shard_lanes(manifest.get("shards"))
+        if mode == "selected":
+            proposal = json.loads(plan.get("proposal", "null"))
+            ui = selected_inventory(proposal, manifest, sha)
+            if manifest["shards"] != proposal["shards"]:
+                raise ValueError("selected assignments differ from plan")
+        ui_lanes = ui_shard_lanes(manifest.get("shards"), selected=mode == "selected")
         if Counter(test for shard in ui_lanes.values() for test in shard) != Counter(ui):
             raise ValueError("UI shard union has a gap or duplicate")
-        lanes = {"unit": unit, **ui_lanes}
+        if mode == "selected":
+            lanes = {**ui_lanes, "ui-1": unit + ui_lanes["ui-1"]}
+        else:
+            lanes = {"unit": unit, **ui_lanes}
     if evidence.keys() != lanes.keys():
         raise ValueError(f"missing or extra lane artifacts: expected={sorted(lanes)}, actual={sorted(evidence)}")
     all_cases = []
     for lane, expected in lanes.items():
         all_cases.extend(validate_lane(expected, evidence[lane], skips + unit_skips))
     executed = [identifier for identifier, result, _ in all_cases if result == "Passed"]
-    if mode == "full" and set(executed) - set(unit) != set(ui) - set(skips):
+    if mode != "smoke" and set(executed) - set(unit) != set(ui) - set(skips):
         raise ValueError("executed iPhone UI union mismatch")
     return (f"{mode}: all {len(all_cases)} cases accounted for; "
             f"BeidTests: {len(unit) - len(unit_skips)} passed, {len(unit_skips)} skipped.")
@@ -381,7 +402,8 @@ def main() -> int:
     shards.add_argument("--enumeration", type=Path, required=True)
     shards.add_argument("--output", type=Path, required=True)
     shards.add_argument("--count", type=int, required=True)
-    shards.add_argument("--mode", choices=("full", "smoke"), required=True)
+    shards.add_argument("--mode", choices=("full", "selected", "smoke"), required=True)
+    shards.add_argument("--proposal", type=Path)
     shards.add_argument("--sha", required=True)
     shards.add_argument("--durations", type=Path, default=DEFAULT_DURATIONS)
     for command in ("lane-arguments", "verify-lane"):
@@ -428,7 +450,7 @@ def main() -> int:
                 if (identifier := line.partition("#")[0].strip())
             ], "BeidTests")
             validate_unit_skips(unit_skips, enumerated["BeidTests"])
-            if args.mode == "smoke":
+            if args.mode != "full":
                 unit_suites = {test.split("/")[1] for test in enumerated["BeidTests"]}
                 missing = set(SMOKE_DEFERRED_UNIT_SUITES) - unit_suites
                 if missing:
@@ -438,8 +460,18 @@ def main() -> int:
             duration_data = json.loads(args.durations.read_text())
             manifest = {"sha": args.sha, "mode": args.mode,
                         "unit": enumerated["BeidTests"], "ui": enumerated["BeidUITests"],
-                        "iphone_skips": skips, "unit_skips": unit_skips, "smoke": smoke,
-                        "shards": shard_tests(enumerated["BeidUITests"], duration_data["seconds"], args.count)}
+                        "iphone_skips": skips, "unit_skips": unit_skips, "smoke": smoke}
+            if args.mode == "selected":
+                if args.proposal is None:
+                    raise ValueError("selected mode requires a proposal")
+                proposal = json.loads(args.proposal.read_text())
+                selected = selected_inventory(proposal, manifest, args.sha)
+                shards = ui_shard_lanes(proposal["shards"], selected=True)
+                manifest["shards"] = shard_tests(selected, duration_data["seconds"], len(shards), selected=True)
+                if manifest["shards"] != proposal["shards"]:
+                    raise ValueError("runtime selected assignments differ from plan")
+            else:
+                manifest["shards"] = shard_tests(enumerated["BeidUITests"], duration_data["seconds"], args.count)
             args.output.write_text(json.dumps(manifest, indent=2) + "\n")
             return 0
         if args.command in ("lane-arguments", "verify-lane"):
@@ -449,12 +481,15 @@ def main() -> int:
                 arguments = selection_arguments("smoke", manifest["smoke"])
             elif args.lane == "unit" and manifest["mode"] == "full":
                 selected, arguments = manifest["unit"], ["-only-testing:BeidTests"]
-            elif manifest["mode"] == "full":
-                ui_lanes = ui_shard_lanes(manifest.get("shards"))
+            elif manifest["mode"] in ("full", "selected"):
+                ui_lanes = ui_shard_lanes(manifest.get("shards"), selected=manifest["mode"] == "selected")
                 if args.lane not in ui_lanes:
                     raise ValueError(f"invalid lane: {args.lane}")
                 selected = ui_lanes[args.lane]
                 arguments = [f"-only-testing:{test}" for test in selected]
+                if manifest["mode"] == "selected" and args.lane == "ui-1":
+                    arguments = selection_arguments("smoke", selected)
+                    selected = smoke_unit_tests(manifest["unit"]) + selected
             else:
                 raise ValueError(f"invalid lane: {args.lane}")
             if args.command == "lane-arguments":
