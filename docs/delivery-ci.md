@@ -202,8 +202,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Methods missing from the table get a 20-second weight. Identifier ordering
     and the lowest shard index break ties, so every new
     test is assigned exactly once. Runtime UI enumeration must also equal the
-    current Swift source inventory. The three tablet-only methods (portrait and
-    landscape Records navigation, plus the landscape primary flow) in
+    current Swift source inventory. The four iPhone exclusions (portrait and
+    landscape Records navigation, the landscape primary flow, and system window resizing) in
     `scripts/ios-ui-iphone-skips.txt` remain selected and must have result nodes;
     they must report their deliberate iPhone Skipped status. An unexecuted
     excluded case may omit duration (counted as zero); passed cases require it.
@@ -231,6 +231,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     the most recent evidence for each lane within the same run. It requires
     evidence from the actual build attempt and rejects lanes older than that
     build.
+    A failed full-mode UI test or result check also uploads
+    `ios-xcresult-<attempt>-<shard>` for seven days when Xcode has written a
+    bundle and its compressed archive fits within 250 MiB. A test step reaching
+    its time limit can leave a partial bundle. Runner loss or expiration of the
+    whole job can prevent upload. The aggregate reads only structured evidence.
     After a full build, **Compare proposed UI test selection** publishes
     `ios-ui-selection-<attempt>` for 14 days. The report records the proposed
     screen and test-file matches, additional estimated seconds above smoke,
@@ -251,7 +256,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     KMP script start/end, and the observed Swift compile window. That window
     includes overlapping/link work; `-showBuildTimingSummary` in `build.log`
     gives actual task durations. Job timeouts are 50 minutes for build/smoke and
-    45 per test lane. Step timeouts are 35 minutes for build (the Release Kotlin
+    55 per full test job, including diagnostic upload and cleanup. Step timeouts are 35 minutes for build (the Release Kotlin
     framework alone takes about 12 minutes on `xcode-27`), 10 for smoke tests,
     and 40 for each full-mode test lane, leaving time for evidence and cleanup.
     UI shards plan at about 20 minutes of test-case time, but on 2026-11-25
@@ -261,13 +266,19 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     artifact portability still need measurement on the final SHA.
 
     Dependency caches are limited to `~/.gradle/caches` (excluding task build
-    caches/execution history), `~/.gradle/wrapper`, `~/.konan`, and SPM
+    caches/execution history), `~/.konan`, and SPM
     checkouts/repository objects under the stable runner-temporary
     `beid-spm/SourcePackages` path. KMP keys include Gradle catalog/wrapper,
     Kotlin declarations/build configuration, Xcode build, SDK build, JDK and
     runner architecture; SPM keys include `Package.resolved`, Xcode build and
     architecture. There are no prefix restore keys. SPM resolution uses the
     resolved file, and build-for-testing disables automatic package resolution.
+    The iOS build separately restores Gradle distributions from
+    `~/.gradle/wrapper/dists` using an exact OS, architecture, wrapper JAR and
+    wrapper properties key. It invokes the checked-in wrapper before building
+    and saves a new distribution immediately. A hit avoids the distribution
+    download. A cold or evicted entry still requires a successful download,
+    with one retry and the checksum from the wrapper properties.
     Build products move only through the artifact of the run's latest build
     attempt. Test results, DerivedData and execution ledgers are never cached.
     With the main merge queue enabled, the merge step is to add the PR to

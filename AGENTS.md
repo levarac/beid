@@ -490,7 +490,7 @@ and architecture must match before extraction; permissions/symlinks survive tar.
 screen-based candidate list with observed UI failures. Its JSON is advisory.
 The aggregate requires every needed job to succeed, the UI shard union to equal
 the runtime enumeration without duplicates, and every enumerated test to be
-checked. Anything not on the per-environment skip list must pass. The three iPhone
+checked. Anything not on the per-environment skip list must pass. The four iPhone
 UI exclusions in `scripts/ios-ui-iphone-skips.txt` and the Debug Simulator unit
 exclusions in `scripts/ios-unit-debug-simulator-skips.txt` must exist and report
 Skipped; a listed test that passes is a stale-list failure. Structured results and
