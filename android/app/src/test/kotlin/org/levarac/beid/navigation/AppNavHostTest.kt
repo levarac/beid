@@ -283,7 +283,7 @@ class AppNavHostTest {
     }
 
     @Test
-    fun manualEventCodeEntryIsReachableOnlyThroughAccount() {
+    fun manualEventCodeEntryIsReachableThroughAccountAndAbsentFromNowBeforeTheStandbyWait() {
         OnboardingPreferences(context).hasCompletedOnboarding = true
         shadowAdapter.setEnabled(true)
         val session = FakeEventJoinSession()

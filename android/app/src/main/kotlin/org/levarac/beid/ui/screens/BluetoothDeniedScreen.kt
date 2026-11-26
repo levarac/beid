@@ -29,21 +29,21 @@ fun BluetoothDeniedScreen(onOpenSettings: () -> Unit, onCheckAgain: () -> Unit) 
         icon = Icons.Filled.BluetoothDisabled,
         title = stringResource(R.string.bluetooth_denied_title),
         message = stringResource(R.string.bluetooth_denied_message),
-        tint = BeidTheme.colors.signalWarning,
+        tint = BeidTheme.colors.actionPrimary,
         footer = {
             Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
                 BeidPrimaryButton(
                     text = stringResource(R.string.bluetooth_denied_open_settings_button),
-                    containerColor = BeidTheme.colors.signalWarning,
-                    contentColor = BeidTheme.colors.labelOnWarning,
+                    containerColor = BeidTheme.colors.actionPrimary,
+                    contentColor = BeidTheme.colors.labelOnActionPrimary,
                     onClick = onOpenSettings,
                     icon = null,
                     modifier = Modifier.testTag(BluetoothDeniedScreenTestTags.OPEN_SETTINGS_BUTTON),
                 )
                 BeidSecondaryButton(
                     text = stringResource(R.string.bluetooth_denied_check_again_button),
-                    contentColor = BeidTheme.colors.signalWarning,
-                    borderColor = BeidTheme.colors.signalWarning,
+                    contentColor = BeidTheme.colors.actionPrimary,
+                    borderColor = BeidTheme.colors.actionPrimary,
                     onClick = onCheckAgain,
                     modifier = Modifier.testTag(BluetoothDeniedScreenTestTags.CHECK_AGAIN_BUTTON),
                 )

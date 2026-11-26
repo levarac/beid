@@ -30,12 +30,12 @@ object BluetoothOffScreenTestTags {
  * dependency (beid#338) — previously reproduced as plain Text/Column
  * without an icon roundel because no icon library was available.
  *
- * iOS applies its single `signalWarning` motif accent to the whole screen —
- * header glyph, step-list badges, and both buttons — via one ambient
- * `.tint()` (see `BluetoothOffView`'s trailing comment). Compose has no
- * ambient tint, so [BeidTheme.colors.signalWarning]/[BeidTheme.colors.labelOnWarning]
- * are passed explicitly to every warning-accented element here instead,
- * including the header icon's `tint`.
+ * iOS applies its single `actionPrimary` tint to the whole screen — header
+ * glyph, step-list badges, and both buttons — via one ambient `.tint()`
+ * (see `BluetoothOffView`'s trailing comment; Flat 2b has one ink, #628).
+ * Compose has no ambient tint, so [BeidTheme.colors.actionPrimary]/
+ * [BeidTheme.colors.labelOnActionPrimary] are passed explicitly to every
+ * tinted element here instead, including the header icon's `tint`.
  */
 @Composable
 fun BluetoothOffScreen(onOpenSettings: () -> Unit, onTurnedOn: () -> Unit) {
@@ -43,7 +43,7 @@ fun BluetoothOffScreen(onOpenSettings: () -> Unit, onTurnedOn: () -> Unit) {
         icon = Icons.Filled.BluetoothDisabled,
         title = stringResource(R.string.bluetooth_off_title),
         message = stringResource(R.string.bluetooth_off_message),
-        tint = BeidTheme.colors.signalWarning,
+        tint = BeidTheme.colors.actionPrimary,
         accessory = {
             BeidNumberedStepList(
                 steps = listOf(
@@ -51,24 +51,24 @@ fun BluetoothOffScreen(onOpenSettings: () -> Unit, onTurnedOn: () -> Unit) {
                     stringResource(R.string.bluetooth_off_step_tap_bluetooth),
                     stringResource(R.string.bluetooth_off_step_switch_on),
                 ),
-                badgeColor = BeidTheme.colors.signalWarning,
-                labelColor = BeidTheme.colors.labelOnWarning,
+                badgeColor = BeidTheme.colors.actionPrimary,
+                labelColor = BeidTheme.colors.labelOnActionPrimary,
             )
         },
         footer = {
             Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
                 BeidPrimaryButton(
                     text = stringResource(R.string.bluetooth_off_open_settings_button),
-                    containerColor = BeidTheme.colors.signalWarning,
-                    contentColor = BeidTheme.colors.labelOnWarning,
+                    containerColor = BeidTheme.colors.actionPrimary,
+                    contentColor = BeidTheme.colors.labelOnActionPrimary,
                     onClick = onOpenSettings,
                     icon = null,
                     modifier = Modifier.testTag(BluetoothOffScreenTestTags.OPEN_SETTINGS_BUTTON),
                 )
                 BeidSecondaryButton(
                     text = stringResource(R.string.bluetooth_off_turned_on_button),
-                    contentColor = BeidTheme.colors.signalWarning,
-                    borderColor = BeidTheme.colors.signalWarning,
+                    contentColor = BeidTheme.colors.actionPrimary,
+                    borderColor = BeidTheme.colors.actionPrimary,
                     onClick = onTurnedOn,
                     modifier = Modifier.testTag(BluetoothOffScreenTestTags.TURNED_ON_BUTTON),
                 )

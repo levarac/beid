@@ -30,8 +30,8 @@ import org.levarac.beid.ui.theme.BeidSpacing
  * is explicit that "there is no default tint — an unspecified tint is a §5
  * violation," and §5's CTA-label rule requires the caller to pick the
  * correct on-fill label color for whatever tint it passes (e.g.
- * `actionPrimary` → `surfaceCanvas`, `proofSeal` → `labelOnSeal`,
- * `signalWarning` → `labelOnWarning`).
+ * `actionPrimary` → `labelOnActionPrimary`, `actionInverse` →
+ * `labelOnActionInverse`).
  */
 @Composable
 fun BeidPrimaryButton(

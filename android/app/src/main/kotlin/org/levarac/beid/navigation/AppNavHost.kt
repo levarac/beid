@@ -5,9 +5,13 @@ import android.content.ActivityNotFoundException
 import android.widget.Toast
 import android.provider.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -17,6 +21,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import java.util.UUID
@@ -25,6 +30,12 @@ import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
 import org.levarac.beid.sensing.BluetoothPermissionState
 import org.levarac.beid.sensing.BluetoothRadioMonitor
+import org.levarac.beid.sensing.BluetoothRouteScreen
+import org.levarac.beid.sensing.BluetoothRouteTarget
+import org.levarac.beid.sensing.BluetoothStateMonitor
+import org.levarac.beid.sensing.HomeBluetoothStatus
+import org.levarac.beid.sensing.LocalHomeBluetoothStatus
+import org.levarac.beid.sensing.bluetoothRouteFor
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.WalletConnectorState
 import org.levarac.beid.ui.screens.AccountRoute
@@ -34,6 +45,7 @@ import org.levarac.beid.ui.screens.BluetoothPermissionScreen
 import org.levarac.beid.ui.screens.HomeRoute
 import org.levarac.beid.ui.screens.ManualEventCodeRoute
 import org.levarac.beid.ui.screens.RecordDetailRoute
+import org.levarac.beid.ui.screens.RecordsByEventRoute
 import org.levarac.beid.ui.screens.RecordsRoute
 import org.levarac.beid.ui.screens.TodaySummaryRoute
 import org.levarac.beid.ui.screens.WelcomeScreen
@@ -47,7 +59,8 @@ import org.levarac.beid.support.supportShareIntent
  * `RootView` + `AppCoordinator`. Onboarding (Welcome → BluetoothPermission →
  * Home/BluetoothOff/BluetoothDenied) mirrors `AppCoordinator`'s guestFirst path
  * (`beginOnboarding()` → `requestBluetoothPermission()` →
- * `evaluateBluetoothState()`). [Screen.Home] retains automatic nearby discovery.
+ * `evaluateBluetoothState()`). [Screen.Home] is the Now / Records tab shell of
+ * iOS #795; nearby discovery runs only while its Now tab is visible and active.
  *
  * Start-destination resolution mirrors iOS's #194 restore fix
  * (`AppCoordinator.restoreAfterOnboarding()`): a user who already completed
@@ -101,136 +114,199 @@ fun AppNavHost(
         onDispose { session.bindBluetoothPermissionResult(null) }
     }
 
-    NavHost(navController = navController, startDestination = startDestination) {
-        composable(Screen.Welcome.route) {
-            WelcomeScreen(
-                onGetStarted = { navController.navigate(Screen.BluetoothPermission.route) },
-            )
-        }
+    // Live Bluetooth state after onboarding. The decision is
+    // `bluetoothRouteFor`; this only feeds it and performs the route.
+    val currentSession by rememberUpdatedState(session)
+    val bluetoothState = remember { BluetoothStateMonitor(context) { currentSession.refreshBluetoothPermissionState() } }
+    DisposableEffect(bluetoothState) {
+        bluetoothState.start()
+        onDispose { bluetoothState.stop() }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { bluetoothState.refresh() }
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    val availability by bluetoothState.availability.collectAsState()
+    LaunchedEffect(currentRoute, availability) {
+        val screen = bluetoothRouteScreenOf(currentRoute) ?: return@LaunchedEffect
+        // A restored back stack or a route change may predate the last read.
+        bluetoothState.refresh()
+        val target = bluetoothRouteFor(screen, bluetoothState.availability.value) ?: return@LaunchedEffect
+        navigateClearingOnboarding(navController, target.route)
+    }
+    val radioOn = bluetoothState.state.collectAsState().value.radioOn
+    LaunchedEffect(session, radioOn) { session.onBluetoothRadioChanged(radioOn) }
 
-        composable(Screen.BluetoothPermission.route) {
-            BluetoothPermissionScreen(
-                onAllowBluetooth = {
-                    session.requestBluetoothPermission(handleBluetoothPermissionResult)
-                },
-            )
-        }
+    val openBluetoothSettings: () -> Unit = {
+        context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+    }
+    val homeBluetoothStatus = remember(bluetoothState) {
+        HomeBluetoothStatus(
+            isRadioOff = bluetoothState.isRadioOff,
+            // iOS sets `coordinator.screen = .bluetoothOff`, a root switch,
+            // so Home is not kept underneath; "I've turned it on" returns
+            // to a fresh Home the same way onboarding reaches it.
+            onFix = { navigateClearingOnboarding(navController, Screen.BluetoothOff.route) },
+            onOpenSettings = openBluetoothSettings,
+        )
+    }
 
-        composable(Screen.BluetoothDenied.route) {
-            BluetoothDeniedScreen(
-                onOpenSettings = { session.openAppSettings() },
-                onCheckAgain = {
-                    session.requestBluetoothPermission(handleBluetoothPermissionResult)
-                },
-            )
-        }
+    CompositionLocalProvider(LocalHomeBluetoothStatus provides homeBluetoothStatus) {
+        NavHost(navController = navController, startDestination = startDestination) {
+            composable(Screen.Welcome.route) {
+                WelcomeScreen(
+                    onGetStarted = { navController.navigate(Screen.BluetoothPermission.route) },
+                )
+            }
 
-        composable(Screen.BluetoothOff.route) {
-            BluetoothOffScreen(
-                onOpenSettings = {
-                    context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                },
-                onTurnedOn = {
-                    if (radioMonitor.isOn) {
-                        navigateClearingOnboarding(navController, Screen.Home.route)
+            composable(Screen.BluetoothPermission.route) {
+                BluetoothPermissionScreen(
+                    onAllowBluetooth = {
+                        session.requestBluetoothPermission(handleBluetoothPermissionResult)
+                    },
+                )
+            }
+
+            composable(Screen.BluetoothDenied.route) {
+                BluetoothDeniedScreen(
+                    onOpenSettings = { session.openAppSettings() },
+                    onCheckAgain = {
+                        session.requestBluetoothPermission(handleBluetoothPermissionResult)
+                    },
+                )
+            }
+
+            composable(Screen.BluetoothOff.route) {
+                BluetoothOffScreen(
+                    onOpenSettings = openBluetoothSettings,
+                    onTurnedOn = {
+                        if (radioMonitor.isOn) {
+                            navigateClearingOnboarding(navController, Screen.Home.route)
+                        }
+                        // Still off: no-op, stay on this screen — matches iOS, which
+                        // doesn't message failure either.
+                    },
+                )
+            }
+
+            composable(Screen.EventJoin.route) {
+                LaunchedEffect(Unit) {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.EventJoin.route) { inclusive = true }
+                        launchSingleTop = true
                     }
-                    // Still off: no-op, stay on this screen — matches iOS, which
-                    // doesn't message failure either.
-                },
-            )
-        }
-
-        composable(Screen.EventJoin.route) {
-            LaunchedEffect(Unit) {
-                navController.navigate(Screen.Home.route) {
-                    popUpTo(Screen.EventJoin.route) { inclusive = true }
-                    launchSingleTop = true
                 }
             }
-        }
 
-        composable(Screen.Home.route) {
-            HomeRoute(
-                session,
-                proofRecordStore,
-                onOpenAccount = { navController.navigate(Screen.Account.route) },
-                onStartWalletBinding = onStartWalletBinding,
-                // beid#463. The same destination Account reaches, now also
-                // reachable from the surface where a participant discovers the
-                // radio found nothing — which is where they actually are when
-                // they need it.
-                onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
-                onOpenRecord = { navController.navigate(Screen.RecordDetail.route(it)) },
-                onOpenEventRecords = { navController.navigate(Screen.EventRecords.route(it)) },
-            )
-        }
+            composable(Screen.Home.route) {
+                HomeRoute(
+                    session,
+                    proofRecordStore,
+                    onOpenAccount = { navController.navigate(Screen.Account.route) },
+                    onOpenEventCodeEntry = { navController.navigate(Screen.HomeEventCode.route) },
+                    onOpenRecord = { navController.navigate(Screen.RecordDetail.route(it)) },
+                    onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
+                    onOpenByEvent = { navController.navigate(Screen.RecordsByEvent.route) },
+                    onStartWalletBinding = onStartWalletBinding,
+                )
+            }
 
-        composable(Screen.Account.route) {
-            val supportShareTitle = stringResource(R.string.account_support_share)
-            AccountRoute(
-                session,
-                onOpenRecords = { navController.navigate(Screen.Records.route) },
-                onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
-                walletState = walletState,
-                onOpenVenue = { context.startActivity(VenueActivity.createIntent(context)) },
-                onShareSupport = {
-                    try {
-                        context.startActivity(supportShareIntent(
-                            supportDiagnostics.exportJson(),
-                            supportShareTitle,
-                        ))
-                    } catch (_: ActivityNotFoundException) {
-                        Toast.makeText(context, R.string.account_support_unavailable, Toast.LENGTH_LONG).show()
-                    }
-                },
-            )
-        }
+            composable(Screen.Account.route) {
+                val supportShareTitle = stringResource(R.string.account_support_share)
+                AccountRoute(
+                    session,
+                    onOpenRecords = { navController.navigate(Screen.Records.route) },
+                    onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
+                    walletState = walletState,
+                    onOpenVenue = { context.startActivity(VenueActivity.createIntent(context)) },
+                    onShareSupport = {
+                        try {
+                            context.startActivity(supportShareIntent(
+                                supportDiagnostics.exportJson(),
+                                supportShareTitle,
+                            ))
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(context, R.string.account_support_unavailable, Toast.LENGTH_LONG).show()
+                        }
+                    },
+                )
+            }
 
-        composable(Screen.ManualEventCode.route) {
-            ManualEventCodeRoute(session, onBack = { navController.popBackStack() })
-        }
+            composable(Screen.ManualEventCode.route) {
+                ManualEventCodeRoute(session, onBack = { navController.popBackStack() })
+            }
 
-        composable(Screen.Records.route) {
-            RecordsRoute(
-                proofRecordStore,
-                onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
-                onOpenDetail = { recordId -> navController.navigate(Screen.RecordDetail.route(recordId)) },
-            )
-        }
+            composable(Screen.HomeEventCode.route) {
+                ManualEventCodeRoute(
+                    session,
+                    onBack = { navController.popBackStack() },
+                    onJoined = { navController.popBackStack(Screen.Home.route, inclusive = false) },
+                )
+            }
 
-        composable(Screen.TodaySummary.route) {
-            TodaySummaryRoute(proofRecordStore)
-        }
+            // Content only, like the other pushed record screens: no top bar, system Back.
+            composable(Screen.RecordsByEvent.route) {
+                RecordsByEventRoute(
+                    proofRecordStore,
+                    onOpenEventRecords = { navController.navigate(Screen.EventRecords.route(it)) },
+                )
+            }
 
-        composable(
-            route = Screen.EventRecords.route,
-            arguments = listOf(navArgument(Screen.EventRecords.ANCHOR_ID_ARG) { type = NavType.StringType }),
-        ) { entry ->
-            val anchorId = UUID.fromString(requireNotNull(entry.arguments?.getString(Screen.EventRecords.ANCHOR_ID_ARG)))
-            RecordsRoute(
-                proofRecordStore,
-                onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
-                onOpenDetail = { navController.navigate(Screen.RecordDetail.route(it)) },
-                eventGroupAnchorId = anchorId,
-            )
-        }
+            composable(Screen.Records.route) {
+                RecordsRoute(
+                    proofRecordStore,
+                    onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
+                    onOpenDetail = { recordId -> navController.navigate(Screen.RecordDetail.route(recordId)) },
+                )
+            }
 
-        composable(
-            route = Screen.RecordDetail.route,
-            arguments = listOf(navArgument(Screen.RecordDetail.RECORD_ID_ARG) { type = NavType.StringType }),
-        ) { backStackEntry ->
-            val recordIdArg = requireNotNull(
-                backStackEntry.arguments?.getString(Screen.RecordDetail.RECORD_ID_ARG),
-            )
-            RecordDetailRoute(
-                proofRecordStore,
-                sessionAggregateSnapshotStore,
-                recordId = UUID.fromString(recordIdArg),
-                onRecordNotFound = { navController.popBackStack() },
-            )
+            composable(Screen.TodaySummary.route) {
+                TodaySummaryRoute(proofRecordStore)
+            }
+
+            composable(
+                route = Screen.EventRecords.route,
+                arguments = listOf(navArgument(Screen.EventRecords.ANCHOR_ID_ARG) { type = NavType.StringType }),
+            ) { entry ->
+                val anchorId = UUID.fromString(requireNotNull(entry.arguments?.getString(Screen.EventRecords.ANCHOR_ID_ARG)))
+                RecordsRoute(
+                    proofRecordStore,
+                    onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
+                    onOpenDetail = { navController.navigate(Screen.RecordDetail.route(it)) },
+                    eventGroupAnchorId = anchorId,
+                )
+            }
+
+            composable(
+                route = Screen.RecordDetail.route,
+                arguments = listOf(navArgument(Screen.RecordDetail.RECORD_ID_ARG) { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val recordIdArg = requireNotNull(
+                    backStackEntry.arguments?.getString(Screen.RecordDetail.RECORD_ID_ARG),
+                )
+                RecordDetailRoute(
+                    proofRecordStore,
+                    sessionAggregateSnapshotStore,
+                    recordId = UUID.fromString(recordIdArg),
+                    onRecordNotFound = { navController.popBackStack() },
+                )
+            }
         }
     }
 }
+
+private fun bluetoothRouteScreenOf(route: String?): BluetoothRouteScreen? = when (route) {
+    null -> null
+    Screen.Welcome.route, Screen.BluetoothPermission.route -> BluetoothRouteScreen.Onboarding
+    Screen.BluetoothDenied.route -> BluetoothRouteScreen.BluetoothDenied
+    Screen.BluetoothOff.route -> BluetoothRouteScreen.BluetoothOff
+    else -> BluetoothRouteScreen.App
+}
+
+private val BluetoothRouteTarget.route: String
+    get() = when (this) {
+        BluetoothRouteTarget.Home -> Screen.Home.route
+        BluetoothRouteTarget.BluetoothOff -> Screen.BluetoothOff.route
+        BluetoothRouteTarget.BluetoothDenied -> Screen.BluetoothDenied.route
+    }
 
 /**
  * Clears the *entire* back stack on the way to a terminal onboarding screen

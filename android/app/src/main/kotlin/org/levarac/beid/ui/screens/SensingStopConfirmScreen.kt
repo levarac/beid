@@ -34,7 +34,12 @@ import org.levarac.beid.ui.designsystem.BeidPrimaryButton
 import org.levarac.beid.ui.theme.BeidSpacing
 import org.levarac.beid.ui.theme.BeidTheme
 
-/** iOS 05e's content order and copy, using the scan flow's native theme and controls. */
+/**
+ * iOS 05e's content order and copy, using the scan flow's native controls.
+ * Colors follow iOS `SensingStopConfirmView`: an ink (`textPrimary`) ground,
+ * `labelOnActionPrimary` titles and figures, `textSecondaryOnInk` secondary
+ * text, and an `actionInverse` stop button.
+ */
 @Composable
 fun SensingStopConfirmScreen(
     event: ScanEventSession,
@@ -44,7 +49,7 @@ fun SensingStopConfirmScreen(
     modifier: Modifier = Modifier,
 ) {
     val locale = LocalConfiguration.current.locales[0]
-    BoxWithConstraints(modifier.fillMaxSize().background(BeidTheme.colors.surfaceCanvas)) {
+    BoxWithConstraints(modifier.fillMaxSize().background(BeidTheme.colors.textPrimary)) {
         val minimumHeight = maxHeight
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
@@ -56,7 +61,7 @@ fun SensingStopConfirmScreen(
                 Text(
                     name,
                     style = MaterialTheme.typography.displayMedium,
-                    color = BeidTheme.colors.textPrimary,
+                    color = BeidTheme.colors.labelOnActionPrimary,
                     modifier = Modifier.widthIn(max = 220.dp).semantics { heading() },
                 )
             }
@@ -66,7 +71,7 @@ fun SensingStopConfirmScreen(
                 Text(
                     stringResource(R.string.scan_stop_since, time),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = BeidTheme.colors.textSecondary,
+                    color = BeidTheme.colors.textSecondaryOnInk,
                     modifier = Modifier.padding(top = BeidSpacing.s),
                 )
             }
@@ -74,18 +79,18 @@ fun SensingStopConfirmScreen(
             Text(
                 stringResource(R.string.scan_stop_heading),
                 style = MaterialTheme.typography.titleLarge,
-                color = BeidTheme.colors.textPrimary,
+                color = BeidTheme.colors.labelOnActionPrimary,
             )
             Text(
                 stringResource(R.string.scan_stop_message),
                 style = MaterialTheme.typography.bodyMedium,
-                color = BeidTheme.colors.textSecondary,
+                color = BeidTheme.colors.textSecondaryOnInk,
                 modifier = Modifier.padding(top = BeidSpacing.s),
             )
             Text(
                 stringResource(R.string.scan_stop_so_far),
                 style = MaterialTheme.typography.labelSmall,
-                color = BeidTheme.colors.textSecondary,
+                color = BeidTheme.colors.textSecondaryOnInk,
                 modifier = Modifier.padding(top = BeidSpacing.xxl),
             )
             Row(Modifier.fillMaxWidth().padding(top = BeidSpacing.s)) {
@@ -98,12 +103,12 @@ fun SensingStopConfirmScreen(
                         Text(
                             value.toString(),
                             style = MaterialTheme.typography.displaySmall,
-                            color = BeidTheme.colors.textPrimary,
+                            color = BeidTheme.colors.labelOnActionPrimary,
                         )
                         Text(
                             stringResource(label),
                             style = MaterialTheme.typography.labelSmall,
-                            color = BeidTheme.colors.textSecondary,
+                            color = BeidTheme.colors.textSecondaryOnInk,
                             modifier = Modifier.padding(top = BeidSpacing.xs),
                         )
                     }
@@ -112,14 +117,14 @@ fun SensingStopConfirmScreen(
             Spacer(Modifier.weight(1f).heightIn(min = BeidSpacing.xxl))
             BeidPrimaryButton(
                 text = stringResource(R.string.scan_stop_confirm),
-                containerColor = BeidTheme.colors.actionPrimary,
-                contentColor = BeidTheme.colors.surfaceCanvas,
+                containerColor = BeidTheme.colors.actionInverse,
+                contentColor = BeidTheme.colors.labelOnActionInverse,
                 onClick = onStop,
                 modifier = Modifier.testTag("scan.stop-confirm.stop"),
             )
             Spacer(Modifier.height(BeidSpacing.l))
             TextButton(onClick = onKeepSensing, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.scan_stop_keep_sensing), color = BeidTheme.colors.textPrimary)
+                Text(stringResource(R.string.scan_stop_keep_sensing), color = BeidTheme.colors.labelOnActionPrimary)
             }
         }
     }

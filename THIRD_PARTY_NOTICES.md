@@ -33,9 +33,12 @@ permission.
 
 ## Fonts in other branches and history
 
-The current main app uses system fonts. The `design/flat-2b` branch bundles
-Bricolage Grotesque, DM Sans and DM Mono, with their original OFL notices beside
-the fonts. The historical `archive/flutter` branch includes Doto and Silkscreen
+Both apps bundle the static Bricolage Grotesque Display cuts, DM Sans and DM
+Mono. Their original OFL notices sit beside the iOS fonts in
+`ios/Beid/DesignSystem/Fonts/` and ship in the Android APK from
+`android/app/src/main/assets/licenses/`; the Android copies are
+byte-identical to the texts reproduced
+below. The historical `archive/flutter` branch includes Doto and Silkscreen
 with their OFL notices. These fonts remain under SIL Open Font License 1.1;
 the root MIT license does not relicense them. Keep the corresponding notices
 with redistributed fonts, including generated static instances, and respect
