@@ -44,6 +44,18 @@ data class NowStandbyPresentation(
  * session into permission and registry checks with its candidate still
  * needed, and a joined session owns its own scan.
  *
+ * A gate closed during such a join still owes that stop ([stopOwed]). If the
+ * join is refused, the session comes back to rest and nothing else would
+ * ever stop the scan (`EventJoinCoordinator.refuseJoin` leaves discovery
+ * running for Now), so the gate stops it then, provided it is still closed;
+ * if it has reopened by then, the open gate takes discovery back instead. A
+ * join that reaches sensing cancels the debt: the joined session owns its
+ * scan from then on (iOS `joinAndStart` clears `discoveryOnlyScanOwned`).
+ *
+ * The 30-second wait counts only joinable candidates, cards whose JOIN Now
+ * enables (`eventIdHex != null`), as iOS release/1.1.0 does: a card shown with
+ * JOIN disabled leaves nothing to tap, so it does not hold back the entry.
+ *
  * This gate is the one owner of whether standby discovery should run. The
  * session only decides whether it can: a start requested while the radio is
  * off is deferred until the radio returns, and [EventJoinSession.stopNearbyEventDiscovery]
@@ -65,6 +77,13 @@ class HomeStandbyViewModel(
     /** Whether this gate currently holds discovery open (iOS `homeStandbyDiscoveryActive`). */
     var discoveryActive: Boolean = false
         private set
+
+    /**
+     * The gate closed while a join was in flight and left its discovery
+     * running for that join; the stop is made once the session is back at
+     * rest behind a still-closed gate.
+     */
+    private var stopOwed = false
 
     private val _presentation = MutableStateFlow(NowStandbyPresentation())
     val presentation: StateFlow<NowStandbyPresentation> = _presentation.asStateFlow()
@@ -90,19 +109,29 @@ class HomeStandbyViewModel(
     }
 
     private fun refresh() {
-        val atRest = session.state.value.isAtRest()
+        val sessionState = session.state.value
+        val atRest = sessionState.isAtRest()
         val isEnabled = selectedTab == HomeTab.Now && rootResumed && !bluetoothOff && atRest
+        if (sessionState is EventJoinUiState.Sensing) stopOwed = false
         if (isEnabled && !discoveryActive) {
             discoveryActive = true
+            stopOwed = false
             session.startNearbyEventDiscovery()
         } else if (!isEnabled && discoveryActive) {
             discoveryActive = false
-            if (atRest) session.stopNearbyEventDiscovery()
+            if (atRest) {
+                session.stopNearbyEventDiscovery()
+            } else if (sessionState !is EventJoinUiState.Sensing) {
+                stopOwed = true
+            }
+        } else if (!isEnabled && stopOwed && atRest) {
+            stopOwed = false
+            session.stopNearbyEventDiscovery()
         }
         val now = uptimeMillis()
         standby = standby.update(
             isEnabled = isEnabled,
-            hasCandidates = session.nearbyEventCards.value.isNotEmpty(),
+            hasJoinableCandidates = session.nearbyEventCards.value.any { it.eventIdHex != null },
             nowMillis = now,
         )
         publish(now)
@@ -138,10 +167,16 @@ class HomeStandbyViewModel(
         tickJob = null
     }
 
+    /**
+     * A stop owed at rest is made here too: the session may have come back to
+     * rest before this gate's collector heard it, and nothing collects after
+     * clearing. A join still in flight keeps its candidate, as in [refresh].
+     */
     override fun onCleared() {
         stopTicking()
-        if (discoveryActive && session.state.value.isAtRest()) session.stopNearbyEventDiscovery()
+        if ((discoveryActive || stopOwed) && session.state.value.isAtRest()) session.stopNearbyEventDiscovery()
         discoveryActive = false
+        stopOwed = false
     }
 
     class Factory(

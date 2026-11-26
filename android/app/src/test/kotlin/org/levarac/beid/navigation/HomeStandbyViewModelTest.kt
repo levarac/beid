@@ -34,6 +34,9 @@ class HomeStandbyViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val card = NearbyEventCard("Nearby", eventIdHex = "ab".repeat(16), eventCodeHashHex = "cd".repeat(8))
 
+    /** No registry-verified event ID, so Now renders its JOIN disabled. */
+    private val unjoinableCard = NearbyEventCard("Unnamed beacon nearby", eventIdHex = null, eventCodeHashHex = "ef".repeat(8))
+
     @BeforeTest fun setUp() = Dispatchers.setMain(dispatcher)
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
@@ -157,6 +160,37 @@ class HomeStandbyViewModelTest {
         assertTrue(viewModel.presentation.value.offersCodeEntry)
     }
 
+    /**
+     * iOS release/1.1.0 `AppCoordinator.updateHomeStandby` counts only cards
+     * whose JOIN is enabled (`joinActionEventCodeHashHex != nil`, i.e. a known
+     * `eventIdHex`): a card Now shows with JOIN disabled leaves the user with
+     * nothing to tap, so it must not hold back ENTER EVENT CODE.
+     */
+    @Test
+    fun anUnjoinableCardDoesNotHoldBackTheCodeEntry() = standbyTest(
+        FakeEventJoinSession(nearbyEventCards = listOf(unjoinableCard)),
+    ) { viewModel, _ ->
+        enable(viewModel)
+        assertTrue(viewModel.presentation.value.listening, "An unjoinable card leaves Now listening")
+        advanceTimeBy(29_000)
+        runCurrent()
+        assertFalse(viewModel.presentation.value.offersCodeEntry)
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue(viewModel.presentation.value.offersCodeEntry)
+    }
+
+    @Test
+    fun aJoinableCardBesideAnUnjoinableOneStillWithholdsTheCodeEntry() = standbyTest(
+        FakeEventJoinSession(nearbyEventCards = listOf(unjoinableCard, card)),
+    ) { viewModel, _ ->
+        enable(viewModel)
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertFalse(viewModel.presentation.value.listening)
+        assertFalse(viewModel.presentation.value.offersCodeEntry)
+    }
+
     @Test
     fun bluetoothOffDisablesTheGateAndStopsDiscovery() = standbyTest(FakeEventJoinSession()) { viewModel, session ->
         enable(viewModel)
@@ -200,6 +234,150 @@ class HomeStandbyViewModelTest {
         session.emit(EventJoinUiState.JoinFailed(EventJoinFailureReason.NETWORK_REQUIRED))
         runCurrent()
         assertEquals(2, session.nearbyEventDiscoveryStartCalls, "A refused join returns to discovery")
+    }
+
+    /** Gate open on Now, then a JOIN tap carries the session into registry verification. */
+    private fun TestScope.joinFromNow(viewModel: HomeStandbyViewModel, session: FakeEventJoinSession) {
+        enable(viewModel)
+        session.emit(EventJoinUiState.RequestingPermission)
+        runCurrent()
+        session.emit(EventJoinUiState.VerifyingRegistry)
+        runCurrent()
+        assertEquals(1, session.nearbyEventDiscoveryStartCalls)
+        assertEquals(0, session.nearbyEventDiscoveryStopCalls)
+    }
+
+    /**
+     * Leaving Now while a join is in flight must not stop discovery then (the
+     * join still needs its candidate), but once the join is refused and the
+     * session is back at rest behind a closed gate, nothing else would ever
+     * stop the scan: the gate owes that stop and makes it then.
+     */
+    @Test
+    fun leavingNowDuringAJoinStopsDiscoveryOnceTheJoinIsRefused() = standbyTest(
+        FakeEventJoinSession(nearbyEventCards = listOf(card)),
+    ) { viewModel, session ->
+        joinFromNow(viewModel, session)
+        viewModel.onTabSelected(HomeTab.Records)
+        runCurrent()
+        assertEquals(0, session.nearbyEventDiscoveryStopCalls, "The join in flight still needs its candidate")
+        session.emit(EventJoinUiState.JoinFailed(EventJoinFailureReason.NETWORK_REQUIRED))
+        runCurrent()
+        assertEquals(1, session.nearbyEventDiscoveryStopCalls)
+        assertEquals(1, session.nearbyEventDiscoveryStartCalls, "Records never restarts discovery")
+        session.emit(EventJoinUiState.Idle)
+        runCurrent()
+        assertEquals(1, session.nearbyEventDiscoveryStopCalls, "The owed stop is made once")
+    }
+
+    @Test
+    fun homeLosingResumeDuringAJoinStopsDiscoveryOnceTheJoinIsRefused() = standbyTest(
+        FakeEventJoinSession(nearbyEventCards = listOf(card)),
+    ) { viewModel, session ->
+        joinFromNow(viewModel, session)
+        viewModel.onRootResumedChanged(false)
+        runCurrent()
+        assertEquals(0, session.nearbyEventDiscoveryStopCalls)
+        session.emit(EventJoinUiState.PermissionDenied)
+        runCurrent()
+        assertEquals(1, session.nearbyEventDiscoveryStopCalls)
+    }
+
+    /**
+     * A join that succeeds hands discovery to the joined session, which owns
+     * its own scan (iOS `joinAndStart` clears `discoveryOnlyScanOwned`). When
+     * that session later ends, the gate owes nothing on the join's behalf.
+     */
+    @Test
+    fun aSuccessfulJoinDropsTheOwedStop() = standbyTest(
+        FakeEventJoinSession(nearbyEventCards = listOf(card)),
+    ) { viewModel, session ->
+        joinFromNow(viewModel, session)
+        viewModel.onTabSelected(HomeTab.Records)
+        runCurrent()
+        session.emit(EventJoinUiState.Sensing(ScanPhase.Sensing))
+        runCurrent()
+        session.emit(EventJoinUiState.Idle)
+        runCurrent()
+        assertEquals(0, session.nearbyEventDiscoveryStopCalls)
+        assertEquals(1, session.nearbyEventDiscoveryStartCalls)
+    }
+
+    /** Back on Now before the refusal: the open gate keeps discovery, as an unbroken visit would. */
+    @Test
+    fun returningToNowBeforeTheRefusalKeepsDiscovery() = standbyTest(
+        FakeEventJoinSession(nearbyEventCards = listOf(card)),
+    ) { viewModel, session ->
+        joinFromNow(viewModel, session)
+        viewModel.onTabSelected(HomeTab.Records)
+        runCurrent()
+        viewModel.onTabSelected(HomeTab.Now)
+        runCurrent()
+        session.emit(EventJoinUiState.JoinFailed(EventJoinFailureReason.NETWORK_REQUIRED))
+        runCurrent()
+        assertEquals(0, session.nearbyEventDiscoveryStopCalls)
+        assertEquals(2, session.nearbyEventDiscoveryStartCalls, "The open gate takes discovery back at rest")
+        assertTrue(viewModel.discoveryActive)
+    }
+
+    /**
+     * Returning to Now and leaving again, both during the join, is still a
+     * closed gate at the refusal: the stop is owed exactly as if the user had
+     * never come back.
+     */
+    @Test
+    fun leavingNowAgainBeforeTheRefusalStillStopsDiscovery() = standbyTest(
+        FakeEventJoinSession(nearbyEventCards = listOf(card)),
+    ) { viewModel, session ->
+        joinFromNow(viewModel, session)
+        viewModel.onTabSelected(HomeTab.Records)
+        runCurrent()
+        viewModel.onTabSelected(HomeTab.Now)
+        runCurrent()
+        viewModel.onTabSelected(HomeTab.Records)
+        runCurrent()
+        session.emit(EventJoinUiState.JoinFailed(EventJoinFailureReason.NETWORK_REQUIRED))
+        runCurrent()
+        assertEquals(1, session.nearbyEventDiscoveryStopCalls)
+    }
+
+    /**
+     * The refusal has already reached the session but not yet the gate's
+     * collector when the Home entry is cleared: the owed stop is made by
+     * [HomeStandbyViewModel.onCleared], because nothing will collect it later.
+     */
+    @Test
+    fun clearingTheHomeEntryWithAnOwedStopAtRestStopsDiscovery() = runTest(dispatcher) {
+        val session = FakeEventJoinSession(nearbyEventCards = listOf(card))
+        val store = ViewModelStore()
+        val viewModel = ViewModelProvider.create(
+            store,
+            HomeStandbyViewModel.Factory(session) { testScheduler.currentTime },
+        )[HomeStandbyViewModel::class.java]
+        joinFromNow(viewModel, session)
+        viewModel.onTabSelected(HomeTab.Records)
+        runCurrent()
+        session.emit(EventJoinUiState.JoinFailed(EventJoinFailureReason.NETWORK_REQUIRED))
+        store.clear()
+        runCurrent()
+        assertEquals(1, session.nearbyEventDiscoveryStopCalls)
+    }
+
+    /** Cleared while the join is still in flight: the join keeps its candidate, as before. */
+    @Test
+    fun clearingTheHomeEntryDuringAJoinLeavesDiscoveryToTheJoin() = runTest(dispatcher) {
+        val session = FakeEventJoinSession(nearbyEventCards = listOf(card))
+        val store = ViewModelStore()
+        val viewModel = ViewModelProvider.create(
+            store,
+            HomeStandbyViewModel.Factory(session) { testScheduler.currentTime },
+        )[HomeStandbyViewModel::class.java]
+        joinFromNow(viewModel, session)
+        viewModel.onTabSelected(HomeTab.Records)
+        runCurrent()
+        store.clear()
+        runCurrent()
+        assertEquals(0, session.nearbyEventDiscoveryStopCalls)
     }
 
     @Test

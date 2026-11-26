@@ -10,12 +10,15 @@ package org.levarac.beid.navigation
  */
 data class HomeStandbyState(val listeningStartedAtMillis: Long? = null) {
     /**
-     * Starts the interval the first time Now is enabled with no candidate and
-     * keeps it through repeated updates; any disabled or non-empty update
-     * discards it, so the next interval is timed from scratch.
+     * Starts the interval the first time Now is enabled with nothing to join
+     * and keeps it through repeated updates; any disabled update, or one with
+     * a joinable candidate, discards it, so the next interval is timed from
+     * scratch. Only a joinable candidate ends the wait: a nearby event whose
+     * JOIN is disabled leaves nothing to tap, so it does not (iOS
+     * `update(isEnabled:hasJoinableCandidates:now:)`).
      */
-    fun update(isEnabled: Boolean, hasCandidates: Boolean, nowMillis: Long): HomeStandbyState {
-        if (!isEnabled || hasCandidates) return HomeStandbyState()
+    fun update(isEnabled: Boolean, hasJoinableCandidates: Boolean, nowMillis: Long): HomeStandbyState {
+        if (!isEnabled || hasJoinableCandidates) return HomeStandbyState()
         return if (listeningStartedAtMillis == null) HomeStandbyState(nowMillis) else this
     }
 

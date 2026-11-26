@@ -15,7 +15,7 @@ class HomeStandbyStateTest {
 
     @Test
     fun fallbackUsesTheThirtySecondBoundary() {
-        val state = HomeStandbyState().update(isEnabled = true, hasCandidates = false, nowMillis = s(100))
+        val state = HomeStandbyState().update(isEnabled = true, hasJoinableCandidates = false, nowMillis = s(100))
         assertFalse(state.offersCodeEntry(atMillis = s(129)))
         assertFalse(state.offersCodeEntry(atMillis = s(130) - 1))
         assertTrue(state.offersCodeEntry(atMillis = s(130)))
@@ -24,10 +24,10 @@ class HomeStandbyStateTest {
     @Test
     fun candidateArrivalCancelsAndRemovalRestartsTheInterval() {
         var state = HomeStandbyState()
-        state = state.update(isEnabled = true, hasCandidates = false, nowMillis = s(100))
-        state = state.update(isEnabled = true, hasCandidates = true, nowMillis = s(129))
+        state = state.update(isEnabled = true, hasJoinableCandidates = false, nowMillis = s(100))
+        state = state.update(isEnabled = true, hasJoinableCandidates = true, nowMillis = s(129))
         assertFalse(state.offersCodeEntry(atMillis = s(200)))
-        state = state.update(isEnabled = true, hasCandidates = false, nowMillis = s(300))
+        state = state.update(isEnabled = true, hasJoinableCandidates = false, nowMillis = s(300))
         assertFalse(state.offersCodeEntry(atMillis = s(329)))
         assertTrue(state.offersCodeEntry(atMillis = s(330)))
     }
@@ -35,10 +35,10 @@ class HomeStandbyStateTest {
     @Test
     fun leavingHomeOrPausingDiscoveryDiscardsTheInterval() {
         var state = HomeStandbyState()
-        state = state.update(isEnabled = true, hasCandidates = false, nowMillis = s(100))
-        state = state.update(isEnabled = false, hasCandidates = false, nowMillis = s(129))
+        state = state.update(isEnabled = true, hasJoinableCandidates = false, nowMillis = s(100))
+        state = state.update(isEnabled = false, hasJoinableCandidates = false, nowMillis = s(129))
         assertFalse(state.offersCodeEntry(atMillis = s(500)))
-        state = state.update(isEnabled = true, hasCandidates = false, nowMillis = s(600))
+        state = state.update(isEnabled = true, hasJoinableCandidates = false, nowMillis = s(600))
         assertFalse(state.offersCodeEntry(atMillis = s(629)))
         assertTrue(state.offersCodeEntry(atMillis = s(630)))
     }
@@ -46,9 +46,9 @@ class HomeStandbyStateTest {
     @Test
     fun repeatedUpdatesDoNotRestartAnUninterruptedInterval() {
         var state = HomeStandbyState()
-        state = state.update(isEnabled = true, hasCandidates = false, nowMillis = s(100))
-        state = state.update(isEnabled = true, hasCandidates = false, nowMillis = s(115))
-        state = state.update(isEnabled = true, hasCandidates = false, nowMillis = s(129))
+        state = state.update(isEnabled = true, hasJoinableCandidates = false, nowMillis = s(100))
+        state = state.update(isEnabled = true, hasJoinableCandidates = false, nowMillis = s(115))
+        state = state.update(isEnabled = true, hasJoinableCandidates = false, nowMillis = s(129))
         assertTrue(state.offersCodeEntry(atMillis = s(130)))
         assertEquals(s(30), state.elapsedMillis(atMillis = s(130)))
     }
@@ -57,7 +57,7 @@ class HomeStandbyStateTest {
     fun noFallbackBeforeDiscoveryBeginsOrWhileCandidatesExist() {
         var state = HomeStandbyState()
         assertFalse(state.offersCodeEntry(atMillis = s(300)))
-        state = state.update(isEnabled = true, hasCandidates = true, nowMillis = s(100))
+        state = state.update(isEnabled = true, hasJoinableCandidates = true, nowMillis = s(100))
         assertFalse(state.offersCodeEntry(atMillis = s(300)))
         assertEquals(0L, state.elapsedMillis(atMillis = s(300)))
         assertNull(state.listeningStartedAtMillis)
@@ -65,7 +65,7 @@ class HomeStandbyStateTest {
 
     @Test
     fun aClockReadingBeforeTheStartNeverYieldsNegativeElapsedTime() {
-        val state = HomeStandbyState().update(isEnabled = true, hasCandidates = false, nowMillis = s(100))
+        val state = HomeStandbyState().update(isEnabled = true, hasJoinableCandidates = false, nowMillis = s(100))
         assertEquals(0L, state.elapsedMillis(atMillis = s(90)))
         assertFalse(state.offersCodeEntry(atMillis = s(90)))
     }

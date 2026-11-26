@@ -700,12 +700,18 @@ class EventJoinScreenTest {
     }
 
     /**
-     * iOS #795: with a candidate on screen — joinable or not — Now offers no
-     * event-code entry; Account's entry remains. (integration/ios-1.1.1 later
-     * keys the wait on joinable candidates only; not ported here.)
+     * The screen alone never puts event-code entry on Now, even beside a card
+     * whose JOIN is disabled and with the shared rescue outcome reached:
+     * [EventJoinContent] renders no standby presentation, so the entry stays
+     * the standby gate's decision. That gate ([org.levarac.beid.navigation.HomeStandbyViewModel])
+     * counts joinable cards only, as iOS release/1.1.0 does, so on Home an
+     * unjoinable card does not hold back the 30-second entry; that is covered
+     * in `HomeStandbyViewModelTest`. Renamed from
+     * `anUnjoinableCandidateOnNowOffersNoCodeEntry`, which read as if an
+     * unjoinable card withheld Now's entry.
      */
     @Test
-    fun anUnjoinableCandidateOnNowOffersNoCodeEntry() {
+    fun theScreenAloneOffersNoCodeEntryBesideAnUnjoinableCandidate() {
         composeTestRule.setContent {
             BeidAppTheme {
                 EventJoinContent(
