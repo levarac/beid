@@ -1488,6 +1488,7 @@ final class AppCoordinator: ObservableObject {
   func requestScanClose() {
     guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
       stopConfirmSnapshot == nil, stopOutcome == nil else { return }
+    sensingCoordinator.recordDiagnostic(.lifecycle(.stopRequested))
     let event: EventSession
     switch sensingCoordinator.phase {
     case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
@@ -1530,6 +1531,7 @@ final class AppCoordinator: ObservableObject {
     guard event.sessionID == snapshot.event.sessionID else { return }
     let proofID = sensingCoordinator.currentProofID
     if let expectedID = snapshot.proofID, proofID != expectedID { return }
+    sensingCoordinator.recordDiagnostic(.lifecycle(.stopConfirmed))
     let aggregate = sensingCoordinator.sessionAggregate
     let detectedDeviceCount = sensingCoordinator.devicesVerified
     let firstSightingAt = sensingCoordinator.firstSightingAt

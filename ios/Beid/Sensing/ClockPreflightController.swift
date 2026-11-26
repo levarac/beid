@@ -65,6 +65,7 @@ final class ClockPreflightController: ObservableObject {
   nonisolated static let barnardEngineEninSeconds: Int32 = 300
 
   @Published private(set) var stateKey: String?
+  weak var diagnostics: DiagnosticsController?
 
   private let preflight = BeidSharedKit.clock.ClockPreflight()
   private let source: any TrustedDateSource
@@ -98,13 +99,29 @@ final class ClockPreflightController: ObservableObject {
       stateKey = nil
       let requestWall = wallMillis()
       let requestMonotonic = monotonicMillis()
+      let diagnosticsGeneration = diagnostics?.consentGeneration
       let header = await source.fetchDateHeader()
+      let responseMonotonic = monotonicMillis()
       preflight.recordMeasurement(
         requestWallMillis: requestWall,
         requestMonotonicMillis: requestMonotonic,
-        responseMonotonicMillis: monotonicMillis(),
+        responseMonotonicMillis: responseMonotonic,
         dateHeader: header
       )
+      if let diagnostics, let diagnosticsGeneration, diagnostics.consentGeneration == diagnosticsGeneration {
+        let sample = BeidSharedKit.clock.clockOffsetSampleFromHttpDate(
+          requestWallMillis: requestWall, requestMonotonicMillis: requestMonotonic,
+          responseMonotonicMillis: responseMonotonic, dateHeader: header
+        )
+        diagnostics.setClockCorrection(sample.map {
+          let width = $0.highMillis - $0.lowMillis
+          // The shared interval is device wall minus UTC. Wire v1 uses UTC minus device wall.
+          return DiagnosticsClockCorrection(
+            sampledAt: DiagnosticsTimestamp(wall: $0.wallAtMillis, monotonic: $0.monotonicAtMillis),
+            offset: -($0.lowMillis + width / 2), uncertainty: (width + 1) / 2
+          )
+        })
+      }
     }
     stateKey = BeidSharedKit.clock.clockPreflightStateKey(
       state: preflight.state(

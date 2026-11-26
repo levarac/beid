@@ -238,6 +238,14 @@ enum SensingScreenshotFixture: String {
 @MainActor
 final class SensingCoordinator: ObservableObject {
   @Published private(set) var phase: ScanPhase = .idle
+  weak var diagnostics: DiagnosticsController? {
+    didSet {
+      keychainEngine?.onDebugEvent = { [weak self] event in
+        // Barnard delivers debug events on the main queue.
+        MainActor.assumeIsolated { self?.recordDiagnosticDebugEvent(event) }
+      }
+    }
+  }
   @Published private(set) var isScanning = false
   @Published private(set) var isAdvertising = false
   /// Latched after startup checks finish so an alert presenter can observe it
@@ -1954,12 +1962,19 @@ final class SensingCoordinator: ObservableObject {
   private func handle(_ event: BarnardEvent) {
     switch event {
     case .state(let state):
+      if state.isScanning != isScanning {
+        recordDiagnostic(.lifecycle(state.isScanning ? .scanStarted : .scanStopped))
+      }
+      if state.isAdvertising != isAdvertising {
+        recordDiagnostic(.lifecycle(state.isAdvertising ? .advertisingStarted : .advertisingStopped))
+      }
       isScanning = state.isScanning
       isAdvertising = state.isAdvertising
       if homeStandbyDiscoveryRequested && !isScanning {
         startHomeStandbyDiscovery()
       }
     case .detection(let detection):
+      recordDiagnostic(.peerDetected(rpid: detection.rpid, rssi: detection.rssi))
       handleDetection(
         enin: detection.enin,
         rpid: detection.rpid,
@@ -2032,12 +2047,56 @@ final class SensingCoordinator: ObservableObject {
     case .constraint, .error:
       break
     case .rssiUpdate(let update):
+      recordDiagnostic(.rssiUpdated(rpid: update.rpid, rssi: update.rssi))
       handleSignalStrength(
         rssi: update.rssi,
         detectedDisplayId: update.detectedDisplayId,
-        at: update.timestamp
+        at: update.timestamp,
+        diagnosticRpid: update.rpid
       )
     }
+  }
+
+  func recordDiagnostic(_ observation: DiagnosticsObservation) {
+    guard !useDemoEventMode else { return }
+    diagnostics?.record(observation)
+  }
+
+  private func recordDiagnosticDebugEvent(_ event: BarnardDebugEvent) {
+    guard diagnostics?.isEnabled == true, !useDemoEventMode else { return }
+    let observation: DiagnosticsObservation
+    switch event.name {
+    case "gatt_read_rpid": observation = .gattReadFinished(.b002, .success)
+    case "gatt_read_display_id": observation = .gattReadFinished(.b003, .success)
+    case "gatt_b003_read_failed", "gatt_b003_invalid_length":
+      observation = .gattReadFinished(.b003, .failure)
+    case "gatt_read_event_code_hash": observation = .gattReadFinished(.b004, .success)
+    case "gatt_b004_read_retry": observation = .gattReadFinished(.b004, .failure)
+    case "gatt_event_info_hint", "gatt_event_info_envelope_v2":
+      observation = .gattReadFinished(.b005, .success)
+    case "gatt_event_info_unavailable":
+      // This name also covers payload parsing and binding failures. Only
+      // the SDK's exact ATT refusal establishes a failed read.
+      guard event.data?["reason"] as? String == "read_not_permitted" else { return }
+      observation = .gattReadFinished(.b005, .failure)
+    case "gatt_read_failed":
+      // These are exact SDK-defined tokens; the SDK dictionary never enters the queue.
+      let characteristic: DiagnosticsCharacteristic
+      switch event.data?["characteristic"] as? String {
+      case "B002_RPID": characteristic = .b002
+      case "B003_displayId": characteristic = .b003
+      case "B004_eventCodeHash": characteristic = .b004
+      case "B005_eventInfo": characteristic = .b005
+      default: return
+      }
+      observation = .gattReadFinished(characteristic, .failure)
+    case "relay_configured":
+      guard let enabled = event.data?["enabled"] as? Bool else { return }
+      observation = .lifecycle(enabled ? .relayEnabled : .relayDisabled)
+    default:
+      return
+    }
+    recordDiagnostic(observation)
   }
 
   /// Not `private`: `BarnardDetectionEvent` has no public initializer
@@ -2475,7 +2534,9 @@ final class SensingCoordinator: ObservableObject {
 
     if let displayId {
       if !detectedDisplayIDs.contains(displayId) { detectedDisplayIDs.insert(displayId) }
-      rememberDetectedDevice(displayId, at: observedAt ?? sensingPresentationNow(Date()))
+      rememberDetectedDevice(
+        displayId, at: observedAt ?? sensingPresentationNow(Date()), diagnosticRpid: rpid
+      )
     }
 
     if displayId == nil {
@@ -2597,7 +2658,9 @@ final class SensingCoordinator: ObservableObject {
   /// marginally stale radius on a node that is already leaving — paid to
   /// avoid a timer, and with it a second clock this path would have to stay
   /// correct against.
-  func handleSignalStrength(rssi: Int, detectedDisplayId: String?, at timestamp: Date) {
+  func handleSignalStrength(
+    rssi: Int, detectedDisplayId: String?, at timestamp: Date, diagnosticRpid: String? = nil
+  ) {
     // Deferred with, and replayed after, the detection it arrived beside; see
     // `queuedSignalStrengthWhileLoading`.
     guard !isLedgerLoading else {
@@ -2628,7 +2691,9 @@ final class SensingCoordinator: ObservableObject {
     guard let nodeId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(
       detectedDisplayId: detectedDisplayId
     ) else { return }
-    if detectedDisplayIDs.contains(nodeId) { rememberDetectedDevice(nodeId, at: timestamp) }
+    if detectedDisplayIDs.contains(nodeId) {
+      rememberDetectedDevice(nodeId, at: timestamp, diagnosticRpid: diagnosticRpid, reason: .rssiUpdate)
+    }
     guard rssi < BeidConfig.nodeSignalUsableUpperBoundDbm else { return }
 
     let sample = Double(rssi)
@@ -2646,9 +2711,15 @@ final class SensingCoordinator: ObservableObject {
     nodeSignalStrengths = smoothedNodeSignalDbm.mapValues { NodeSignalStrength.measured(dBm: $0) }
   }
 
-  private func rememberDetectedDevice(_ id: String, at timestamp: Date) {
+  private func rememberDetectedDevice(
+    _ id: String, at timestamp: Date, diagnosticRpid: String? = nil, reason: DiagnosticsDetectionReason = .detection
+  ) {
     // Reordered callbacks must not make a recently heard device expire early.
-    detectedLastHeardAt[id] = max(detectedLastHeardAt[id] ?? timestamp, timestamp)
+    if let previous = detectedLastHeardAt[id], previous >= timestamp { return }
+    detectedLastHeardAt[id] = timestamp
+    if let diagnosticRpid, !useDemoEventMode {
+      diagnostics?.recordLastDetection(displayID: id, rpid: diagnosticRpid, timestamp: timestamp, reason: reason)
+    }
   }
 
   /// Whether enough event time has passed since the last republish. Compares
@@ -2733,6 +2804,7 @@ final class SensingCoordinator: ObservableObject {
   /// Calls the Barnard SDK's leave API (`BarnardEngine.leaveEvent`) to clear
   /// whichever manual or nearby join code is current.
   func leaveEvent() {
+    if joinedEventCode != nil { recordDiagnostic(.lifecycle(.left)) }
     invalidateEventIdentityVerification()
     admissionAfterLedgerLoad = nil
     storageAdmissionRetry = nil
@@ -3096,6 +3168,7 @@ final class SensingCoordinator: ObservableObject {
       homeStandbyDiscoveryRequested = false
       discoveryOnlyScanOwned = false
       engine.joinAndStart(context)
+      recordDiagnostic(.lifecycle(.joined))
       // The relay gate opens here, from the capability the gate just admitted,
       // in the same shape as Android's `EventJoinCoordinator.beginVerifiedJoin`
       // (beid#437). The id is the definition's own `eventIdHex`, not the
@@ -3311,6 +3384,7 @@ final class SensingCoordinator: ObservableObject {
     firstSightingAt = nil
     detectedDisplayIDs = []
     detectedLastHeardAt = [:]
+    diagnostics?.resetRadarAssociations()
     #if DEBUG
     sensingScreenshotNow = nil
     sensingScreenshotFixture = nil
@@ -4762,6 +4836,7 @@ final class SensingCoordinator: ObservableObject {
   /// never touches the ledger runtime or `WindowReportStore`. See
   /// `ensureLedgerWindowOpen()` for the ledger-lifecycle half.
   private func openNewWindowState(enin: Int) {
+    recordDiagnostic(.windowOpened(enin))
     let windowId = UUID()
     currentWindowId = windowId
     currentWindowEnin = enin
@@ -4910,6 +4985,7 @@ final class SensingCoordinator: ObservableObject {
       clearCurrentWindowState()
       return
     }
+    recordDiagnostic(.windowClosed(enin))
 
     // Snapshot every lossless input before either the legacy report path or
     // clearCurrentWindowState() can discard the current RPID set. The new
