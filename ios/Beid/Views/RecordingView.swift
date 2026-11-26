@@ -111,7 +111,6 @@ struct SensingSealedView: View {
               Spacer(minLength: DS.Space.l)
               SensingWindowBars(
                 aggregate: snapshot.aggregate,
-                firstSightingAt: snapshot.firstSightingAt,
                 endsSession: true
               )
 

@@ -424,11 +424,16 @@ final class SensingCoordinator: ObservableObject {
       let peerCounts = fixture == .sensing || fixture == .stopConfirm || fixture == .sealed
         ? [1, 4, 6, 9, 8, 13]
         : [5]
+      // The last fixture window is the current wall-clock window, as live.
+      let currentWindow = Int(floor(
+        sensingScreenshotNow!.timeIntervalSince1970
+          / TimeInterval(ClockPreflightController.barnardEngineEninSeconds)))
+      let firstWindow = currentWindow - (peerCounts.count - 1)
       for (window, peerCount) in peerCounts.enumerated() {
         for peer in 0..<peerCount {
           let displayID = String(format: "%08x", peer + 1)
           _ = recordDeviceIdentity(
-            enin: 6_000_000 + window,
+            enin: firstWindow + window,
             rpid: "tour-rpid-\(window)-\(peer)",
             detectedDisplayId: displayID
           )

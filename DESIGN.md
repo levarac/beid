@@ -2138,7 +2138,16 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   restarts its rolling timer; observation-window boundaries never expire
   nodes. Expiry changes only this
   live display; DEVICES HEARD remains the session total, and earlier window
-  observations and signed records remain intact. DONE advances to the collected-record
+  observations and signed records remain intact. The window bars show the
+  last six wall-clock windows (`ClockPreflightController.barnardEngineEninSeconds`,
+  300 s), oldest on the left, with windows that had no detection kept as
+  thin 4 pt slots instead of being skipped. The current wall-clock window is
+  always the rightmost slot and always the white one: it starts at the 4 pt
+  baseline and grows 2 pt per device heard in it (capped at 40 pt), and
+  "NOW" sits under it. When a seventh window begins, every slot shifts one
+  place left and the oldest drops off. The left label is the start time of
+  the oldest visible window. The sealed Record view has no wall clock, so
+  its rightmost slot is the last observed window and the label reads "END". DONE advances to the collected-record
   screen, and View collection opens Records. After an explicit stop Now
   stays quiet: "Sensing stopped" with "Your Record is saved in Records on
   this device. You can close the app." (or "No Record was created for this
