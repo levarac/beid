@@ -1,5 +1,6 @@
 package org.levarac.beid.ui.screens
 
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +16,7 @@ internal class FakeEventJoinSession(
     nearbyEventCards: List<NearbyEventCard> = emptyList(),
     nearbyEventsOmitted: Boolean = false,
     initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.Granted,
+    override val currentProofId: UUID? = null,
 ) : EventJoinSession {
     private val mutableState = MutableStateFlow(initial)
     override val state: StateFlow<EventJoinUiState> = mutableState.asStateFlow()
@@ -95,6 +97,8 @@ internal class FakeEventJoinSession(
     override fun leaveEvent() {
         leaveEventCallCount += 1
     }
+
+    override fun hasStoredProof(proofId: UUID): Boolean = proofId == currentProofId
 
     override fun markRecordingCeremonyShown() {
         recordingCeremonyShown = true

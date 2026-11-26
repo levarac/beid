@@ -18,20 +18,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.lifecycle.viewmodel.compose.viewModel
 import org.levarac.beid.ui.AppVersion
 import org.levarac.beid.R
 import org.levarac.beid.sensing.BluetoothRadioMonitor
-import org.levarac.beid.sensing.EventJoinSession
-import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.CachedWalletHint
 import org.levarac.beid.sensing.WalletConnectorState
 import org.levarac.beid.ui.designsystem.BeidSecondaryButton
@@ -45,7 +40,6 @@ import org.levarac.beid.ui.theme.BeidTheme
  */
 object AccountScreenTestTags {
     const val BLUETOOTH_STATUS_TEXT = "account_bluetooth_status_text"
-    const val LEAVE_EVENT_BUTTON = "account_leave_event_button"
     const val RECORDS_BUTTON = "account_records_button"
     const val MANUAL_EVENT_CODE_BUTTON = "account_manual_event_code_button"
     const val VENUE_BROADCAST_BUTTON = "account_venue_broadcast_button"
@@ -62,13 +56,12 @@ object AccountScreenTestTags {
  * still initiated from the recording flow, and no disconnect placement is
  * invented here.
  *
- * State lives in [viewModel], not here — same split as [EventJoinScreen]/
- * [EventJoinViewModel], so this composable stays a pure function that Compose
- * tests can render directly against a fake session.
+ * This screen deliberately receives no session or coordinator handle. Ending
+ * an active session belongs to the confirmed Stop action in the sensing UI;
+ * Account must not provide an unconfirmed finalization bypass.
  */
 @Composable
 fun AccountScreen(
-    viewModel: AccountViewModel,
     isBluetoothOn: Boolean,
     onOpenRecords: () -> Unit,
     onOpenManualEventCode: () -> Unit = {},
@@ -77,9 +70,6 @@ fun AccountScreen(
     onShareSupport: () -> Unit = {},
     onOpenPrivacyPolicy: () -> Unit = {},
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val isSessionActive = uiState.sessionState is EventJoinUiState.Sensing
-
     Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
         Column(
             modifier = Modifier
@@ -171,20 +161,6 @@ fun AccountScreen(
                 modifier = Modifier.testTag(AccountScreenTestTags.VENUE_BROADCAST_BUTTON),
             )
 
-            // No motif accent (DESIGN.md §5: account is outside sensing/ceremony/recovery
-            // moments) and no destructive-colored tint (no ratified DS.Color for that,
-            // see the PR report) — same neutral secondary-button treatment EventJoinScreen
-            // already uses for its own non-primary action. The "Leave Event" label alone
-            // carries the destructive meaning.
-            BeidSecondaryButton(
-                text = stringResource(R.string.account_leave_event_button),
-                contentColor = BeidTheme.colors.textPrimary,
-                borderColor = BeidTheme.colors.strokeHairline,
-                onClick = viewModel::leaveEvent,
-                enabled = isSessionActive,
-                modifier = Modifier.testTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON),
-            )
-
             BeidSecondaryButton(
                 text = stringResource(R.string.account_support_share),
                 contentColor = BeidTheme.colors.textPrimary,
@@ -221,15 +197,13 @@ fun AccountScreen(
 }
 
 /**
- * Constructs (via [AccountViewModel.Factory]) and remembers the screen's
- * [AccountViewModel], and reads [BluetoothRadioMonitor] once per screen
- * entry — a plain [remember]-scoped read, not a live listener, consistent
+ * Reads [BluetoothRadioMonitor] once per screen entry — a plain
+ * [remember]-scoped read, not a live listener, consistent
  * with how [BluetoothOffScreen]'s "I've turned it on" already treats radio
  * state in this codebase.
  */
 @Composable
 fun AccountRoute(
-    session: EventJoinSession,
     onOpenRecords: () -> Unit,
     onOpenManualEventCode: () -> Unit,
     walletState: WalletConnectorState = WalletConnectorState.Idle,
@@ -239,9 +213,7 @@ fun AccountRoute(
     val context = LocalContext.current
     val bluetoothMonitor = remember { BluetoothRadioMonitor(context) }
     val isBluetoothOn = remember { bluetoothMonitor.isOn }
-    val viewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory(session))
     AccountScreen(
-        viewModel = viewModel,
         isBluetoothOn = isBluetoothOn,
         onOpenRecords = onOpenRecords,
         onOpenManualEventCode = onOpenManualEventCode,

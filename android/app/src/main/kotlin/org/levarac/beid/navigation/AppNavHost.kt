@@ -212,7 +212,6 @@ fun AppNavHost(
             composable(Screen.Account.route) {
                 val supportShareTitle = stringResource(R.string.account_support_share)
                 AccountRoute(
-                    session,
                     onOpenRecords = { navController.navigate(Screen.Records.route) },
                     onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
                     walletState = walletState,
