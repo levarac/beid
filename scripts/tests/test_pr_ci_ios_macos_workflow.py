@@ -4,6 +4,7 @@ import shlex
 from pathlib import Path
 import subprocess
 import sys
+import tarfile
 import tempfile
 import textwrap
 import unittest
@@ -64,6 +65,54 @@ def run_commands(text: str) -> str:
 
 
 class PrCiIosMacosWorkflowTest(unittest.TestCase):
+    def test_distribution_is_available_before_the_xcode_build(self):
+        steps = workflow_data(workflow_text())["jobs"]["build"]["steps"]
+        names = [step.get("name") for step in steps]
+        restore = step_data(workflow_text(), "Restore Gradle distribution")
+        save = step_data(workflow_text(), "Save Gradle distribution")
+        self.assertEqual(restore["with"]["path"], "~/.gradle/wrapper/dists")
+        self.assertEqual(save["with"]["path"], restore["with"]["path"])
+        self.assertEqual(save["with"]["key"], "${{ steps.distribution.outputs.cache-primary-key }}")
+        self.assertIn("steps.distribution.outputs.cache-hit != 'true'", save["if"])
+        self.assertIn("android/gradle/wrapper/gradle-wrapper.properties", restore["with"]["key"])
+        self.assertNotIn("toolchain", restore["with"]["key"])
+        self.assertNotIn("~/.gradle/wrapper", step_data(workflow_text(), "Cache KMP dependencies")["with"]["path"])
+        self.assertIn("./gradlew --version", step_data(workflow_text(), "Prepare Gradle distribution")["run"])
+        self.assertLess(names.index("Restore Gradle distribution"), names.index("Prepare Gradle distribution"))
+        self.assertLess(names.index("Prepare Gradle distribution"), names.index("Save Gradle distribution"))
+        self.assertLess(names.index("Save Gradle distribution"), names.index("Build for testing"))
+
+    def test_failed_ui_shard_preserves_only_a_complete_bounded_archive(self):
+        pack = step_data(workflow_text(), "Archive failed UI test result", "tests")
+        upload = step_data(workflow_text(), "Upload failed UI test result", "tests")
+        self.assertIn("always()", pack["if"])
+        self.assertIn("startsWith(matrix.lane, 'ui-')", pack["if"])
+        self.assertIn("steps.run_tests.outcome", pack["if"])
+        self.assertIn("steps.structured.outcome", pack["if"])
+        self.assertEqual(step_data(workflow_text(), "Execute full-mode test lane", "tests")["id"], "run_tests")
+        self.assertEqual(step_data(workflow_text(), "Collect shard structured results", "tests")["id"], "structured")
+        self.assertEqual(pack["env"]["MAX_ARCHIVE_BYTES"], str(250 * 1024 * 1024))
+        self.assertEqual(upload["with"]["path"], "${{ env.CI_OUTPUT_ROOT }}/Tests.xcresult.tar.gz")
+        self.assertEqual(upload["with"]["retention-days"], "7")
+        self.assertEqual(upload["with"]["name"], "ios-xcresult-${{ github.run_attempt }}-${{ matrix.lane }}")
+        self.assertEqual(upload["if"], "${{ always() && steps.archive.outputs.ready == 'true' }}")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            output = root / "output"
+            bundle = root / "Tests.xcresult"
+            for case in ("absent", "oversized", "valid"):
+                if case != "absent":
+                    bundle.mkdir(exist_ok=True)
+                    (bundle / "result").write_bytes(os.urandom(4096 if case == "oversized" else 16))
+                output.write_text("")
+                subprocess.run(["bash", "-c", pack["run"]], check=True, capture_output=True,
+                               env={**os.environ, "CI_OUTPUT_ROOT": temp, "GITHUB_OUTPUT": str(output),
+                                    "MAX_ARCHIVE_BYTES": "2048"})
+                self.assertEqual("ready=true" in output.read_text(), case == "valid")
+            with tarfile.open(root / "Tests.xcresult.tar.gz") as archive:
+                self.assertEqual(archive.extractfile("Tests.xcresult/result").read(),
+                                 (bundle / "result").read_bytes())
+
     def test_lane_creates_its_device_instead_of_selecting_or_erasing_one(self) -> None:
         text = run_commands(workflow_text())
         self.assertIn("python3 scripts/ci_simulator.py", text)
