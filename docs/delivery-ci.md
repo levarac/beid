@@ -162,11 +162,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Smoke runs the checked-in UI list and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`; full runs both complete bundles.
     Deferred coverage paths, uncertain classifications, and the `ci:full-ui` label
     select full mode. Merge groups, push,
-    nightly and manual events always run full. On `merge_group`, the optional
+    nightly and ordinary manual runs use full mode. The opt-in manual Swift Export benchmark runs smoke. On `merge_group`, the optional
     classifier is skipped and the required iOS job always executes, including
     documentation-only changes. This reuses the existing non-PR condition and
     guarantees full-suite evidence for the merge result. The existing run-name
-    expression also displays full because only PR events can select smoke.
+    expression also displays full for merge groups.
     Mode is selected once from the event and its SHA-pinned changed paths.
     The summary records the selected mode, per-bundle counts and
     summed xcresult Test Case durations (numeric `durationInSeconds` or the
@@ -279,8 +279,22 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     and saves a new distribution immediately. A hit avoids the distribution
     download. A cold or evicted entry still requires a successful download,
     with one retry and the checksum from the wrapper properties.
-    Build products move only through the artifact of the run's latest build
-    attempt. Test results, DerivedData and execution ledgers are never cached.
+    Release pushes also populate an exact cache of the arm64 Kotlin Release Swift
+    Export. Release-targeting PRs can read from their base and save in their own
+    PR scope. The key covers shared sources, Gradle inputs and resolved compiler
+    and library contents, native host tools, Xcode project and build recipes,
+    JDK, runner image, Swift, Clang and simulator SDK. Xcode installs the
+    verified archive, Swift modules and headers into a fresh Debug Simulator
+    products directory. A miss or failed validation builds the export normally.
+    The iOS app, both test bundles and the run-specific test manifest are built
+    for each head. Full-mode jobs receive them through the current build artifact.
+
+    To measure cold and warm builds on one head, manually enable
+    `swift_export_benchmark` and then rerun all jobs on that run. Its cache key
+    includes the run ID. Attempt one must build and save, later attempts must
+    restore the same export and link in a fresh DerivedData. Both execute the
+    normal smoke tests. Compare total build-job time including fingerprinting,
+    transfers and publication as well as the Xcode build and test steps. Test results, DerivedData and execution ledgers are never cached.
     With the main merge queue enabled, the merge step is to add the PR to
     the queue after its required PR checks pass. A completed full-mode pass of
     `iOS simulator` on the queue's exact merge result satisfies the full-suite

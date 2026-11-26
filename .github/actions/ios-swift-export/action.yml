@@ -1,0 +1,87 @@
+name: Kotlin Swift Export cache
+description: Restore or publish the exact simulator export
+inputs:
+  operation:
+    required: true
+    description: restore or save
+  products:
+    required: true
+    description: Fresh Xcode or standalone producer products directory
+  namespace:
+    required: false
+    default: shared
+    description: Separate ordinary caches from same-run benchmark entries
+outputs:
+  hit:
+    description: Exact entry validated
+    value: ${{ steps.validate.outputs.hit }}
+  saved:
+    description: Exact key was visible after publication
+    value: ${{ steps.receipt.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - id: fingerprint
+      shell: bash
+      run: |
+        set -euo pipefail
+        inputs_file="$RUNNER_TEMP/beid-swift-export-inputs.json"
+        if (cd android && ./gradlew -q -I ../scripts/ios_swift_export_inputs.gradle \
+              :shared:fingerprintSwiftExportInputs "-PbeidExportInputsFile=$inputs_file") &&
+           digest="$(python3 scripts/ios_swift_export_key.py "$inputs_file")" &&
+           [[ "$digest" =~ ^[a-f0-9]{64}$ ]]; then
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+        else
+          echo "::notice::Swift Export inputs unavailable. Use the normal Kotlin build."
+        fi
+
+    - id: restore
+      if: inputs.operation == 'restore' && steps.fingerprint.outputs.digest != ''
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: .ci-swift-export
+        key: beid-swift-export-v1-${{ inputs.namespace }}-${{ steps.fingerprint.outputs.digest }}
+
+    - id: validate
+      if: inputs.operation == 'restore' && steps.restore.outputs.cache-hit == 'true'
+      shell: bash
+      env:
+        DIGEST: ${{ steps.fingerprint.outputs.digest }}
+      run: |
+        set -euo pipefail
+        if python3 scripts/ios_swift_export_cache.py verify --entry .ci-swift-export --key "$DIGEST"; then
+          echo "hit=true" >> "$GITHUB_OUTPUT"
+          echo "BEID_SWIFT_EXPORT_ENTRY=$GITHUB_WORKSPACE/.ci-swift-export" >> "$GITHUB_ENV"
+          echo "BEID_SWIFT_EXPORT_KEY=$DIGEST" >> "$GITHUB_ENV"
+        else
+          echo "::warning::Cached Swift Export failed verification. Use the normal Kotlin build."
+        fi
+
+    - id: snapshot
+      if: inputs.operation == 'save' && steps.fingerprint.outputs.digest != ''
+      shell: bash
+      env:
+        DIGEST: ${{ steps.fingerprint.outputs.digest }}
+        PRODUCTS: ${{ inputs.products }}
+      run: |
+        set -euo pipefail
+        if [[ ! -e .ci-swift-export ]] && python3 scripts/ios_swift_export_cache.py snapshot \
+            --entry .ci-swift-export --key "$DIGEST" --products "$PRODUCTS"; then
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "::notice::No new verified Swift Export snapshot to publish."
+        fi
+
+    - if: steps.snapshot.outputs.ready == 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: .ci-swift-export
+        key: beid-swift-export-v1-${{ inputs.namespace }}-${{ steps.fingerprint.outputs.digest }}
+
+    - id: receipt
+      if: steps.snapshot.outputs.ready == 'true'
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        lookup-only: true
+        path: .ci-swift-export
+        key: beid-swift-export-v1-${{ inputs.namespace }}-${{ steps.fingerprint.outputs.digest }}

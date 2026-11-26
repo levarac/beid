@@ -9,9 +9,10 @@ from scripts.tests.test_pr_ci_lane_skip import WORKFLOWS, job_name
 NAMES = ("pr-ci.yml", "pr-ci-ios-macos.yml", "pr-ci-lab-cli.yml")
 
 
-def expression_value(expression, *, event, ref, sha="a" * 40, pr=None, labels=None):
+def expression_value(expression, *, event, ref, sha="a" * 40, pr=None, labels=None, benchmark=False):
     """Evaluate the context/boolean subset used by checkout, group and run-name."""
     values = {
+        "inputs.swift_export_benchmark": benchmark,
         "github.event_name": event,
         "github.ref": ref,
         "github.ref_name": ref.removeprefix("refs/heads/"),
@@ -25,7 +26,7 @@ def expression_value(expression, *, event, ref, sha="a" * 40, pr=None, labels=No
         "contains(github.event.pull_request.labels.*.name, 'ci:full-ui')",
         repr(labels is not None and any(label["name"] == "ci:full-ui" for label in labels)),
     )
-    expression = re.sub(r"github(?:\.[\w]+)+", lambda m: repr(values[m[0]]), expression)
+    expression = re.sub(r"(?:github|inputs)(?:\.[\w]+)+", lambda m: repr(values[m[0]]), expression)
     expression = expression.replace("null", "None").replace("&&", " and ").replace("||", " or ")
     expression = re.sub(r"!(?!=)", " not ", expression)
     return eval(expression.strip(), {"__builtins__": {}}, {})  # noqa: S307
@@ -103,3 +104,5 @@ class MergeGroupWorkflowTest(unittest.TestCase):
                 name = render(template, event=event, ref="refs/heads/main", labels=labels)
                 self.assertIn(f"iOS simulator ({expected})", name)
                 self.assertIn(event, name)
+        name = render(template, event="workflow_dispatch", ref="refs/heads/test", benchmark=True)
+        self.assertIn("iOS simulator (cache benchmark, smoke)", name)

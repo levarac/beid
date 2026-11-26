@@ -372,8 +372,8 @@ the same name shadows them.
   PRs keep smoke only when every iOS-affecting changed path is a UI or CI-selection
   path defined by `scripts/ci_change_filter.py`. Other iOS-affecting paths or failed
   classification select full mode. A `ci:full-ui` label in the event payload
-  selects the full UI suite. All other events run full, including
-  `merge_group`, main pushes, nightly and manual dispatch. With the main merge
+  selects the full UI suite. Merge groups, main pushes, nightly and ordinary manual runs use full mode.
+  The opt-in manual Swift Export benchmark runs smoke. With the main merge
   queue (active), the merge step is to add the PR to the queue; the queue's
   completed full-mode `iOS simulator` pass on the exact merge result satisfies
   the merge requirement. The queue lane never skips for paths. For a full run
@@ -495,11 +495,13 @@ UI exclusions in `scripts/ios-ui-iphone-skips.txt` and the Debug Simulator unit
 exclusions in `scripts/ios-unit-debug-simulator-skips.txt` must exist and report
 Skipped; a listed test that passes is a stale-list failure. Structured results and
 phase timings are uploaded in both modes. A successful explicit classifier skip
-is the only exception to executed evidence. Dependency-only KMP/SPM caches use
+is the only exception to executed evidence. KMP/SPM dependency caches use
 exact toolchain/lockfile keys without prefix restores; DerivedData and test
-results are never cached. A payload
+results are never cached. Release pushes seed a content-keyed arm64 simulator Swift Export.
+Release-targeting PRs verify its 23 files before reuse. On a miss they run
+`:shared:embedSwiftExportForXcode`. The app and tests build for each SHA. A payload
 label `ci:full-ui` selects the full UI suite; merge groups, main pushes,
-nightly (03:23 UTC, separate concurrency group) and manual runs are full.
+nightly (03:23 UTC, separate concurrency group) and ordinary manual runs are full.
 The xcresult tree must prove exactly the smoke list Passed in smoke mode and
 every enumerated non-exempt UI case Passed in full mode. Summary counts and per-bundle
 durations come from xcresult Test Case nodes, summed without suite totals.

@@ -1486,7 +1486,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nKMP_JAVA_HOME=\"$(\"$SRCROOT/../scripts/resolve_kmp_java_home.sh\")\"\nexport JAVA_HOME=\"$KMP_JAVA_HOME\"\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\necho \"Using KMP JDK: $JAVA_HOME\"\n\"$JAVA_HOME/bin/java\" -version\ncd \"$SRCROOT/../android\"\n# Select the Kotlin build type without changing Swift's Xcode configuration.\nCONFIGURATION=\"${BEID_KMP_BUILD_TYPE:-$CONFIGURATION}\" \\\n  ./gradlew :shared:embedSwiftExportForXcode --no-daemon\n";
+			shellScript = "set -eu\n# Hosted Debug/arm64 Simulator builds may reuse a verified Release export.\nif [ -n \"${BEID_SWIFT_EXPORT_KEY:-}\" ] && [ -n \"${BEID_SWIFT_EXPORT_ENTRY:-}\" ] &&\n   [ \"$CONFIGURATION\" = Debug ] &&\n   [ \"$PLATFORM_NAME\" = iphonesimulator ] && [ \"$ARCHS\" = arm64 ] &&\n   [ \"${BEID_KMP_BUILD_TYPE:-}\" = Release ] &&\n   python3 \"$SRCROOT/../scripts/ios_swift_export_cache.py\" install \\\n     --entry \"$BEID_SWIFT_EXPORT_ENTRY\" --key \"$BEID_SWIFT_EXPORT_KEY\" --products \"$BUILT_PRODUCTS_DIR\"; then\n  echo \"Restored Kotlin Swift Export\"\n  exit 0\nfi\nKMP_JAVA_HOME=\"$(\"$SRCROOT/../scripts/resolve_kmp_java_home.sh\")\"\nexport JAVA_HOME=\"$KMP_JAVA_HOME\"\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\necho \"Using KMP JDK: $JAVA_HOME\"\n\"$JAVA_HOME/bin/java\" -version\ncd \"$SRCROOT/../android\"\n# Select the Kotlin build type without changing Swift's Xcode configuration.\nCONFIGURATION=\"${BEID_KMP_BUILD_TYPE:-$CONFIGURATION}\" \\\n  ./gradlew :shared:embedSwiftExportForXcode --no-daemon\n";
 		};
 		F2B6B1CB58EACE18BFC50F4D /* Build BeidSharedKit */ = {
 			isa = PBXShellScriptBuildPhase;

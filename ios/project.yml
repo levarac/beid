@@ -42,6 +42,16 @@ targets:
         basedOnDependencyAnalysis: false
         script: |
           set -eu
+          # Hosted Debug/arm64 Simulator builds may reuse a verified Release export.
+          if [ -n "${BEID_SWIFT_EXPORT_KEY:-}" ] && [ -n "${BEID_SWIFT_EXPORT_ENTRY:-}" ] &&
+             [ "$CONFIGURATION" = Debug ] &&
+             [ "$PLATFORM_NAME" = iphonesimulator ] && [ "$ARCHS" = arm64 ] &&
+             [ "${BEID_KMP_BUILD_TYPE:-}" = Release ] &&
+             python3 "$SRCROOT/../scripts/ios_swift_export_cache.py" install \
+               --entry "$BEID_SWIFT_EXPORT_ENTRY" --key "$BEID_SWIFT_EXPORT_KEY" --products "$BUILT_PRODUCTS_DIR"; then
+            echo "Restored Kotlin Swift Export"
+            exit 0
+          fi
           KMP_JAVA_HOME="$("$SRCROOT/../scripts/resolve_kmp_java_home.sh")"
           export JAVA_HOME="$KMP_JAVA_HOME"
           export PATH="$JAVA_HOME/bin:$PATH"

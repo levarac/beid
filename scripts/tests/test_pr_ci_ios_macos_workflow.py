@@ -252,6 +252,21 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
                         capture_output=True, text=True)
                     self.assertEqual(output.read_text(), f"mode={expected}\n")
 
+    def test_benchmark_changes_mode_only_on_explicit_manual_request(self):
+        command = step_data(workflow_text(), "Determine test mode", "plan")["run"]
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            for event, requested, expected in [
+                ("workflow_dispatch", "false", "full"), ("workflow_dispatch", "true", "smoke"),
+                ("merge_group", "true", "full"), ("pull_request", "true", "full"),
+            ]:
+                with self.subTest(event=event, requested=requested):
+                    output.write_text("")
+                    subprocess.run(["bash", "-c", command], check=True,
+                        env={**os.environ, "EVENT_NAME": event, "ALLOW_SMOKE": "false",
+                             "EXPORT_BENCHMARK": requested, "GITHUB_OUTPUT": str(output)})
+                    self.assertEqual(output.read_text(), f"mode={expected}\n")
+
     def test_selection_shell_passes_exact_arguments_in_both_modes(self):
         block = step_data(workflow_text(), "Test without rebuilding")
         self.assertIn("scripts.ios_ui_smoke arguments", block["run"])

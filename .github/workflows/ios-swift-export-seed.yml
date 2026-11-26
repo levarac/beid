@@ -1,0 +1,73 @@
+name: Prepare Kotlin Swift Export
+on:
+  push:
+    branches: ['release/**']
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    name: Prepare release simulator export
+    runs-on: xcode-27
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: zulu
+          java-version: '17'
+      - name: Identify dependency cache inputs
+        id: toolchain
+        run: |
+          set -euo pipefail
+          echo "KMP_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          {
+            printf 'xcode=%s\n' "$(xcodebuild -version | shasum -a 256 | awk '{print $1}')"
+            printf 'sdk=%s\n' "$(xcrun --sdk iphonesimulator --show-sdk-build-version)"
+            printf 'jdk=%s\n' "$("$JAVA_HOME/bin/java" -version 2>&1 | shasum -a 256 | awk '{print $1}')"
+          } >> "$GITHUB_OUTPUT"
+      - name: Cache Gradle distribution
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: beid-ios-gradle-dist-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle/wrapper/gradle-wrapper.jar') }}
+      - name: Cache KMP dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            !~/.gradle/caches/build-cache-*
+            !~/.gradle/caches/*/executionHistory
+            ~/.konan
+          key: beid-ios-kmp-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
+      - id: export
+        uses: ./.github/actions/ios-swift-export
+        with:
+          operation: restore
+          products: ${{ runner.temp }}/export/Debug-iphonesimulator
+      - name: Build the Release Kotlin simulator export
+        if: steps.export.outputs.hit != 'true'
+        working-directory: android
+        run: |
+          set -euo pipefail
+          export ARCHS=arm64 PLATFORM_NAME=iphonesimulator CONFIGURATION=Release
+          SDK_NAME="iphonesimulator$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          export SDK_NAME
+          export IPHONEOS_DEPLOYMENT_TARGET=17.0 FRAMEWORKS_FOLDER_PATH=Frameworks
+          export BUILT_PRODUCTS_DIR="$RUNNER_TEMP/export/Debug-iphonesimulator"
+          export TARGET_BUILD_DIR="$BUILT_PRODUCTS_DIR"
+          mkdir -p "$BUILT_PRODUCTS_DIR"
+          ./gradlew :shared:embedSwiftExportForXcode --no-daemon
+      - id: publish
+        if: steps.export.outputs.hit != 'true'
+        uses: ./.github/actions/ios-swift-export
+        with:
+          operation: save
+          products: ${{ runner.temp }}/export/Debug-iphonesimulator
+      - name: Confirm release export is available
+        if: steps.export.outputs.hit != 'true' && steps.publish.outputs.saved != 'true'
+        run: exit 1
