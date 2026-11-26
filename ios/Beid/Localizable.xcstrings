@@ -4418,6 +4418,17 @@
         }
       }
     },
+    "Pack schedule ends": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pack schedule ends"
+          }
+        }
+      }
+    },
     "Pack digest": {
       "extractionState": "manual",
       "localizations": {
