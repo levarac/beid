@@ -1738,23 +1738,23 @@
     "Couldn't seal attendance": {},
     "beid couldn't finish sealing your attendance with this wallet.": {},
     "scan.binding.title": {
-      "comment": "Event name, e.g. 'ETH Tokyo 2026 confirmed' — heading on the wallet connect+binding prompt.",
+      "comment": "Event name, e.g. 'ETH Tokyo 2026 record linked' — heading on the wallet connect+binding prompt.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ confirmed"
+            "value": "%@ record linked"
           }
         }
       }
     },
     "scan.binding.sealedSubtitle": {
-      "comment": "Confirmation after the wallet-binding signature succeeds; event name is interpolated, e.g. 'Your attendance to ETH Tokyo 2026 is sealed.'",
+      "comment": "Confirmation after the wallet-binding signature succeeds; event name is interpolated, e.g. 'Your record for ETH Tokyo 2026 is linked.'",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your attendance to %@ is sealed."
+            "value": "Your record for %@ is linked."
           }
         }
       }

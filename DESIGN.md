@@ -2807,7 +2807,7 @@ lives in `AGENTS.md`.
   > the term choice itself was not overturned.
 
 - Welcome uses the exact headline "Record you were there." and subtitle
-  "Your phones say hello to each other, and keep a note anyone can verify."
+  "Nearby devices say hello to each other, and keep a note anyone can verify."
   These are the approved Welcome exception to the general presence-copy
   caution. Other copy describes observations, explicit joining and foreground
   sensing without promising background operation.
