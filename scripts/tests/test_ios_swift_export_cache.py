@@ -73,6 +73,39 @@ class ExportKeyTests(unittest.TestCase):
             self.assertTrue(tracked_input(name), name)
         self.assertFalse(tracked_input("ios/Beid/Home.swift"))
 
+    def test_toolchain_ignores_rollout_version_but_detects_changed_compiler(self):
+        import os
+        from unittest.mock import patch
+        from scripts import ios_swift_export_key as key
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("bin/java", "lib/modules", "lib/server/libjvm.dylib", "SDKSettings.json",
+                         "swiftc", "swift-frontend", "clang", "ld", "libtool"):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(name.encode())
+
+            def tool_command(*args):
+                if args[-1] == "--show-sdk-path":
+                    return os.fsencode(root)
+                if args[-2] == "--find":
+                    return os.fsencode(root / args[-1])
+                if args[-2:] == ("clang", "--version"):
+                    return b"clang 1\nInstalledDir: /runner/" + os.fsencode(os.environ["ImageVersion"])
+                return b"same toolchain"
+
+            self.addCleanup(key.content.cache_clear)
+            with patch.object(key, "command", side_effect=tool_command), \
+                 patch.object(key.subprocess, "check_output", return_value=b"Java 17"), \
+                 patch.dict(os.environ, {"ImageOS": "xcode-27-arm64", "ImageVersion": "first"}):
+                first = key.host_toolchain(root)
+                with patch.dict(os.environ, {"ImageVersion": "second"}):
+                    self.assertEqual(first, key.host_toolchain(root))
+                    (root / "clang").write_bytes(b"changed compiler")
+                    key.content.cache_clear()
+                    self.assertNotEqual(first, key.host_toolchain(root))
+
     def test_key_is_relocatable_and_sensitive_to_source_dependencies_and_image(self):
         import json
         import subprocess

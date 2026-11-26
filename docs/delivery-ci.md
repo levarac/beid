@@ -283,7 +283,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Export. Release-targeting PRs can read from their base and save in their own
     PR scope. The key covers shared sources, Gradle inputs and resolved compiler
     and library contents, native host tools, Xcode project and build recipes,
-    JDK, runner image, Swift, Clang and simulator SDK. Xcode installs the
+    host OS build, active JDK and Xcode tool contents, and simulator SDK. Xcode installs the
     verified archive, Swift modules and headers into a fresh Debug Simulator
     products directory. A miss or failed validation builds the export normally.
     The iOS app, both test bundles and the run-specific test manifest are built
