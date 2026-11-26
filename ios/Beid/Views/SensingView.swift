@@ -581,9 +581,17 @@ struct SensingSessionSurface: View {
             VStack(alignment: .leading, spacing: DS.Space.m) {
               BeidLiveSessionPanel {
                 VStack(alignment: .leading, spacing: DS.Space.m) {
-                  Text(presentation == .signalLost ? LocalizedStringKey("Signal lost") : LocalizedStringKey("Sensing"))
-                    .beidTextStyle(DS.Font.Library.labelMono11)
-                    .foregroundStyle(DS.Color.textSecondaryOnInk)
+                  // The status dot (as beside status text elsewhere) carries the
+                  // live state, so it does not depend on the card being near-black.
+                  HStack(spacing: DS.Space.s) {
+                    Circle()
+                      .fill(presentation == .signalLost ? DS.Color.statusPending : DS.Color.statusOn)
+                      .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+                      .accessibilityHidden(true)
+                    Text(presentation == .signalLost ? LocalizedStringKey("Signal lost") : LocalizedStringKey("Sensing"))
+                      .beidTextStyle(DS.Font.Library.labelMono11)
+                      .foregroundStyle(DS.Color.textSecondaryOnInk)
+                  }
                   if presentation == .steady || presentation == .waiting || presentation == .signalLost {
                     eventHeading
                   } else {
