@@ -15,6 +15,37 @@ final class FlatScreenshotTourC: XCTestCase {
 
   func testShot_05_Sensing() { capture("05") }
 
+  /// TestFlight 331 reported empty space below the content after scrolling
+  /// the live Sensing screen up. Pins the settled bottom: the last control
+  /// (the "how sensing works" link) ends only the content padding (16 pt) and
+  /// the footer padding (8 pt) above the Stop control, and the steady layout
+  /// that fits the screen does not scroll at all.
+  func testSensingScrollStopsAtTheContentEnd() throws {
+    for code in ["05a", "05a3"] {
+      let app = launchSensingFixture(code)
+      let last = app.descendants(matching: .any).matching(NSPredicate(
+        format: "identifier == 'scan.first-time.about' OR identifier == 'scan.about'")).firstMatch
+      let stop = app.buttons["scan.stop-sensing"]
+      XCTAssertTrue(last.waitForExistence(timeout: 10) && stop.exists, code)
+      for _ in 0..<6 { app.swipeUp(velocity: .slow) }
+      Thread.sleep(forTimeInterval: 2)
+      let gap = stop.frame.minY - last.frame.maxY
+      XCTAssertEqual(gap, 24, accuracy: 4,
+        "\(code): content ends \(gap) pt above the Stop control after scrolling to the bottom")
+      app.terminate()
+    }
+
+    let steady = launchSensingFixture("05")
+    let stop = steady.buttons["scan.stop-sensing"]
+    let top = stop.frame.minY
+    let text = steady.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Keep the app open'")).firstMatch
+    let before = text.frame.minY
+    steady.swipeUp(velocity: .slow)
+    Thread.sleep(forTimeInterval: 1)
+    XCTAssertEqual(text.frame.minY, before, accuracy: 1, "a layout that fits must not scroll")
+    XCTAssertEqual(stop.frame.minY, top, accuracy: 1)
+  }
+
   func testShot_05a_Detecting() { capture("05a") }
   func testShot_05a2_Detecting20s() { capture("05a2") }
   func testShot_05a3_DetectingFirstTime() { capture("05a3") }
