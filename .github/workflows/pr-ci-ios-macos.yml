@@ -400,8 +400,13 @@ jobs:
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          INDEX_BENCHMARK: ${{ github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark }}
         run: |
           set -euo pipefail
+          index_setting=""
+          if [[ "$INDEX_BENCHMARK" == true ]]; then
+            index_setting=COMPILER_INDEX_STORE_ENABLE=NO
+          fi
           mkdir -p "$CI_OUTPUT_ROOT"
           python3 -m scripts.ios_ci_timing --phase spm \
             --log "$CI_OUTPUT_ROOT/spm.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
@@ -418,6 +423,7 @@ jobs:
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" \
             -disableAutomaticPackageResolution \
+            ${index_setting:+"$index_setting"} \
             SWIFT_OPTIMIZATION_LEVEL=-O \
             BEID_SWIFT_EXPORT_KEY="${BEID_SWIFT_EXPORT_KEY:-}" \
             BEID_SWIFT_EXPORT_ENTRY="${BEID_SWIFT_EXPORT_ENTRY:-}" \
