@@ -27,7 +27,7 @@ not authorise a new publishing implementation.
 | | Decision |
 | --- | --- |
 | **Q3 — graph boundary** | **No participant-level rows in the public view.** |
-| **Q8 — DISPLAY time disclosure** | **Event-relative coarse bucket.** No participant-level absolute timestamp at any precision in the UI. |
+| **Q8 — DISPLAY time disclosure** | **Event-relative coarse buckets for observation times.** The published event schedule may use absolute dates and times. |
 | **Q2 — v1.1 public DISPLAY outputs** | **Recomputed device count and observed pseudonymous relations, with no minimum cohort.** Q8 still governs displayed time. |
 | **Q10 — wallet/owner-key/self-proof** | **Ratified: never published.** Was already true in code; now a rule. |
 
@@ -51,8 +51,10 @@ contracts:
 3. **Before the participant's first upload:** explain that the public
    verification API exposes raw signed Observations, that third parties
    can reconstruct within-event pseudonymous edges, and that counts and
-   relations also appear at small events. A record shows devices observing
-   each other over Bluetooth. It does not establish a person's presence.
+   relations also appear at small events. A record shows one device observing
+   another over Bluetooth. A [mutual sighting](issue-144-attestation-contract.md#2-terms)
+   requires two independently signed, valid reciprocal records for the same
+   event and a compatible window. A record does not establish a person's presence.
    Explain the retention, deletion and contact details in the
    [2026-11-26 notice decision](https://github.com/levarac/beid/issues/468#issuecomment-7187223146).
    Public copies and records anchored to a public blockchain cannot be recalled.
@@ -99,10 +101,13 @@ attacker's cost; it does not remove the key. An event-relative bucket
 removes the key itself. These are different kinds of answer, not two
 points on one scale.
 
-Q8 is a DISPLAY decision. The raw verification response still carries the
-timing material required by its public profile; the page must not turn that
-into participant-level timestamps. Thus a coarse displayed bucket must not be
-described as coarsening or removing time in the downloadable evidence.
+Q8 governs observation times in the public display. Any displayed activity
+uses coarse buckets relative to the event. This applies to time labels for
+devices, edges, and aggregates derived from their observations. The UI may show
+absolute start and end times from the published event schedule because that
+schedule is set independently of device activity. The raw verification response
+still carries the timing material required by its public profile. Downloadable
+evidence retains that timing even when the display uses coarse buckets.
 
 ### Q2 in v1.1
 
