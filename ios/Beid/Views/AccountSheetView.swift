@@ -4,6 +4,17 @@
 import SwiftUI
 import UIKit
 
+private struct DiagnosticsEnvironmentKey: EnvironmentKey {
+  static let defaultValue: DiagnosticsController? = nil
+}
+
+extension EnvironmentValues {
+  var diagnosticsController: DiagnosticsController? {
+    get { self[DiagnosticsEnvironmentKey.self] }
+    set { self[DiagnosticsEnvironmentKey.self] = newValue }
+  }
+}
+
 /// Account screen 10. H1 removes all wallet rows in v1.1; Bluetooth,
 /// Organizer tools, privacy, support and the existing sensing routes remain.
 struct AccountSheetView: View {
@@ -14,6 +25,7 @@ struct AccountSheetView: View {
   }
 
   @EnvironmentObject private var coordinator: AppCoordinator
+  @Environment(\.diagnosticsController) private var diagnostics
   @Environment(\.dismiss) private var dismiss
   @State private var path: [Destination] = []
   @State private var supportShareItem: SupportShareItem?
@@ -40,6 +52,9 @@ struct AccountSheetView: View {
         // Account Join retains the existing event-code route.
         // Sensing ends through STOP SENSING in the details opened from Now.
         EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
+        if let diagnostics {
+          ShareDiagnosticsSection(diagnostics: diagnostics)
+        }
         // beid#466: export a frozen snapshot only after the user's action.
         Section {
           Button("Share support information") {
@@ -163,6 +178,74 @@ struct AccountSheetView: View {
   }
 
 
+}
+
+private struct ShareDiagnosticsSection: View {
+  @ObservedObject var diagnostics: DiagnosticsController
+  @State private var trialCode = ""
+  @State private var errorMessage: LocalizedStringKey?
+
+  var body: some View {
+    Section {
+      LabeledContent {
+        if diagnostics.isEnabled {
+          Text("On")
+        } else {
+          Text("Off")
+        }
+      } label: {
+        Text("Share diagnostics")
+      }
+      .accessibilityIdentifier("account.diagnostics.status")
+
+      Text("Share Bluetooth detection and stop times, temporary IDs from this diagnostic run, and your device model and app version with Levarac’s diagnostic server. Data expires after 90 days and is automatically deleted. You can stop sharing at any time.")
+        .foregroundStyle(DS.Color.textSecondary)
+      if !diagnostics.canUpload {
+        Text("Uploads are unavailable in this build.")
+          .foregroundStyle(DS.Color.textSecondary)
+      }
+
+      if diagnostics.isEnabled {
+        Button("Turn off sharing", role: .destructive) { revoke() }
+          .accessibilityIdentifier("account.diagnostics.revoke")
+      } else {
+        SecureField("Trial code", text: $trialCode)
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+          .accessibilityIdentifier("account.diagnostics.trial-code")
+        Button("Turn on sharing") { enable() }
+          .disabled(trialCode.isEmpty)
+          .accessibilityIdentifier("account.diagnostics.enable")
+      }
+      if let errorMessage {
+        Text(errorMessage)
+          .foregroundStyle(DS.Color.textSecondary)
+          .accessibilityIdentifier("account.diagnostics.error")
+      }
+    }
+    .onDisappear { trialCode = "" }
+  }
+
+  private func enable() {
+    defer { trialCode = "" }
+    do {
+      try diagnostics.enable(code: trialCode.trimmingCharacters(in: .whitespacesAndNewlines))
+      errorMessage = nil
+    } catch DiagnosticsQueue.Failure.invalidTrialCode {
+      errorMessage = "Enter the complete trial code."
+    } catch {
+      errorMessage = "Couldn’t turn on diagnostics. Try again."
+    }
+  }
+
+  private func revoke() {
+    do {
+      try diagnostics.revoke()
+      errorMessage = nil
+    } catch {
+      errorMessage = "Couldn’t finish clearing diagnostics."
+    }
+  }
 }
 
 private enum AccountSheetHitTarget {

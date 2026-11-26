@@ -576,6 +576,7 @@ struct SensingSessionSurface: View {
           ? min(geometry.size.width, DS.Layout.stateContentMaxWidth) : geometry.size.width
         let contentWidth = max(0, layoutWidth - 2 * (DS.Space.pageMargin + DS.Space.m))
         let radarSize = min(DS.Size.liveSessionRadarField, contentWidth)
+        let peers = radarPeers(at: now)
         ScrollView {
           BeidAdaptiveContent {
             VStack(alignment: .leading, spacing: DS.Space.m) {
@@ -595,13 +596,18 @@ struct SensingSessionSurface: View {
                       .foregroundStyle(DS.Color.textSecondaryOnInk)
                   }
                   SensingRadarView(
-                    peers: radarPeers(at: now),
+                    peers: peers,
                     mutualDeviceCount: 0,
                     observedWindowCount: observedWindowCount ?? 0,
                     showsEdges: false,
                     size: radarSize,
                     recordedWindowMarkDiameter: recordedWindowMarkDiameter(at: now, size: radarSize)
                   )
+                  .onChange(of: Set(peers.map(\.id)), initial: true) { previous, current in
+                    sensing.diagnostics?.recordRadarProjection(
+                      from: previous == current ? [] : previous, to: current
+                    )
+                  }
                   .frame(maxWidth: .infinity)
                   Text("HEARD IN THE LAST 5 MINUTES")
                     .beidTextStyle(DS.Font.Library.labelMono11)

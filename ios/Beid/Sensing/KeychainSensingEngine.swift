@@ -11,6 +11,9 @@ final class KeychainSensingEngine: EventJoinControlling, ParticipantRelayControl
   var onEvent: ((BarnardEvent) -> Void)? {
     didSet { engine?.onEvent = onEvent }
   }
+  var onDebugEvent: ((BarnardDebugEvent) -> Void)? {
+    didSet { engine?.onDebugEvent = onDebugEvent }
+  }
 
   private let store: DeviceSecretKeychainStore
   private var storage: ResolvedDeviceSecretStorage?
@@ -29,6 +32,7 @@ final class KeychainSensingEngine: EventJoinControlling, ParticipantRelayControl
     engine?.stopAutomaticOperation()
     let engine = BarnardEngine(keyStorage: resolved)
     engine.onEvent = onEvent
+    engine.onDebugEvent = onDebugEvent
     self.engine = engine
     storage = resolved
   }

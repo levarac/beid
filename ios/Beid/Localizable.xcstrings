@@ -2602,6 +2602,19 @@
         }
       }
     },
+    "Share diagnostics": {
+      "comment": "Title of the opt-in diagnostics section in Account."
+    },
+    "Share Bluetooth detection and stop times, temporary IDs from this diagnostic run, and your device model and app version with Levarac’s diagnostic server. Data expires after 90 days and is automatically deleted. You can stop sharing at any time.": {},
+    "Uploads are unavailable in this build.": {},
+    "Trial code": {
+      "comment": "Placeholder for the operator-issued code that joins an optional diagnostics trial."
+    },
+    "Turn on sharing": {},
+    "Turn off sharing": {},
+    "Enter the complete trial code.": {},
+    "Couldn’t turn on diagnostics. Try again.": {},
+    "Couldn’t finish clearing diagnostics.": {},
     "Share support information": {},
     "Includes app version, recent states and failure reasons from this app session. Choose who to share it with.": {},
     "Off · Fix": {
