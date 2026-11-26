@@ -186,22 +186,20 @@ class AppNavHostTest {
         OnboardingPreferences(context).hasCompletedOnboarding = true
         shadowAdapter.setEnabled(true)
         val proofId = UUID.randomUUID()
-        val session = FakeEventJoinSession(
-            initial = EventJoinUiState.Sensing(
-                ScanPhase.Recording(ScanEventSession("ABC123"), peersVerified = 3),
-            ),
-            currentProofId = proofId,
+        val recording = EventJoinUiState.Sensing(
+            ScanPhase.Recording(ScanEventSession("ABC123"), peersVerified = 3),
         )
+        val session = FakeEventJoinSession(initial = recording, currentProofId = proofId)
         session.markRecordingCeremonyShown()
 
         composeTestRule.setContent {
             BeidAppTheme { AppNavHost(session, proofRecordStore()) }
         }
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PHASE_STATUS_PILL).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.BIND_WALLET_BUTTON).assertExists()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
 
-        composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText(context.getString(R.string.account_leave_event_button)).assertDoesNotExist()
         assertEquals(0, session.leaveEventCallCount)
 
@@ -209,17 +207,18 @@ class AppNavHostTest {
         val close = composeTestRule.onNodeWithText(context.getString(R.string.scan_close))
         val confirmation = composeTestRule.onNodeWithText(context.getString(R.string.scan_stop_heading))
         close.assertIsDisplayed().performClick()
-        confirmation.assertIsDisplayed()
+        confirmation.performScrollTo().assertIsDisplayed()
         assertEquals(0, session.leaveEventCallCount)
 
         composeTestRule.onNodeWithText(context.getString(R.string.scan_stop_keep_sensing))
             .performScrollTo().performClick()
         confirmation.assertDoesNotExist()
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PHASE_STATUS_PILL).assertIsDisplayed()
+        close.assertIsDisplayed()
+        assertEquals(recording, session.state.value)
         assertEquals(0, session.leaveEventCallCount)
 
         close.performClick()
-        confirmation.assertIsDisplayed()
+        confirmation.performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText(context.getString(R.string.scan_stop_confirm))
             .performScrollTo().performClick()
 
