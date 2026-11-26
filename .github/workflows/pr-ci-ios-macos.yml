@@ -323,6 +323,7 @@ jobs:
           key: beid-ios-kmp-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
 
       - name: Cache SPM checkouts
+        id: spm-checkouts
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           # Repository objects keep checkouts' Git alternates valid. Neither
@@ -400,13 +401,21 @@ jobs:
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          REUSE_PACKAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark && steps.spm-checkouts.outputs.cache-hit == 'true' }}
         run: |
           set -euo pipefail
           mkdir -p "$CI_OUTPUT_ROOT"
-          python3 -m scripts.ios_ci_timing --phase spm \
-            --log "$CI_OUTPUT_ROOT/spm.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
-            xcodebuild -resolvePackageDependencies -project ios/Beid.xcodeproj -scheme Beid \
-            -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" -onlyUsePackageVersionsFromResolvedFile
+          package_flag=""
+          if [[ "$REUSE_PACKAGES" == true ]]; then
+            package_flag=-skipPackageUpdates
+            echo '{"phase":"spm","event":"skipped","reason":"exact checkout cache hit"}' >> "$CI_OUTPUT_ROOT/build-timings.jsonl"
+            echo 'Using cached package checkouts at their locked revisions' > "$CI_OUTPUT_ROOT/spm.log"
+          else
+            python3 -m scripts.ios_ci_timing --phase spm \
+              --log "$CI_OUTPUT_ROOT/spm.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
+              xcodebuild -resolvePackageDependencies -project ios/Beid.xcodeproj -scheme Beid \
+              -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" -onlyUsePackageVersionsFromResolvedFile
+          fi
           python3 -m scripts.ios_ci_timing --phase build \
             --log "$CI_OUTPUT_ROOT/build.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
             xcodebuild -showBuildTimingSummary \
@@ -418,11 +427,27 @@ jobs:
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" \
             -disableAutomaticPackageResolution \
+            ${package_flag:+"$package_flag"} \
             SWIFT_OPTIMIZATION_LEVEL=-O \
             BEID_SWIFT_EXPORT_KEY="${BEID_SWIFT_EXPORT_KEY:-}" \
             BEID_SWIFT_EXPORT_ENTRY="${BEID_SWIFT_EXPORT_ENTRY:-}" \
             BEID_KMP_BUILD_TYPE=Release \
             build-for-testing
+          if [[ "$REUSE_PACKAGES" == true ]]; then
+            git diff --exit-code HEAD -- ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+            python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          pins = json.loads(Path("ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved").read_text())["pins"]
+          checkouts = Path(os.environ["SPM_SOURCE_ROOT"]) / "checkouts"
+          actual = {subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD"], text=True).strip()
+                    for path in checkouts.iterdir() if path.is_dir()}
+          expected = {pin["state"]["revision"] for pin in pins}
+          if not expected or expected != actual:
+              raise SystemExit("Resolved Swift package revisions differ from the checked-in lockfile")
+          print(f"Verified {len(pins)} pinned package revisions")
+          PY
+          fi
 
       - name: Publish newly built Swift Export
         id: export-save
