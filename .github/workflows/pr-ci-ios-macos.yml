@@ -347,9 +347,9 @@ jobs:
           scripts/xcodegen_generate_checked.sh
           (
             cd ios
-            if [[ -n "$(git status --porcelain -- Beid.xcodeproj)" ]]; then
-              echo "error: Beid.xcodeproj is out of sync with project.yml" >&2
-              git status --porcelain -- Beid.xcodeproj >&2
+            if [[ -n "$(git status --porcelain -- Beid.xcodeproj Lab/Info.plist)" ]]; then
+              echo "error: Beid.xcodeproj or Lab/Info.plist is out of sync with project.yml" >&2
+              git status --porcelain -- Beid.xcodeproj Lab/Info.plist >&2
               exit 1
             fi
           )
