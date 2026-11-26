@@ -13,6 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.levarac.beid.R
 import org.levarac.beid.sensing.ScanEventSession
+import org.levarac.beid.ui.designsystem.SensingRadar
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -53,6 +54,51 @@ class ScanFlowScreensTest {
 
         composeTestRule.onNodeWithText(context.getString(R.string.scan_event_found_title)).assertIsDisplayed()
         composeTestRule.onNodeWithText(context.getString(R.string.scan_event_found_message)).assertIsDisplayed()
+    }
+
+    /**
+     * PR #928 review: the radar drops a peer after 300 s of silence, so it
+     * must say so on screen, not only in the TalkBack summary. iOS
+     * release/1.1.0 `SensingSessionSurface` puts "HEARD IN THE LAST 5
+     * MINUTES" directly below `SensingRadarView` (DESIGN.md: "with the
+     * caption \"HEARD IN THE LAST 5 MINUTES\" below the radar").
+     */
+    @Test
+    fun eventFoundScreenCaptionsTheRadarTimeWindowBelowIt() {
+        composeTestRule.setContent {
+            BeidAppTheme { EventFoundScreen(session) }
+        }
+
+        assertRadarCaptionBelowRadar()
+    }
+
+    @Test
+    fun recordingScreenCaptionsTheRadarTimeWindowBelowIt() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                RecordingScreen(
+                    session = session,
+                    peersVerified = 3,
+                    showEntranceCeremony = false,
+                    onCeremonyFinished = {},
+                    onSimulateSignalLost = {},
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        assertRadarCaptionBelowRadar()
+    }
+
+    private fun assertRadarCaptionBelowRadar() {
+        val caption = composeTestRule.onNodeWithText(RADAR_CAPTION)
+        caption.assertIsDisplayed()
+        val radarBounds = composeTestRule.onNodeWithTag(SensingRadar.TEST_TAG).fetchSemanticsNode().boundsInRoot
+        val captionBounds = caption.fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            captionBounds.top >= radarBounds.bottom,
+            "caption $captionBounds must sit below the radar $radarBounds",
+        )
     }
 
     @Test
@@ -200,5 +246,10 @@ class ScanFlowScreensTest {
         }
 
         composeTestRule.onNodeWithText(context.getString(R.string.scan_sensing_message)).assertIsDisplayed()
+    }
+
+    private companion object {
+        /** iOS release/1.1.0 `Localizable.xcstrings` key and value, as drawn (labelMono11 is uppercase). */
+        const val RADAR_CAPTION = "HEARD IN THE LAST 5 MINUTES"
     }
 }

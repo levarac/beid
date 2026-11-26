@@ -17,4 +17,7 @@
         <item quantity="one">%1$d device heard in the last 5 minutes</item>
         <item quantity="other">%1$d devices heard in the last 5 minutes</item>
     </plurals>
+
+    <!-- "HEARD IN THE LAST 5 MINUTES" (iOS release/1.1.0 key, SensingView). Caption drawn directly below the sensing radar: the radar shows only nearby devices heard within the last 5 minutes and drops one that stays silent longer. "Heard" means received over Bluetooth, not audio. Set in an all-caps mono label style. -->
+    <string name="radar_time_window_caption">HEARD IN THE LAST 5 MINUTES</string>
 </resources>

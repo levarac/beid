@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Warning
@@ -47,6 +48,7 @@ import org.levarac.beid.ui.designsystem.EncounterFieldPulseGlyph
 import org.levarac.beid.ui.designsystem.ProofSealMarkGlyph
 import org.levarac.beid.ui.designsystem.SensingRadar
 import org.levarac.beid.ui.designsystem.SensingRadarPeer
+import org.levarac.beid.ui.theme.BeidFont
 import org.levarac.beid.ui.theme.BeidSize
 import org.levarac.beid.ui.theme.BeidSpacing
 import org.levarac.beid.ui.theme.BeidTheme
@@ -385,6 +387,11 @@ private const val SESSION_RADAR_TICK_MILLIS = 1_000L
  *   the radar at 300 s ([RadarPeerLiveness]). The last-heard time is read
  *   live, never from the published list, because an RSSI sample moves it
  *   without a republish.
+ * - Caption: "HEARD IN THE LAST 5 MINUTES" directly below the radar, as
+ *   release/1.1.0 `SensingSessionSurface` draws it (DESIGN.md), so the
+ *   300 s window is visible and not only spoken. Mono 11 in `textSecondary`,
+ *   not iOS's `textSecondaryOnInk`: this radar sits on the light page, not on
+ *   an ink panel. Left readable by TalkBack, as iOS leaves it for VoiceOver.
  * - Edges: never. iOS (integration/ios-1.1.1, still so in release/1.1.0
  *   `SensingView`) hardcodes `showsEdges: false` for every presentation (an
  *   edge would suggest a two-way link no device measures); SubPM decision
@@ -420,18 +427,30 @@ private fun SessionRadar(radarPeers: List<SensingRadarPeerSignal>, lastHeardAtMi
         if (!RadarPeerLiveness.isCurrent(lastHeard, nowMillis)) return@mapNotNull null
         SensingRadarPeer(peer.displayId, peer.dbm, isDimmed = RadarPeerLiveness.isDimmed(lastHeard, nowMillis))
     }
-    BoxWithConstraints(
-        Modifier.fillMaxWidth().semantics { this[SessionRadarDimmedPeers] = peers.map { it.isDimmed } },
-        contentAlignment = Alignment.Center,
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(BeidSpacing.m),
     ) {
-        val size = minOf(BeidSize.radarField, maxWidth + BeidSpacing.pageMargin).coerceAtLeast(0.dp)
-        SensingRadar(
-            peers = peers,
-            mutualDeviceCount = 0,
-            observedWindowCount = 0,
-            modifier = Modifier.requiredSize(size),
-            showsEdges = false,
-            size = size,
+        BoxWithConstraints(
+            Modifier.fillMaxWidth().semantics { this[SessionRadarDimmedPeers] = peers.map { it.isDimmed } },
+            contentAlignment = Alignment.Center,
+        ) {
+            val size = minOf(BeidSize.radarField, maxWidth + BeidSpacing.pageMargin).coerceAtLeast(0.dp)
+            SensingRadar(
+                peers = peers,
+                mutualDeviceCount = 0,
+                observedWindowCount = 0,
+                modifier = Modifier.requiredSize(size),
+                showsEdges = false,
+                size = size,
+            )
+        }
+        NowStyledText(
+            text = stringResource(R.string.radar_time_window_caption),
+            style = BeidFont.Library.labelMono11,
+            color = BeidTheme.colors.textSecondary,
+            modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
         )
     }
 }
