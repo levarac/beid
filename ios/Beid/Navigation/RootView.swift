@@ -82,9 +82,9 @@ private struct FirstUploadNoticeView: View {
   var body: some View {
     NavigationStack {
       ScrollView {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
           Text("Before your first upload")
-            .font(.title.bold())
+            .font(DS.Font.sectionTitle)
             .accessibilityAddTraits(.isHeader)
           Text("The event operator receives signed Bluetooth observations between devices. Raw observations are available through a public verification API. Others can use them to reconstruct a graph of pseudonymous devices within the event.")
           Text("Device counts and observed relationships are public even at small events. These records show devices observing one another over Bluetooth; they do not establish that a person attended.")
