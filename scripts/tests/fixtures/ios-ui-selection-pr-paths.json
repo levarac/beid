@@ -1,0 +1,56 @@
+{
+  "907": {
+    "head": "65c36ae87bf2adf81ded23d5df34e24013254274",
+    "merge_base": "788832cd157c5b28309b74a3b80abf4957c67c13",
+    "files": [
+      "DESIGN.md",
+      "ios/Beid/DesignSystem/BeidAdaptiveContent.swift",
+      "ios/Beid/DesignSystem/Tokens.swift",
+      "ios/Beid/Localizable.xcstrings",
+      "ios/Beid/Navigation/AppCoordinator.swift",
+      "ios/Beid/Views/CollectionHomeView.swift",
+      "ios/Beid/Views/EventFoundView.swift",
+      "ios/Beid/Views/RecordingView.swift",
+      "ios/Beid/Views/ScanFlowView.swift",
+      "ios/Beid/Views/SensingStopConfirmView.swift",
+      "ios/Beid/Views/SensingView.swift",
+      "ios/Beid/Views/SignalLostView.swift",
+      "ios/BeidTests/HomeStandbyStateTests.swift",
+      "ios/BeidTests/SensingStopConfirmCopyTests.swift",
+      "ios/BeidTests/SensingStopFlowTests.swift",
+      "ios/BeidUITests/BeidIPadLayoutTests.swift",
+      "ios/BeidUITests/NearbyJoinUITests.swift",
+      "ios/BeidUITests/RecordingBindingSheetUITests.swift",
+      "ios/BeidUITests/SingleAppearanceUITests.swift"
+    ]
+  },
+  "891": {
+    "head": "13742948e8bfe19d3c5b65a1cb1fb988abc62263",
+    "merge_base": "77ceb8b9d350aeb74088eca9ad516b58336a76f6",
+    "files": [
+      "ios/BeidUITests/FlatScreenshotTourB.swift",
+      "ios/BeidUITests/FlatScreenshotTourC.swift"
+    ]
+  },
+  "873": {
+    "head": "a58e2d15dab7bfb684b4eeb075bb76df8f1ff264",
+    "merge_base": "d995290713dd8dccc31c1213ce7edbe83e05d62e",
+    "files": [
+      "ios/Beid/Views/AccountSheetView.swift",
+      "ios/Beid/Views/OrganizerToolsView.swift",
+      "ios/BeidUITests/FlatScreenshotTourD.swift"
+    ]
+  },
+  "871": {
+    "head": "eda969a8ab3fe14d0ac6c45aa1778a3c9026ae79",
+    "merge_base": "6f9fa7401e1855b55e9c34dd0484e3aeab343387",
+    "files": [
+      ".github/workflows/pr-ci-ios-macos.yml",
+      "AGENTS.md",
+      "docs/delivery-ci.md",
+      "scripts/ios_ui_smoke.py",
+      "scripts/tests/test_ios_ci_shards.py",
+      "scripts/tests/test_ios_shard_workflow.py"
+    ]
+  }
+}

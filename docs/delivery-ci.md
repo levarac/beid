@@ -236,6 +236,21 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     bundle and its compressed archive fits within 250 MiB. A test step reaching
     its time limit can leave a partial bundle. Runner loss or expiration of the
     whole job can prevent upload. The aggregate reads only structured evidence.
+    After a full build, **Compare proposed UI test selection** publishes
+    `ios-ui-selection-<attempt>` for 14 days. The report records the proposed
+    screen and test-file matches, additional estimated seconds above smoke,
+    the final candidate IDs, and any observed failures outside either set.
+    The hand-written `VIEWS` and `TEST_FILES` tables match changed screen and
+    UI test sources. Unmapped iOS inputs (including shared helpers), missing
+    or malformed changed-path data, renames/deletions flagged by the collector,
+    or an estimate over 25 additional minutes expand the final proposal to the
+    full UI inventory. The report retains the original matches so a fallback
+    can be distinguished from what the mapping itself covered. Expected iPhone
+    skips remain listed at zero cost. Missing shard results are marked as
+    incomplete evidence and do not alter the proposal. This Linux job runs
+    after the full test jobs when the full build succeeded, including when
+    tests failed. Smoke runs skip it. It has its own check result and the
+    required iOS check has no dependency on it.
     Use “Re-run all jobs” to recreate expired artifacts.
     `scripts/ios_ci_timing.py` timestamps SPM resolution,
     KMP script start/end, and the observed Swift compile window. That window
