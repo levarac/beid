@@ -2145,6 +2145,7 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   collection-home screen yet." Promoting a screen to this role is
   explicitly deferred to #141 (per `Screen.kt`/`RecordsScreen.kt`'s own
   kdoc), not something this document should describe as already true.]**
+- **Now registration period**: show the verified date range inside the nearby-event card. Organizer messaging is outside the product scope, so the standalone organizer tile shown in Figma is omitted.
 - **Sensing detail (05–07)**: push from the Now tab's `NavigationStack`.
   The native Back button and interactive pop gesture return to Now without
   ending participation, changing the live session, or stopping its radio.
