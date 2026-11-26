@@ -169,6 +169,7 @@ class EventJoinCoordinatorSelfProofTest {
         val store = SelfProofRecordStore(newTempRecordFile("self-proofs"))
         val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store, nearbyRegistry = registry)
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
 
         joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)

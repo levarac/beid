@@ -1427,6 +1427,16 @@ class EventJoinCoordinator internal constructor(
         }
     }
 
+    /**
+     * Asks for the runtime permission and reports the answer; it starts no
+     * discovery. The answer routes the user (Home, the Bluetooth-off guidance
+     * or the denied guidance), and standby discovery is started only by Now's
+     * standby gate once Home is visible — iOS release/1.1.0
+     * `AppCoordinator.requestBluetoothPermission` → `applyBluetoothState`
+     * likewise only sets `screen`. Starting here would queue a deferred scan
+     * when the radio is off, which the radio returning would then run behind
+     * the Bluetooth-off guidance, before the user confirms "I've turned it on".
+     */
     override fun requestBluetoothPermission(onResult: (BluetoothPermissionState) -> Unit) {
         if (disposed) return
         bindBluetoothPermissionResult(onResult)
@@ -1434,9 +1444,6 @@ class EventJoinCoordinator internal constructor(
             if (disposed) return@requestPermissions
             val permissionState = mapOnboardingPermissionResult(result)
             currentBluetoothPermissionState = permissionState
-            if (permissionState == BluetoothPermissionState.Granted) {
-                startNearbyEventDiscoveryIfIdle()
-            }
             // The SDK callback retains only this coordinator, never the requesting UI.
             val handler = bluetoothPermissionResultHandler
             if (handler != null) handler(permissionState)

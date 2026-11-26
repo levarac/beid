@@ -97,6 +97,7 @@ class EventJoinCoordinatorRadioPauseTest {
         val registry = FakeNearbyEventRegistry()
         val coordinator = coordinator(engine, registry)
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
         joinPromotedVectorEvent(coordinator, engine, registry)
         val before = coordinator.state.value
         assertIs<EventJoinUiState.Sensing>(before)
@@ -181,6 +182,45 @@ class EventJoinCoordinatorRadioPauseTest {
         assertEquals(2, engine.startScanCalls)
         assertEquals(1, engine.stopScanCalls)
         assertTrue(engine.engineState.isScanning)
+    }
+
+    /**
+     * A permission grant routes the user and starts nothing (iOS release/1.1.0
+     * `AppCoordinator.requestBluetoothPermission` → `applyBluetoothState`).
+     * Granted with the radio off, the user is on the Bluetooth-off guidance
+     * waiting for "I've turned it on"; the radio returning there must not
+     * start a scan the Now gate never asked for.
+     */
+    @Test
+    fun aPermissionGrantedWhileTheRadioIsOffStartsNoDiscoveryWhenTheRadioReturns() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        coordinator.onBluetoothRadioChanged(isOn = false)
+        val results = mutableListOf<BluetoothPermissionState>()
+
+        coordinator.requestBluetoothPermission { results += it }
+        coordinator.onBluetoothRadioChanged(isOn = true)
+
+        assertEquals(listOf(BluetoothPermissionState.Granted), results)
+        assertEquals(0, engine.startScanCalls, "only the Now gate starts standby discovery")
+        assertFalse(engine.engineState.isScanning)
+
+        coordinator.startNearbyEventDiscovery()
+
+        assertEquals(1, engine.startScanCalls, "the gate's request starts it")
+        assertTrue(engine.engineState.isScanning)
+    }
+
+    /** With the radio on, too, the grant itself starts nothing; the gate does. */
+    @Test
+    fun aPermissionGrantWithTheRadioOnStartsNoDiscovery() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+
+        coordinator.requestBluetoothPermission {}
+
+        assertEquals(0, engine.startScanCalls)
+        assertFalse(engine.engineState.isScanning)
     }
 
     private fun TestScope.coordinator(
