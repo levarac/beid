@@ -107,8 +107,8 @@ beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
   current actions; Records owns saved records and events. On iOS, the
   primary nearby candidate card is the join control (#858, maintainer
   decision 2026-11-23). It becomes tappable after registry verification
-  and retains the 20pt `DS.Radius.nowCard`. Now's DO THIS NOW and FROM THE
-  ORGANIZER tiles use Flat 2b fills and a 12pt radius (`DS.Radius.control`).
+  and retains the 20pt `DS.Radius.nowCard`. Now's DO THIS NOW tile uses
+  Flat 2b fills and a 12pt radius (`DS.Radius.control`).
   Records shows one Attendance per event, preserving its stored recording
   sessions inside the existing detail routes.
 - The earlier Flat 2b Screens and Liquid Glass-era Fixed layouts are
@@ -2145,6 +2145,7 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   collection-home screen yet." Promoting a screen to this role is
   explicitly deferred to #141 (per `Screen.kt`/`RecordsScreen.kt`'s own
   kdoc), not something this document should describe as already true.]**
+- **Now registration period**: show the verified date range inside the nearby-event card. Organizer messaging is outside the product scope, so the standalone organizer tile shown in Figma is omitted.
 - **Sensing detail (05–07)**: push from the Now tab's `NavigationStack`.
   The native Back button and interactive pop gesture return to Now without
   ending participation, changing the live session, or stopping its radio.
@@ -2806,7 +2807,7 @@ lives in `AGENTS.md`.
   > the term choice itself was not overturned.
 
 - Welcome uses the exact headline "Record you were there." and subtitle
-  "Your phones say hello to each other, and keep a note anyone can verify."
+  "Nearby devices say hello to each other, and keep a note anyone can verify."
   These are the approved Welcome exception to the general presence-copy
   caution. Other copy describes observations, explicit joining and foreground
   sensing without promising background operation.

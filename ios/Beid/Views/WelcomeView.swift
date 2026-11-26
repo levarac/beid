@@ -6,7 +6,6 @@ import SwiftUI
 /// Screen 01. Continue opens Bluetooth setup without a wallet step.
 struct WelcomeView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
-  @State private var showAboutSensing = false
 
   var body: some View {
     FlatOnboardingPage {
@@ -54,7 +53,7 @@ struct WelcomeView: View {
         // connecting/terms footer stays out: this guest-first route connects nothing.
         BeidTextControl("How it works", glyph: .trailing("→", announcing: "How it works"))
         {
-          showAboutSensing = true
+          coordinator.welcomeAboutSensingPresented = true
         }
         .accessibilityIdentifier("welcome.howItWorks")
         .padding(.top, DS.Space.m)
@@ -64,15 +63,17 @@ struct WelcomeView: View {
         coordinator.beginOnboarding()
       }
     }
-    .sheet(isPresented: $showAboutSensing) {
+    .sheet(isPresented: $coordinator.welcomeAboutSensingPresented, onDismiss: {
+      if !coordinator.welcomeAboutSensingPresented { coordinator.welcomeAboutSensingUntilDismissed = false }
+    }) {
       NavigationStack {
         AboutSensingView()
           .toolbar {
             ToolbarItem(placement: .confirmationAction) {
               if #available(iOS 26, *) {
-                Button(role: .confirm) { showAboutSensing = false }
+                Button(role: .confirm) { coordinator.welcomeAboutSensingPresented = false }
               } else {
-                Button("Done", systemImage: "checkmark") { showAboutSensing = false }
+                Button("Done", systemImage: "checkmark") { coordinator.welcomeAboutSensingPresented = false }
               }
             }
           }

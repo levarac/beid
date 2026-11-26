@@ -41,6 +41,26 @@ final class NearbyJoinUITests: XCTestCase {
     XCTAssertFalse(stopped.exists)
   }
 
+  func testVerifiedNearbyCardContainsRegistrationPeriodWithoutAnOrganizerTile() throws {
+    let app = XCUIApplication()
+    app.launchArguments = ["-beid-ui-test", "-beid-nearby-join-fixture"]
+    app.launch()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
+    app.buttons["bluetooth.permission.continue"].assertHittable()
+    app.buttons["bluetooth.permission.continue"].tap()
+
+    let card = app.buttons["home.nearby.join.9adc61d60dda843e"]
+    card.assertHittable()
+    XCTAssertFalse(app.staticTexts["FROM THE ORGANIZER"].exists)
+    let period = try XCTUnwrap(card.value as? String)
+    XCTAssertFalse(period.isEmpty, "The verified registration period belongs to the nearby event card")
+    let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    screenshot.name = "now-verified-registration-period"
+    screenshot.lifetime = .keepAlways
+    add(screenshot)
+  }
+
   func testNearbyCardTapJoinsItsVerifiedEventExactlyOnce() {
     continueAfterFailure = false
     let app = XCUIApplication()

@@ -6,9 +6,19 @@ import UIKit
 
 @main
 struct BeidApp: App {
-  @StateObject private var coordinator = AppCoordinator()
+  @StateObject private var coordinator: AppCoordinator
+  #if DEBUG && targetEnvironment(simulator)
+  private let firstUploadFixture: FirstUploadNoticeUITestFixture?
+  #endif
 
   init() {
+    #if DEBUG && targetEnvironment(simulator)
+    let fixture = FirstUploadNoticeUITestFixture.fromLaunchEnvironment()
+    firstUploadFixture = fixture
+    _coordinator = StateObject(wrappedValue: fixture?.coordinator ?? AppCoordinator())
+    #else
+    _coordinator = StateObject(wrappedValue: AppCoordinator())
+    #endif
     DeviceSecretKeychainStore.removeLegacyUserDefaultsCopy(from: .standard)
     let appearance = UINavigationBarAppearance()
     appearance.configureWithOpaqueBackground()
@@ -25,11 +35,23 @@ struct BeidApp: App {
 
   var body: some Scene {
     WindowGroup {
-      RootView()
-        .environmentObject(coordinator)
-        .onOpenURL { url in
-          MetaMaskConnector.shared.handle(url: url)
-        }
+      #if DEBUG && targetEnvironment(simulator)
+      if let firstUploadFixture {
+        FirstUploadNoticeUITestRoot(fixture: firstUploadFixture)
+      } else {
+        appRoot
+      }
+      #else
+      appRoot
+      #endif
     }
+  }
+
+  private var appRoot: some View {
+    RootView()
+      .environmentObject(coordinator)
+      .onOpenURL { url in
+        MetaMaskConnector.shared.handle(url: url)
+      }
   }
 }

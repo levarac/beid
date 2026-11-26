@@ -237,6 +237,16 @@ enum SensingScreenshotFixture: String {
 /// always use the real sensing path (see README).
 @MainActor
 final class SensingCoordinator: ObservableObject {
+  @Published private(set) var firstUploadNoticeRequested = false
+
+  func dismissFirstUploadNotice() {
+    firstUploadNoticeRequested = false
+  }
+
+  func continueAfterFirstUploadNotice() {
+    firstUploadNoticeRequested = false
+    reportSubmissionRuntime?.continueAfterFirstUploadNotice()
+  }
   @Published private(set) var phase: ScanPhase = .idle
   @Published private(set) var isScanning = false
   @Published private(set) var isAdvertising = false
@@ -1889,6 +1899,9 @@ final class SensingCoordinator: ObservableObject {
       Task { @MainActor in self.handle(event) }
     }
     reconcileSigningKeyChangeAcknowledgements()
+    self.reportSubmissionRuntime?.onFirstUploadNoticeRequired = { [weak self] in
+      self?.firstUploadNoticeRequested = true
+    }
     self.reportSubmissionRuntime?.isSigningKeyChangeAcknowledged = { [weak proofStore] eventCode in
       proofStore?.isSigningKeyChangeAcknowledged(forEventCode: eventCode) == true
     }
