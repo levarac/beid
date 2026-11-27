@@ -97,11 +97,13 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     hosted iOS PR gate. `pull_request` includes `opened`, `synchronize`,
     `reopened`, `ready_for_review`, `labeled`, and `closed`, with no
     path filter or draft guard.
-    Adding `ci:full-ui` requests full coverage. Other label additions skip
-    all jobs in an isolated concurrency group, even when the PR already has
+    Adding `ci:full-ui` requests full coverage. Other label additions run only
+    an Ubuntu summary step in an isolated group, even when the PR already has
     `ci:full-ui`. Closing or merging a PR cancels its outstanding iOS run by
     entering the same PR-number concurrency group. Both inactive event types
-    use a separate check name so they cannot satisfy the required check.
+    expand a single matrix row named `iOS simulator (inactive)`. Only active
+    events expand a row named `iOS simulator`. The inactive row has no checkout,
+    test or artifact step.
     A `Classify paths for iOS lane` job runs the same collection step and
     `scripts/ci_change_filter.py` as `Determine changed paths`; the lane has a
     job-level `if:` driven by an independent `ios` output. Documentation-only
@@ -236,8 +238,17 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     requires build/test success in its one job and its exact execution ledger.
     On ready-for-review the workflow waits behind any active execution and can
     report a completed result from the same PR, head and mode. A recorded
-    failure still fails the check. Adding `ci:full-ui` requests a fresh run;
+    failure still fails the check. After a carried failure, select **Re-run all
+    jobs** to run planning again and execute the tests. Retrying only the
+    aggregate keeps the original plan and reports the same failure. Adding
+    `ci:full-ui` requests a fresh run;
     later pushes with that label also require fresh full execution.
+
+    The iOS classifier and planner check out the event's base SHA. Only the
+    trusted base supplies the receipt lookup, path policy and mode checks.
+    Pull-request changes to those tools or the iOS workflow require fresh
+    execution. The aggregate validates carried evidence with the same base
+    code. Fresh builds and tests still use the PR head.
 
     On synchronize, the planner looks up this workflow's original run and jobs
     through the read-only Actions API. Both revisions must belong to the same
@@ -253,7 +264,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     changing build inputs or CI code use fresh execution. The cumulative PR
     may change Swift app/test sources, shared Kotlin sources and independent
     paths. Forks, incomplete metadata and lookup
-    failures and older PR heads without the lookup helper fall back to fresh
+    failures and base revisions without the lookup helper fall back to fresh
     execution. The check name for unrelated labels and closed events is selected
     solely from the webhook payload, independently of skipped jobs. The check summary names the current
     head, tested SHA, run, attempt and mode. An explicit classifier skip remains

@@ -213,7 +213,8 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
         message = (f"{mode} check for {sha} uses execution at {previous['sha']} "
                    f"(run {previous['run_id']}, attempt {previous['attempt']}).")
         if previous.get("conclusion") != "success":
-            raise ValueError(f"Prior iOS check did not pass. {message}")
+            raise ValueError(f"Prior iOS check did not pass. {message} "
+                             "Select Re-run all jobs for a fresh plan and test execution.")
         return message
     if plan.get("run") != "true" or mode not in ("full", "smoke"):
         raise ValueError("missing or invalid test plan")

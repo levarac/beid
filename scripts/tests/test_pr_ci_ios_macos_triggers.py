@@ -47,14 +47,19 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
     def test_drafts_also_get_exact_head_evidence(self) -> None:
         jobs = workflow_data(workflow_text())["jobs"]
         checkouts = []
-        for job in jobs.values():
+        for job_id, job in jobs.items():
             self.assertNotIn("pull_request.draft", job.get("if", ""))
             for step in job.get("steps", []):
                 self.assertNotIn("pull_request.draft", step.get("if", ""))
                 if step.get("uses", "").startswith("actions/checkout@"):
                     checkouts.append(step)
-                    self.assertEqual(step["with"]["ref"],
-                                     "${{ github.event.pull_request.head.sha || github.sha }}")
+                    if job_id in ("changes", "plan"):
+                        expected = "${{ github.event.pull_request.base.sha || github.sha }}"
+                    elif job_id == "ios-simulator":
+                        expected = "${{ needs.plan.outputs.previous && github.event.pull_request.base.sha || github.event.pull_request.head.sha || github.sha }}"
+                    else:
+                        expected = "${{ github.event.pull_request.head.sha || github.sha }}"
+                    self.assertEqual(step["with"]["ref"], expected)
         self.assertTrue(checkouts)
 
     def test_push_is_limited_to_main(self) -> None:
@@ -96,14 +101,19 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
         self.assertEqual(render(concurrency["group"], **pr, action="labeled", label="ci:full-ui"), active)
         self.assertNotEqual(render(concurrency["group"], **pr, action="labeled", label="triage"), active)
         self.assertNotEqual(render(concurrency["group"], **pr, action="closed", attempt=2), active)
-        aggregate = data["jobs"]["ios-simulator"]["name"]
-        self.assertNotIn("needs.", aggregate)
+        job = data["jobs"]["ios-simulator"]
+        self.assertEqual(job["if"], "${{ always() }}")
+        self.assertEqual(job["name"], "${{ matrix.context }}")
+        from scripts.tests.test_merge_group_workflows import selected_context
+        matrix = job["strategy"]["matrix"]
+        self.assertEqual(matrix["context"], ["iOS simulator", "iOS simulator (inactive)"])
+        self.assertNotIn("needs.", matrix["exclude"][0]["context"])
         for action, label, active in (("opened", "", True), ("synchronize", "", True),
                                       ("reopened", "", True), ("ready_for_review", "", True),
                                       ("labeled", "ci:full-ui", True), ("labeled", "triage", False),
                                       ("closed", "", False), ("", "", False)):
             for result in ("skipped", "failure", "success"):
-                self.assertEqual(render(aggregate, **pr, action=action, label=label, changes_result=result),
+                self.assertEqual(selected_context(job, **pr, action=action, label=label, changes_result=result),
                                  "iOS simulator" if active else "iOS simulator (inactive)")
 
     def test_lookup_falls_back_when_older_pr_head_has_no_helper(self):
@@ -111,6 +121,7 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
         import subprocess
         import tempfile
         step = next(s for s in workflow_data(workflow_text())["jobs"]["plan"]["steps"] if s.get("id") == "previous")
+        self.assertIn("github.run_attempt == 1", step["if"])
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "step-output"
             output.touch()
@@ -128,9 +139,18 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
             with self.subTest(action=action, label=label):
                 self.assertEqual(render(jobs["changes"]["if"], **context, action=action, label=label), str(active))
                 result = "success" if active else "skipped"
-                for name in ("plan", "ios-simulator"):
-                    condition = jobs[name]["if"].replace("!cancelled()", "True").replace("always()", "True")
-                    self.assertEqual(render(condition, **context, action=action, label=label, changes_result=result), str(active))
+                condition = jobs["plan"]["if"].replace("!cancelled()", "True")
+                self.assertEqual(render(condition, **context, action=action, label=label, changes_result=result), str(active))
+
+    def test_inactive_matrix_row_only_runs_the_summary_step(self):
+        from scripts.tests.test_merge_group_workflows import render
+        job = workflow_data(workflow_text())["jobs"]["ios-simulator"]
+        self.assertEqual(job["runs-on"], "ubuntu-24.04-arm")
+        self.assertEqual(job["if"], "${{ always() }}")
+        for step in job["steps"]:
+            condition = step["if"].replace("always()", "True").replace("needs.plan.outputs.run", "'true'")
+            enabled = render(condition, event="pull_request", ref="pr", matrix_context="iOS simulator (inactive)")
+            self.assertEqual(enabled, str(step.get("name") == "Record inactive PR event"))
 
 
 if __name__ == "__main__":

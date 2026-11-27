@@ -163,7 +163,13 @@ def discovery_arguments(command):
 
 
 def workflow_job_names(workflow_text):
-    return {m.group(1) for m in JOB_NAME_LINE_RE.finditer(workflow_text)}
+    names = {m.group(1) for m in JOB_NAME_LINE_RE.finditer(workflow_text)}
+    # The iOS gate chooses one of two static check names in its context matrix.
+    if "${{ matrix.context }}" in names:
+        for values in re.findall(r"^        context:\n((?:          - [^\n]+\n)+)", workflow_text, re.M):
+            names.discard("${{ matrix.context }}")
+            names.update(line.strip().removeprefix("- ") for line in values.splitlines())
+    return names
 
 
 def workflow_command_tokens(run_blocks):

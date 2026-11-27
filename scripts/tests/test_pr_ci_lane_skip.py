@@ -98,8 +98,12 @@ class LaneNamesTest(unittest.TestCase):
         from scripts.tests.test_merge_group_workflows import render
         for path, job_id, name in ((IOS, "ios-simulator", "iOS simulator"), LANES["lab-cli"]):
             with self.subTest(job=job_id):
-                self.assertEqual(render(job_name(path, job_id), event="pull_request", action="synchronize",
-                                        ref="refs/pull/7/merge"), name)
+                context = dict(event="pull_request", action="synchronize", ref="refs/pull/7/merge")
+                if job_id == "ios-simulator":
+                    from scripts.tests.workflow_yaml import workflow_data
+                    from scripts.tests.test_merge_group_workflows import selected_context
+                    context["matrix_context"] = selected_context(workflow_data(path.read_text())["jobs"][job_id], **context)
+                self.assertEqual(render(job_name(path, job_id), **context), name)
 
     def test_lanes_are_gated_by_a_job_not_a_workflow_path_filter(self):
         for lane, (path, job_id, _) in LANES.items():
@@ -135,7 +139,8 @@ class LaneNamesTest(unittest.TestCase):
                 self.assertNotIn("pulls.listFiles", block)
                 self.assertIn("previous_filename", block)
                 self.assertIn("persist-credentials: false", block)
-                self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", block)
+                trusted_ref = "base" if path == IOS else "head"
+                self.assertIn("ref: ${{ github.event.pull_request." + trusted_ref + ".sha || github.sha }}", block)
                 self.assertNotIn("secrets.", block)
 
 

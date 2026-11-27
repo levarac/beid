@@ -79,6 +79,10 @@ class PreviousRunTests(unittest.TestCase):
                 return {"total_count": 1, "jobs": [inactive]}
             return self.api(route)
         self.assertEqual(reuse.previous_run(self.event, "smoke", self.repo, 90, api, self.new_merge)["run_id"], 80)
+        inactive["conclusion"] = "success"
+        inactive["steps"] = [{"name": "Record inactive PR event", "conclusion": "success"}]
+        self.runs[0]["conclusion"] = "success"
+        self.assertEqual(reuse.previous_run(self.event, "smoke", self.repo, 90, api, self.new_merge)["run_id"], 80)
         inactive["name"] = "iOS simulator"
         self.assertIsNone(reuse.previous_run(self.event, "smoke", self.repo, 90, api, self.new_merge))
 
@@ -120,6 +124,18 @@ class PreviousRunTests(unittest.TestCase):
         self.pr_files.append({"filename": "docs/archived.md", "previous_filename": "scripts/ios_ui_smoke.py"})
         self.assertIsNone(self.resolve())
 
+    def test_changing_the_lookup_helper_never_entitles_the_pr_to_prior_evidence(self):
+        self.pr_files.append({"filename": "scripts/ios_pr_run_reuse.py", "status": "modified"})
+        self.assertIsNone(self.resolve())
+        self.event["action"] = "ready_for_review"
+        self.pr["head"]["sha"] = self.old
+        self.assertIsNone(self.resolve())
+        self.pr_files[-1] = {"filename": "docs/old-helper.md", "status": "renamed",
+                             "previous_filename": "scripts/ios_pr_run_reuse.py"}
+        self.assertIsNone(self.resolve())
+        self.pr_files[-1] = {"filename": "ios/Beid/Views/Removed.swift", "status": "removed"}
+        self.assertEqual(self.resolve()["sha"], self.old)
+
     def test_pr_build_inputs_and_mismatched_job_owners_force_a_fresh_run(self):
         for path in ("ios/project.yml", "android/app/build.gradle.kts", "scripts/ios_ui_smoke.py", "unknown/thing"):
             with self.subTest(path=path), mock.patch.dict(self.pr_files[0], filename=path):
@@ -135,7 +151,7 @@ class PreviousRunTests(unittest.TestCase):
         self.run["conclusion"] = "failure"
         self.jobs[self.old][-1]["conclusion"] = "failure"
         self.assertEqual(self.resolve()["conclusion"], "failure")
-        self.assertFalse(any("compare/" in url for url in self.calls))
+        self.assertNotIn(f"compare/{self.old}...{self.old}", self.calls)
 
     def test_ready_can_report_the_completed_exact_head_attempt(self):
         self.event["action"] = "ready_for_review"
@@ -177,5 +193,5 @@ class PreviousRunTests(unittest.TestCase):
         with mock.patch.dict(needs["build"], result="failure"), self.assertRaises(ValueError):
             validate_aggregate("pull_request", needs, None, {}, self.new)
         plan["previous"] = json.dumps({**previous, "conclusion": "failure"})
-        with self.assertRaisesRegex(ValueError, "Prior iOS check did not pass"):
+        with self.assertRaisesRegex(ValueError, "Prior iOS check did not pass.*Re-run all jobs"):
             validate_aggregate("pull_request", needs, None, {}, self.new)

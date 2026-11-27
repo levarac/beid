@@ -67,8 +67,8 @@ class ShardWorkflowTest(unittest.TestCase):
     def test_aggregate_is_always_created_with_exact_required_name(self):
         text = IOS.read_text()
         aggregate = job_block(IOS, "ios-simulator")
-        self.assertIn("    if: ${{ always() &&", aggregate)
-        self.assertIn("&& 'iOS simulator' || 'iOS simulator (inactive)'", aggregate)
+        self.assertIn("    if: ${{ always() }}", aggregate)
+        self.assertIn("          - iOS simulator\n", aggregate)
         self.assertIn("needs: [changes, plan, build, tests]", aggregate)
         self.assertIn("runs-on: ubuntu-24.04-arm", aggregate)
         self.assertIn("toJSON(needs)", aggregate)

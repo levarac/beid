@@ -480,8 +480,10 @@ violations, with no pass-fixture or application violations.
 
 The separate `.github/workflows/pr-ci-ios-macos.yml` reports **iOS simulator**
 from an aggregate on `ubuntu-24.04-arm`. Its job name is
-`${{ (github.event_name != 'pull_request' || github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || github.event.action == 'ready_for_review' || github.event.action == 'labeled' && github.event.label.name == 'ci:full-ui') && 'iOS simulator' || 'iOS simulator (inactive)' }}`.
-Closed PRs and unrelated labels skip all jobs and use the inactive check name.
+`${{ matrix.context }}` (one context per event).
+Closed PRs and unrelated labels run one Ubuntu summary step named by the
+static matrix value `iOS simulator (inactive)`. The required `iOS simulator`
+row exists only for an active event.
 **Plan iOS test jobs**
 selects mode once from the event. **Build iOS test bundles** runs
 `build-for-testing` once, enumerates both compiled bundles, and in smoke mode
@@ -553,6 +555,7 @@ only on PRs; merge groups bypass them and always execute both lanes. This
 reuses the existing non-PR path and ensures full iOS merge-result evidence,
 without adding another classification gate. Main pushes and manual dispatch
 also always run both lanes.
+The iOS classifier, planner and inherited-evidence verifier use the event base SHA.
 All PR build checkouts use the explicit PR head SHA; merge groups use
 `github.sha`, which GitHub defines as the merge-group head SHA. The iOS run
 name displays full on merge groups. Concurrency groups include the event name

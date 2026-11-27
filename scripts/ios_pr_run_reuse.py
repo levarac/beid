@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode
 
-from scripts.ci_change_filter import safe_ios_reuse_changes
+from scripts.ci_change_filter import _requires_full_ios, safe_ios_reuse_changes
 
 WORKFLOW = ".github/workflows/pr-ci-ios-macos.yml"
 SHA = re.compile("[0-9a-f]{40}")
@@ -65,6 +65,35 @@ def executed_mode(jobs):
     return None
 
 
+def eligible_pr_changes(files, *, cross_head, mode):
+    if not isinstance(files, list) or not 0 < len(files) < 300:
+        return False
+    policy = {WORKFLOW, "scripts/ios_pr_run_reuse.py", "scripts/ci_change_filter.py", "scripts/ios_ui_smoke.py"}
+    for entry in files:
+        if not isinstance(entry, dict) or not isinstance(entry.get("filename"), str):
+            return False
+        path = entry["filename"]
+        previous, status = entry.get("previous_filename"), entry.get("status")
+        if path in policy or previous in policy:
+            return False
+        if not cross_head:
+            if status not in ("added", "modified", "removed", "renamed") or (status == "renamed") != bool(previous):
+                return False
+            continue  # On ready both runs tested the identical tree, including removals.
+        if status not in ("added", "modified") or previous:
+            return False
+        if mode == "smoke" and _requires_full_ios(path):
+            return False
+        if not safe_ios_reuse_changes([entry]):
+            # A change to the build graph could create a new dependency on
+            # a normally independent path. Only accept known product sources.
+            swift = path.startswith(("ios/Beid/", "ios/BeidTests/", "ios/BeidUITests/")) and path.endswith(".swift")
+            kotlin = path.startswith("shared/src/") and path.endswith(".kt")
+            if not (swift or kotlin):
+                return False
+    return True
+
+
 def previous_run(event, mode, repo, current_id, api, current_merge):
     action = event["action"]
     if action not in ("ready_for_review", "synchronize") or mode not in ("full", "smoke"):
@@ -100,9 +129,11 @@ def previous_run(event, mode, repo, current_id, api, current_merge):
         plan = jobs.get("Plan iOS test jobs", {})
         gate = jobs.get("iOS simulator", {})
         actual_mode = executed_mode(jobs)
-        if ("iOS simulator (inactive)" in jobs and "iOS simulator" not in jobs
-                and all(job.get("conclusion") == "skipped" for job in jobs.values())):
-            continue
+        inactive = jobs.get("iOS simulator (inactive)")
+        if inactive and not gate and all(job["conclusion"] == "skipped" for job in jobs.values() if job is not inactive):
+            if (inactive["conclusion"] == "skipped" or
+                    inactive["conclusion"] == "success" and successful_step(inactive, "Record inactive PR event")):
+                continue
         if run["conclusion"] == "skipped":
             return None
         if successful_step(plan, "Use prior iOS execution") and not actual_mode and gate.get("conclusion") == "success":
@@ -129,28 +160,13 @@ def previous_run(event, mode, repo, current_id, api, current_merge):
                 return None
         elif not (action == "ready_for_review" and outcome == run["conclusion"] == "failure"):
             return None
+        files = api(f"compare/{base['sha']}...{head['sha']}")["files"]
+        if not eligible_pr_changes(files, cross_head=sha != head["sha"], mode=mode):
+            return None
         if sha != head["sha"]:
             source_blob = workflow_blob(api, stamped, base["sha"], sha)
             if not source_blob or source_blob != workflow_blob(api, current_merge, base["sha"], head["sha"]):
                 return None
-            # Reject PRs that modify the CI code used to produce or verify a
-            # receipt, even when the most recent commit changes only prose.
-            files = api(f"compare/{base['sha']}...{head['sha']}")["files"]
-            if not isinstance(files, list) or not 0 < len(files) < 300:
-                return None
-            for entry in files:
-                if (not isinstance(entry, dict) or not isinstance(entry.get("filename"), str)
-                        or entry.get("status") not in ("added", "modified") or entry.get("previous_filename")):
-                    return None
-                path = entry["filename"]
-                if safe_ios_reuse_changes([entry]):
-                    continue
-                # Changing the build graph could turn a normally independent
-                # file into a test or bundle input. Accept only product source
-                # outside the allowlisted independent roots.
-                if not ((path.startswith(("ios/Beid/", "ios/BeidTests/", "ios/BeidUITests/"))
-                         and path.endswith(".swift")) or (path.startswith("shared/src/") and path.endswith(".kt"))):
-                    return None
             comparison = api(f"compare/{sha}...{head['sha']}")
             if (comparison.get("status") != "ahead" or comparison["merge_base_commit"]["sha"] != sha
                     or not safe_ios_reuse_changes(comparison["files"])):
