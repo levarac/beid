@@ -95,9 +95,13 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
   - **`.github/workflows/pr-ci-ios-macos.yml`** — `iOS simulator` is the
     hosted iOS PR gate. `pull_request` includes `opened`, `synchronize`,
-    `reopened`, `ready_for_review`, and `labeled` (not `unlabeled`), with no
+    `reopened`, `ready_for_review`, `labeled`, and `closed`, with no
     path filter or draft guard.
-    Thus every PR creates the `iOS simulator` context for branch protection.
+    Adding `ci:full-ui` requests full coverage. Other label additions skip
+    all jobs in an isolated concurrency group, even when the PR already has
+    `ci:full-ui`. Closing or merging a PR cancels its outstanding iOS run by
+    entering the same PR-number concurrency group. Both inactive event types
+    use a separate check name so they cannot satisfy the required check.
     A `Classify paths for iOS lane` job runs the same collection step and
     `scripts/ci_change_filter.py` as `Determine changed paths`; the lane has a
     job-level `if:` driven by an independent `ios` output. Documentation-only

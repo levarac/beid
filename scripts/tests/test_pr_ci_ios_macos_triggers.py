@@ -40,7 +40,7 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
     def test_pull_request_fires_on_every_head(self) -> None:
         section = workflow_data(workflow_text())["on"]["pull_request"]
         self.assertEqual(section, {"types": [
-            "opened", "synchronize", "reopened", "ready_for_review", "labeled",
+            "opened", "synchronize", "reopened", "ready_for_review", "labeled", "closed",
         ]})
 
     def test_drafts_also_get_exact_head_evidence(self) -> None:
@@ -82,10 +82,36 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
         self.assertIn("'auto' || 'full'", name)
 
     def test_concurrency_still_cancels_superseded_runs(self) -> None:
-        self.assertEqual(workflow_data(workflow_text())["concurrency"], {
-            "group": "pr-ios-macos-${{ github.event_name }}-${{ github.ref }}",
-            "cancel-in-progress": "true",
-        })
+        from scripts.tests.test_merge_group_workflows import render
+        data = workflow_data(workflow_text())
+        concurrency = data["concurrency"]
+        self.assertEqual(concurrency["cancel-in-progress"], "true")
+        self.assertIn("${{ github.event_name }}", concurrency["group"])
+        pr = dict(event="pull_request", pr=42, ref="refs/pull/42/merge")
+        active = render(concurrency["group"], **pr, action="synchronize")
+        self.assertEqual(active, "pr-ios-macos-pull_request-refs/pull/42/merge")
+        self.assertEqual(render(concurrency["group"], **{**pr, "ref": "refs/heads/release/1.1.0"},
+                                action="closed"), active)
+        self.assertEqual(render(concurrency["group"], **pr, action="labeled", label="ci:full-ui"), active)
+        self.assertNotEqual(render(concurrency["group"], **pr, action="labeled", label="triage"), active)
+        self.assertNotEqual(render(concurrency["group"], **pr, action="closed", attempt=2), active)
+        aggregate = data["jobs"]["ios-simulator"]["name"]
+        self.assertEqual(render(aggregate, **pr), "iOS simulator")
+        self.assertNotEqual(render(aggregate, **pr, changes_result="skipped"), "iOS simulator")
+
+    def test_only_full_label_enters_the_pr_workflow_and_close_never_tests(self):
+        from scripts.tests.test_merge_group_workflows import render
+        jobs = workflow_data(workflow_text())["jobs"]
+        context = dict(event="pull_request", ref="refs/pull/42/merge", pr=42, labels=[{"name": "ci:full-ui"}])
+        for action, label, active in (("opened", "", True), ("ready_for_review", "", True),
+                                      ("labeled", "ci:full-ui", True), ("labeled", "triage", False),
+                                      ("closed", "", False)):
+            with self.subTest(action=action, label=label):
+                self.assertEqual(render(jobs["changes"]["if"], **context, action=action, label=label), str(active))
+                result = "success" if active else "skipped"
+                for name in ("plan", "ios-simulator"):
+                    condition = jobs[name]["if"].replace("!cancelled()", "True").replace("always()", "True")
+                    self.assertEqual(render(condition, **context, changes_result=result), str(active))
 
 
 if __name__ == "__main__":

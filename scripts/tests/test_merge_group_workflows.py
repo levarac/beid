@@ -9,10 +9,17 @@ from scripts.tests.test_pr_ci_lane_skip import WORKFLOWS, job_name
 NAMES = ("pr-ci.yml", "pr-ci-ios-macos.yml", "pr-ci-lab-cli.yml")
 
 
-def expression_value(expression, *, event, ref, sha="a" * 40, pr=None, labels=None):
+def expression_value(expression, *, event, ref, sha="a" * 40, pr=None, labels=None,
+                     action="", label="", run_id=314, attempt=1, changes_result="success"):
     """Evaluate the context/boolean subset used by checkout, group and run-name."""
     values = {
         "github.event_name": event,
+        "github.event.action": action,
+        "github.event.number": pr or "",
+        "github.event.label.name": label,
+        "github.run_id": run_id,
+        "github.run_attempt": attempt,
+        "needs.changes.result": changes_result,
         "github.ref": ref,
         "github.ref_name": ref.removeprefix("refs/heads/"),
         "github.sha": sha,
@@ -25,10 +32,10 @@ def expression_value(expression, *, event, ref, sha="a" * 40, pr=None, labels=No
         "contains(github.event.pull_request.labels.*.name, 'ci:full-ui')",
         repr(labels is not None and any(label["name"] == "ci:full-ui" for label in labels)),
     )
-    expression = re.sub(r"github(?:\.[\w]+)+", lambda m: repr(values[m[0]]), expression)
+    expression = re.sub(r"(?:github|needs)(?:\.[\w]+)+", lambda m: repr(values[m[0]]), expression)
     expression = expression.replace("null", "None").replace("&&", " and ").replace("||", " or ")
     expression = re.sub(r"!(?!=)", " not ", expression)
-    return eval(expression.strip(), {"__builtins__": {}}, {})  # noqa: S307
+    return eval(expression.strip(), {"__builtins__": {}}, {"format": str.format})  # noqa: S307
 
 
 def render(template, **context):
@@ -58,7 +65,8 @@ class MergeGroupWorkflowTest(unittest.TestCase):
         }.items():
             for job, expected in jobs.items():
                 with self.subTest(workflow=workflow, job=job):
-                    self.assertEqual(job_name(WORKFLOWS / workflow, job), expected)
+                    self.assertEqual(render(job_name(WORKFLOWS / workflow, job),
+                                            event="merge_group", ref="refs/heads/queue"), expected)
 
     def test_concurrency_separates_events_and_queue_entries(self):
         for name in NAMES:

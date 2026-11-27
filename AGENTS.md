@@ -360,7 +360,7 @@ the same name shadows them.
   reasonable at the time.**
 - **Require executed hosted iOS evidence on the exact validated SHA.**
   The `iOS simulator` aggregate is created on every PR open, push (`synchronize`),
-  reopen, ready-for-review, and labeled event, including drafts, with no
+  reopen, ready-for-review, and addition of `ci:full-ui`, including drafts, with no
   workflow-level PR path exclusions. It runs on every PR except one whose changed files are
   documentation or verified independent inputs (`android/app/src/**` after
   build-input rules, and standalone `tools/beid-lab-cli/**`, as
@@ -476,7 +476,10 @@ violations, with no pass-fixture or application violations.
   environment: install it with `python3 -m pip install PyYAML==6.0.2`.
 
 The separate `.github/workflows/pr-ci-ios-macos.yml` reports **iOS simulator**
-from an always-running aggregate on `ubuntu-24.04-arm`. **Plan iOS test jobs**
+from an aggregate on `ubuntu-24.04-arm`. Its job name is
+`iOS simulator${{ github.event_name == 'pull_request' && needs.changes.result == 'skipped' && ' (inactive)' || '' }}`.
+Closed PRs and unrelated labels skip all jobs and use the inactive check name.
+**Plan iOS test jobs**
 selects mode once from the event. **Build iOS test bundles** runs
 `build-for-testing` once, enumerates both compiled bundles, and in smoke mode
 runs the checked-in UI list and `BeidTests` minus the three deferred suites in that macOS job. Deferred coverage and uncertain changed paths select full mode.
@@ -515,7 +518,8 @@ runs; merge groups always run the lane in full mode.
 `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
 `swift build -c release` and `swift test`. Both report on every PR head,
 including drafts, with `opened`, `synchronize`, `reopened`, and
-`ready_for_review`; iOS also includes `labeled`, never `unlabeled`. Neither has
+`ready_for_review`; iOS also receives `labeled` and `closed`. Only adding
+`ci:full-ui` requests tests. Closing or merging the PR cancels its outstanding iOS run. Neither has
 a PR workflow path filter, so the required contexts are always created.
 Each workflow has its own small classification
 job (**Classify paths for iOS lane**, **Classify paths for lab CLI lane**) that

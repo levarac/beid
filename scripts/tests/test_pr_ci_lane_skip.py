@@ -95,9 +95,10 @@ def lane_runs(lane: str, *, event="pull_request", changes_result="success", file
 
 class LaneNamesTest(unittest.TestCase):
     def test_required_check_names_are_unchanged(self):
+        from scripts.tests.test_merge_group_workflows import render
         for path, job_id, name in ((IOS, "ios-simulator", "iOS simulator"), LANES["lab-cli"]):
             with self.subTest(job=job_id):
-                self.assertEqual(job_name(path, job_id), name)
+                self.assertEqual(render(job_name(path, job_id), event="pull_request", ref="refs/pull/7/merge"), name)
 
     def test_lanes_are_gated_by_a_job_not_a_workflow_path_filter(self):
         for lane, (path, job_id, _) in LANES.items():
@@ -118,10 +119,14 @@ class LaneNamesTest(unittest.TestCase):
                 self.assertNotEqual(job_name(path, job_id), job_name(PR_CI, "changes"))
 
     def test_classification_jobs_run_only_for_pull_requests_with_the_shared_classifier(self):
+        from scripts.tests.test_merge_group_workflows import render
         for path in (IOS, LAB_CLI):
             with self.subTest(workflow=path.name):
                 block = job_block(path, "changes")
-                self.assertIn("if: ${{ github.event_name == 'pull_request' }}", block)
+                condition = "${{ " + job_condition(path, "changes") + " }}"
+                for event in ("pull_request", "push", "merge_group", "workflow_dispatch", "schedule"):
+                    self.assertEqual(render(condition, event=event, ref="refs/heads/main"),
+                                     str(event == "pull_request"))
                 self.assertIn("python3 scripts/ci_change_filter.py --input", block)
                 # Pinned to the event's own SHAs; the PR's current file list is
                 # deliberately not used (see test_pr_ci_changed_paths_collection).

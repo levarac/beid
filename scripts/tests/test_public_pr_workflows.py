@@ -39,7 +39,7 @@ class PublicPrWorkflowTests(unittest.TestCase):
         for name in ("pr-ci-ios-macos.yml", "pr-ci-lab-cli.yml"):
             text = (WORKFLOWS / name).read_text()
             pr = text.split("  pull_request:\n", 1)[1].split("  push:\n", 1)[0]
-            expected = ("types: [opened, synchronize, reopened, ready_for_review, labeled]"
+            expected = ("types: [opened, synchronize, reopened, ready_for_review, labeled, closed]"
                         if name == "pr-ci-ios-macos.yml" else
                         "types: [opened, synchronize, reopened, ready_for_review]")
             self.assertIn(expected, pr)

@@ -6,7 +6,7 @@ on:
   # Always report a status for every PR head, including drafts. Workflow-level
   # path filters would leave a required context pending on unrelated changes.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, closed]
   merge_group:
     types: [checks_requested]
   push:
@@ -58,8 +58,9 @@ env:
   IOS_UI_SHARDS: ${{ inputs.ui_shards || '4' }}
 
 concurrency:
-  # Event and ref/PR identity isolate queue entries from PR updates and main pushes.
-  group: pr-ios-macos-${{ github.event_name }}-${{ github.ref }}
+  # A merged PR's ref changes to its base. Keep close in the PR's group;
+  # an unrelated label gets its own group so it cannot cancel active tests.
+  group: pr-ios-macos-${{ github.event_name }}-${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.number) || github.ref }}${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:full-ui' || github.event.action == 'closed' && github.run_attempt > 1) && github.run_id || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -68,7 +69,7 @@ jobs:
     # Pull requests only: merge groups, main pushes, nightly and manual runs bypass classification.
     # The name differs from pr-ci.yml's "Determine changed paths" on purpose:
     # required status contexts are keyed by job name.
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' && (github.event.action != 'labeled' || github.event.label.name == 'ci:full-ui') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     permissions:
@@ -164,7 +165,7 @@ jobs:
   plan:
     name: Plan iOS test jobs
     needs: changes
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'skipped') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
     outputs:
@@ -779,9 +780,9 @@ jobs:
           xcrun simctl delete "$SIMULATOR_UDID"
 
   ios-simulator:
-    name: iOS simulator
+    name: iOS simulator${{ github.event_name == 'pull_request' && needs.changes.result == 'skipped' && ' (inactive)' || '' }}
     needs: [changes, plan, build, tests]
-    if: ${{ always() }}
+    if: ${{ always() && (github.event_name != 'pull_request' || needs.changes.result != 'skipped') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
     steps:
