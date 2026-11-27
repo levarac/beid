@@ -278,9 +278,13 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
     On the first attempt of an ordinary push to `main`, the planner looks up the
     latest run of this iOS workflow for the same commit on the repository's main
-    merge queue. It must have succeeded before the push run was created. One
-    queue attempt must show a successful build-for-testing, the unit lane, every
-    UI shard and the aggregate's execution-ledger check. The push aggregate
+    merge queue. It must have succeeded before the push run was created. The
+    successful queue attempt's job list must show a passing build-for-testing,
+    unit lane, every UI shard and the aggregate's execution-ledger check.
+    When GitHub re-runs failed jobs, it lists retained successes with new job
+    IDs and the new attempt number. The push can credit those earlier successes
+    together with the re-run jobs because the queue accepted their combined
+    full-suite evidence for the same workflow run and commit. The push aggregate
     links to that attempt and the push starts no macOS jobs. An unsuccessful
     queue run, a different SHA, an older serial workflow, incomplete evidence
     or an unavailable API causes fresh execution. **Re-run all jobs** on the
