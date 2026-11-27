@@ -292,7 +292,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     `.xcresult` under their original attempt-1 names. Save a copy of the first
     failure artifacts with their SHA-256 digests before retrying, and confirm
     the build products and successful lane evidence remain available in Actions.
-    Use **Re-run job** on the failed UI lane. The CLI equivalent is
+    Use **Re-run job** on the failed UI lane. To use the CLI, run
+    `gh run view RUN_ID --repo levarac/beid --attempt 1 --json jobs` and find
+    the failed lane's `databaseId` by its `name`. Pass that ID to
     `gh run rerun RUN_ID --job FAILED_JOB_ID --repo levarac/beid`.
     GitHub reuses the build's products and reruns the dependent checks. The
     lane runs its full manifest on a fresh simulator with the existing limits.
