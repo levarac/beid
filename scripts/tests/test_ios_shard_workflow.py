@@ -137,12 +137,12 @@ class ShardWorkflowTest(unittest.TestCase):
     def test_dependency_caches_have_exact_toolchain_and_lockfile_keys(self):
         build = job_block(IOS, "build")
         self.assertIn("name: Cache KMP dependencies", build, "missing dependency cache")
-        for token in ("~/.gradle/caches", "~/.gradle/wrapper", "~/.konan",
+        for token in ("~/.gradle/caches/modules-2/files-2.1", "~/.gradle/wrapper", "~/.konan/dependencies",
                       "android/gradle/*.toml", "android/gradle/wrapper/gradle-wrapper.properties",
                       "android/build.gradle.kts", "steps.toolchain.outputs.xcode",
                       "steps.toolchain.outputs.sdk", "steps.toolchain.outputs.jdk",
                       "runner.arch", "Package.resolved", "env.SPM_SOURCE_ROOT }}/checkouts",
-                      "env.SPM_SOURCE_ROOT }}/repositories", "!~/.gradle/caches/build-cache-*"):
+                      "env.SPM_SOURCE_ROOT }}/repositories", "beid-ios-kmp-v2-"):
             self.assertIn(token, build)
         self.assertNotIn("restore-keys:", build)
         # Test jobs consume same-run artifacts and have no cache at all.
