@@ -282,13 +282,19 @@ final class BeidIPadLayoutTests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
-    XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
-    XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
-    app.staticTexts["SEALED ON THIS DEVICE"].scrollToHittable(in: app)
-    XCTAssertTrue(app.staticTexts["SEALED ON THIS DEVICE"].exists)
-    XCTAssertTrue(app.staticTexts["Self-signed on device"].exists)
-    XCTAssertFalse(app.staticTexts["Verified"].exists)
-    XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
+    XCTContext.runActivity(named: "Check that the record is complete") { _ in
+      XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
+      XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
+    }
+    XCTContext.runActivity(named: "Find the local seal on Record Detail") { _ in
+      app.staticTexts["SEALED ON THIS DEVICE"].scrollToHittable(in: app)
+      XCTAssertTrue(app.staticTexts["SEALED ON THIS DEVICE"].exists)
+    }
+    XCTContext.runActivity(named: "Check the local signature and external status") { _ in
+      XCTAssertTrue(app.staticTexts["Self-signed on device"].exists)
+      XCTAssertFalse(app.staticTexts["Verified"].exists)
+      XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
+    }
   }
 
   /// D1 forbids numeric mutual counts anywhere on Record Detail, including
@@ -451,38 +457,50 @@ final class BeidIPadLayoutTests: XCTestCase {
   /// `.recording` begins without a wallet presentation. Used by both the
   /// Recording-screen test above and `navigateToCollectionWithProof` below.
   private func reachRecordingScreen() {
-    app.launchControlledDemo()
+    XCTContext.runActivity(named: "Launch controlled demo") { _ in
+      app.launchControlledDemo()
+    }
 
-    app.buttons["Continue"].tap()
-    XCTAssertTrue(
-      app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5),
-      "Expected Bluetooth permission after Get Started.\n\(app.debugDescription)"
-    )
-    app.buttons["bluetooth.permission.continue"].tap()
+    XCTContext.runActivity(named: "Complete onboarding and reach Now") { _ in
+      app.buttons["Continue"].tap()
+      XCTAssertTrue(
+        app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5),
+        "Expected Bluetooth permission after Get Started.\n\(app.debugDescription)"
+      )
+      app.buttons["bluetooth.permission.continue"].tap()
+    }
 
-    let senseEvent = app.buttons["home.demo.join"]
-    XCTAssertTrue(
-      senseEvent.waitForExistence(timeout: 5),
-      "Expected Home after allowing Bluetooth.\n\(app.debugDescription)"
-    )
-    senseEvent.tap()
-    app.advanceDemo(to: .sensing)
-    XCTAssertTrue(
-      app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30),
-      "Expected the transient sensing screen after Scan.\n\(app.debugDescription)"
-    )
-    app.advanceDemo(to: .eventFound)
-    XCTAssertTrue(
-      app.staticTexts["scan.event-found"].waitForExistence(timeout: 30),
-      "Expected the transient event-found screen after sensing.\n\(app.debugDescription)"
-    )
+    XCTContext.runActivity(named: "Join the demo event from Now") { _ in
+      let senseEvent = app.buttons["home.demo.join"]
+      XCTAssertTrue(
+        senseEvent.waitForExistence(timeout: 5),
+        "Expected Home after allowing Bluetooth.\n\(app.debugDescription)"
+      )
+      senseEvent.tap()
+    }
+    XCTContext.runActivity(named: "Advance controlled demo to Sensing") { _ in
+      app.advanceDemo(to: .sensing)
+      XCTAssertTrue(
+        app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30),
+        "Expected the transient sensing screen after Scan.\n\(app.debugDescription)"
+      )
+    }
+    XCTContext.runActivity(named: "Advance controlled demo to Event Found") { _ in
+      app.advanceDemo(to: .eventFound)
+      XCTAssertTrue(
+        app.staticTexts["scan.event-found"].waitForExistence(timeout: 30),
+        "Expected the transient event-found screen after sensing.\n\(app.debugDescription)"
+      )
+    }
 
-    app.advanceDemo(to: .recording)
-    XCTAssertTrue(
-      app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30),
-      "Expected recording after Event Found.\n\(app.debugDescription)"
-    )
-    dismissBindingSheetToReachLiveRecording()
+    XCTContext.runActivity(named: "Advance controlled demo to Recording") { _ in
+      app.advanceDemo(to: .recording)
+      XCTAssertTrue(
+        app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30),
+        "Expected recording after Event Found.\n\(app.debugDescription)"
+      )
+      dismissBindingSheetToReachLiveRecording()
+    }
   }
 
   private func assertSensingFooterVisibleInPortrait() {
@@ -520,32 +538,42 @@ final class BeidIPadLayoutTests: XCTestCase {
   /// already exercises, without its screenshot/orientation concerns.
   private func navigateToCollectionWithProof() {
     reachRecordingScreen()
-    app.buttons["scan.stop-sensing"].tap()
-    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
-    app.alerts.buttons["Stop sensing"].tap()
-    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
-    app.buttons["Done"].tap()
-    XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))
-    assertProofCollectedHeader()
-    app.buttons["View records"].tap()
+    XCTContext.runActivity(named: "Stop sensing and confirm the stop") { _ in
+      app.buttons["scan.stop-sensing"].tap()
+      XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+      app.alerts.buttons["Stop sensing"].tap()
+    }
+    XCTContext.runActivity(named: "Open the saved-record outcome") { _ in
+      XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+      app.buttons["Done"].tap()
+      XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))
+      assertProofCollectedHeader()
+    }
+    XCTContext.runActivity(named: "Open Records from the saved-record outcome") { _ in
+      app.buttons["View records"].tap()
 
-    XCTAssertTrue(
-      app.scrollViews["records.grid"].waitForExistence(timeout: 5),
-      "Expected Records after ending recording.\n\(app.debugDescription)"
-    )
+      XCTAssertTrue(
+        app.scrollViews["records.grid"].waitForExistence(timeout: 5),
+        "Expected Records after ending recording.\n\(app.debugDescription)"
+      )
+    }
   }
 
   /// Opens the DemoEvent proof `navigateToCollectionWithProof` just left on
   /// Collection, and waits for Proof Detail to appear.
   private func openFirstProof() {
-    app.openRecordsByEvent()
-    app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
-    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
-    app.buttons["event-detail.proof.1"].tap()
-    XCTAssertTrue(
-      app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5),
-      "Expected Proof Detail after opening the DemoEvent proof.\n\(app.debugDescription)"
-    )
+    XCTContext.runActivity(named: "Open Records by event and select the demo event") { _ in
+      app.openRecordsByEvent()
+      app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
+      XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    }
+    XCTContext.runActivity(named: "Open the demo Record Detail") { _ in
+      app.buttons["event-detail.proof.1"].tap()
+      XCTAssertTrue(
+        app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5),
+        "Expected Proof Detail after opening the DemoEvent proof.\n\(app.debugDescription)"
+      )
+    }
   }
 
   private func assertProofCollectedHeader() {

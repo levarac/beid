@@ -111,27 +111,35 @@ final class FlatScreenshotTourA: XCTestCase {
   private func openAccountEventCodeEntry(frame: String? = nil) {
     app.launchArguments = ["-beid-ui-test"]
     if let frame { app.launchArguments.append(frame) }
-    app.launch()
-
-    app.buttons["Continue"].tap()
-    let allowBluetooth = app.buttons["bluetooth.permission.continue"]
-    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
-    allowBluetooth.tap()
-
-    let account = app.buttons["home.account"]
-    XCTAssertTrue(account.waitForExistence(timeout: 5))
-    account.tap()
-
-    let joinEvent = app.buttons["Join event"]
-    let list = app.collectionViews.firstMatch
-    var attempts = 0
-    while !joinEvent.exists && attempts < 6 {
-      list.swipeUp()
-      attempts += 1
+    XCTContext.runActivity(named: "Launch event-code fixture") { _ in
+      app.launch()
     }
-    XCTAssertTrue(joinEvent.exists, "Account's Join event row was not reachable")
-    joinEvent.tap()
-    XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
+
+    XCTContext.runActivity(named: "Open Bluetooth permission and reach Now") { _ in
+      app.buttons["Continue"].tap()
+      let allowBluetooth = app.buttons["bluetooth.permission.continue"]
+      XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
+      allowBluetooth.tap()
+    }
+
+    XCTContext.runActivity(named: "Open Account") { _ in
+      let account = app.buttons["home.account"]
+      XCTAssertTrue(account.waitForExistence(timeout: 5))
+      account.tap()
+    }
+
+    XCTContext.runActivity(named: "Open Join event from Account") { _ in
+      let joinEvent = app.buttons["Join event"]
+      let list = app.collectionViews.firstMatch
+      var attempts = 0
+      while !joinEvent.exists && attempts < 6 {
+        list.swipeUp()
+        attempts += 1
+      }
+      XCTAssertTrue(joinEvent.exists, "Account's Join event row was not reachable")
+      joinEvent.tap()
+      XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
+    }
   }
 
   private func keepScreenshot(named name: String) {
@@ -213,18 +221,22 @@ final class FlatScreenshotTourA: XCTestCase {
 
   func testEventCodeGuidanceSupportsPasteWithoutAShortCodeExample() {
     openAccountEventCodeEntry()
-    assertExactText(
-      "If your event is not listed, ask the organizer for its event code and paste it here.",
-      message: "Event code entry must describe organizer-supplied paste input"
-    )
-    let field = app.textFields["Event code"]
-    XCTAssertTrue(field.waitForExistence(timeout: 5))
-    XCTAssertEqual(field.placeholderValue, "Paste event code")
-    XCTAssertTrue(app.buttons["eventCode.paste"].exists)
-    XCTAssertFalse(app.buttons["Connect wallet instead"].exists)
-    XCTAssertTrue(app.buttons["Cancel"].exists)
-    app.buttons["Cancel"].tap()
-    XCTAssertTrue(app.buttons["account.aboutSensing"].waitForExistence(timeout: 5))
+    XCTContext.runActivity(named: "Check event-code guidance and paste controls") { _ in
+      assertExactText(
+        "If your event is not listed, ask the organizer for its event code and paste it here.",
+        message: "Event code entry must describe organizer-supplied paste input"
+      )
+      let field = app.textFields["Event code"]
+      XCTAssertTrue(field.waitForExistence(timeout: 5))
+      XCTAssertEqual(field.placeholderValue, "Paste event code")
+      XCTAssertTrue(app.buttons["eventCode.paste"].exists)
+      XCTAssertFalse(app.buttons["Connect wallet instead"].exists)
+      XCTAssertTrue(app.buttons["Cancel"].exists)
+    }
+    XCTContext.runActivity(named: "Cancel event-code entry and return to Account") { _ in
+      app.buttons["Cancel"].tap()
+      XCTAssertTrue(app.buttons["account.aboutSensing"].waitForExistence(timeout: 5))
+    }
   }
 
   func testWelcomeExplanationReportsUnavailableSendingDetails() {

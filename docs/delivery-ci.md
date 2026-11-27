@@ -270,6 +270,41 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     These are containment, not claimed speed; hosted full and smoke timing and
     artifact portability still need measurement on the final SHA.
 
+    ### Hosted UI query timeouts
+
+    [Issue #949](https://github.com/levarac/beid/issues/949) tracks
+    `Failed to get matching snapshot: Timed out while evaluating UI query.`
+    and the equivalent message with `snapshots`. Named XCTest activities
+    mark the demo advances, screen transitions and assertions in the reported
+    test paths. Open the original result's activity log to identify the last
+    started operation and record the query or screen in the issue.
+
+    For a release PR, the CI owner may retry a failed UI lane once on the
+    original full run. Before retrying, check that the run is complete at
+    attempt 1 on the current PR head. The build, unit lane and all other UI
+    lanes must be successful. Check that the failed lane has complete
+    structured results, its failed cases are outside the PR's changed code
+    paths, and every failure has the exact query-timeout message above.
+    Assertion failures, launch or termination errors, and missing or mixed
+    evidence follow the normal failure investigation.
+
+    Retain the first failing job link, manifest, structured result and raw
+    `.xcresult` under their original attempt-1 names. Save a copy of the first
+    failure artifacts with their SHA-256 digests before retrying, and confirm
+    the build products and successful lane evidence remain available in Actions.
+    Use **Re-run job** on the failed UI lane. To use the CLI, run
+    `gh run view RUN_ID --repo levarac/beid --attempt 1 --json jobs` and find
+    the failed lane's `databaseId` by its `name`. Pass that ID to
+    `gh run rerun RUN_ID --job FAILED_JOB_ID --repo levarac/beid`.
+    GitHub reuses the build's products and reruns the dependent checks. The
+    lane runs its full manifest on a fresh simulator with the existing limits.
+
+    Record the two job links, the first failed test IDs and both outcomes.
+    Require the retried lane and the normal aggregate check to pass. Keep a
+    passing retry visible as a recovery in #949 and leave it out of the
+    consecutive clean-run count. If the second attempt fails or is incomplete,
+    leave the run red and investigate the retained evidence.
+
     Dependency caches are limited to `~/.gradle/caches` (excluding task build
     caches/execution history), `~/.konan`, and SPM
     checkouts/repository objects under the stable runner-temporary
