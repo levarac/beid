@@ -201,6 +201,81 @@ final class WalletConnectTests: XCTestCase {
     XCTAssertTrue(dispatched)
   }
 
+  func testNewPersonalSignSupersedesPendingSignWithoutLosingTheConnection() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectResult = .success(
+      MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1")
+    )
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+    await connector.connect()
+    let connectedState = connector.state
+    transport.suspendPersonalSign = true
+
+    let firstTask = Task { await connector.requestPersonalSign(messageHex: "0xFIRST") }
+    await transport.waitUntilPersonalSignStarts(messageHex: "0xFIRST")
+    let currentTask = Task { await connector.requestPersonalSign(messageHex: "0xCURRENT") }
+    await transport.waitUntilPersonalSignStarts(messageHex: "0xCURRENT")
+
+    transport.completePersonalSign(messageHex: "0xFIRST", with: .success("0xSTALE_SIGNATURE"))
+    let firstResult = await firstTask.value
+    XCTAssertEqual(firstResult, .failure(.cancelled))
+    XCTAssertEqual(connector.state, connectedState)
+    XCTAssertEqual(connector.address, "0xMETAMASK")
+    XCTAssertEqual(transport.disconnectCount, 0)
+
+    transport.completePersonalSign(messageHex: "0xCURRENT", with: .success("0xCURRENT_SIGNATURE"))
+    let currentResult = await currentTask.value
+    XCTAssertEqual(currentResult, .success("0xCURRENT_SIGNATURE"))
+    XCTAssertEqual(connector.state, connectedState)
+  }
+
+  func testLateSupersededSignCannotReplaceTheNewSignature() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectResult = .success(
+      MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1")
+    )
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+    await connector.connect()
+    let connectedState = connector.state
+    transport.suspendPersonalSign = true
+
+    let firstTask = Task { await connector.requestPersonalSign(messageHex: "0xFIRST") }
+    await transport.waitUntilPersonalSignStarts(messageHex: "0xFIRST")
+    let currentTask = Task { await connector.requestPersonalSign(messageHex: "0xCURRENT") }
+    await transport.waitUntilPersonalSignStarts(messageHex: "0xCURRENT")
+    transport.completePersonalSign(messageHex: "0xCURRENT", with: .success("0xCURRENT_SIGNATURE"))
+    let currentResult = await currentTask.value
+    XCTAssertEqual(currentResult, .success("0xCURRENT_SIGNATURE"))
+
+    transport.completePersonalSign(messageHex: "0xFIRST", with: .failure(.rejected))
+    let firstResult = await firstTask.value
+    XCTAssertEqual(firstResult, .failure(.cancelled))
+    XCTAssertEqual(currentResult, .success("0xCURRENT_SIGNATURE"))
+    XCTAssertEqual(connector.state, connectedState)
+    XCTAssertEqual(connector.address, "0xMETAMASK")
+    XCTAssertEqual(transport.disconnectCount, 0)
+  }
+
+  func testDisconnectDuringPersonalSignStillResolvesNotConnected() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectResult = .success(
+      MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1")
+    )
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+    await connector.connect()
+    transport.suspendPersonalSign = true
+    let signTask = Task { await connector.requestPersonalSign(messageHex: "0xMESSAGE") }
+    await transport.waitUntilPersonalSignStarts()
+
+    connector.disconnect()
+    let result = await signTask.value
+    XCTAssertEqual(result, .failure(.notConnected))
+    transport.completePersonalSign(with: .success("0xLATE_SIGNATURE"))
+    XCTAssertEqual(connector.state, .idle)
+    XCTAssertNil(connector.address)
+    XCTAssertEqual(transport.disconnectCount, 1)
+  }
+
   func testMetaMaskLateConnectResultCannotRestoreDisconnectedSession() async {
     let transport = FakeMetaMaskTransport(isWalletInstalled: true)
     transport.suspendConnect = true
@@ -294,6 +369,9 @@ final class WalletConnectTests: XCTestCase {
     let result = await signTask.value
     XCTAssertEqual(result, .failure(.cancelled))
     XCTAssertEqual(transport.disconnectCount, 0)
+    transport.completePersonalSign(with: .success("0xLATE_SIGNATURE"))
+    XCTAssertEqual(connector.state, .idle)
+    XCTAssertNil(connector.address)
   }
 
   /// Positive mirror: the property under test is "light paths leave the SDK
@@ -512,8 +590,8 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
     CheckedContinuation<Result<MetaMaskWalletAccount, MetaMaskTransportError>, Never>?
   private var connectAndSignContinuation:
     CheckedContinuation<Result<(MetaMaskWalletAccount, String), MetaMaskTransportError>, Never>?
-  private var personalSignContinuation:
-    CheckedContinuation<Result<String, MetaMaskTransportError>, Never>?
+  private var personalSignContinuations:
+    [String: CheckedContinuation<Result<String, MetaMaskTransportError>, Never>] = [:]
 
   init(isWalletInstalled: Bool) {
     self.isWalletInstalled = isWalletInstalled
@@ -547,7 +625,7 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
     requestedMessage = messageHex
     guard suspendPersonalSign else { return signatureResult }
     return await withCheckedContinuation { continuation in
-      personalSignContinuation = continuation
+      personalSignContinuations[messageHex] = continuation
     }
   }
 
@@ -587,15 +665,15 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
     connectAndSignContinuation = nil
   }
 
-  func waitUntilPersonalSignStarts() async {
-    while requestedMessage == nil {
+  func waitUntilPersonalSignStarts(messageHex: String? = nil) async {
+    while requestedMessage == nil || (messageHex != nil && requestedMessage != messageHex) {
       await Task.yield()
     }
   }
 
-  func completePersonalSign(with result: Result<String, MetaMaskTransportError>) {
-    personalSignContinuation?.resume(returning: result)
-    personalSignContinuation = nil
+  func completePersonalSign(messageHex: String? = nil, with result: Result<String, MetaMaskTransportError>) {
+    guard let message = messageHex ?? requestedMessage else { return }
+    personalSignContinuations.removeValue(forKey: message)?.resume(returning: result)
   }
 }
 

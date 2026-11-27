@@ -29,9 +29,8 @@ import kotlin.test.assertIs
  * What is *not* here: whether the shared gate binds a canonical open code to
  * the Event ID that came back. That decision is `shared/`'s and is proven in
  * `RegistryVerifiedJoinContextTest`, where a successful registry answer can be
- * constructed. This module deliberately cannot build one — see
- * [FakeEventJoinRegistry] — and a test here that appeared to prove it would be
- * proving something weaker while reading like the real thing.
+ * constructed. Joined-session tests below instead use [joinPromotedVectorEvent]
+ * to walk the real candidate-promotion gate through the fake engine.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorRescuePathTest {
@@ -252,6 +251,77 @@ class EventJoinCoordinatorRescuePathTest {
             NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED,
             coordinator.nearbyEventSearchOutcome.value,
             "and it must still be a live countdown, not one that was silently never restarted",
+        )
+    }
+
+    @Test
+    fun aSearchAfterLeavingAJoinedEventWaitsForTheWholeNewDelay() = runTest {
+        val engine = FakeEventJoinEngine()
+        val nearby = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, nearbyRegistry = nearby)
+        val delayMillis = RESCUE_ENTRY_DELAY_SECONDS * 1_000L
+
+        coordinator.startNearbyEventDiscovery()
+        runCurrent()
+        advanceTimeBy(delayMillis)
+        runCurrent()
+        assertEquals(NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED, coordinator.nearbyEventSearchOutcome.value)
+
+        joinPromotedVectorEvent(coordinator, engine, nearby)
+        assertIs<EventJoinUiState.Sensing>(coordinator.state.value)
+        assertEquals(1, engine.joinEventCalls, "the participant must actually have joined through the engine")
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, engine.getCurrentEventCode())
+
+        coordinator.leaveEvent()
+        runCurrent()
+        assertIs<EventJoinUiState.Idle>(coordinator.state.value)
+        assertEquals(null, engine.getCurrentEventCode())
+
+        coordinator.startNearbyEventDiscovery()
+        runCurrent()
+        assertEquals(NearbyEventSearchOutcome.SEARCHING, coordinator.nearbyEventSearchOutcome.value)
+
+        advanceTimeBy(delayMillis - 1L)
+        runCurrent()
+        assertEquals(
+            NearbyEventSearchOutcome.SEARCHING,
+            coordinator.nearbyEventSearchOutcome.value,
+            "the old search must not make rescue appear even one millisecond early",
+        )
+
+        advanceTimeBy(1L)
+        runCurrent()
+        assertEquals(NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED, coordinator.nearbyEventSearchOutcome.value)
+    }
+
+    @Test
+    fun leavingAJoinedEventCancelsThePendingRescueCountdown() = runTest {
+        val engine = FakeEventJoinEngine()
+        val nearby = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, nearbyRegistry = nearby)
+        val delayMillis = RESCUE_ENTRY_DELAY_SECONDS * 1_000L
+
+        coordinator.startNearbyEventDiscovery()
+        runCurrent()
+        advanceTimeBy(delayMillis / 2)
+        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, nearby)
+        assertIs<EventJoinUiState.Sensing>(coordinator.state.value)
+        assertEquals(1, engine.joinEventCalls, "a pending search must lead to a real joined session")
+        assertEquals(NearbyEventSearchOutcome.SEARCHING, coordinator.nearbyEventSearchOutcome.value)
+
+        coordinator.leaveEvent()
+        runCurrent()
+        assertIs<EventJoinUiState.Idle>(coordinator.state.value)
+        assertEquals(null, engine.getCurrentEventCode())
+        assertEquals(NearbyEventSearchOutcome.SEARCHING, coordinator.nearbyEventSearchOutcome.value)
+
+        advanceTimeBy(delayMillis)
+        runCurrent()
+        assertEquals(
+            NearbyEventSearchOutcome.SEARCHING,
+            coordinator.nearbyEventSearchOutcome.value,
+            "the pending countdown must not offer rescue after its joined session has ended",
         )
     }
 
