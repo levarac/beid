@@ -106,6 +106,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     summary only when classification succeeded with `ios=false,error=false`. The only
     non-documentation exclusions are `android/app/src/**` (after build-input
     rules) and the standalone `tools/beid-lab-cli/**`.
+    On a PR update, classification compares the event's base and head. A PR
+    that only edits `docs/delivery-ci.md` skips the iOS build and still runs
+    the documentation drift check in Repository sanity. If the PR also changes
+    UI tests, a final commit that only edits this document still triggers the
+    iOS build and tests on the new head.
     `android/settings.gradle.kts` includes only `:app` and `:shared`, with the
     latter mapped to `../shared`; `shared/build.gradle.kts` has no dependency
     on `:app`. `ios/project.yml` invokes only the shared Swift Export task,
