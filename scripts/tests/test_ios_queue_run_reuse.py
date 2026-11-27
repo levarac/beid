@@ -40,18 +40,18 @@ class QueueEvidenceTests(TestCase):
                               "conclusion": "success", "steps": [{"name": step, "conclusion": "success"}]})
 
     def api(self, path):
-        if path == "actions/runs/12":
+        if path == f"actions/runs/{self.push['id']}":
             return self.push
         if path.startswith("actions/workflows/pr-ci-ios-macos.yml/runs?"):
             self.assertIn("event=merge_group", path)
             self.assertIn("head_sha=" + self.sha, path)
             return {"workflow_runs": self.runs, "total_count": len(self.runs)}
-        if path == "actions/runs/10/attempts/1/jobs?per_page=100":
+        if path == f"actions/runs/{self.source['id']}/attempts/{self.source['run_attempt']}/jobs?per_page=100":
             return {"jobs": self.jobs, "total_count": len(self.jobs)}
         self.fail(f"Unexpected API path: {path}")
 
     def lookup(self):
-        return reuse.previous_queue_run(self.event, self.repo, 12, self.api, self.sha)
+        return reuse.previous_queue_run(self.event, self.repo, self.push["id"], self.api, self.sha)
 
     def test_main_push_planner_outputs_a_receipt_and_falls_back_on_api_failure(self):
         with TemporaryDirectory() as temp:
@@ -133,6 +133,42 @@ class QueueEvidenceTests(TestCase):
                                 ("push", "refs/heads/main", "a" * 40)]:
             with self.subTest(event=event, ref=ref, sha=sha), self.assertRaises(ValueError):
                 validate_aggregate(event, needs, None, {}, sha, ref=ref)
+
+    def test_partial_queue_rerun_credits_retained_jobs_and_retried_shards(self):
+        # Job IDs and times from PR run 45900966547, attempt 2. The queue
+        # event, its SHA and the subsequent main push come from the synthetic replay.
+        run_id = 45900966547
+        self.sha = "f9b11d1170bf9b94245ad250f3926623efc4cf79"
+        self.event["after"] = self.sha
+        self.push.update(id=run_id + 1, head_sha=self.sha)
+        self.source.update(id=run_id, head_sha=self.sha, run_attempt=2, created_at="2026-11-26T21:51:32Z",
+                           run_started_at="2026-11-26T22:59:22Z", updated_at="2026-11-27T00:00:25Z")
+        attempt_jobs = {
+            # GitHub reissued these jobs under attempt 2 with their original times.
+            "Plan iOS test jobs": (140209912409, "2026-11-26T21:51:48Z"),
+            "Build iOS test bundles": (140209920651, "2026-11-26T21:51:58Z"),
+            "iOS full tests (unit)": (140209874688, "2026-11-26T22:09:25Z"),
+            "iOS full tests (ui-1)": (140209874141, "2026-11-26T22:26:54Z"),
+            "iOS full tests (ui-3)": (140209924105, "2026-11-26T22:09:24Z"),
+            # The other three UI shards and the aggregate ran again.
+            "iOS full tests (ui-2)": (140209873159, "2026-11-26T23:21:05Z"),
+            "iOS full tests (ui-4)": (140209873165, "2026-11-26T23:27:09Z"),
+            "iOS full tests (ui-5)": (140209872937, "2026-11-26T23:05:21Z"),
+            "iOS simulator": (140229250199, "2026-11-27T00:00:16Z"),
+        }
+        jobs = {job["name"]: job for job in self.jobs}
+        jobs["iOS full tests (ui-5)"] = {**jobs["iOS full tests (ui-4)"], "name": "iOS full tests (ui-5)"}
+        self.jobs = list(jobs.values())
+        for name, (job_id, started_at) in attempt_jobs.items():
+            jobs[name].update(id=job_id, started_at=started_at, run_id=run_id, head_sha=self.sha, run_attempt=2)
+
+        self.assertEqual(self.lookup(), dict(run_id=run_id, attempt=2, sha=self.sha, mode="full",
+                                             conclusion="success", source_event="merge_group"))
+        # Only the final attempt's published evidence can be credited.
+        with mock.patch.dict(jobs["Build iOS test bundles"], run_attempt=1):
+            self.assertIsNone(self.lookup())
+        with mock.patch.dict(jobs["iOS full tests (ui-2)"], steps=[]):
+            self.assertIsNone(self.lookup())
 
     def test_source_requires_same_workflow_repo_commit_queue_and_prior_success(self):
         for fields in [
