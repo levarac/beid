@@ -419,8 +419,7 @@ final class SensingCoordinator: ObservableObject {
     let elapsedSeconds: TimeInterval
     switch fixture {
     case .sensing:
-      let midpoint = ProcessInfo.processInfo.arguments.contains("-beid-sensing-window-midpoint")
-      elapsedSeconds = 25 * 60 + (midpoint ? 150 : 0)
+      elapsedSeconds = 25 * 60
     case .stopConfirm: elapsedSeconds = 25 * 60
     case .detecting: elapsedSeconds = 10
     case .detectingFirstTime: elapsedSeconds = 2 * 60
@@ -435,11 +434,16 @@ final class SensingCoordinator: ObservableObject {
       let peerCounts = fixture == .sensing || fixture == .stopConfirm || fixture == .sealed
         ? [1, 4, 6, 9, 8, 13]
         : [5]
+      // The last fixture window is the current wall-clock window, as live.
+      let currentWindow = Int(floor(
+        sensingScreenshotNow!.timeIntervalSince1970
+          / TimeInterval(ClockPreflightController.barnardEngineEninSeconds)))
+      let firstWindow = currentWindow - (peerCounts.count - 1)
       for (window, peerCount) in peerCounts.enumerated() {
         for peer in 0..<peerCount {
           let displayID = String(format: "%08x", peer + 1)
           _ = recordDeviceIdentity(
-            enin: 6_000_000 + window,
+            enin: firstWindow + window,
             rpid: "tour-rpid-\(window)-\(peer)",
             detectedDisplayId: displayID
           )
@@ -1044,6 +1048,18 @@ final class SensingCoordinator: ObservableObject {
   /// `currentWindowEnin` so the self-proof layer (§2.2) is exercisable
   /// under demo mode too.
   private var demoWindowEnin = 0
+  private(set) var demoBarsFirstSightingAt: Date?
+
+  /// Synthetic window cursor for the chart only. Screenshot fixtures already
+  /// use wall-clock indices and must keep their frozen presentation.
+  var demoWindowBarsIndex: Int64? {
+    #if DEBUG
+    guard useDemoEventMode, sensingScreenshotFixture == nil else { return nil }
+    return Int64(demoWindowEnin)
+    #else
+    return nil
+    #endif
+  }
 
   // MARK: - Nearby event discovery state (B005 pre-join hints, gh#100 Stage 1)
   //
@@ -3349,6 +3365,7 @@ final class SensingCoordinator: ObservableObject {
     firstWindowEnin = nil
     lastWindowEnin = nil
     demoWindowEnin = 0
+    demoBarsFirstSightingAt = nil
     demoWindowRpids = []
     clearDemoInterpreterState()
     currentWindowRpids = []
@@ -5811,6 +5828,7 @@ final class SensingCoordinator: ObservableObject {
   private func observeOneDemoDevice(displayId: String?, rpid: String, enin: Int) -> Bool {
     #if DEBUG
     rememberFirstSighting(at: AdaptiveLayoutUITestFixture.observationTimestamp())
+    if demoBarsFirstSightingAt == nil { demoBarsFirstSightingAt = Date() }
     #endif
     demoDeviceSequence += 1
     demoWindowEnin = enin

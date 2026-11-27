@@ -15,27 +15,35 @@ final class FlatScreenshotTourC: XCTestCase {
 
   func testShot_05_Sensing() { capture("05") }
 
-  func testSensingDrawsRecordedWindowMarkAtMidpoint() throws {
-    let app = launchSensingFixture("05", extraArguments: ["-beid-sensing-window-midpoint"])
-    SensingVisualOracle.assertInitialMetrics(in: app, test: self, name: "05-window-midpoint", expected: ("13", "27:30"))
-    let radar = app.descendants(matching: .any)["sensing.radar"]
-    XCTAssertTrue(radar.isHittable)
-    let image = try XCTUnwrap(radar.screenshot().image.cgImage)
-    // At halfway the white mark overlays the middle guide (233.12pt on a
-    // 362pt field). Sample its top arc, well away from the center glyph.
-    let centerX = CGFloat(image.width) / 2
-    let topArcY = CGFloat(image.height) * (1 - 233.12 / 362) / 2
-    let sample = try XCTUnwrap(image.cropping(to: CGRect(x: centerX - 12, y: topArcY - 4, width: 24, height: 8).integral))
-    var pixels = [UInt8](repeating: 0, count: sample.width * sample.height)
-    let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
-      guard let context = CGContext(data: buffer.baseAddress, width: sample.width, height: sample.height,
-        bitsPerComponent: 8, bytesPerRow: sample.width, space: CGColorSpaceCreateDeviceGray(),
-        bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
-      context.draw(sample, in: CGRect(x: 0, y: 0, width: sample.width, height: sample.height))
-      return true
+  /// TestFlight 331 reported empty space below the content after scrolling
+  /// the live Sensing screen up. Pins the settled bottom: the last control
+  /// (the "how sensing works" link) ends only the content padding (16 pt) and
+  /// the footer padding (8 pt) above the Stop control, and the steady layout
+  /// that fits the screen does not scroll at all.
+  func testSensingScrollStopsAtTheContentEnd() throws {
+    for code in ["05a", "05a3"] {
+      let app = launchSensingFixture(code)
+      let last = app.descendants(matching: .any).matching(NSPredicate(
+        format: "identifier == 'scan.first-time.about' OR identifier == 'scan.about'")).firstMatch
+      let stop = app.buttons["scan.stop-sensing"]
+      XCTAssertTrue(last.waitForExistence(timeout: 10) && stop.exists, code)
+      for _ in 0..<6 { app.swipeUp(velocity: .slow) }
+      Thread.sleep(forTimeInterval: 2)
+      let gap = stop.frame.minY - last.frame.maxY
+      XCTAssertEqual(gap, 24, accuracy: 4,
+        "\(code): content ends \(gap) pt above the Stop control after scrolling to the bottom")
+      app.terminate()
     }
-    XCTAssertTrue(rendered)
-    XCTAssertGreaterThanOrEqual(pixels.filter { $0 >= 120 }.count, 12, "The middle arc must be brighter than its guide")
+
+    let steady = launchSensingFixture("05")
+    let stop = steady.buttons["scan.stop-sensing"]
+    let top = stop.frame.minY
+    let text = steady.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Keep the app open'")).firstMatch
+    let before = text.frame.minY
+    steady.swipeUp(velocity: .slow)
+    Thread.sleep(forTimeInterval: 1)
+    XCTAssertEqual(text.frame.minY, before, accuracy: 1, "a layout that fits must not scroll")
+    XCTAssertEqual(stop.frame.minY, top, accuracy: 1)
   }
 
   func testShot_05a_Detecting() { capture("05a") }

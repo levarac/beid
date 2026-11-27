@@ -1542,6 +1542,8 @@ final class AppCoordinator: ObservableObject {
     let detectedDeviceCount = sensingCoordinator.devicesVerified
     let firstSightingAt = sensingCoordinator.firstSightingAt
     let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
+    let isDemo = sensingCoordinator.demoWindowBarsIndex != nil
+    let demoBarsFirstSightingAt = sensingCoordinator.demoBarsFirstSightingAt
     homeDiscoveryHeldAfterStop = true
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
@@ -1573,7 +1575,9 @@ final class AppCoordinator: ObservableObject {
       aggregate: aggregate,
       detectedDeviceCount: detectedDeviceCount,
       firstSightingAt: firstSightingAt,
-      sealedAt: sealedAt
+      sealedAt: sealedAt,
+      isDemo: isDemo,
+      demoBarsFirstSightingAt: demoBarsFirstSightingAt
     )
   }
 
