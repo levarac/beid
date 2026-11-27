@@ -50,6 +50,34 @@ fun appVersionValue(key: String): String =
     appVersion.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() }
         ?: throw GradleException("android/version.properties must set $key")
 
+// All Robolectric tests explicitly use @Config(sdk = [34]); there is no
+// robolectric.properties override. Robolectric 4.15.1 also uses its maximum
+// supported SDK (35) for compile-time resources, independently of our
+// compileSdk/targetSdk (36): SandboxManager -> AndroidTestEnvironment.
+// Versions and the i7 suffix come from 4.15.1's DefaultSdkProvider. Revisit
+// both entries when changing Robolectric or the tests' SDK configuration.
+val robolectricSdkVersions = mapOf(
+    34 to "14-robolectric-10818077-i7",
+    35 to "15-robolectric-12650502-i7",
+)
+// Separate configurations prevent Gradle's version conflict resolution from
+// replacing SDK 34 with SDK 35 (both jars have the same Maven module name).
+val robolectricSdkArtifacts = robolectricSdkVersions.map { (sdk, version) ->
+    configurations.create("robolectricSdk$sdk") {
+        isCanBeConsumed = false
+        isCanBeResolved = true
+        isTransitive = false
+    }.also { configuration ->
+        dependencies.add(configuration.name, "org.robolectric:android-all-instrumented:$version")
+    }
+}
+val robolectricDependencyDir = layout.buildDirectory.dir("robolectric")
+val prepareRobolectricSdks by tasks.registering(Sync::class) {
+    description = "Resolves Robolectric SDK jars through Gradle before offline unit tests."
+    from(robolectricSdkArtifacts)
+    into(robolectricDependencyDir)
+}
+
 android {
     namespace = "org.levarac.beid"
     compileSdk = 36
@@ -140,6 +168,23 @@ android {
     // Share the signed import fixtures with iOS and track them as JVM test inputs.
     sourceSets.getByName("test").resources.srcDir("../../ios/BeidTests/Fixtures/venue-bundle-conformance")
 
+}
+
+tasks.withType<Test>().configureEach {
+    dependsOn(prepareRobolectricSdks)
+    inputs.dir(robolectricDependencyDir).withPathSensitivity(PathSensitivity.RELATIVE)
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", robolectricDependencyDir.get().asFile.absolutePath)
+    doFirst {
+        val jars = robolectricSdkVersions.values.map { version ->
+            robolectricDependencyDir.get().file("android-all-instrumented-$version.jar").asFile
+        }
+        val missing = jars.filterNot { it.isFile && it.canRead() }
+        if (missing.isNotEmpty()) {
+            throw GradleException("Missing or unreadable offline Robolectric SDK jars: ${missing.joinToString()}")
+        }
+        logger.lifecycle("Robolectric offline SDKs: ${jars.joinToString { it.name }}")
+    }
 }
 
 dependencies {
