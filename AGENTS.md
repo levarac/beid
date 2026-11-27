@@ -377,7 +377,10 @@ the same name shadows them.
   classification select full mode. A `ci:full-ui` label in the event payload
   selects the full UI suite. Merge groups, main pushes, nightly runs and manual
   dispatches select full mode. A main push can credit a completed full merge-queue
-  run on the identical commit, as described in `docs/delivery-ci.md`. With the main merge
+  run on the identical commit. On a retry, the queue's aggregate can accept
+  jobs that passed on an earlier attempt of the same run together with jobs
+  that passed on retry. The main push can credit that combined result, as
+  described in `docs/delivery-ci.md`. With the main merge
   queue (active), the merge step is to add the PR to the queue; the queue's
   completed full-mode `iOS simulator` pass on the exact merge result satisfies
   the merge requirement. The queue lane never skips for paths. For a full run
