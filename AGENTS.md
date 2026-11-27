@@ -480,7 +480,7 @@ violations, with no pass-fixture or application violations.
 
 The separate `.github/workflows/pr-ci-ios-macos.yml` reports **iOS simulator**
 from an aggregate on `ubuntu-24.04-arm`. Its job name is
-`iOS simulator${{ github.event_name == 'pull_request' && needs.changes.result == 'skipped' && ' (inactive)' || '' }}`.
+`${{ (github.event_name != 'pull_request' || github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || github.event.action == 'ready_for_review' || github.event.action == 'labeled' && github.event.label.name == 'ci:full-ui') && 'iOS simulator' || 'iOS simulator (inactive)' }}`.
 Closed PRs and unrelated labels skip all jobs and use the inactive check name.
 **Plan iOS test jobs**
 selects mode once from the event. **Build iOS test bundles** runs

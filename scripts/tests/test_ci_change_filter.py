@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -9,6 +10,31 @@ from scripts.ci_change_filter import classify
 
 
 class CIChangeFilterTests(unittest.TestCase):
+    def test_ios_and_shared_build_inputs_do_not_reference_android_app_sources(self):
+        # The independent-path exemption relies on this build-graph boundary.
+        root = Path(__file__).resolve().parents[2]
+        tracked = subprocess.check_output(["git", "ls-files", "-z", "--", "ios", "shared", "scripts",
+                                           "android", ".github/workflows/pr-ci-ios-macos.yml"], cwd=root)
+        suffixes = (".gradle", ".gradle.kts", ".xcconfig", ".pbxproj", ".xcfilelist", ".sh",
+                    "project.yml", "gradle.properties", "Package.swift")
+        repo_path = re.compile(r"(?:android/|(?:\.\./)+)app/src(?:/|[\s'\"),]|$)")
+        offenders = []
+        for raw in tracked.decode().split("\0"):
+            if not raw:
+                continue
+            relevant = (raw.startswith(("ios/", "shared/")) and raw.endswith(suffixes)
+                        or raw in ("android/build.gradle.kts", "android/settings.gradle.kts",
+                                   "android/app/build.gradle.kts", ".github/workflows/pr-ci-ios-macos.yml")
+                        or raw.startswith(("scripts/ios_", "scripts/xcodegen_", "scripts/resolve_kmp_"))
+                        and raw.endswith((".py", ".sh")))
+            if not relevant:
+                continue
+            contents = (root / raw).read_text()
+            if repo_path.search(contents) or (raw.startswith("android/") and "/app/" not in raw
+                                               and re.search(r"\bapp/src/", contents)):
+                offenders.append(raw)
+        self.assertEqual(offenders, [], "Reassess iOS classification and prior-result reuse for Android sources")
+
     def test_docs_only_skips_expensive_lanes_but_keeps_sanity(self):
         self.assertEqual(
             classify(["README.md", "docs/ci.md"]),

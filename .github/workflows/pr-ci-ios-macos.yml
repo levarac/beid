@@ -200,14 +200,17 @@ jobs:
 
       - name: Check for directly executed PR evidence
         id: previous
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action == 'synchronize' || github.event.action == 'ready_for_review') && needs.changes.result == 'success' && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false' && github.run_attempt == 1 }}
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action == 'ready_for_review' || github.event.action == 'synchronize' && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui')) && needs.changes.result == 'success' && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false' && github.run_attempt == 1 }}
         env:
           GH_TOKEN: ${{ github.token }}
           MODE: ${{ steps.test-mode.outputs.mode }}
-        run: python3 -m scripts.ios_pr_run_reuse "$MODE" >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ -f scripts/ios_pr_run_reuse.py ]]; then
+            python3 -m scripts.ios_pr_run_reuse "$MODE" >> "$GITHUB_OUTPUT"
+          fi
 
       # This step name records immutable event inputs on the source attempt.
-      - name: iOS plan v1 PR ${{ github.event.number }} base ${{ github.event.pull_request.base.sha }} head ${{ github.event.pull_request.head.sha }} mode ${{ steps.test-mode.outputs.mode }}
+      - name: iOS plan v2 PR ${{ github.event.number }} base ${{ github.event.pull_request.base.sha }} head ${{ github.event.pull_request.head.sha }} mode ${{ steps.test-mode.outputs.mode }} merge ${{ github.sha }}
         if: ${{ github.event_name == 'pull_request' && !steps.previous.outputs.previous && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false' }}
         run: echo "Planning a fresh iOS execution"
 
@@ -803,9 +806,9 @@ jobs:
           xcrun simctl delete "$SIMULATOR_UDID"
 
   ios-simulator:
-    name: iOS simulator${{ github.event_name == 'pull_request' && needs.changes.result == 'skipped' && ' (inactive)' || '' }}
+    name: ${{ (github.event_name != 'pull_request' || github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || github.event.action == 'ready_for_review' || github.event.action == 'labeled' && github.event.label.name == 'ci:full-ui') && 'iOS simulator' || 'iOS simulator (inactive)' }}
     needs: [changes, plan, build, tests]
-    if: ${{ always() && (github.event_name != 'pull_request' || needs.changes.result != 'skipped') }}
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || github.event.action == 'ready_for_review' || github.event.action == 'labeled' && github.event.label.name == 'ci:full-ui') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
     steps:

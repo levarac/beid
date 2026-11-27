@@ -97,8 +97,26 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
         self.assertNotEqual(render(concurrency["group"], **pr, action="labeled", label="triage"), active)
         self.assertNotEqual(render(concurrency["group"], **pr, action="closed", attempt=2), active)
         aggregate = data["jobs"]["ios-simulator"]["name"]
-        self.assertEqual(render(aggregate, **pr), "iOS simulator")
-        self.assertNotEqual(render(aggregate, **pr, changes_result="skipped"), "iOS simulator")
+        self.assertNotIn("needs.", aggregate)
+        for action, label, active in (("opened", "", True), ("synchronize", "", True),
+                                      ("reopened", "", True), ("ready_for_review", "", True),
+                                      ("labeled", "ci:full-ui", True), ("labeled", "triage", False),
+                                      ("closed", "", False), ("", "", False)):
+            for result in ("skipped", "failure", "success"):
+                self.assertEqual(render(aggregate, **pr, action=action, label=label, changes_result=result),
+                                 "iOS simulator" if active else "iOS simulator (inactive)")
+
+    def test_lookup_falls_back_when_older_pr_head_has_no_helper(self):
+        import os
+        import subprocess
+        import tempfile
+        step = next(s for s in workflow_data(workflow_text())["jobs"]["plan"]["steps"] if s.get("id") == "previous")
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "step-output"
+            output.touch()
+            subprocess.run(["bash", "-eu", "-c", step["run"]], check=True, cwd=directory,
+                           env={**os.environ, "MODE": "smoke", "GITHUB_OUTPUT": str(output)})
+            self.assertEqual(output.read_text(), "")
 
     def test_only_full_label_enters_the_pr_workflow_and_close_never_tests(self):
         from scripts.tests.test_merge_group_workflows import render
@@ -112,7 +130,7 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
                 result = "success" if active else "skipped"
                 for name in ("plan", "ios-simulator"):
                     condition = jobs[name]["if"].replace("!cancelled()", "True").replace("always()", "True")
-                    self.assertEqual(render(condition, **context, changes_result=result), str(active))
+                    self.assertEqual(render(condition, **context, action=action, label=label, changes_result=result), str(active))
 
 
 if __name__ == "__main__":

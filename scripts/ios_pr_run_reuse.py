@@ -16,7 +16,29 @@ SHA = re.compile("[0-9a-f]{40}")
 
 
 def provenance(number, base, sha, mode):
-    return f"iOS plan v1 PR {number} base {base} head {sha} mode {mode}"
+    return f"iOS plan v2 PR {number} base {base} head {sha} mode {mode} merge "
+
+
+def stamped_merge(plan, number, base, sha, mode):
+    prefix = provenance(number, base, sha, mode)
+    matches = [step["name"][len(prefix):] for step in plan.get("steps") or []
+               if step.get("conclusion") == "success" and step["name"].startswith(prefix)]
+    if len(matches) == 1 and SHA.fullmatch(matches[0]):
+        return matches[0]
+    return None
+
+
+def workflow_blob(api, merge, base, head):
+    """Resolve the workflow read by Actions on this particular test merge."""
+    if not isinstance(merge, str) or not SHA.fullmatch(merge):
+        return None
+    commit = api(f"git/commits/{merge}")
+    if commit["sha"] != merge or [parent["sha"] for parent in commit["parents"]] != [base, head]:
+        return None
+    item = api(f"contents/{WORKFLOW}?ref={merge}")
+    if item.get("type") == "file" and item.get("path") == WORKFLOW and SHA.fullmatch(item["sha"]):
+        return item["sha"]
+    return None
 
 
 def successful_step(job, name):
@@ -43,11 +65,14 @@ def executed_mode(jobs):
     return None
 
 
-def previous_run(event, mode, repo, current_id, api):
+def previous_run(event, mode, repo, current_id, api, current_merge):
     action = event["action"]
     if action not in ("ready_for_review", "synchronize") or mode not in ("full", "smoke"):
         return None
     number, pr = event["number"], event["pull_request"]
+    if action == "synchronize" and (not isinstance(pr.get("labels"), list)
+                                    or any(label["name"] == "ci:full-ui" for label in pr["labels"])):
+        return None
     base, head = pr["base"], pr["head"]
     if (base["repo"]["full_name"] != repo or head["repo"]["full_name"] != repo
             or not SHA.fullmatch(head["sha"]) or not SHA.fullmatch(base["sha"])):
@@ -65,9 +90,7 @@ def previous_run(event, mode, repo, current_id, api):
             continue
         attempt = run["run_attempt"]
         if (not SHA.fullmatch(sha) or run["status"] != "completed" or type(attempt) is not int or attempt < 1
-                or run["conclusion"] not in ("success", "failure")):
-            return None
-        if action == "synchronize" and (sha == head["sha"] or run["conclusion"] != "success" or attempt != 1):
+                or run["conclusion"] not in ("success", "failure", "skipped")):
             return None
         response = api(f"actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100")
         jobs = {job["name"]: job for job in response["jobs"]}
@@ -77,17 +100,24 @@ def previous_run(event, mode, repo, current_id, api):
         plan = jobs.get("Plan iOS test jobs", {})
         gate = jobs.get("iOS simulator", {})
         actual_mode = executed_mode(jobs)
-        if ("iOS simulator (inactive)" in jobs or successful_step(plan, "Use prior iOS execution")) and not actual_mode:
+        if ("iOS simulator (inactive)" in jobs and "iOS simulator" not in jobs
+                and all(job.get("conclusion") == "skipped" for job in jobs.values())):
+            continue
+        if run["conclusion"] == "skipped":
+            return None
+        if successful_step(plan, "Use prior iOS execution") and not actual_mode and gate.get("conclusion") == "success":
             continue  # Compare the actual tested ancestor directly on repeated documentation edits.
-        stamped = successful_step(plan, provenance(number, base["sha"], sha, mode))
+        if action == "synchronize" and (sha == head["sha"] or run["conclusion"] != "success" or attempt != 1):
+            return None
+        stamped = stamped_merge(plan, number, base["sha"], sha, mode)
         if not stamped:
             # A completed, executed run on the identical SHA can predate the
             # plan marker. Cross-SHA reuse always needs immutable base provenance.
             opposite = "full" if mode == "smoke" else "smoke"
-            if (successful_step(plan, provenance(number, base["sha"], sha, opposite))
+            if (stamped_merge(plan, number, base["sha"], sha, opposite)
                     or action == "ready_for_review" and actual_mode == opposite and run["conclusion"] == "success"):
                 continue
-            if any(s.get("conclusion") == "success" and s["name"].startswith("iOS plan v1 PR ")
+            if any(s.get("conclusion") == "success" and s["name"].startswith("iOS plan v2 PR ")
                    for s in plan.get("steps") or []):
                 return None  # Recorded provenance differs from the current base/PR.
             if action != "ready_for_review" or actual_mode != mode:
@@ -100,6 +130,9 @@ def previous_run(event, mode, repo, current_id, api):
         elif not (action == "ready_for_review" and outcome == run["conclusion"] == "failure"):
             return None
         if sha != head["sha"]:
+            source_blob = workflow_blob(api, stamped, base["sha"], sha)
+            if not source_blob or source_blob != workflow_blob(api, current_merge, base["sha"], head["sha"]):
+                return None
             # Reject PRs that modify the CI code used to produce or verify a
             # receipt, even when the most recent commit changes only prose.
             files = api(f"compare/{base['sha']}...{head['sha']}")["files"]
@@ -140,7 +173,7 @@ def main():
 
     try:
         event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
-        result = previous_run(event, sys.argv[1], repo, int(os.environ["GITHUB_RUN_ID"]), api)
+        result = previous_run(event, sys.argv[1], repo, int(os.environ["GITHUB_RUN_ID"]), api, os.environ["GITHUB_SHA"])
     except (AttributeError, KeyError, TypeError, ValueError, OSError, subprocess.SubprocessError):
         print("Prior iOS evidence unavailable. Running the normal lane.", file=sys.stderr)
         return

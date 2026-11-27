@@ -236,12 +236,15 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     requires build/test success in its one job and its exact execution ledger.
     On ready-for-review the workflow waits behind any active execution and can
     report a completed result from the same PR, head and mode. A recorded
-    failure still fails the check. Adding `ci:full-ui` requests a fresh run.
+    failure still fails the check. Adding `ci:full-ui` requests a fresh run;
+    later pushes with that label also require fresh full execution.
 
     On synchronize, the planner looks up this workflow's original run and jobs
     through the read-only Actions API. Both revisions must belong to the same
     repository, PR and branch. The source plan must record the same base SHA,
-    its tested head and the requested mode. The first attempt must have completed
+    its tested head, requested mode and GitHub's synthetic PR merge SHA.
+    The planner checks the parents of both synthetic commits and requires the
+    workflow file to have the same Git blob at both revisions. The first attempt must have completed
     its build, tests and successful execution ledger. A previous inherited result
     cannot serve as evidence. The comparison from the tested SHA to the new head
     must prove direct ancestry and contain fewer than 300 files, all added or
@@ -250,7 +253,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     changing build inputs or CI code use fresh execution. The cumulative PR
     may change Swift app/test sources, shared Kotlin sources and independent
     paths. Forks, incomplete metadata and lookup
-    failures fall back to fresh execution. The check summary names the current
+    failures and older PR heads without the lookup helper fall back to fresh
+    execution. The check name for unrelated labels and closed events is selected
+    solely from the webhook payload, independently of skipped jobs. The check summary names the current
     head, tested SHA, run, attempt and mode. An explicit classifier skip remains
     a separate outcome. Merge groups, main pushes, nightly and manual runs
     always execute. A source run from before base provenance was recorded

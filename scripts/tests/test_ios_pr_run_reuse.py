@@ -10,8 +10,9 @@ class PreviousRunTests(unittest.TestCase):
     def setUp(self):
         self.base, self.old, self.new = ("a" * 40, "b" * 40, "c" * 40)
         self.repo = "levarac/beid"
+        self.old_merge, self.new_merge, self.blob = "d" * 40, "e" * 40, "f" * 40
         repo = {"full_name": self.repo}
-        self.pr = {"number": 952, "base": {"sha": self.base, "ref": "release/1.1.0", "repo": repo},
+        self.pr = {"number": 952, "labels": [], "base": {"sha": self.base, "ref": "release/1.1.0", "repo": repo},
                    "head": {"sha": self.new, "ref": "branch", "repo": repo}}
         self.event = {"number": 952, "action": "synchronize", "pull_request": self.pr}
         self.run = {"id": 80, "run_attempt": 1, "event": "pull_request", "status": "completed",
@@ -30,7 +31,7 @@ class PreviousRunTests(unittest.TestCase):
         def job(name, step):
             return {"name": name, "head_sha": sha, "run_id": 80, "conclusion": "success",
                     "steps": [{"name": step, "conclusion": "success"}]}
-        marker = reuse.provenance(952, base or self.base, sha, mode)
+        marker = reuse.provenance(952, base or self.base, sha, mode) + self.old_merge
         self.jobs[sha] = [job("Plan iOS test jobs", marker),
                           job("Build iOS test bundles", "Build for testing"),
                           job("iOS simulator", "Verify all job results and execution ledger")]
@@ -45,6 +46,12 @@ class PreviousRunTests(unittest.TestCase):
         self.calls.append(url)
         if "/runs?" in url:
             return {"workflow_runs": self.runs}
+        if url.startswith("git/commits/"):
+            merge = url.rsplit("/", 1)[-1]
+            source = self.old if merge == self.old_merge else self.new
+            return {"sha": merge, "parents": [{"sha": self.base}, {"sha": source}]}
+        if url.startswith("contents/"):
+            return {"type": "file", "path": reuse.WORKFLOW, "sha": self.blob}
         if "/jobs?" in url:
             return {"jobs": self.jobs[self.run["head_sha"]], "total_count": len(self.jobs[self.run["head_sha"]])}
         if url.startswith(f"compare/{self.base}..."):
@@ -54,7 +61,26 @@ class PreviousRunTests(unittest.TestCase):
         self.fail(url)
 
     def resolve(self, mode="smoke"):
-        return reuse.previous_run(self.event, mode, self.repo, 90, self.api)
+        return reuse.previous_run(self.event, mode, self.repo, 90, self.api, self.new_merge)
+
+    def test_cross_head_requires_identical_workflow_on_verified_merge_commits(self):
+        for route, value in ((f"git/commits/{self.old_merge}", {"sha": self.old_merge, "parents": []}),
+                             (f"contents/{reuse.WORKFLOW}?ref={self.new_merge}",
+                              {"type": "file", "path": reuse.WORKFLOW, "sha": "1" * 40})):
+            api = lambda url: value if url == route else self.api(url)
+            with self.subTest(route=route):
+                self.assertIsNone(reuse.previous_run(self.event, "smoke", self.repo, 90, api, self.new_merge))
+
+    def test_only_proven_inactive_run_may_be_ignored(self):
+        self.runs.insert(0, {**self.run, "id": 81, "conclusion": "skipped"})
+        inactive = {"name": "iOS simulator (inactive)", "head_sha": self.old, "run_id": 81, "conclusion": "skipped"}
+        def api(route):
+            if "runs/81/attempts/" in route:
+                return {"total_count": 1, "jobs": [inactive]}
+            return self.api(route)
+        self.assertEqual(reuse.previous_run(self.event, "smoke", self.repo, 90, api, self.new_merge)["run_id"], 80)
+        inactive["name"] = "iOS simulator"
+        self.assertIsNone(reuse.previous_run(self.event, "smoke", self.repo, 90, api, self.new_merge))
 
     def test_docs_update_cites_the_executed_ancestor_and_attempt(self):
         self.assertEqual(self.resolve(), {"run_id": 80, "attempt": 1, "sha": self.old,
@@ -122,6 +148,8 @@ class PreviousRunTests(unittest.TestCase):
         self.event["action"] = "labeled"
         self.assertIsNone(self.resolve())
         self.event["action"] = "synchronize"
+        with mock.patch.dict(self.pr, labels=[{"name": "ci:full-ui"}]):
+            self.assertIsNone(self.resolve("full"))
         self.pr["head"]["repo"] = {"full_name": "fork/beid"}
         self.assertIsNone(self.resolve())
         self.assertEqual(self.calls, [])

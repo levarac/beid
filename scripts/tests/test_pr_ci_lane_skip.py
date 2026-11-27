@@ -98,7 +98,8 @@ class LaneNamesTest(unittest.TestCase):
         from scripts.tests.test_merge_group_workflows import render
         for path, job_id, name in ((IOS, "ios-simulator", "iOS simulator"), LANES["lab-cli"]):
             with self.subTest(job=job_id):
-                self.assertEqual(render(job_name(path, job_id), event="pull_request", ref="refs/pull/7/merge"), name)
+                self.assertEqual(render(job_name(path, job_id), event="pull_request", action="synchronize",
+                                        ref="refs/pull/7/merge"), name)
 
     def test_lanes_are_gated_by_a_job_not_a_workflow_path_filter(self):
         for lane, (path, job_id, _) in LANES.items():
