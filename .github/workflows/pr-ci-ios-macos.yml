@@ -366,7 +366,13 @@ jobs:
           key: beid-ios-spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
       - name: Restore release compiler and Kotlin export caches
-        if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'release/1.1.0'
+        # The build checks out the PR head, which may predate the cache action.
+        if: >-
+          github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'release/1.1.0' &&
+          hashFiles('.github/actions/ios-release-cache/action.yml') != '' &&
+          hashFiles('scripts/ios_release_cache.py') != '' &&
+          hashFiles('scripts/ios_swift_export_key.py') != '' &&
+          hashFiles('scripts/ios_swift_export_cache.py') != ''
         uses: ./.github/actions/ios-release-cache
         with:
           operation: restore
