@@ -6,7 +6,7 @@ on:
   # Always report a status for every PR head, including drafts. Workflow-level
   # path filters would leave a required context pending on unrelated changes.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, closed]
   merge_group:
     types: [checks_requested]
   push:
@@ -26,6 +26,7 @@ on:
       - "android/gradle/wrapper/**"
       - "android/gradle/*.toml"
       - "scripts/ci_change_filter.py"
+      - "scripts/ios_pr_run_reuse.py"
       - "scripts/xcodegen_generate_checked.sh"
       - "scripts/resolve_kmp_java_home.sh"
       - "scripts/download_xcodegen.sh"
@@ -58,9 +59,10 @@ env:
   IOS_UI_SHARDS: ${{ inputs.ui_shards || '4' }}
 
 concurrency:
-  # Event and ref/PR identity isolate queue entries from PR updates and main pushes.
-  group: pr-ios-macos-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A merged PR's ref changes to its base. Keep close in the PR's group;
+  # an unrelated label gets its own group so it cannot cancel active tests.
+  group: pr-ios-macos-${{ github.event_name }}-${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.number) || github.ref }}${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:full-ui' || github.event.action == 'closed' && github.run_attempt > 1) && github.run_id || '' }}
+  cancel-in-progress: ${{ github.event.action != 'ready_for_review' }}
 
 jobs:
   changes:
@@ -68,7 +70,7 @@ jobs:
     # Pull requests only: merge groups, main pushes, nightly and manual runs bypass classification.
     # The name differs from pr-ci.yml's "Determine changed paths" on purpose:
     # required status contexts are keyed by job name.
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' && (github.event.action != 'labeled' || github.event.label.name == 'ci:full-ui') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     permissions:
@@ -82,7 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
 
       - name: Collect changed paths
@@ -164,17 +166,21 @@ jobs:
   plan:
     name: Plan iOS test jobs
     needs: changes
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'skipped') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       run: ${{ steps.plan.outputs.run }}
       mode: ${{ steps.test-mode.outputs.mode }}
       matrix: ${{ steps.plan.outputs.matrix }}
+      previous: ${{ steps.previous.outputs.previous }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
 
       - name: Determine test mode
@@ -192,12 +198,33 @@ jobs:
               --event-name "$EVENT_NAME" --event-path "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check for directly executed PR evidence
+        id: previous
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action == 'ready_for_review' || github.event.action == 'synchronize' && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui')) && needs.changes.result == 'success' && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false' && github.run_attempt == 1 }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ steps.test-mode.outputs.mode }}
+        run: |
+          if [[ -f scripts/ios_pr_run_reuse.py ]]; then
+            python3 -m scripts.ios_pr_run_reuse "$MODE" >> "$GITHUB_OUTPUT"
+          fi
+
+      # This step name records immutable event inputs on the source attempt.
+      - name: iOS plan v2 PR ${{ github.event.number }} base ${{ github.event.pull_request.base.sha }} head ${{ github.event.pull_request.head.sha }} mode ${{ steps.test-mode.outputs.mode }} merge ${{ github.sha }}
+        if: ${{ github.event_name == 'pull_request' && !steps.previous.outputs.previous && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false' }}
+        run: echo "Planning a fresh iOS execution"
+
+      - name: Use prior iOS execution
+        if: ${{ steps.previous.outputs.previous != '' }}
+        run: echo "The aggregate will identify the original run and tested SHA."
+
       - name: Plan bounded test matrix
         id: plan
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           CHANGES_JSON: ${{ toJSON(needs.changes) }}
+          PREVIOUS: ${{ steps.previous.outputs.previous }}
         run: |
           set -euo pipefail
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
@@ -207,7 +234,7 @@ jobs:
           if count not in (4, 5):
               raise SystemExit('IOS_UI_SHARDS must be 4 or 5')
           skip = classifier_skip(os.environ['EVENT_NAME'], {'changes': json.loads(os.environ['CHANGES_JSON'])})
-          print(f'run={str(not skip).lower()}')
+          print(f'run={str(not skip and not os.environ.get("PREVIOUS")).lower()}')
           print('matrix=' + json.dumps({'lane': ['unit'] + [f'ui-{i + 1}' for i in range(count)]}))
           PY
 
@@ -779,19 +806,31 @@ jobs:
           xcrun simctl delete "$SIMULATOR_UDID"
 
   ios-simulator:
-    name: iOS simulator
+    name: ${{ matrix.context }}
+    strategy:
+      matrix:
+        context:
+          - iOS simulator
+          - iOS simulator (inactive)
+        exclude:
+          - context: ${{ (github.event_name != 'pull_request' || github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || github.event.action == 'ready_for_review' || github.event.action == 'labeled' && github.event.label.name == 'ci:full-ui') && 'iOS simulator (inactive)' || 'iOS simulator' }}
     needs: [changes, plan, build, tests]
     if: ${{ always() }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
     steps:
+      - name: Record inactive PR event
+        if: ${{ matrix.context == 'iOS simulator (inactive)' }}
+        run: echo 'This PR event requests no iOS tests.' >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: ${{ matrix.context == 'iOS simulator' }}
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ needs.plan.outputs.previous && github.event.pull_request.base.sha || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Download structured test evidence
-        if: ${{ needs.plan.outputs.run == 'true' }}
+        if: ${{ matrix.context == 'iOS simulator' && needs.plan.outputs.run == 'true' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: ios-evidence-*
@@ -799,7 +838,7 @@ jobs:
           path: ${{ runner.temp }}/ios-evidence
 
       - name: Verify all job results and execution ledger
-        if: always()
+        if: ${{ always() && matrix.context == 'iOS simulator' }}
         shell: bash
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}

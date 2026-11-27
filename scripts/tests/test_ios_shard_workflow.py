@@ -68,7 +68,7 @@ class ShardWorkflowTest(unittest.TestCase):
         text = IOS.read_text()
         aggregate = job_block(IOS, "ios-simulator")
         self.assertIn("    if: ${{ always() }}", aggregate)
-        self.assertIn("    name: iOS simulator\n", aggregate)
+        self.assertIn("          - iOS simulator\n", aggregate)
         self.assertIn("needs: [changes, plan, build, tests]", aggregate)
         self.assertIn("runs-on: ubuntu-24.04-arm", aggregate)
         self.assertIn("toJSON(needs)", aggregate)

@@ -198,6 +198,24 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
             raise ValueError("classifier skip has inconsistent job results")
         return "Classifier skip: no iOS-affecting changes."
     mode = plan.get("mode")
+    if plan.get("previous"):
+        previous = json.loads(plan["previous"])
+        changes = needs.get("changes", {})
+        if (not isinstance(previous, dict) or event != "pull_request" or mode not in ("smoke", "full") or previous.get("mode") != mode
+                or changes.get("result") != "success" or changes.get("outputs", {}).get("error") != "false"
+                or changes.get("outputs", {}).get("ios") != "true" or plan.get("run") != "false"
+                or any(needs.get(job, {}).get("result") != "skipped" for job in ("build", "tests"))
+                or manifest is not None or evidence or not re.fullmatch("[a-f0-9]{40}", previous["sha"])
+                or type(previous["run_id"]) is not int or previous["run_id"] <= 0
+                or type(previous["attempt"]) is not int or previous["attempt"] < 1
+                or previous["attempt"] != 1 and previous["sha"] != sha):
+            raise ValueError("inconsistent prior iOS execution evidence")
+        message = (f"{mode} check for {sha} uses execution at {previous['sha']} "
+                   f"(run {previous['run_id']}, attempt {previous['attempt']}).")
+        if previous.get("conclusion") != "success":
+            raise ValueError(f"Prior iOS check did not pass. {message} "
+                             "Select Re-run all jobs for a fresh plan and test execution.")
+        return message
     if plan.get("run") != "true" or mode not in ("full", "smoke"):
         raise ValueError("missing or invalid test plan")
     for job in ("build", "tests") if mode == "full" else ("build",):
@@ -526,6 +544,9 @@ def main() -> int:
                 print(line.strip())
         return 0
     except (OSError, ValueError, KeyError, IndexError, TypeError) as error:
+        if args.command == "aggregate" and str(error).startswith("Prior iOS check did not pass."):
+            with args.summary.open("a", encoding="utf-8") as output:
+                output.write(f"\n{error}\n")
         print(f"iOS UI evidence failed: {error}", file=sys.stderr)
         return 1
 
