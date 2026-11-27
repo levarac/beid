@@ -183,9 +183,12 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           ALLOW_SMOKE: ${{ needs.changes.result == 'success' && needs.changes.outputs.error == 'false' && needs.changes.outputs.ios_full == 'false' }}
+          RELEASE_BOOT_BENCHMARK: ${{ github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/ci/speed-boot-release-') }}
         run: |
           set -euo pipefail
-          if [[ "$ALLOW_SMOKE" != true ]]; then
+          if [[ "$RELEASE_BOOT_BENCHMARK" == true ]]; then
+            printf 'mode=smoke\n' >> "$GITHUB_OUTPUT"
+          elif [[ "$ALLOW_SMOKE" != true ]]; then
             printf 'mode=full\n' >> "$GITHUB_OUTPUT"
           else
             python3 -m scripts.ios_ui_smoke mode \
