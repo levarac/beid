@@ -36,6 +36,25 @@ class TimingTest(unittest.TestCase):
             self.assertTrue(all(e["utc"].endswith("+00:00") for e in events))
             self.assertIn("CompileSwiftSources (2.0 seconds)", (folder / "build.log").read_text())
 
+    def test_restored_export_finishes_kmp_before_swift_compilation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            output = "\n".join([
+                "Restored Kotlin Swift Export",
+                "PhaseScriptExecution Build BeidSharedKit /tmp/script.sh",
+                "Restored Kotlin Swift Export",
+                "SwiftCompile normal arm64 Beid.swift",
+            ])
+            result = self.run_child(folder, f"print({output!r})")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            events = [json.loads(line) for line in (folder / "timings.jsonl").read_text().splitlines()]
+            kmp = [event for event in events if event["phase"] == "kmp"]
+            self.assertEqual([event["event"] for event in kmp], ["start", "end"])
+            self.assertTrue(kmp[1]["restored"])
+            self.assertGreaterEqual(kmp[1]["elapsed_seconds"], 0)
+            swift_start = next(event for event in events if event["phase"] == "swift-compile-window")
+            self.assertLess(events.index(kmp[1]), events.index(swift_start))
+
     def test_failure_preserves_exit_log_and_incomplete_phase(self):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)
