@@ -105,4 +105,4 @@ class MergeGroupWorkflowTest(unittest.TestCase):
                 self.assertIn(f"iOS simulator ({expected})", name)
                 self.assertIn(event, name)
         name = render(template, event="workflow_dispatch", ref="refs/heads/test", benchmark=True)
-        self.assertIn("iOS simulator (cache benchmark, smoke)", name)
+        self.assertIn("iOS simulator (Kotlin Debug benchmark, smoke)", name)

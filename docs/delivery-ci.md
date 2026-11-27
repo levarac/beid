@@ -289,12 +289,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     The iOS app, both test bundles and the run-specific test manifest are built
     for each head. Full-mode jobs receive them through the current build artifact.
 
-    To measure cold and warm builds on one head, manually enable
-    `swift_export_benchmark` and then rerun all jobs on that run. Its cache key
-    includes the run ID. Attempt one must build and save, later attempts must
-    restore the same export and link in a fresh DerivedData. Both execute the
-    normal smoke tests. Compare total build-job time including fingerprinting,
-    transfers and publication as well as the Xcode build and test steps. Test results, DerivedData and execution ledgers are never cached.
+    On this benchmark branch, manually enabling `swift_export_benchmark`
+    builds a fresh Debug Kotlin export and runs the normal smoke tests.
+    The benchmark bypasses the Release export cache and verifies that the
+    Debug Kotlin linker ran. PRs still select Release Kotlin. Test results,
+    DerivedData and execution ledgers are never cached.
     With the main merge queue enabled, the merge step is to add the PR to
     the queue after its required PR checks pass. A completed full-mode pass of
     `iOS simulator` on the queue's exact merge result satisfies the full-suite

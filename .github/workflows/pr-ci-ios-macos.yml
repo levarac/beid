@@ -1,6 +1,6 @@
 name: PR iOS CI
 # Execution mode is selected below from the event and its changed paths.
-run-name: "iOS simulator (${{ inputs.swift_export_benchmark && 'cache benchmark, smoke' || github.event_name == 'pull_request' && github.event.pull_request.labels != null && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui') && 'auto' || 'full' }}) — ${{ github.event_name }} — ${{ github.ref_name }}"
+run-name: "iOS simulator (${{ inputs.swift_export_benchmark && 'Kotlin Debug benchmark, smoke' || github.event_name == 'pull_request' && github.event.pull_request.labels != null && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui') && 'auto' || 'full' }}) — ${{ github.event_name }} — ${{ github.ref_name }}"
 
 on:
   # Always report a status for every PR head, including drafts. Workflow-level
@@ -44,7 +44,7 @@ on:
   workflow_dispatch:
     inputs:
       swift_export_benchmark:
-        description: Measure Kotlin export reuse with smoke tests (rerun all jobs for the warm sample)
+        description: Measure a fresh Debug Kotlin build with the required smoke tests
         type: boolean
         default: false
   # 03:23 UTC avoids the busy top of the hour; scheduled workflows use main,
@@ -367,7 +367,7 @@ jobs:
 
       - name: Look up the simulator Swift Export
         id: export
-        if: ${{ github.event_name == 'pull_request' && startsWith(github.base_ref, 'release/') || github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark }}
+        if: ${{ github.event_name == 'pull_request' && startsWith(github.base_ref, 'release/') }}
         uses: ./.github/actions/ios-swift-export
         with:
           operation: restore
@@ -421,7 +421,7 @@ jobs:
             SWIFT_OPTIMIZATION_LEVEL=-O \
             BEID_SWIFT_EXPORT_KEY="${BEID_SWIFT_EXPORT_KEY:-}" \
             BEID_SWIFT_EXPORT_ENTRY="${BEID_SWIFT_EXPORT_ENTRY:-}" \
-            BEID_KMP_BUILD_TYPE=Release \
+            BEID_KMP_BUILD_TYPE=${{ github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark && 'Debug' || 'Release' }} \
             build-for-testing
 
       - name: Publish newly built Swift Export
@@ -433,21 +433,12 @@ jobs:
           namespace: ${{ inputs.swift_export_benchmark && github.run_id || 'shared' }}
           products: ${{ env.CI_OUTPUT_ROOT }}/DerivedData/Build/Products/Debug-iphonesimulator
 
-      - name: Verify benchmark used its intended Kotlin build path
+      - name: Verify the benchmark built the Debug Kotlin export
         if: github.event_name == 'workflow_dispatch' && inputs.swift_export_benchmark
-        env:
-          HIT: ${{ steps.export.outputs.hit }}
-          SAVED: ${{ steps.export-save.outputs.saved }}
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_RUN_ATTEMPT" == 1 ]]; then
-            [[ "$HIT" != true && "$SAVED" == true ]]
-            grep -q ':shared:embedSwiftExportForXcode' "$CI_OUTPUT_ROOT/build.log"
-          else
-            [[ "$HIT" == true ]]
-            grep -qx 'Restored Kotlin Swift Export' "$CI_OUTPUT_ROOT/build.log"
-            if grep -q ':shared:embedSwiftExportForXcode' "$CI_OUTPUT_ROOT/build.log"; then exit 1; fi
-          fi
+          grep -Fq ':shared:linkSwiftExportBinaryDebugStaticIosSimulatorArm64' "$CI_OUTPUT_ROOT/build.log"
+          grep -Fq ':shared:embedSwiftExportForXcode' "$CI_OUTPUT_ROOT/build.log"
 
       - name: Enumerate built tests and compute shards
         id: enumerate

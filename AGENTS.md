@@ -499,7 +499,9 @@ is the only exception to executed evidence. KMP/SPM dependency caches use
 exact toolchain/lockfile keys without prefix restores; DerivedData and test
 results are never cached. Release pushes seed a content-keyed arm64 simulator Swift Export.
 Release-targeting PRs verify its 23 files before reuse. On a miss they run
-`:shared:embedSwiftExportForXcode`. The app and tests build for each SHA. A payload
+`:shared:embedSwiftExportForXcode`. On this benchmark branch the opt-in manual
+smoke run builds Kotlin Debug and checks that `:shared:linkSwiftExportBinaryDebugStaticIosSimulatorArm64`
+ran. The app and tests build for each SHA. A payload
 label `ci:full-ui` selects the full UI suite; merge groups, main pushes,
 nightly (03:23 UTC, separate concurrency group) and ordinary manual runs are full.
 The xcresult tree must prove exactly the smoke list Passed in smoke mode and

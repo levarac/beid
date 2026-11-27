@@ -26,13 +26,23 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertNotIn("build-for-testing", tests)
 
     def test_release_kmp_is_scoped_to_the_debug_test_build(self):
+        from scripts.tests.test_merge_group_workflows import render
+        from scripts.tests.workflow_yaml import named_step, workflow_data
         build = job_block(IOS, "build")
         build_step = build.split("      - name: Build for testing\n", 1)[1].split("      - name:", 1)[0]
-        self.assertRegex(
-            build_step,
-            r"(?s)-configuration Debug.*SWIFT_OPTIMIZATION_LEVEL=-O.*BEID_KMP_BUILD_TYPE=Release.*build-for-testing",
-        )
+        setting = re.search(r"BEID_KMP_BUILD_TYPE=(.+?) \\", build_step)[1]
+        for event, opt_in, expected in (("workflow_dispatch", True, "Debug"),
+                                        ("workflow_dispatch", False, "Release"), ("pull_request", False, "Release"),
+                                        ("merge_group", False, "Release"), ("schedule", False, "Release")):
+            with self.subTest(event=event, opt_in=opt_in):
+                self.assertEqual(render(setting, event=event, benchmark=opt_in, ref="refs/heads/ci/test"), expected)
+        self.assertRegex(build_step, r"(?s)-configuration Debug.*SWIFT_OPTIMIZATION_LEVEL=-O.*BEID_KMP_BUILD_TYPE=.*build-for-testing")
         self.assertEqual(IOS.read_text().count("BEID_KMP_BUILD_TYPE"), 1)
+        workflow = workflow_data(IOS.read_text())
+        restore = named_step(workflow, "build", "Look up the simulator Swift Export")
+        self.assertNotIn("workflow_dispatch", restore["if"])
+        publish = named_step(workflow, "build", "Publish newly built Swift Export")
+        self.assertIn("steps.export.outcome == 'success'", publish["if"])
 
     def test_aggregate_is_always_created_with_exact_required_name(self):
         text = IOS.read_text()
