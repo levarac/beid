@@ -31,7 +31,7 @@ import org.levarac.beid.ui.theme.BeidTheme
  * `badgeColor`/`labelColor` are required, not defaulted: on iOS the badge
  * fill follows the hosting screen's ambient `.tint()` (its single motif
  * accent per DESIGN.md §5), and `labelColor` must be that tint's on-fill
- * pairing token (e.g. `signalWarning` fill → `labelOnWarning` label — the
+ * pairing token (e.g. `actionPrimary` fill → `labelOnActionPrimary` label — the
  * same rule `BeidPrimaryButton` follows). Compose has no ambient tint to
  * read implicitly, so both are caller-supplied instead of hardcoded here.
  *

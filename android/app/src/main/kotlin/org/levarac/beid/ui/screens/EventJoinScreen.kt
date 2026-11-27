@@ -1,23 +1,23 @@
 package org.levarac.beid.ui.screens
 
-import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,7 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -40,31 +40,25 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.first
 import org.levarac.beid.BuildConfig
 import org.levarac.beid.R
-import org.levarac.beid.sensing.ClockPreflightController
-import org.levarac.beid.sensing.OperatorDateHeaderSource
-import org.levarac.beid.sensing.operatorOriginOrNull
+import org.levarac.beid.navigation.NowStandbyPresentation
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.NearbyEventCardVerification
-import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.shared.event.EventJoinFailureReason
-import org.levarac.beid.shared.event.NearbyEventSearchOutcome
-import org.levarac.beid.ui.designsystem.BeidPanel
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
 import org.levarac.beid.ui.designsystem.BeidSecondaryButton
-import org.levarac.beid.ui.designsystem.BeidStatusPill
 import org.levarac.beid.ui.designsystem.BeidTextField
 import org.levarac.beid.ui.theme.BeidAppTheme
+import org.levarac.beid.ui.theme.BeidFont
+import org.levarac.beid.ui.theme.BeidRadius
 import org.levarac.beid.ui.theme.BeidSpacing
 import org.levarac.beid.ui.theme.BeidTheme
 
@@ -85,9 +79,6 @@ object EventJoinScreenTestTags {
     const val NEARBY_EVENT_LIST = "nearby_event_list"
     const val NEARBY_EVENTS_OMITTED = "nearby_events_omitted"
 
-    /** beid#463: the rescue route out of a search that found nothing joinable. */
-    const val RESCUE_ENTRY_BUTTON = "event_join_rescue_entry_button"
-
     /** beid#463: fills the code field from the clipboard, so no one hand-types 64 hex characters. */
     const val PASTE_BUTTON = "event_join_paste_button"
     const val BIND_WALLET_BUTTON = "event_join_bind_wallet_button"
@@ -97,6 +88,9 @@ object EventJoinScreenTestTags {
     const val CLOCK_PREFLIGHT_RETRY = "event_join_clock_preflight_retry"
 
     fun nearbyEventCard(eventCodeHashHex: String): String = "nearby_event_card_$eventCodeHashHex"
+
+    /** iOS #795: the explicit JOIN control for one candidate (`home.nearby.join.*` / `.additional.*`). */
+    fun nearbyEventJoin(eventCodeHashHex: String): String = "nearby_event_join_$eventCodeHashHex"
 }
 
 /**
@@ -144,7 +138,6 @@ fun EventJoinScreen(
     showSimulateSignalLost: Boolean = BuildConfig.DEBUG,
     modifier: Modifier = Modifier,
     title: String = stringResource(R.string.event_join_title),
-    collectionContent: @Composable ColumnScope.() -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -166,7 +159,6 @@ fun EventJoinScreen(
         showSimulateSignalLost = showSimulateSignalLost,
         modifier = modifier,
         title = title,
-        collectionContent = collectionContent,
     )
 }
 
@@ -187,9 +179,8 @@ fun EventJoinScreen(
  * Once [EventJoinUiState.Sensing] is reached, the title and the nearby-event
  * cards give way to [ScanFlowScreen] (beid#336) — the Android equivalent of
  * iOS's `ScanFlowView` full-screen cover, except the account-entry icon
- * above stays visible in every state: it is Android's only door to the
- * Account screen (and therefore to "Leave Event"). It stays in the chrome
- * alongside the one-tap Close action while a session is active.
+ * above stays visible in every state. Account does not own session
+ * finalization; the confirmed Close/Stop action stays in the sensing chrome.
  *
  * [showEntranceCeremony]/[onCeremonyFinished] default to "skip the
  * ceremony" — read-only scenario/demo playback has no coordinator-backed
@@ -225,8 +216,6 @@ fun EventJoinContent(
     onConfirmStopSensing: () -> Unit = {},
     modifier: Modifier = Modifier,
     title: String = stringResource(R.string.event_join_title),
-    /** Home adds its collection to the same scrolling body, below discovery or the active scan. */
-    collectionContent: @Composable ColumnScope.() -> Unit = {},
 ) {
     Scaffold(
         modifier = modifier,
@@ -256,90 +245,29 @@ fun EventJoinContent(
             )
         },
     ) { innerPadding ->
-        // System Back on the confirmation means "Keep sensing". The scan screen is the
-        // navigation root, so an unhandled Back would leave the activity instead.
-        BackHandler(enabled = state.stopConfirmation != null) { onKeepSensing() }
-        val confirmation = state.stopConfirmation
-        if (confirmation != null) {
-            BeidAppTheme(darkTheme = true) {
-                SensingStopConfirmScreen(
-                    event = confirmation.event,
-                    metrics = state.scanSessionMetrics,
-                    onStop = onConfirmStopSensing,
-                    onKeepSensing = onKeepSensing,
-                    modifier = Modifier.padding(innerPadding),
-                )
-            }
-            return@Scaffold
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .consumeWindowInsets(innerPadding)
-                .padding(horizontal = BeidSpacing.pageMargin)
-                .padding(top = BeidSpacing.l, bottom = BeidSpacing.l)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
-        ) {
-            val sessionState = state.sessionState
-            if (sessionState is EventJoinUiState.Sensing) {
-                ScanFlowScreen(
-                    phase = sessionState.phase,
-                    showEntranceCeremony = showEntranceCeremony,
-                    onCeremonyFinished = onCeremonyFinished,
-                    showSimulateSignalLost = showSimulateSignalLost,
-                    onSimulateSignalLost = onSimulateSignalLost,
-                    onResumeSensing = onResumeSensing,
-                    onStartWalletBinding = onStartWalletBinding,
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.event_join_discovery_heading),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = BeidTheme.colors.textPrimary,
-                    modifier = Modifier.semantics { heading() },
-                )
-                Text(
-                    text = stringResource(R.string.event_join_discovery_supporting),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = BeidTheme.colors.textSecondary,
-                )
-                ClockPreflightNotice(state = state.clockPreflight, onRetry = onRetryClockPreflight)
-                NearbyEventCards(
-                    cards = state.nearbyEventCards,
-                    selectedEventHashHex = state.selectedNearbyEventHashHex,
-                    searchOutcome = state.searchOutcome,
-                    omitted = state.nearbyEventsOmitted,
-                    enabled = sessionState is EventJoinUiState.Idle || sessionState is EventJoinUiState.OwnerKeyUnavailable,
-                    onJoin = onJoinNearbyEvent,
-                    onOpenManualEventCode = onOpenManualEventCode,
-                )
-                if (sessionState !is EventJoinUiState.Idle) {
-                    statusText(sessionState)?.let { currentStatus ->
-                        Text(
-                            text = currentStatus,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = BeidTheme.colors.textSecondary,
-                            modifier = Modifier.semantics {
-                                stateDescription = currentStatus
-                                liveRegion = LiveRegionMode.Polite
-                            },
-                        )
-                    }
-                }
-                if (sessionState is EventJoinUiState.PermissionDenied) {
-                    BeidPrimaryButton(
-                        text = stringResource(R.string.event_join_open_settings),
-                        containerColor = BeidTheme.colors.actionPrimary,
-                        contentColor = BeidTheme.colors.surfaceCanvas,
-                        onClick = onOpenSettings,
-                        modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
-                    )
-                }
-            }
-            collectionContent()
-        }
+        // The same Now body the Home shell renders (iOS #795 NowHomeView),
+        // without the shell's tab bar. A read-only scenario has no standby
+        // gate, no radio and no code-entry route, so those inputs are inert.
+        NowContent(
+            state = state,
+            standby = NowStandbyPresentation(),
+            bluetoothOff = false,
+            onJoinNearbyEvent = onJoinNearbyEvent,
+            onOpenCodeEntry = onOpenManualEventCode,
+            onFixBluetooth = {},
+            onOpenBluetoothSettings = {},
+            onOpenSettings = onOpenSettings,
+            onSimulateSignalLost = onSimulateSignalLost,
+            onResumeSensing = onResumeSensing,
+            onStartWalletBinding = onStartWalletBinding,
+            onRetryClockPreflight = onRetryClockPreflight,
+            showEntranceCeremony = showEntranceCeremony,
+            onCeremonyFinished = onCeremonyFinished,
+            showSimulateSignalLost = showSimulateSignalLost,
+            onKeepSensing = onKeepSensing,
+            onConfirmStopSensing = onConfirmStopSensing,
+            modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding),
+        )
     }
 }
 
@@ -440,7 +368,7 @@ fun ManualEventCodeContent(
                 }
             }
             if (state.sessionState is EventJoinUiState.OwnerKeyUnavailable) {
-                statusText(state.sessionState)?.let { status ->
+                eventJoinStatusText(state.sessionState)?.let { status ->
                     Text(status, color = BeidTheme.colors.textPrimary)
                 }
             }
@@ -459,7 +387,7 @@ fun ManualEventCodeContent(
             BeidPrimaryButton(
                 text = stringResource(R.string.event_join_button),
                 containerColor = BeidTheme.colors.actionPrimary,
-                contentColor = BeidTheme.colors.surfaceCanvas,
+                contentColor = BeidTheme.colors.labelOnActionPrimary,
                 onClick = onSubmit,
                 modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
             )
@@ -467,10 +395,31 @@ fun ManualEventCodeContent(
     }
 }
 
+/**
+ * [onJoined], when given, is called once the session starts sensing after
+ * this screen opened — Now's event-code entry uses it to return to Home the
+ * way iOS #795 dismisses its `HomeEventCodeEntrySheet` and presents the scan
+ * (`joinEventFromHomeResolvingCanonicalId`). Android's `joinEvent` already
+ * verifies and starts sensing, so nothing else has to be started here.
+ * Account's entry passes null and keeps its existing behavior.
+ */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-fun ManualEventCodeRoute(session: EventJoinSession, onBack: () -> Unit = {}) {
+fun ManualEventCodeRoute(
+    session: EventJoinSession,
+    onBack: () -> Unit = {},
+    onJoined: (() -> Unit)? = null,
+) {
     val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session))
+    if (onJoined != null) {
+        val currentOnJoined by rememberUpdatedState(onJoined)
+        LaunchedEffect(session) {
+            if (session.state.value !is EventJoinUiState.Sensing) {
+                session.state.first { it is EventJoinUiState.Sensing }
+                currentOnJoined()
+            }
+        }
+    }
     ManualEventCodeScreen(viewModel, onBack)
 }
 
@@ -497,209 +446,138 @@ private fun OmittedNearbyEventsRow() {
     )
 }
 
+/**
+ * iOS #795's nearby candidates on Now: the first candidate under FOUND NEARBY
+ * with an explicit JOIN, the rest under ALSO NEARBY, each joined only by a tap
+ * on its own JOIN. Nothing here selects or joins on its own.
+ *
+ * `eventIdHex` stays the single joinability gate. The status line follows
+ * iOS's copy for a checked and a still-checking registration; the two
+ * failure states beid#584 added keep their existing Android sentences
+ * because iOS has no counterpart for them and collapsing them back into
+ * "Checking" is the defect #584 fixed.
+ */
 @Composable
-private fun NearbyEventCards(
+internal fun NearbyEventCards(
     cards: List<NearbyEventCard>,
-    selectedEventHashHex: String?,
-    searchOutcome: NearbyEventSearchOutcome,
     omitted: Boolean,
     enabled: Boolean,
     onJoin: (String) -> Unit,
-    onOpenManualEventCode: () -> Unit,
 ) {
-    if (cards.isEmpty()) {
-        val isSearching = searchOutcome == NearbyEventSearchOutcome.SEARCHING
-        val searchingLabel = stringResource(
-            if (isSearching) R.string.event_join_searching_nearby else R.string.event_join_no_nearby_title,
-        )
-        BeidPanel(
-            modifier = Modifier
-                .testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST),
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                if (isSearching) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.semantics { stateDescription = searchingLabel },
-                        color = BeidTheme.colors.signalActive,
-                    )
-                }
-                Text(
-                    text = searchingLabel,
-                    color = BeidTheme.colors.textPrimary,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    if (cards.isEmpty() && !omitted) return
+    Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.l)) {
+        cards.firstOrNull()?.let { first -> FoundNearbyCard(first, enabled, onJoin) }
+        if (cards.size > 1) {
+            Column(Modifier.fillMaxWidth().testTag(NowScreenTestTags.ALSO_NEARBY)) {
+                NowStyledText(
+                    text = stringResource(R.string.now_also_nearby),
+                    style = BeidFont.Library.labelMono10,
+                    color = BeidTheme.colors.textSecondary,
                 )
-                if (isSearching) {
-                    Text(stringResource(R.string.event_join_rescue_guidance), color = BeidTheme.colors.textSecondary)
-                } else {
-                    Text(
-                        stringResource(R.string.event_join_rescue_prompt),
-                        color = BeidTheme.colors.textSecondary,
-                    )
-                    BeidSecondaryButton(
-                        text = stringResource(R.string.event_join_rescue_enter_code),
-                        contentColor = BeidTheme.colors.textPrimary,
-                        borderColor = BeidTheme.colors.textSecondary,
-                        onClick = onOpenManualEventCode,
-                        modifier = Modifier.testTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON),
-                    )
-                }
-                if (omitted) {
-                    OmittedNearbyEventsRow()
-                }
+                cards.drop(1).forEach { card -> AlsoNearbyRow(card, enabled, onJoin) }
             }
         }
-        return
-    }
-    Column(
-        verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
-        modifier = Modifier.testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST),
-    ) {
-        cards.forEach { card ->
-            val cardEnabled = enabled && card.eventIdHex != null
-            val selected = cardEnabled && card.eventCodeHashHex == selectedEventHashHex
-            BeidPanel(
-                modifier = Modifier
-                    .selectable(
-                        selected = selected,
-                        enabled = cardEnabled,
-                        onClick = { onJoin(card.eventCodeHashHex) },
-                        role = Role.RadioButton,
-                    )
-                    .testTag(EventJoinScreenTestTags.nearbyEventCard(card.eventCodeHashHex)),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.event_join_beacon_name_label),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = BeidTheme.colors.textSecondary,
-                        )
-                        Text(
-                            text = card.beaconDisplayName ?: stringResource(R.string.event_join_beacon_name_missing),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = BeidTheme.colors.textPrimary,
-                        )
-                    }
-                    BeidStatusPill(
-                        // `eventIdHex` stays the single joinability gate, here as
-                        // everywhere else on this card; `verification` only breaks
-                        // down the not-yet-joinable case (beid#584).
-                        label = stringResource(
-                            when {
-                                card.eventIdHex != null -> R.string.event_join_candidate_verified
-                                card.verification == NearbyEventCardVerification.RETRYING ->
-                                    R.string.event_join_candidate_retrying
-                                card.verification == NearbyEventCardVerification.NOT_REGISTERED ->
-                                    R.string.event_join_candidate_not_registered
-                                else -> R.string.event_join_candidate_unverified
-                            },
-                        ),
-                        tone = if (card.eventIdHex != null) BeidStatusPill.Tone.Active else BeidStatusPill.Tone.Neutral,
-                    )
-                }
-                if (card.displayValidFromEpochSeconds != null && card.displayValidUntilEpochSeconds != null) Text(
-                    text = stringResource(
-                        R.string.event_join_validity_period,
-                        card.displayValidFromEpochSeconds,
-                        card.displayValidUntilEpochSeconds,
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = BeidTheme.colors.textSecondary,
-                )
-                // beid#584: this line used to say "Waiting for event
-                // verification" for every non-joinable card, including one
-                // whose every registry read had failed. It is the full-width
-                // line rather than the pill because the pill shares a row with
-                // the beacon name and cannot hold a sentence.
-                if (card.eventIdHex == null) Text(
-                    text = stringResource(
-                        when (card.verification) {
-                            NearbyEventCardVerification.RETRYING -> R.string.event_join_verification_retrying
-                            NearbyEventCardVerification.NOT_REGISTERED ->
-                                R.string.event_join_verification_not_registered
-                            else -> R.string.event_join_not_joinable_yet
-                        },
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = BeidTheme.colors.textSecondary,
-                )
-                if (selected) Text(
-                    text = stringResource(R.string.event_join_selected),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = BeidTheme.colors.textSecondary,
-                )
-                if (cardEnabled) {
-                    Text(
-                        text = stringResource(R.string.event_join_join_affordance),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = BeidTheme.colors.actionPrimary,
-                    )
-                }
-            }
-        }
-        if (searchOutcome == NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED) {
-            // Candidates and the "nothing found" panel are mutually exclusive.
-            // Keep the manual-code escape hatch for an unjoinable candidate,
-            // without presenting the contradictory empty-state copy.
-            BeidSecondaryButton(
-                text = stringResource(R.string.event_join_rescue_enter_code),
-                contentColor = BeidTheme.colors.textPrimary,
-                borderColor = BeidTheme.colors.textSecondary,
-                onClick = onOpenManualEventCode,
-                modifier = Modifier.testTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON),
-            )
-        }
-
         if (omitted) {
             OmittedNearbyEventsRow()
         }
     }
 }
 
-/**
- * Constructs (via [EventJoinViewModel.Factory]) and remembers the screen's
- * [EventJoinViewModel], scoped to the current [androidx.lifecycle.ViewModelStoreOwner]
- * (`MainActivity`). Kept separate from [EventJoinScreen] so the latter stays
- * a pure function of [EventJoinViewModel] for Compose tests to render
- * directly against a fake session, without a real [EventJoinSession].
- */
 @Composable
-fun EventJoinRoute(
-    session: EventJoinSession,
-    onOpenAccount: () -> Unit,
-    onOpenManualEventCode: () -> Unit,
-    onStartWalletBinding: () -> Unit = {},
-    /** beid#464。テストが偽の日付ソースを渡せるように引数にしている。本番は既定値だけを使う。 */
-    clockPreflight: ClockPreflightController = remember {
-        ClockPreflightController(
-            OperatorDateHeaderSource(operatorOriginOrNull(BuildConfig.EVENT_CODE_LOOKUP_URL_TEMPLATE)),
+private fun FoundNearbyCard(card: NearbyEventCard, enabled: Boolean, onJoin: (String) -> Unit) {
+    val joinable = enabled && card.eventIdHex != null
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(BeidTheme.colors.textPrimary, RoundedCornerShape(BeidRadius.nowCard))
+            .padding(BeidSpacing.l)
+            .testTag(EventJoinScreenTestTags.nearbyEventCard(card.eventCodeHashHex)),
+        verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
+    ) {
+        NowStyledText(
+            stringResource(R.string.now_found_nearby),
+            BeidFont.Library.labelMono10,
+            BeidTheme.colors.textSecondaryOnInk,
         )
-    },
-    modifier: Modifier = Modifier,
-    title: String = stringResource(R.string.event_join_title),
-    collectionContent: @Composable ColumnScope.() -> Unit = {},
-) {
-    LaunchedEffect(session) { session.startNearbyEventDiscovery() }
-    val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session, clockPreflight))
-    EventJoinScreen(
-        viewModel, onOpenAccount, onOpenManualEventCode, onStartWalletBinding,
-        modifier = modifier, title = title, collectionContent = collectionContent,
-    )
+        NowStyledText(
+            stringResource(R.string.now_name_announced_nearby),
+            BeidFont.Library.labelMono10,
+            BeidTheme.colors.textSecondaryOnInk,
+        )
+        Text(
+            text = candidateName(card),
+            style = BeidFont.Library.title19.textStyle,
+            color = BeidTheme.colors.labelOnActionPrimary,
+        )
+        NowStyledText(
+            candidateRegistrationStatus(card),
+            BeidFont.Library.labelMono10,
+            BeidTheme.colors.textSecondaryOnInk,
+        )
+        NowTextControl(
+            label = stringResource(R.string.now_join_action),
+            onClick = { onJoin(card.eventCodeHashHex) },
+            color = BeidTheme.colors.labelOnActionPrimary,
+            disabledColor = BeidTheme.colors.textSecondaryOnInk,
+            enabled = joinable,
+            modifier = Modifier.testTag(EventJoinScreenTestTags.nearbyEventJoin(card.eventCodeHashHex)),
+        )
+    }
 }
 
 @Composable
-private fun statusText(state: EventJoinUiState): String? = when (state) {
+private fun AlsoNearbyRow(card: NearbyEventCard, enabled: Boolean, onJoin: (String) -> Unit) {
+    val joinable = enabled && card.eventIdHex != null
+    Column(Modifier.testTag(EventJoinScreenTestTags.nearbyEventCard(card.eventCodeHashHex))) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = BeidSpacing.xxl)
+                .clickable(enabled = joinable, role = Role.Button) { onJoin(card.eventCodeHashHex) }
+                .padding(vertical = BeidSpacing.s)
+                .testTag(EventJoinScreenTestTags.nearbyEventJoin(card.eventCodeHashHex)),
+            horizontalArrangement = Arrangement.spacedBy(BeidSpacing.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
+                Text(
+                    text = candidateName(card),
+                    style = BeidFont.Library.title17.textStyle,
+                    color = BeidTheme.colors.textPrimary,
+                )
+                NowStyledText(
+                    candidateRegistrationStatus(card),
+                    BeidFont.Library.labelMono10,
+                    BeidTheme.colors.textSecondary,
+                )
+            }
+            NowStyledText(
+                stringResource(R.string.now_join_arrow),
+                BeidFont.Library.labelMono11,
+                if (joinable) BeidTheme.colors.textPrimary else BeidTheme.colors.textSecondary,
+            )
+        }
+        HorizontalDivider(color = BeidTheme.colors.strokeHairline)
+    }
+}
+
+@Composable
+private fun candidateName(card: NearbyEventCard): String =
+    card.beaconDisplayName ?: stringResource(R.string.event_join_beacon_name_missing)
+
+@Composable
+private fun candidateRegistrationStatus(card: NearbyEventCard): String = stringResource(
+    when {
+        card.eventIdHex != null -> R.string.now_registration_checked
+        card.verification == NearbyEventCardVerification.RETRYING -> R.string.event_join_verification_retrying
+        card.verification == NearbyEventCardVerification.NOT_REGISTERED ->
+            R.string.event_join_verification_not_registered
+        else -> R.string.now_registration_checking
+    },
+)
+
+@Composable
+internal fun eventJoinStatusText(state: EventJoinUiState): String? = when (state) {
     is EventJoinUiState.Idle -> stringResource(R.string.event_join_status_idle)
     is EventJoinUiState.RequestingPermission -> stringResource(R.string.event_join_status_requesting_permission)
     is EventJoinUiState.VerifyingRegistry -> stringResource(R.string.event_join_status_verifying_registry)
@@ -760,21 +638,16 @@ private fun EventJoinScreenPermissionDeniedPreview() {
     EventJoinContentPreview(EventJoinScreenState(sessionState = EventJoinUiState.PermissionDenied))
 }
 
-/**
- * beid#463's rescue offer, and the case it exists for: a card on screen that
- * cannot be joined. An implementation that decided this on an empty list would
- * render this preview without the button.
- */
-@Preview(name = "Idle — search found nothing joinable, rescue offered", showBackground = true)
+/** iOS #795: a candidate that is not joinable yet keeps its JOIN disabled. */
+@Preview(name = "Idle — one candidate not yet joinable", showBackground = true)
 @Composable
-private fun EventJoinScreenRescueOfferedPreview() {
+private fun EventJoinScreenUnjoinableCandidatePreview() {
     EventJoinContentPreview(
         EventJoinScreenState(
             sessionState = EventJoinUiState.Idle,
             nearbyEventCards = listOf(
                 NearbyEventCard("Unnamed beacon nearby", null, null, null, "2222222222222222"),
             ),
-            searchOutcome = NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED,
         ),
     )
 }

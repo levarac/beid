@@ -38,7 +38,7 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
             BeidPrimaryButton(
                 text = stringResource(R.string.welcome_get_started),
                 containerColor = BeidTheme.colors.actionPrimary,
-                contentColor = BeidTheme.colors.surfaceCanvas,
+                contentColor = BeidTheme.colors.labelOnActionPrimary,
                 onClick = onGetStarted,
                 icon = null,
                 modifier = Modifier.testTag(WelcomeScreenTestTags.GET_STARTED_BUTTON),

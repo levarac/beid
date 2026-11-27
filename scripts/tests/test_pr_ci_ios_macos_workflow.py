@@ -65,6 +65,12 @@ def run_commands(text: str) -> str:
 
 
 class PrCiIosMacosWorkflowTest(unittest.TestCase):
+    def test_xcodegen_drift_checks_the_lab_plist_and_generated_project(self):
+        script = step_data(workflow_text(), "Verify XcodeGen pin and generated project")["run"]
+        target = "git status --porcelain -- Beid.xcodeproj Lab/Info.plist"
+        self.assertIn(f'if [[ -n "$({target})" ]]; then', script)
+        self.assertIn(f"{target} >&2", script)
+
     def test_distribution_is_available_before_the_xcode_build(self):
         steps = workflow_data(workflow_text())["jobs"]["build"]["steps"]
         names = [step.get("name") for step in steps]

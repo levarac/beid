@@ -7,6 +7,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import org.levarac.beid.ui.theme.BeidRadius
 import org.levarac.beid.ui.theme.BeidTheme
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,6 +27,12 @@ import androidx.compose.foundation.text.KeyboardOptions
  * [Text] rendered above the field by the caller (this codebase's existing
  * pattern, e.g. `AccountScreen`'s "Bluetooth" label above its status row),
  * not this control's built-in `label` slot.
+ *
+ * That caption is a sibling node, so it does not name the field for
+ * TalkBack. Such a caller passes the same text as [accessibilityLabel], which
+ * this control sets as the editable node's content description, present
+ * whether the field is empty or populated; the caller then clears the
+ * caption's own semantics so the name is read once, on the field.
  */
 @Composable
 fun BeidTextField(
@@ -34,10 +42,13 @@ fun BeidTextField(
     isError: Boolean,
     modifier: Modifier = Modifier,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    enabled: Boolean = true,
+    accessibilityLabel: String? = null,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
+        enabled = enabled,
         placeholder = { Text(placeholder) },
         isError = isError,
         singleLine = true,
@@ -47,9 +58,9 @@ fun BeidTextField(
             focusedTextColor = BeidTheme.colors.textPrimary,
             unfocusedTextColor = BeidTheme.colors.textPrimary,
             errorTextColor = BeidTheme.colors.textPrimary,
-            focusedContainerColor = BeidTheme.colors.surfaceRaised,
-            unfocusedContainerColor = BeidTheme.colors.surfaceRaised,
-            errorContainerColor = BeidTheme.colors.surfaceRaised,
+            focusedContainerColor = BeidTheme.colors.surfaceCanvas,
+            unfocusedContainerColor = BeidTheme.colors.surfaceCanvas,
+            errorContainerColor = BeidTheme.colors.surfaceCanvas,
             focusedPlaceholderColor = BeidTheme.colors.textSecondary,
             unfocusedPlaceholderColor = BeidTheme.colors.textSecondary,
             errorPlaceholderColor = BeidTheme.colors.textSecondary,
@@ -63,6 +74,14 @@ fun BeidTextField(
             cursorColor = BeidTheme.colors.actionPrimary,
             errorCursorColor = BeidTheme.colors.actionPrimary,
         ),
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (accessibilityLabel != null) {
+                    Modifier.semantics { contentDescription = accessibilityLabel }
+                } else {
+                    Modifier
+                },
+            ),
     )
 }

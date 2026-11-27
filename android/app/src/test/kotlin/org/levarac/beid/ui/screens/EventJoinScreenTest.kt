@@ -12,8 +12,6 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertIsNotSelected
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -27,12 +25,15 @@ import androidx.test.core.app.ApplicationProvider
 import kotlin.test.assertNull
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import java.io.File
 import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.levarac.beid.R
 import org.levarac.beid.scenario.AndroidDemoScenario
 import org.levarac.beid.scenario.snapshot
+import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.sensing.ClockPreflightController
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
@@ -57,6 +58,9 @@ class EventJoinScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     private val session1 = ScanEventSession(eventCode = "ABC123")
 
     @Test
@@ -79,8 +83,10 @@ class EventJoinScreenTest {
             }
         }
         val context = ApplicationProvider.getApplicationContext<Context>()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_owner_key_unavailable)).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(hash)).assertIsEnabled().performClick()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_owner_key_unavailable))
+            .performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventJoin(hash))
+            .performScrollTo().assertIsEnabled().performClick()
         assertEquals(hash, joinedHash)
     }
 
@@ -105,9 +111,9 @@ class EventJoinScreenTest {
     }
 
     /**
-     * beid#363: the scenario/preview path renders the same nearby-event card
-     * list production does, including leaving an unverified candidate
-     * disabled. Drives [EventJoinContent] with a hand-built state rather
+     * beid#363 + iOS #795: the scenario/preview path renders the same Now
+     * candidates production does — the first under FOUND NEARBY, the rest
+     * under ALSO NEARBY — and leaves an unverified candidate's JOIN disabled. Drives [EventJoinContent] with a hand-built state rather
      * than an [EventJoinViewModel], which is exactly what a DEBUG
      * launch-argument scenario and a Compose preview do.
      */
@@ -139,26 +145,37 @@ class EventJoinScreenTest {
         }
 
         val context = ApplicationProvider.getApplicationContext<Context>()
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
-        composeTestRule.onNodeWithText("Verified beacon").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Unverified beacon").assertIsDisplayed()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_not_joinable_yet)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertExists()
+        composeTestRule.onNodeWithText(context.getString(R.string.now_found_nearby)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Verified beacon").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.now_registration_checked)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(NowScreenTestTags.ALSO_NEARBY).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Unverified beacon").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.now_registration_checking).uppercase())
+            .performScrollTo().assertIsDisplayed()
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(verifiedHash))
-            .assertIsEnabled()
-            .assertIsSelected()
-
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(unverifiedHash))
-            .assertIsDisplayed()
+        // No card selects or joins on its own: the candidate itself is not a
+        // control, and only its JOIN reports the stable hash.
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(verifiedHash)).performClick()
+        composeTestRule.runOnIdle { assertNull(joinedHash) }
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventJoin(unverifiedHash))
+            .performScrollTo()
             .assertIsNotEnabled()
-            .assertIsNotSelected()
             .performClick()
         composeTestRule.runOnIdle { assertNull(joinedHash) }
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventJoin(verifiedHash))
+            .performScrollTo()
+            .assertIsEnabled()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+            .performClick()
+        composeTestRule.runOnIdle { assertEquals(verifiedHash, joinedHash) }
     }
 
     /**
      * beid#584: a card that failed verification and a card whose read has not
-     * returned yet must not read the same. The Pixel held "Checking" and
+     * returned yet must not read the same. Now uses iOS #795's "Checking event
+     * registration…" for the pending case; the two failure states keep the
+     * existing sentences, which iOS has no counterpart for. The Pixel held "Checking" and
      * "Waiting for event verification" for over an hour on a candidate whose
      * every registry read had failed, which is how a settled failure passed
      * for a slow success.
@@ -204,29 +221,27 @@ class EventJoinScreenTest {
 
         val context = ApplicationProvider.getApplicationContext<Context>()
         listOf(
-            R.string.event_join_candidate_unverified,
-            R.string.event_join_not_joinable_yet,
-            R.string.event_join_candidate_retrying,
+            R.string.now_registration_checking,
             R.string.event_join_verification_retrying,
-            R.string.event_join_candidate_not_registered,
             R.string.event_join_verification_not_registered,
         ).forEach { copy ->
-            composeTestRule.onNodeWithText(context.getString(copy))
+            // Label/Mono 10 is an uppercase Library style.
+            composeTestRule.onNodeWithText(context.getString(copy).uppercase())
                 .performScrollTo()
                 .assertIsDisplayed()
         }
 
         // None of the three is joinable, so the failure copy never arrives
         // with an affordance that implies it is.
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(retryingHash))
-            .assertIsNotEnabled()
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(unregisteredHash))
-            .assertIsNotEnabled()
+        listOf(checkingHash, retryingHash, unregisteredHash).forEach { hash ->
+            composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventJoin(hash)).assertIsNotEnabled()
+        }
     }
 
     @Test
-    fun checkingLabelRemainsHorizontalAtNarrowWidthWithLargeText() {
-        val checkingHash = "1111111111111111"
+    fun foundNearbyJoinStaysReachableAtNarrowWidthWithLargeText() {
+        val hash = "1111111111111111"
+        var joinedHash: String? = null
         composeTestRule.setContent {
             CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = 1.5f)) {
                 BeidAppTheme {
@@ -236,13 +251,13 @@ class EventJoinScreenTest {
                                 nearbyEventCards = listOf(
                                     NearbyEventCard(
                                         beaconDisplayName = "A long nearby event name",
-                                        eventCodeHashHex = checkingHash,
-                                        verification = NearbyEventCardVerification.CHECKING,
+                                        eventIdHex = "0x01",
+                                        eventCodeHashHex = hash,
                                     ),
                                 ),
                             ),
                             onOpenAccount = {},
-                            onJoinNearbyEvent = {},
+                            onJoinNearbyEvent = { joinedHash = it },
                             onOpenSettings = {},
                             onSimulateSignalLost = {},
                             onResumeSensing = {},
@@ -252,19 +267,26 @@ class EventJoinScreenTest {
             }
         }
 
+        // Robolectric's default graphics mode does not measure glyph widths,
+        // so a plain Text's width says nothing here; the status line is
+        // asserted present and the JOIN target is asserted by its height.
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val bounds = composeTestRule
-            .onNodeWithText(context.getString(R.string.event_join_candidate_unverified))
+        composeTestRule.onNodeWithText(context.getString(R.string.now_registration_checked))
+            .performScrollTo()
             .assertIsDisplayed()
-            .fetchSemanticsNode()
-            .boundsInRoot
-        assertTrue(bounds.width > bounds.height, "Checking must remain a horizontal label: $bounds")
+        val join = composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventJoin(hash))
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertTrue(join.fetchSemanticsNode().boundsInRoot.height >= 48f, "JOIN keeps a 48dp touch target")
+        join.performClick()
+        composeTestRule.runOnIdle { assertEquals(hash, joinedHash) }
     }
 
     /**
      * beid#363: the legacy event-code text input is gone from the
-     * scenario/preview path — an empty candidate list now shows production's
-     * searching + rescue copy, not a second manual-entry surface.
+     * scenario/preview path — an empty candidate list shows Now's listening
+     * strip and DO THIS NOW tile, not a manual-entry surface. The scenario
+     * path has no standby gate, so it never offers ENTER EVENT CODE.
      */
     @Test
     fun scenarioPathWithNoNearbyCandidatesShowsSearchingCopyAndNoEventCodeEntry() {
@@ -282,13 +304,15 @@ class EventJoinScreenTest {
         }
 
         val context = ApplicationProvider.getApplicationContext<Context>()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_searching_nearby)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_rescue_guidance)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.home_now_title)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.now_listening)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.now_standby_tile_title)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(NowScreenTestTags.ENTER_CODE).assertDoesNotExist()
         composeTestRule.onNodeWithText(context.getString(R.string.event_join_code_label)).assertDoesNotExist()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertDoesNotExist()
     }
 
-    /** beid#464: Route が controller を ViewModel に渡していなければ、画面を開いても時計は測られない。 */
+    /** beid#464: if Home does not hand its controller to the ViewModel, opening Now never measures the clock. */
     @Test
     fun theRouteHandsTheClockPreflightToTheScreenSoOpeningItMeasures() {
         var fetches = 0
@@ -306,10 +330,14 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinRoute(
+                HomeRoute(
                     session = FakeEventJoinSession(),
+                    proofRecordStore = ProofRecordStore(File(tempFolder.root, "records.json")),
                     onOpenAccount = {},
-                    onOpenManualEventCode = {},
+                    onOpenEventCodeEntry = {},
+                    onOpenRecord = {},
+                    onOpenToday = {},
+                    onOpenByEvent = {},
                     clockPreflight = controller,
                 )
             }
@@ -371,8 +399,8 @@ class EventJoinScreenTest {
         composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {}) } }
 
         val context = ApplicationProvider.getApplicationContext<Context>()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_searching_nearby)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_rescue_guidance)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.now_listening)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.now_found_nearby)).assertDoesNotExist()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertDoesNotExist()
     }
 
@@ -400,8 +428,8 @@ class EventJoinScreenTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
         assertEquals(1, accountOpened)
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_candidate_verified)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_join_affordance)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.now_registration_checked)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.now_join_action)).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -540,11 +568,12 @@ class EventJoinScreenTest {
             BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {}) }
         }
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard("1111111111111111"))
-            .assertIsSelected()
+        // iOS #795: appearing is not joining. Nothing is joined until JOIN is tapped.
+        composeTestRule.runOnIdle { assertNull(session.joinedNearbyEventCodeHashHex) }
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventJoin("1111111111111111"))
+            .performScrollTo()
             .assertHasClickAction()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
             .performClick()
         composeTestRule.runOnIdle {
             assertEquals(eventId, viewModel.uiState.value.nearbyEventCards.single().eventIdHex)
@@ -570,9 +599,11 @@ class EventJoinScreenTest {
         composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {}) } }
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(eventCodeHash))
+            .performScrollTo()
             .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventJoin(eventCodeHash))
+            .performScrollTo()
             .assertIsNotEnabled()
-            .assertIsNotSelected()
             .performClick()
         composeTestRule.runOnIdle {
             assertNull(session.joinedNearbyEventCodeHashHex)
@@ -617,14 +648,13 @@ class EventJoinScreenTest {
     }
 
     /**
-     * beid#463 acceptance condition 1, at the surface: once the search has run
-     * its course without finding anything joinable, the rescue route is on the
-     * screen the participant is already looking at — not filed under Account,
-     * which is where it was and where nobody stuck in a doorway would look.
+     * iOS #795 replaces beid#463's in-list rescue offer on Now with the
+     * standby gate's ENTER EVENT CODE (30 s with no candidate, see
+     * `HomeStandbyViewModelTest`). The shared search outcome alone no longer
+     * puts a code entry on Now.
      */
     @Test
-    fun theRescueRouteAppearsOnceTheSearchFoundNothingJoinable() {
-        var openedManualEventCode = 0
+    fun theSearchOutcomeAloneNoLongerPutsACodeEntryOnNow() {
         composeTestRule.setContent {
             BeidAppTheme {
                 EventJoinContent(
@@ -633,7 +663,6 @@ class EventJoinScreenTest {
                         searchOutcome = NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED,
                     ),
                     onOpenAccount = {},
-                    onOpenManualEventCode = { openedManualEventCode += 1 },
                     onJoinNearbyEvent = {},
                     onOpenSettings = {},
                     onSimulateSignalLost = {},
@@ -642,22 +671,15 @@ class EventJoinScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON)
-            .performScrollTo()
-            .assertIsDisplayed()
-            .assertHasClickAction()
-            .performClick()
-
-        assertEquals(1, openedManualEventCode, "the rescue button must reach the event-code destination")
+        composeTestRule.onNodeWithTag(NowScreenTestTags.ENTER_CODE).assertDoesNotExist()
     }
 
     /**
-     * The other side of the same condition, and the one that makes it a claim
-     * rather than a decoration: while the search is still running the route is
-     * not offered, so its appearance actually means something happened.
+     * While the search is still running, Now offers no event-code entry either:
+     * only the standby gate's 30-second wait can put one there.
      */
     @Test
-    fun theRescueRouteIsAbsentWhileTheSearchIsStillRunning() {
+    fun noCodeEntryWhileTheSearchIsStillRunning() {
         composeTestRule.setContent {
             BeidAppTheme {
                 EventJoinContent(
@@ -674,16 +696,22 @@ class EventJoinScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(NowScreenTestTags.ENTER_CODE).assertDoesNotExist()
     }
 
     /**
-     * A screen of candidates that cannot be joined is the same dead end as an
-     * empty one, and it is the case an implementation keyed on "is the card
-     * list empty" gets wrong — silently, because the screen looks busy.
+     * The screen alone never puts event-code entry on Now, even beside a card
+     * whose JOIN is disabled and with the shared rescue outcome reached:
+     * [EventJoinContent] renders no standby presentation, so the entry stays
+     * the standby gate's decision. That gate ([org.levarac.beid.navigation.HomeStandbyViewModel])
+     * counts joinable cards only, as iOS release/1.1.0 does, so on Home an
+     * unjoinable card does not hold back the 30-second entry; that is covered
+     * in `HomeStandbyViewModelTest`. Renamed from
+     * `anUnjoinableCandidateOnNowOffersNoCodeEntry`, which read as if an
+     * unjoinable card withheld Now's entry.
      */
     @Test
-    fun unjoinableCardsOnScreenDoNotHideTheRescueRoute() {
+    fun theScreenAloneOffersNoCodeEntryBesideAnUnjoinableCandidate() {
         composeTestRule.setContent {
             BeidAppTheme {
                 EventJoinContent(
@@ -703,12 +731,7 @@ class EventJoinScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON)
-            .performScrollTo()
-            .assertIsDisplayed()
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_rescue_prompt))
-            .assertDoesNotExist()
+        composeTestRule.onNodeWithTag(NowScreenTestTags.ENTER_CODE).assertDoesNotExist()
     }
 
     /**
@@ -820,6 +843,7 @@ class EventJoinScreenTest {
         }
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENTS_OMITTED)
+            .performScrollTo()
             .assertIsDisplayed()
     }
 
@@ -846,6 +870,7 @@ class EventJoinScreenTest {
         }
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENTS_OMITTED)
+            .performScrollTo()
             .assertIsDisplayed()
     }
 

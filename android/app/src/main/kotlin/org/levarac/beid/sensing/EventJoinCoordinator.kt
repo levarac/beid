@@ -148,6 +148,8 @@ class EventJoinCoordinator internal constructor(
     joinRegistry: EventJoinRegistry? = null,
     private val joinDiagnostics: (String) -> Unit = ::logRuntimeDiagnostic,
     initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.NotDetermined,
+    /** Re-reads the runtime permission for [refreshBluetoothPermissionState]; null keeps the cached answer. */
+    private val readBluetoothPermissionState: (() -> BluetoothPermissionState)? = null,
     checkpointDispatcher: CoroutineDispatcher = Dispatchers.IO,
     checkpointPersistence: ((SessionCheckpoint) -> Unit)? = null,
     private val checkpointRuntimeOwner: SessionCheckpointRuntimeOwner = ProcessSessionCheckpointRuntimeOwner,
@@ -165,6 +167,7 @@ class EventJoinCoordinator internal constructor(
         ledgerFilesDir = context.filesDir,
         windowObservationRuntimeOwner = ProcessWindowObservationRuntimeOwner,
         initialBluetoothPermissionState = currentBluetoothPermissionState(context),
+        readBluetoothPermissionState = context.applicationContext.let { app -> { currentBluetoothPermissionState(app) } },
     )
 
     private val selfProofRecordStore = checkpointRuntimeOwner.selfProofStore(selfProofRecordStore.file, selfProofRecordStore)
@@ -218,6 +221,10 @@ class EventJoinCoordinator internal constructor(
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
     private var currentBluetoothPermissionState = initialBluetoothPermissionState
+
+    /** Assumed on until the host reports otherwise; see [onBluetoothRadioChanged]. */
+    private var bluetoothRadioOn = true
+    private var standbyPausedForRadio = false
     private var bluetoothPermissionResultHandler: ((BluetoothPermissionState) -> Unit)? = null
     private var undeliveredBluetoothPermissionResult: BluetoothPermissionState? = null
     override val bluetoothPermissionState: BluetoothPermissionState
@@ -430,10 +437,10 @@ class EventJoinCoordinator internal constructor(
      *   Its store writes stay off main, and ProofRecordingBridge publishes the
      *   recovered record through the thread-safe ProofRecordStore.recordsFlow.
      * - [finalizeSelfProofIfNeeded]'s two call sites are ordinary method
-     *   calls, not Barnard callbacks: [leaveEvent] is invoked from
-     *   `AccountScreen.kt`'s "Leave Event" button
-     *   (`onClick = viewModel::leaveEvent`, a Compose click handler, which
-     *   Compose always dispatches on the main thread), and [dispose] is
+     *   calls, not Barnard callbacks: [leaveEvent] is invoked from the
+     *   sensing UI's Stop path after its applicable confirmation policy (a
+     *   Compose callback, which Compose always dispatches on the main thread),
+     *   and [dispose] is
      *   invoked from the Activity session ViewModel's `onCleared()`
      *   (also on the main thread). Both confirmed by reading
      *   their actual callers, not inferred by analogy.
@@ -1420,6 +1427,16 @@ class EventJoinCoordinator internal constructor(
         }
     }
 
+    /**
+     * Asks for the runtime permission and reports the answer; it starts no
+     * discovery. The answer routes the user (Home, the Bluetooth-off guidance
+     * or the denied guidance), and standby discovery is started only by Now's
+     * standby gate once Home is visible — iOS release/1.1.0
+     * `AppCoordinator.requestBluetoothPermission` → `applyBluetoothState`
+     * likewise only sets `screen`. Starting here would queue a deferred scan
+     * when the radio is off, which the radio returning would then run behind
+     * the Bluetooth-off guidance, before the user confirms "I've turned it on".
+     */
     override fun requestBluetoothPermission(onResult: (BluetoothPermissionState) -> Unit) {
         if (disposed) return
         bindBluetoothPermissionResult(onResult)
@@ -1427,9 +1444,6 @@ class EventJoinCoordinator internal constructor(
             if (disposed) return@requestPermissions
             val permissionState = mapOnboardingPermissionResult(result)
             currentBluetoothPermissionState = permissionState
-            if (permissionState == BluetoothPermissionState.Granted) {
-                startNearbyEventDiscoveryIfIdle()
-            }
             // The SDK callback retains only this coordinator, never the requesting UI.
             val handler = bluetoothPermissionResultHandler
             if (handler != null) handler(permissionState)
@@ -1437,10 +1451,59 @@ class EventJoinCoordinator internal constructor(
         }
     }
 
+    override fun refreshBluetoothPermissionState(): BluetoothPermissionState {
+        if (!disposed) readBluetoothPermissionState?.let { currentBluetoothPermissionState = it() }
+        return currentBluetoothPermissionState
+    }
+
+    /**
+     * Pauses standby discovery while the radio is off and resumes it when the
+     * radio is back — but only a standby the gate still wants. Mirrors
+     * integration/ios-1.1.1: `AppCoordinator.updateHomeStandby`
+     * (`ios/Beid/Navigation/AppCoordinator.swift:941-958`) gates standby on `!homeBluetoothIsOff` and,
+     * when the gate closes, stops discovery only while idle;
+     * `SensingCoordinator.handle(.state)` (`ios/Beid/Sensing/SensingCoordinator.swift:1849-1856`)
+     * restarts a requested standby scan once scanning is possible again.
+     *
+     * Ownership: the caller of [startNearbyEventDiscovery] /
+     * [stopNearbyEventDiscovery] (Home's standby gate) decides whether standby
+     * should run. This method only decides whether it *can*: it defers a
+     * requested standby while the radio is off and runs it when the radio
+     * returns. [stopNearbyEventDiscovery] withdraws the request, as iOS clears
+     * `homeStandbyDiscoveryRequested`, so a radio returning after the gate
+     * closed starts nothing.
+     *
+     * A joined session is never touched: the radio does not change
+     * EventFound / Recording / SignalLost, and its transport is Barnard's.
+     * Stopping also withdraws the rescue countdown, so a dead radio is never
+     * reported as "no joinable event nearby".
+     */
+    override fun onBluetoothRadioChanged(isOn: Boolean) {
+        if (disposed || isOn == bluetoothRadioOn) return
+        bluetoothRadioOn = isOn
+        if (!isOn) {
+            val standbyActive = discoveryOnlyScanOwned || nearbyDiscoveryStartedAtEpochMillis != null
+            if (scanPhase == ScanPhase.Idle && standbyActive) {
+                stopNearbyEventDiscovery()
+                // After the stop, which withdraws any request: this pause is
+                // the radio's, and the request it keeps is still the gate's.
+                standbyPausedForRadio = true
+            }
+        } else if (standbyPausedForRadio) {
+            standbyPausedForRadio = false
+            startNearbyEventDiscoveryIfIdle()
+        }
+    }
+
     override fun startNearbyEventDiscovery() = startNearbyEventDiscoveryIfIdle()
 
     private fun startNearbyEventDiscoveryIfIdle() {
         if (disposed || scanPhase != ScanPhase.Idle) return
+        if (!bluetoothRadioOn) {
+            // Requested while off: remember it, start nothing, run no rescue clock.
+            standbyPausedForRadio = true
+            return
+        }
         // Before the scan-ownership checks below, deliberately. The rescue
         // countdown is about the participant standing on the join surface
         // waiting for an event to appear, which is true whether or not this
@@ -1497,7 +1560,10 @@ class EventJoinCoordinator internal constructor(
         )
     }
 
-    fun stopNearbyEventDiscovery() {
+    override fun stopNearbyEventDiscovery() {
+        // The caller no longer wants standby, so a start deferred for the
+        // radio is withdrawn with it (iOS: `homeStandbyDiscoveryRequested = false`).
+        standbyPausedForRadio = false
         val isAdvertising = !disposed && engine.getState().isAdvertising
         val shouldStopScan = discoveryOnlyScanOwned &&
             scanPhase == ScanPhase.Idle &&

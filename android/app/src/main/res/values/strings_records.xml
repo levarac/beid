@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Records tab (port of iOS #795 RecordsHomeView and its "By event" list).
+  English copy matches ios/Beid/Localizable.xcstrings on
+  feat/ios-v2-now-records exactly; the iOS key is noted on each entry.
+  Mono label styles uppercase at render time, so copy keeps the iOS case.
+-->
+<resources>
+    <!-- records.header.counts: "%#@records@ · %#@events@". iOS passes the event-group count to both. -->
+    <string name="records_home_counts">%1$s · %2$s</string>
+    <plurals name="records_home_counts_records">
+        <item quantity="one">%d record</item>
+        <item quantity="other">%d records</item>
+    </plurals>
+    <plurals name="records_home_counts_events">
+        <item quantity="one">%d event</item>
+        <item quantity="other">%d events</item>
+    </plurals>
+    <!-- records.title -->
+    <string name="records_home_title">Records</string>
+    <!-- "BY EVENT"; its glyph announces "Records by event". -->
+    <string name="records_home_by_event">BY EVENT</string>
+    <string name="records_home_by_event_accessibility">Records by event</string>
+    <!-- "Saved records appear here after sensing." -->
+    <string name="records_home_empty">Saved records appear here after sensing.</string>
+    <!-- "Attendance": the tile title, one per event. -->
+    <string name="records_home_attendance">Attendance</string>
+    <!-- records.record.accessibilityLabel -->
+    <string name="records_home_record_accessibility">Record for %1$s</string>
+    <!--
+      Android-only entry: iOS #795 leaves Today without an entry point. This is
+      main's iOS quiet text control (collection.dailySummaryButton, "Today").
+    -->
+    <string name="records_home_today">Today</string>
+    <!-- "By event": the By event page title. -->
+    <string name="records_by_event_title">By event</string>
+    <!-- records.event.sessionAction -->
+    <plurals name="records_by_event_sessions">
+        <item quantity="one">%d session →</item>
+        <item quantity="other">%d sessions →</item>
+    </plurals>
+</resources>

@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -183,5 +185,22 @@ class RecordsScreenTest {
 
         composeTestRule.onNodeWithText("FIRST").assertIsDisplayed()
         composeTestRule.onNodeWithText("SECOND").assertIsDisplayed()
+    }
+
+    /** The empty card's title and message share the leading edge, as iOS empty blocks do. */
+    @Test
+    fun emptyStateMessageIsLeadingAlignedLikeItsTitle() {
+        composeTestRule.setContent {
+            BeidAppTheme { RecordsScreen(records = emptyList(), onOpenDetail = {}) }
+        }
+
+        fun firstLineLeft(text: String): Float {
+            val layouts = mutableListOf<TextLayoutResult>()
+            composeTestRule.onNodeWithText(text).fetchSemanticsNode()
+                .config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+            return layouts.single().getLineLeft(0)
+        }
+        assertEquals(0f, firstLineLeft(context.getString(R.string.records_empty_title)))
+        assertEquals(0f, firstLineLeft(context.getString(R.string.records_empty_message)))
     }
 }
