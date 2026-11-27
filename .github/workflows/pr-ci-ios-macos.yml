@@ -761,10 +761,8 @@ jobs:
 
       - name: Execute full-mode test lane
         id: run_tests
-        # UI shards plan at about 20 minutes of test-case time, but single tests stall
-        # for 2 to 5 minutes on hosted xcode-27 runners (2026-11-25); 40 is containment
-        # until the stalls are explained, not a speed target.
-        timeout-minutes: 40
+        # Allow slow UI runs to finish and leave time for evidence and simulator cleanup.
+        timeout-minutes: ${{ matrix.lane == 'unit' && 40 || 45 }}
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}

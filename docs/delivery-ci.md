@@ -211,8 +211,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     and one unit job after the build. They can start together when five
     macOS runners are free. A manual run of this workflow can choose 4 or 5
     UI jobs with `ui_shards`. Its matrix planner rejects other counts. The current weights put the
-    longest lane at 56m48s with two jobs and 37m55s with three. Three jobs
-    leave only 2m05s for XCTest overhead within the 40-minute test step.
+    longest lane at 56m48s with two jobs and 37m55s with three. Under the former
+    40-minute UI limit, three jobs left only 2m05s for XCTest overhead.
+    The full-mode test step allows 45 minutes per UI shard to accommodate slow
+    hosted runs and 40 minutes for the unit lane. Each job has 55 minutes for
+    setup, execution, evidence collection and simulator cleanup.
 
     The shared manifest generator, `scripts/ios_ui_smoke.py shards`, accepts
     counts from 2 through 5. The single-runner release nightly uses `--count 2`
