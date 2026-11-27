@@ -193,12 +193,14 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     `max-parallel: 6`, and the iOS macOS jobs use the `xcode-27` label.
     The default `env.IOS_UI_SHARDS` value of `4` requests four UI jobs
     and one unit job after the build. They can start together when five
-    macOS runners are free. A manual run can choose 4 or 5 UI jobs with
-    `ui_shards`. Other counts fail planning. The current weights put the
+    macOS runners are free. A manual run of this workflow can choose 4 or 5
+    UI jobs with `ui_shards`. Its matrix planner rejects other counts. The current weights put the
     longest lane at 56m48s with two jobs and 37m55s with three. Three jobs
     leave only 2m05s for XCTest overhead within the 40-minute test step.
 
-    `scripts/ios_ui_smoke.py shards` balances methods longest-first using
+    The shared manifest generator, `scripts/ios_ui_smoke.py shards`, accepts
+    counts from 2 through 5. The single-runner release nightly uses `--count 2`
+    to build its full-suite manifest. The generator balances methods longest-first using
     `scripts/ios-ui-durations.json`. The weights use hosted iPhone
     `test-tree.json` case durations. A new or changed test may use a projected
     weight until a hosted run measures it.

@@ -202,9 +202,9 @@ jobs:
           set -euo pipefail
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
-          from scripts.ios_ui_smoke import UI_SHARD_COUNTS, classifier_skip
+          from scripts.ios_ui_smoke import classifier_skip
           count = int(os.environ['IOS_UI_SHARDS'])
-          if count not in UI_SHARD_COUNTS:
+          if count not in (4, 5):
               raise SystemExit('IOS_UI_SHARDS must be 4 or 5')
           skip = classifier_skip(os.environ['EVENT_NAME'], {'changes': json.loads(os.environ['CHANGES_JSON'])})
           print(f'run={str(not skip).lower()}')
