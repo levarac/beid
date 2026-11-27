@@ -349,6 +349,27 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     consecutive clean-run count. If the second attempt fails or is incomplete,
     leave the run red and investigate the retained evidence.
 
+    On pushes to `release/1.1.0`, `ios-release-cache-seed.yml` populates the
+    Gradle distribution, KMP dependencies and SwiftPM checkouts with the same
+    cache keys and paths as the PR build. It also builds the arm64 Debug
+    Simulator products with Release Kotlin and Swift optimization `-O`. It
+    saves a separate compiler CAS snapshot at most once per toolchain and ISO
+    week, and a Kotlin Swift Export snapshot for each complete input digest.
+    The seed checks all five entries against GitHub's release-ref cache index.
+    A snapshot key ends with the SHA-256 of its archive. Using that digest
+    requires a matching key in the release index. The export fingerprint
+    also covers the Gradle artifacts, shared sources, Xcode project, host tools,
+    SDK and JDK. Test bundles, results and DerivedData are excluded.
+
+    The benchmark stored 124,823,225 bytes of compressed CAS and 3,592,270
+    bytes of Swift Export, about 1.2% of a 10 GiB limit combined. Its Gradle
+    distribution, KMP dependencies and SwiftPM checkouts took another 1.63 GB.
+    When a measurement finishes, retain its timing and case receipts, list
+    caches with `gh cache list --ref refs/heads/BRANCH --limit 100`, and
+    delete the measurement branch's entries by verified cache ID. The
+    measurement owner coordinates cleanup with the maintainer authorized
+    to remove those entries. Release and main entries remain available to PRs.
+
     Dependency caches are limited to `~/.gradle/caches` (excluding task build
     caches/execution history), `~/.konan`, and SPM
     checkouts/repository objects under the stable runner-temporary

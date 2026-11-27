@@ -13,7 +13,7 @@ BASE_HOSTED_RUNNERS = {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-26"}
 
 
 def allowed_hosted_runners(path: Path) -> set[str]:
-    if path.name == "pr-ci-ios-macos.yml":
+    if path.name in {"pr-ci-ios-macos.yml", "ios-release-cache-seed.yml"}:
         return BASE_HOSTED_RUNNERS | {"xcode-27"}
     return BASE_HOSTED_RUNNERS
 
@@ -62,6 +62,7 @@ class PublicPrWorkflowTests(unittest.TestCase):
     def test_macos_builds_pin_the_available_xcode(self):
         for name, version in (
             ("pr-ci-ios-macos.yml", "27.2"),
+            ("ios-release-cache-seed.yml", "27.2"),
             ("main-ios-release-build.yml", "26.5"),
             ("pr-ci-lab-cli.yml", "26.5"),
         ):
@@ -83,8 +84,13 @@ class PublicPrWorkflowTests(unittest.TestCase):
         self.assertIn("not a passing comparison", text)
 
     def test_all_actions_are_pinned_and_annotated(self):
-        for path in WORKFLOWS.glob("*.yml"):
+        composite = ROOT / ".github/actions/ios-release-cache/action.yml"
+        for path in [*WORKFLOWS.glob("*.yml"), composite]:
             for action in re.findall(r"(?m)^\s+(?:- )?uses: (.+)$", path.read_text()):
+                if action == "./.github/actions/ios-release-cache":
+                    self.assertIn(path.name, {"pr-ci-ios-macos.yml", "ios-release-cache-seed.yml"})
+                    self.assertLess(path.read_text().index("uses: actions/checkout@"), path.read_text().index(action))
+                    continue
                 self.assertRegex(action, r"^[\w/-]+@[0-9a-f]{40} # v[\w.]+$", path.name)
 
     def test_every_runner_is_hosted(self):

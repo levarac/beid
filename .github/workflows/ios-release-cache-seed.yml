@@ -1,0 +1,258 @@
+name: Seed release iOS build caches
+on:
+  push:
+    branches: ['release/1.1.0']
+    paths:
+      - '.github/actions/ios-release-cache/**'
+      - '.github/workflows/ios-release-cache-seed.yml'
+      - '.github/workflows/pr-ci-ios-macos.yml'
+      - 'ios/**'
+      - 'shared/**'
+      - 'android/**'
+      - '!android/app/src/**'
+      - 'scripts/**'
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-release-cache-seed-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  seed:
+    permissions:
+      contents: read
+      actions: read
+    name: Seed release simulator caches
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set build paths
+        run: |
+          echo "CI_OUTPUT_ROOT=$RUNNER_TEMP/beid-release-build" >> "$GITHUB_ENV"
+          echo "SPM_SOURCE_ROOT=$RUNNER_TEMP/beid-spm/SourcePackages" >> "$GITHUB_ENV"
+
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Point KMP JDK resolver at setup-java
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'KMP_JAVA_HOME=%s\n' "$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Resolve Xcode and JDK with the iOS 27.0 runtime
+        id: toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$DEVELOPER_DIR/usr/bin/xcodebuild"
+          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 27.2"
+          xcrun simctl list runtimes --json \
+            | python3 -c 'import json, sys; runtimes = json.load(sys.stdin)["runtimes"]; raise SystemExit(0 if any(item.get("isAvailable") and item.get("name") == "iOS 27.0" for item in runtimes) else "iOS 27.0 runtime is unavailable")'
+
+          kmp_java_home="$(scripts/resolve_kmp_java_home.sh)"
+          "$kmp_java_home/bin/java" -version
+          xcodebuild -version
+
+          {
+            echo "KMP_JAVA_HOME=$kmp_java_home"
+            echo "JAVA_HOME=$kmp_java_home"
+          } >> "$GITHUB_ENV"
+          {
+            printf 'xcode=%s\n' "$(xcodebuild -version | shasum -a 256 | awk '{print $1}')"
+            printf 'sdk=%s\n' "$(xcrun --sdk iphonesimulator --show-sdk-build-version)"
+            printf 'jdk=%s\n' "$("$kmp_java_home/bin/java" -version 2>&1 | shasum -a 256 | awk '{print $1}')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore Gradle distribution
+        id: dist
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: beid-ios-gradle-dist-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle/wrapper/gradle-wrapper.jar') }}
+
+      - name: Cache KMP dependencies
+        id: kmp
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            !~/.gradle/caches/build-cache-*
+            !~/.gradle/caches/*/executionHistory
+            ~/.konan
+          # The Kotlin version is declared in android/build.gradle.kts today.
+          # No prefix restore: a toolchain/configuration mismatch stays cold.
+          key: beid-ios-kmp-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
+
+      - name: Cache SPM checkouts
+        id: spm
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          # Repository objects keep checkouts' Git alternates valid. Neither
+          # SwiftPM build products nor DerivedData are included.
+          path: |
+            ${{ env.SPM_SOURCE_ROOT }}/checkouts
+            ${{ env.SPM_SOURCE_ROOT }}/repositories
+          key: beid-ios-spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
+      - name: Prepare Gradle distribution
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Retry a cold download once before spending time on the simulator.
+          ./gradlew --version || ./gradlew --version
+
+      - name: Look up release cache entries
+        id: plan
+        uses: ./.github/actions/ios-release-cache
+        with:
+          operation: plan
+
+      - name: Check dependency keys in the release scope
+        id: deps
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIST: ${{ steps.dist.outputs.cache-primary-key }}
+          KMP: ${{ steps.kmp.outputs.cache-primary-key }}
+          SPM: ${{ steps.spm.outputs.cache-primary-key }}
+        run: python3 -m scripts.ios_release_cache dependencies
+
+      - name: Decide whether to populate
+        id: fill
+        env:
+          FRESH: ${{ steps.plan.outputs.cas_fresh == 'true' && steps.plan.outputs.export_fresh == 'true' && steps.deps.outputs.all == 'true' }}
+        run: echo "needed=$([[ $FRESH == true ]] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+      - name: Install pinned XcodeGen
+        if: steps.fill.outputs.needed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_dir="$RUNNER_TEMP/xcodegen-pinned"
+          scripts/download_xcodegen.sh "$install_dir"
+          printf '%s\n' "$install_dir/xcodegen/bin" >> "$GITHUB_PATH"
+
+      - name: Verify XcodeGen pin and generated project
+        if: steps.fill.outputs.needed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_version="$(tr -d '[:space:]' < ios/ci_scripts/XCODEGEN_VERSION)"
+          installed_version=""
+          if command -v xcodegen >/dev/null 2>&1; then
+            installed_version="$(xcodegen --version | awk '{print $2}')"
+          fi
+          if [[ "$installed_version" != "$expected_version" ]]; then
+            echo "error: XcodeGen $expected_version is required; found ${installed_version:-none}" >&2
+            exit 1
+          fi
+
+          echo "Using XcodeGen: $(xcodegen --version)"
+          scripts/xcodegen_generate_checked.sh
+          (
+            cd ios
+            if [[ -n "$(git status --porcelain -- Beid.xcodeproj Lab/Info.plist)" ]]; then
+              echo "error: Beid.xcodeproj or Lab/Info.plist is out of sync with project.yml" >&2
+              git status --porcelain -- Beid.xcodeproj Lab/Info.plist >&2
+              exit 1
+            fi
+          )
+
+      - name: Create owned simulator
+        id: simulator
+        if: steps.fill.outputs.needed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          simulator_udid="$(python3 scripts/ci_simulator.py \
+            --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB")"
+          printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
+
+      - name: Build for testing
+        # Release Kotlin takes about 12 minutes on xcode-27 (Debug: about 7).
+        timeout-minutes: 35
+        if: steps.fill.outputs.needed == 'true'
+        shell: bash
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$CI_OUTPUT_ROOT" "$RUNNER_TEMP/beid-release-cache/cas"
+          python3 -m scripts.ios_ci_timing --phase spm \
+            --log "$CI_OUTPUT_ROOT/spm.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
+            xcodebuild -resolvePackageDependencies -project ios/Beid.xcodeproj -scheme Beid \
+            -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" -onlyUsePackageVersionsFromResolvedFile
+          python3 -m scripts.ios_ci_timing --phase build \
+            --log "$CI_OUTPUT_ROOT/build.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
+            xcodebuild -showBuildTimingSummary \
+            -project ios/Beid.xcodeproj \
+            -scheme Beid \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
+            -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" \
+            -disableAutomaticPackageResolution \
+            COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES \
+            COMPILATION_CACHE_CAS_PATH="$RUNNER_TEMP/beid-release-cache/cas" \
+            SWIFT_OPTIMIZATION_LEVEL=-O \
+            BEID_KMP_BUILD_TYPE=Release \
+            build-for-testing
+
+      - name: Save verified release snapshots
+        if: steps.fill.outputs.needed == 'true'
+        uses: ./.github/actions/ios-release-cache
+        with:
+          operation: save
+
+      - name: Save release dist dependencies
+        if: steps.deps.outputs.dist != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: ${{ steps.dist.outputs.cache-primary-key }}
+
+      - name: Save release kmp dependencies
+        if: steps.deps.outputs.kmp != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            !~/.gradle/caches/build-cache-*
+            !~/.gradle/caches/*/executionHistory
+            ~/.konan
+          key: ${{ steps.kmp.outputs.cache-primary-key }}
+
+      - name: Save release spm dependencies
+        if: steps.deps.outputs.spm != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ env.SPM_SOURCE_ROOT }}/checkouts
+            ${{ env.SPM_SOURCE_ROOT }}/repositories
+          key: ${{ steps.spm.outputs.cache-primary-key }}
+
+      - name: Confirm the release-scoped entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIST: ${{ steps.dist.outputs.cache-primary-key }}
+          KMP: ${{ steps.kmp.outputs.cache-primary-key }}
+          SPM: ${{ steps.spm.outputs.cache-primary-key }}
+        run: python3 -m scripts.ios_release_cache confirm
+
+      - name: Delete the seed-owned simulator
+        if: always() && steps.simulator.outputs.udid != ''
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: xcrun simctl delete "$UDID"

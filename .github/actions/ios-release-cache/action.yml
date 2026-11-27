@@ -1,0 +1,98 @@
+name: Release Simulator build caches
+description: Publish on the release ref or consume its content-verified caches
+inputs:
+  operation:
+    required: true
+    description: plan, save or restore
+outputs:
+  cas_fresh:
+    description: Release already has this week's compiler snapshot
+    value: ${{ steps.plan.outputs.cas_fresh }}
+  export_fresh:
+    description: Release already has this exact Kotlin export
+    value: ${{ steps.plan.outputs.export_fresh }}
+runs:
+  using: composite
+  steps:
+    - id: plan
+      shell: bash
+      # A cache service or fingerprint failure on a PR leaves the normal build selected.
+      continue-on-error: ${{ inputs.operation == 'restore' }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 -m scripts.ios_release_cache plan
+
+    - id: restore_cas
+      if: inputs.operation == 'restore' && steps.plan.outputs.cas_key != ''
+      continue-on-error: true
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ${{ runner.temp }}/beid-release-cache/cas.tar
+        key: ${{ steps.plan.outputs.cas_key }}
+        restore-keys: ${{ steps.plan.outputs.cas_prefix }}
+
+    - id: restore_export
+      if: inputs.operation == 'restore' && steps.plan.outputs.export_key != ''
+      continue-on-error: true
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ${{ runner.temp }}/beid-release-cache/export.tar
+        key: ${{ steps.plan.outputs.export_key }}
+        restore-keys: ${{ steps.plan.outputs.export_prefix }}
+
+    - name: Enable a verified compiler cache
+      if: inputs.operation == 'restore' && steps.restore_cas.outputs.cache-matched-key != ''
+      shell: bash
+      env:
+        MATCHED: ${{ steps.restore_cas.outputs.cache-matched-key }}
+      run: |
+        if python3 -m scripts.ios_release_cache restore --kind cas --matched "$MATCHED"; then
+          echo "BEID_CAS_PATH=$RUNNER_TEMP/beid-release-cache/cas" >> "$GITHUB_ENV"
+        else
+          echo "::notice::Compiler cache unavailable. Use the standard build."
+        fi
+
+    - name: Enable the exact verified Kotlin export
+      if: inputs.operation == 'restore' && steps.restore_export.outputs.cache-matched-key != ''
+      shell: bash
+      env:
+        MATCHED: ${{ steps.restore_export.outputs.cache-matched-key }}
+        DIGEST: ${{ steps.plan.outputs.export_digest }}
+      run: |
+        entry="$RUNNER_TEMP/beid-release-cache/export"
+        if python3 -m scripts.ios_release_cache restore --kind export --matched "$MATCHED" &&
+           python3 scripts/ios_swift_export_cache.py verify --entry "$entry" --key "$DIGEST"; then
+          echo "BEID_SWIFT_EXPORT_ENTRY=$entry" >> "$GITHUB_ENV"
+          echo "BEID_SWIFT_EXPORT_KEY=$DIGEST" >> "$GITHUB_ENV"
+        else
+          echo "::notice::Swift Export unavailable. Build Kotlin normally."
+        fi
+
+    - id: pack_cas
+      if: inputs.operation == 'save' && github.event_name == 'push' && github.ref == 'refs/heads/release/1.1.0' && steps.plan.outputs.cas_fresh != 'true'
+      shell: bash
+      run: python3 -m scripts.ios_release_cache pack --kind cas --source "$RUNNER_TEMP/beid-release-cache/cas"
+
+    - if: steps.pack_cas.outputs.key != ''
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ${{ runner.temp }}/beid-release-cache/cas.tar
+        key: ${{ steps.pack_cas.outputs.key }}
+
+    - id: pack_export
+      if: inputs.operation == 'save' && github.event_name == 'push' && github.ref == 'refs/heads/release/1.1.0' && steps.plan.outputs.export_fresh != 'true'
+      shell: bash
+      env:
+        DIGEST: ${{ steps.plan.outputs.export_digest }}
+      run: |
+        set -euo pipefail
+        entry="$RUNNER_TEMP/beid-release-cache/export"
+        python3 scripts/ios_swift_export_cache.py snapshot --entry "$entry" --key "$DIGEST" \
+          --products "$CI_OUTPUT_ROOT/DerivedData/Build/Products/Debug-iphonesimulator"
+        python3 -m scripts.ios_release_cache pack --kind export --source "$entry"
+
+    - if: steps.pack_export.outputs.key != ''
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ${{ runner.temp }}/beid-release-cache/export.tar
+        key: ${{ steps.pack_export.outputs.key }}
