@@ -104,7 +104,9 @@ class LintFixtureWiringTests(unittest.TestCase):
         workflow = workflow_data((ROOT / ".github/workflows/pr-ci.yml").read_text())
         lint = workflow["jobs"]["lint"]
         self.assertEqual(lint["name"], "SwiftLint")
-        self.assertEqual(lint["runs-on"], "macos-26")
+        self.assertEqual(lint["runs-on"], "ubuntu-24.04-arm")
+        self.assertRegex(lint["container"]["image"],
+                         r"^ghcr\.io/realm/swiftlint:0\.65\.0@sha256:[0-9a-f]{64}$")
         steps = [step for step in lint["steps"]
                  if step.get("run") == "python3 scripts/check_lint_fixtures.py"]
         self.assertEqual(len(steps), 1)

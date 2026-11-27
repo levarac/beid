@@ -68,11 +68,8 @@ with open(f"{root}/.swiftlint-baseline.json", "w") as f:
 PYEOF
 
 cd "$ROOT"
-# The resolver's precondition (Xcode.app / sourcekitdInProc / xcode-select)
-# is macOS-only: SwiftLint on Linux (this repo's PR CI runs SwiftLint on
-# ubuntu-latest) uses the Linux Swift toolchain and never touches
-# sourcekitdInProc or DEVELOPER_DIR. Gate the whole mechanism on Darwin so
-# Linux keeps running exactly as it did before this resolver existed.
+# On macOS resolve SourceKit from Xcode. The Linux CI image supplies
+# libsourcekitdInProc.so with SwiftLint.
 if [ "$(uname -s)" = "Darwin" ]; then
     # NOT `export DEVELOPER_DIR="$(resolve_developer_dir)"`: under set -e, a
     # failing command substitution inside an `export` assignment is masked by

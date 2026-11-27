@@ -567,12 +567,13 @@ These three workflows remain the execution source of truth; the documentation
 drift check covers all three job lists and their distinguishing command tokens.
 
 All pull-request jobs use fixed GitHub-hosted runner labels. Determine changed
-paths and Repository sanity use `ubuntu-24.04-arm`; Android uses
-`ubuntu-24.04`; SwiftLint and the lab CLI use `macos-26` with Xcode 26.5.
+paths, Repository sanity and SwiftLint use `ubuntu-24.04-arm`. The SwiftLint
+0.65.0 image supplies Linux SourceKit for the design-contract rules.
+Android uses `ubuntu-24.04`. The lab CLI uses `macos-26` with Xcode 26.5.
 The iOS build/test jobs use `xcode-27` with Xcode 27.2 and the iOS 27.0
 Simulator runtime. iOS planning and aggregation use `ubuntu-24.04-arm`.
-SwiftLint needs Xcode SourceKit. Repository sanity
-installs pinned Python 3.12; Android installs JDK 17 and Android 36 job-locally.
+Repository sanity installs pinned Python 3.12. Android installs JDK 17 and
+Android 36 job-locally.
 All pull requests run these checks without private credentials. The private
 Parallax comparison is explicitly reported as SKIPPED, never as a passing
 comparison. All Actions use full commit SHA pins. Android delivery and private
