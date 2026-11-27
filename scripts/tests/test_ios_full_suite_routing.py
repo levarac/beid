@@ -34,12 +34,26 @@ class Event:
     files: tuple[str, ...] = ()
     branch: str = "main"
     action: str = ""
-    label: str = ""
+    added_label: str = ""
+    labels: tuple[str, ...] = ()
+    cron: str = ""
     receipt: bool = False  # The evidence verifier's output, tested independently.
     attempt: int = 1
     unsafe: bool = False
     dispatch: str = IOS
     ui_shards: str = ""
+
+    def payload(self):
+        if self.name == "pull_request":
+            data = {"action": self.action, "pull_request": {"labels": [{"name": name} for name in self.labels]}}
+            if self.added_label:
+                data["label"] = {"name": self.added_label}
+            return data
+        return {"schedule": self.cron} if self.name == "schedule" else {}
+
+
+def declared_crons(on):
+    return {entry["cron"] for entry in on.get("schedule", [])} if isinstance(on, dict) else set()
 
 
 def matches(value, patterns):
@@ -58,6 +72,8 @@ def triggered(name, on, event):
         return False
     if event.name == "workflow_dispatch":
         return name == event.dispatch  # Dispatch addresses a single workflow.
+    if event.name == "schedule":
+        return event.cron in declared_crons(on)
     config = on.get(event.name) if isinstance(on, dict) else None
     config = config if isinstance(config, dict) else {}
     if event.name == "push" and config.keys() & {"tags", "tags-ignore"} and not config.keys() & {"branches", "branches-ignore"}:
@@ -94,8 +110,7 @@ def census(directory):
         data = workflow_data(path.read_text())
         jobs = data["jobs"]
         steps = [(job, step) for job in jobs for step in execution_steps(jobs[job])]
-        if steps:
-            owners[path.name] = (data, steps)
+        owners[path.name] = (data, steps)
     return owners
 
 
@@ -106,9 +121,11 @@ def value(expression, event, bindings):
         return expression == "true"
     ref = {"pull_request": "refs/pull/42/merge", "merge_group": f"refs/heads/gh-readonly-queue/{event.branch}/pr-42"}.get(
         event.name, "refs/heads/" + event.branch)
+    payload = event.payload()
     return expression_value("(" + expression + ")", event=event.name, ref=ref, attempt=event.attempt,
-                            action=event.action, label=event.label, labels=[{"name": event.label}] if event.label else [],
-                            bindings=bindings)
+                            action=event.action, label=payload.get("label", {}).get("name", ""),
+                            labels=payload.get("pull_request", {}).get("labels"),
+                            bindings={**bindings, "github.event.schedule": payload.get("schedule", "")})
 
 
 def outputs(step, directory, **env):
@@ -142,8 +159,7 @@ def sharded_plan(workflow, event, directory):
         steps = {s["id"]: s for s in plan["steps"] if "id" in s}
         mode = steps["test-mode"]
         allow = value(mode["env"]["ALLOW_SMOKE"], event, ctx)
-        labels = [{"name": event.label}] if event.label else []
-        (directory / "event.json").write_text(json.dumps({"pull_request": {"labels": labels}}))
+        (directory / "event.json").write_text(json.dumps(event.payload()))
         ctx["steps.test-mode.outputs.mode"] = outputs(mode, directory, ALLOW_SMOKE=str(allow).lower(),
                                                      EVENT_NAME=value(mode["env"]["EVENT_NAME"], event, ctx))["mode"]
         eligible = value(steps["previous"]["if"], event, ctx)
@@ -211,7 +227,8 @@ def full_executions(workflows, event, *, nightly_run=None):
                 for _ in range(whole_suite_copies(job)):
                     yield path
 
-    return [path for name, (data, _) in workflows.items() if triggered(name, data["on"], event) for path in walk(name)]
+    return [path for name, (data, steps) in workflows.items() if steps and triggered(name, data["on"], event)
+            for path in walk(name)]
 
 
 class FullSuiteRoutingTests(unittest.TestCase):
@@ -250,8 +267,9 @@ class FullSuiteRoutingTests(unittest.TestCase):
             ("build configuration PR", pr("android/build.gradle.kts"), 1),
             ("unknown path", pr("unknown/input"), 1), ("failed classification", pr(), 1),
             ("renamed or deleted documentation", pr(DOC, unsafe=True), 1),
-            ("full-labelled UI", pr(VIEW, action="labeled", label="ci:full-ui"), 1),
-            ("unrelated label", pr(CORE, action="labeled", label="triage"), 0),
+            ("full-labelled UI", pr(VIEW, action="labeled", added_label="ci:full-ui", labels=("ci:full-ui",)), 1),
+            ("UI update with existing full label and prior receipt", pr(VIEW, labels=("ci:full-ui",), receipt=True), 1),
+            ("unrelated label", pr(CORE, action="labeled", added_label="triage", labels=("triage",)), 0),
             ("closed PR", pr(CORE, action="closed"), 0),
             ("ready with full receipt", pr(CORE, action="ready_for_review", receipt=True), 0),
             ("ready without receipt", pr(CORE, action="ready_for_review"), 1),
@@ -268,12 +286,38 @@ class FullSuiteRoutingTests(unittest.TestCase):
             with self.subTest(case=description):
                 self.assertEqual(full_executions(self.workflows, event), [(IOS, "tests")] if count else [])
 
+    def test_schedule_matches_the_cron_in_the_event(self):
+        early, late, shared = "23 3 * * *", "23 17 * * *", "0 0 * * *"
+        with tempfile.TemporaryDirectory() as folder:
+            for name, cron in [("early.yml", early), ("late.yml", late)]:
+                workflow = {"on": {"schedule": [{"cron": cron}, {"cron": shared}]},
+                            "jobs": {"tests": {"steps": [{"run": "xcodebuild -scheme Beid test"}]}}}
+                (Path(folder) / name).write_text(yaml.safe_dump(workflow))
+            workflows = census(Path(folder))
+        for cron, expected in [(early, ["early.yml"]), (late, ["late.yml"]),
+                               (shared, ["early.yml", "late.yml"]), ("0 1 * * *", [])]:
+            with self.subTest(cron=cron):
+                runs = full_executions(workflows, Event("schedule", cron=cron))
+                self.assertEqual(runs, [(name, "tests") for name in expected])
+
     def test_scheduled_full_count(self):
-        if not (WORKFLOWS / NIGHTLY).is_file():
-            self.skipTest("release-ios-nightly.yml is absent from this checkout; GitHub runs schedules from main")
+        # GitHub fires schedules only from the default branch. On release this
+        # checks the schedules its workflow definitions would bring to main.
+        crons = {name: declared_crons(data["on"]) for name, (data, _) in self.workflows.items()}
+        self.assertTrue(crons[NIGHTLY] if NIGHTLY in crons else crons[IOS], "Missing scheduled iOS suite")
+        for cron in sorted(set().union(*crons.values())):
+            with self.subTest(cron=cron):
+                event = Event("schedule", cron=cron)
+                if cron in crons.get(NIGHTLY, set()):
+                    self.check_release_nightly(event)
+                else:
+                    runs = full_executions(self.workflows, event)
+                    self.assertEqual([path[0] for path in runs], [IOS] if cron in crons[IOS] else [], runs)
+
+    def check_release_nightly(self, event):
         from scripts import release_nightly as nightly
 
-        data = workflow_data((WORKFLOWS / NIGHTLY).read_text())
+        data = self.workflows[NIGHTLY][0]
         plan = data["jobs"]["plan"]
         decide = next(s for s in plan["steps"] if s.get("id") == "decide")
         self.assertIn("release_nightly.py decide", decide["run"])
@@ -282,4 +326,4 @@ class FullSuiteRoutingTests(unittest.TestCase):
             with self.subTest(previous=prior, proof=proof), patch.object(nightly, "previous", return_value=prior * 40), \
                     patch.object(nightly, "exact_pass", return_value=proof):
                 run, _ = nightly.decide(Mock(), "a" * 40, 2, None)
-                self.assertEqual(full_executions(self.workflows, Event("schedule"), nightly_run=run), expected)
+                self.assertEqual(full_executions(self.workflows, event, nightly_run=run), expected)
