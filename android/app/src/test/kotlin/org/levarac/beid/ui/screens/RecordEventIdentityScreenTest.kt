@@ -94,6 +94,9 @@ class RecordEventIdentityScreenTest {
         }
         composeTestRule.onNodeWithText(EVENT_NAME).assertIsDisplayed()
         composeTestRule.mainClock.advanceTimeBy(200)
+        // Past the ceremony the steady state includes the radar (beid#722), so
+        // reaching "3" is a real scroll, which needs frames: resume the clock.
+        composeTestRule.mainClock.autoAdvance = true
         composeTestRule.onNodeWithText(EVENT_NAME).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("3").performScrollTo().assertIsDisplayed()
     }

@@ -22,6 +22,9 @@ class ScanDeviceAccounting {
     val coPresentDeviceCount: Int get() = coPresentRpids.size
     val distinctDeviceCount: Int get() = distinctDeviceIds.size
 
+    /** The normalized display ids behind [distinctDeviceCount], for the radar only (beid#722). In memory only. */
+    val detectedDisplayIds: Set<String> get() = distinctDeviceIds
+
     /**
      * First ENIN this session crossed a co-presence window boundary at —
      * `null` until the first [record] call. First-set-wins: never moves

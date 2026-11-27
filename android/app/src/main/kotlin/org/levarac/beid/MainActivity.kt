@@ -99,6 +99,7 @@ open class MainActivity : ComponentActivity() {
                     session = coordinator,
                     proofRecordStore = proofRecordStore,
                     sessionAggregateSnapshotStore = coordinator.sessionAggregateSnapshotStore,
+                    sigilPresenceStore = coordinator.sigilPresenceStore,
                     walletState = walletState,
                     onStartWalletBinding = { walletBindingFlow?.start() },
                 )

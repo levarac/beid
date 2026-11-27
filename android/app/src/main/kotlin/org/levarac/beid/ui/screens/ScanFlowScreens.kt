@@ -1,8 +1,11 @@
 package org.levarac.beid.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Warning
@@ -12,23 +15,29 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.levarac.beid.R
 import org.levarac.beid.sensing.ScanEventSession
+import org.levarac.beid.sensing.RadarPeerLiveness
 import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.sensing.SensingRadarPeerSignal
 import org.levarac.beid.ui.designsystem.BeidGlyph
 import org.levarac.beid.ui.designsystem.BeidHeroHeader
 import org.levarac.beid.ui.designsystem.BeidMetricRow
@@ -37,6 +46,10 @@ import org.levarac.beid.ui.designsystem.BeidSecondaryButton
 import org.levarac.beid.ui.designsystem.BeidStatusPill
 import org.levarac.beid.ui.designsystem.EncounterFieldPulseGlyph
 import org.levarac.beid.ui.designsystem.ProofSealMarkGlyph
+import org.levarac.beid.ui.designsystem.SensingRadar
+import org.levarac.beid.ui.designsystem.SensingRadarPeer
+import org.levarac.beid.ui.theme.BeidFont
+import org.levarac.beid.ui.theme.BeidSize
 import org.levarac.beid.ui.theme.BeidSpacing
 import org.levarac.beid.ui.theme.BeidTheme
 
@@ -71,10 +84,12 @@ fun ScanFlowScreen(
     onSimulateSignalLost: () -> Unit,
     onResumeSensing: () -> Unit,
     onStartWalletBinding: () -> Unit = {},
+    radarPeers: List<SensingRadarPeerSignal> = emptyList(),
+    radarPeerLastHeardAtMillis: (String) -> Long? = { null },
 ) {
     when (phase) {
         ScanPhase.Idle, ScanPhase.Sensing -> SensingScreen()
-        is ScanPhase.EventFound -> EventFoundScreen(phase.session)
+        is ScanPhase.EventFound -> EventFoundScreen(phase.session, radarPeers, radarPeerLastHeardAtMillis)
         is ScanPhase.Recording -> RecordingScreen(
             session = phase.session,
             peersVerified = phase.peersVerified,
@@ -83,6 +98,8 @@ fun ScanFlowScreen(
             showSimulateSignalLost = showSimulateSignalLost,
             onSimulateSignalLost = onSimulateSignalLost,
             onStartWalletBinding = onStartWalletBinding,
+            radarPeers = radarPeers,
+            radarPeerLastHeardAtMillis = radarPeerLastHeardAtMillis,
         )
         is ScanPhase.SignalLost -> SignalLostScreen(
             session = phase.session,
@@ -93,12 +110,10 @@ fun ScanFlowScreen(
 }
 
 /**
- * Screen 05: Sensing — mirrors iOS's `SensingView`. iOS's animated radar
- * rings (`DS.Motion`) are not ported: DESIGN.md marks `DS.Motion` springs
- * `PROPOSAL — Ken ratification pending`, and android/README.md already
- * defers all Compose animation-spec work to "once a motion-bearing screen
- * lands" — this is that screen, but the motion itself stays out of scope
- * for beid#336, which is about phase *content*, not animation.
+ * Screen 05: Sensing — the joined-but-no-event-yet phase. No radar here: on
+ * iOS the radar belongs to `SensingSessionSurface`, which only EventFound and
+ * Recording use; this phase's iOS screen is the pre-join `SensingView`. The
+ * radar itself is [SessionRadar] below (beid#722).
  */
 @Composable
 fun SensingScreen() {
@@ -146,7 +161,11 @@ fun SensingScreen() {
  * once Android's session model grows.
  */
 @Composable
-fun EventFoundScreen(session: ScanEventSession) {
+fun EventFoundScreen(
+    session: ScanEventSession,
+    radarPeers: List<SensingRadarPeerSignal> = emptyList(),
+    radarPeerLastHeardAtMillis: (String) -> Long? = { null },
+) {
     val foundMessage = stringResource(R.string.scan_event_found_message)
     val foundStatus = stringResource(R.string.scan_event_found_status)
     Column(
@@ -167,6 +186,7 @@ fun EventFoundScreen(session: ScanEventSession) {
             label = foundStatus,
             tone = BeidStatusPill.Tone.Active,
         )
+        SessionRadar(radarPeers, radarPeerLastHeardAtMillis)
         CircularProgressIndicator(
             color = BeidTheme.colors.actionPrimary,
             modifier = Modifier.semantics {
@@ -207,6 +227,8 @@ fun RecordingScreen(
     onSimulateSignalLost: () -> Unit,
     onStartWalletBinding: () -> Unit = {},
     ceremonyDwellMillis: Long = 2000,
+    radarPeers: List<SensingRadarPeerSignal> = emptyList(),
+    radarPeerLastHeardAtMillis: (String) -> Long? = { null },
 ) {
     val recordingStatus = stringResource(R.string.event_join_status_recording)
     var showCeremony by remember { mutableStateOf(showEntranceCeremony) }
@@ -260,6 +282,7 @@ fun RecordingScreen(
                 style = MaterialTheme.typography.bodyLarge,
                 color = BeidTheme.colors.textSecondary,
             )
+            SessionRadar(radarPeers, radarPeerLastHeardAtMillis)
             BeidMetricRow(
                 label = stringResource(R.string.event_join_peers_verified_label),
                 value = peersVerified.toString(),
@@ -333,6 +356,101 @@ fun SignalLostScreen(session: ScanEventSession, peersVerified: Int, onResumeSens
             contentColor = BeidTheme.colors.labelOnActionPrimary,
             onClick = onResumeSensing,
             modifier = Modifier.testTag(EventJoinScreenTestTags.RESUME_BUTTON),
+        )
+    }
+}
+
+/**
+ * The session radar's wall clock, in epoch milliseconds: the same base as
+ * Barnard's event timestamps. Injectable so tests can drive time.
+ */
+internal val LocalSessionRadarClock = staticCompositionLocalOf<() -> Long> { System::currentTimeMillis }
+
+/** Test-only: the dim flag of every peer the session radar is given, in order. Never an id. */
+internal val SessionRadarDimmedPeers = SemanticsPropertyKey<List<Boolean>>("SessionRadarDimmedPeers")
+
+/** iOS `TimelineView(.periodic(from: .now, by: 1))`. */
+private const val SESSION_RADAR_TICK_MILLIS = 1_000L
+
+/**
+ * The sensing radar (beid#722, iOS `SensingSessionSurface`'s
+ * `SensingRadarView`) for EventFound and Recording.
+ *
+ * - Peers: the detected peers of the live session, as
+ *   [org.levarac.beid.sensing.EventJoinSession.radarPeers] publishes them;
+ *   a new list per detection recomposes and redraws it. Ids place a node only.
+ * - Liveness (release/1.1.0 `SensingView.radarPeers(at:)`, #855/#901): a
+ *   one-second ticker re-reads the wall clock ([LocalSessionRadarClock]) and
+ *   each peer's last-heard time
+ *   ([org.levarac.beid.sensing.EventJoinSession.radarPeerLastHeardAtMillis]),
+ *   so with no new observation a peer dims from 30 s of silence and leaves
+ *   the radar at 300 s ([RadarPeerLiveness]). The last-heard time is read
+ *   live, never from the published list, because an RSSI sample moves it
+ *   without a republish.
+ * - Caption: "HEARD IN THE LAST 5 MINUTES" directly below the radar, as
+ *   release/1.1.0 `SensingSessionSurface` draws it (DESIGN.md), so the
+ *   300 s window is visible and not only spoken. Mono 11 in `textSecondary`,
+ *   not iOS's `textSecondaryOnInk`: this radar sits on the light page, not on
+ *   an ink panel. Left readable by TalkBack, as iOS leaves it for VoiceOver.
+ * - Edges: never. iOS (integration/ios-1.1.1, still so in release/1.1.0
+ *   `SensingView`) hardcodes `showsEdges: false` for every presentation (an
+ *   edge would suggest a two-way link no device measures); SubPM decision
+ *   2026-11-19, superseding main/#795's per-presentation edges.
+ * - Counts: 0 and 0. The radar speaks only the number of devices heard
+ *   (release/1.1.0 `radar.accessibility.devicesHeard`) and draws neither
+ *   count, and iOS itself passes `mutualDeviceCount: 0`.
+ * - Not yet ported from release/1.1.0 `SensingView`: the recorded-window
+ *   mark; the component supports it, this caller does not pass it. The live
+ *   window count sits behind `scanSessionMetrics`, whose aggregation is
+ *   evaluated only while 05e is visible, so it is not run per detection for a
+ *   value nothing reads.
+ * - Size: iOS `min(radarField, width - pageMargin)`, where width is the screen
+ *   width outside the page margins. This content sits inside Now's
+ *   page-margin inset (two margins), so that width is [maxWidth] plus two
+ *   margins; the radar may overflow the column by half a margin each side,
+ *   centred, exactly as on iOS.
+ */
+@Composable
+private fun SessionRadar(radarPeers: List<SensingRadarPeerSignal>, lastHeardAtMillis: (String) -> Long?) {
+    val clock = LocalSessionRadarClock.current
+    var nowMillis by remember(clock) { mutableLongStateOf(clock()) }
+    LaunchedEffect(clock) {
+        while (true) {
+            delay(SESSION_RADAR_TICK_MILLIS)
+            nowMillis = clock()
+        }
+    }
+    // Not remembered: last-heard times move without a recomposition, so they
+    // are re-read on every tick and every new list.
+    val peers = radarPeers.mapNotNull { peer ->
+        val lastHeard = lastHeardAtMillis(peer.displayId)
+        if (!RadarPeerLiveness.isCurrent(lastHeard, nowMillis)) return@mapNotNull null
+        SensingRadarPeer(peer.displayId, peer.dbm, isDimmed = RadarPeerLiveness.isDimmed(lastHeard, nowMillis))
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(BeidSpacing.m),
+    ) {
+        BoxWithConstraints(
+            Modifier.fillMaxWidth().semantics { this[SessionRadarDimmedPeers] = peers.map { it.isDimmed } },
+            contentAlignment = Alignment.Center,
+        ) {
+            val size = minOf(BeidSize.radarField, maxWidth + BeidSpacing.pageMargin).coerceAtLeast(0.dp)
+            SensingRadar(
+                peers = peers,
+                mutualDeviceCount = 0,
+                observedWindowCount = 0,
+                modifier = Modifier.requiredSize(size),
+                showsEdges = false,
+                size = size,
+            )
+        }
+        NowStyledText(
+            text = stringResource(R.string.radar_time_window_caption),
+            style = BeidFont.Library.labelMono11,
+            color = BeidTheme.colors.textSecondary,
+            modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
         )
     }
 }

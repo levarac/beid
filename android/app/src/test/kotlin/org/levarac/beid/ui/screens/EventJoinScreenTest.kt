@@ -107,7 +107,8 @@ class EventJoinScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithText("40").assertIsDisplayed()
+        // The Recording radar (beid#722) sits above the metric row; scroll Now to it.
+        composeTestRule.onNodeWithText("40").performScrollTo().assertIsDisplayed()
     }
 
     /**
@@ -481,7 +482,8 @@ class EventJoinScreenTest {
 
         val context = ApplicationProvider.getApplicationContext<Context>()
         composeTestRule.onNodeWithText(context.getString(R.string.scan_recording_ceremony_title)).assertDoesNotExist()
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
+        // The Recording radar (beid#722) sits above the metric row; scroll Now to it.
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("2").assertIsDisplayed()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).assertIsDisplayed()
 
@@ -512,7 +514,7 @@ class EventJoinScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON).assertDoesNotExist()
     }
 

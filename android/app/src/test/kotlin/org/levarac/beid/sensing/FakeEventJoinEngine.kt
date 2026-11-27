@@ -9,6 +9,7 @@ import org.levarac.barnard.BarnardEventInfo
 import org.levarac.barnard.BarnardEventInfoHintEvent
 import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.barnard.BarnardRelayVerifier
+import org.levarac.barnard.BarnardRssiUpdateEvent
 import org.levarac.barnard.BarnardPermissionStatus
 import org.levarac.parallax.discovery.RegistryVerifiedJoinContext
 
@@ -167,6 +168,30 @@ internal class FakeEventJoinEngine(
                     eventInfo = BarnardEventInfo(displayName, hash, census),
                     additionalNamesOmitted = additionalNamesOmitted,
                     additionalEventsOmitted = additionalEventsOmitted,
+                ),
+            ),
+        )
+    }
+
+    /** beid#722: a Barnard RSSI sample, the radar feed's second source beside [emitDetection]. */
+    fun emitRssiUpdate(
+        rssi: Int,
+        detectedDisplayId: String?,
+        timestampMs: Long,
+        enin: Long = 1,
+        rpid: String = "aa",
+        reporterRpid: String = "00",
+    ) {
+        onEvent?.invoke(
+            BarnardEvent.RssiUpdate(
+                BarnardRssiUpdateEvent(
+                    timestampMs = timestampMs,
+                    rssi = rssi,
+                    rpid = rpid,
+                    reporterRpid = reporterRpid,
+                    enin = enin,
+                    detectedDisplayId = detectedDisplayId,
+                    debugLocalName = null,
                 ),
             ),
         )
