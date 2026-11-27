@@ -134,9 +134,16 @@ class QueueEvidenceTests(TestCase):
             with self.subTest(event=event, ref=ref, sha=sha), self.assertRaises(ValueError):
                 validate_aggregate(event, needs, None, {}, sha, ref=ref)
 
-    def test_partial_queue_rerun_credits_retained_jobs_and_retried_shards(self):
-        # Job IDs and times from PR run 45900966547, attempt 2. The queue
-        # event, its SHA and the subsequent main push come from the synthetic replay.
+    def test_partial_rerun_on_the_four_shard_merge_queue(self):
+        self.assert_partial_queue_rerun(ui_shards=4)
+
+    def test_partial_rerun_with_the_pre_912_five_shard_matrix(self):
+        self.assert_partial_queue_rerun(ui_shards=5)
+
+    def assert_partial_queue_rerun(self, *, ui_shards):
+        # PR #945 run 45900966547 supplied the attempt-2 job IDs and times
+        # for the pre-#912 matrix. The current queue replay omits ui-5.
+        # The queue event, its SHA and the subsequent main push are synthetic.
         run_id = 45900966547
         self.sha = "f9b11d1170bf9b94245ad250f3926623efc4cf79"
         self.event["after"] = self.sha
@@ -150,17 +157,19 @@ class QueueEvidenceTests(TestCase):
             "iOS full tests (unit)": (140209874688, "2026-11-26T22:09:25Z"),
             "iOS full tests (ui-1)": (140209874141, "2026-11-26T22:26:54Z"),
             "iOS full tests (ui-3)": (140209924105, "2026-11-26T22:09:24Z"),
-            # The other three UI shards and the aggregate ran again.
+            # ui-2, ui-4 and the aggregate ran again, as did ui-5 in the older matrix.
             "iOS full tests (ui-2)": (140209873159, "2026-11-26T23:21:05Z"),
             "iOS full tests (ui-4)": (140209873165, "2026-11-26T23:27:09Z"),
             "iOS full tests (ui-5)": (140209872937, "2026-11-26T23:05:21Z"),
             "iOS simulator": (140229250199, "2026-11-27T00:00:16Z"),
         }
         jobs = {job["name"]: job for job in self.jobs}
-        jobs["iOS full tests (ui-5)"] = {**jobs["iOS full tests (ui-4)"], "name": "iOS full tests (ui-5)"}
+        if ui_shards == 5:
+            jobs["iOS full tests (ui-5)"] = {**jobs["iOS full tests (ui-4)"], "name": "iOS full tests (ui-5)"}
         self.jobs = list(jobs.values())
-        for name, (job_id, started_at) in attempt_jobs.items():
-            jobs[name].update(id=job_id, started_at=started_at, run_id=run_id, head_sha=self.sha, run_attempt=2)
+        for name, job in jobs.items():
+            job_id, started_at = attempt_jobs[name]
+            job.update(id=job_id, started_at=started_at, run_id=run_id, head_sha=self.sha, run_attempt=2)
 
         self.assertEqual(self.lookup(), dict(run_id=run_id, attempt=2, sha=self.sha, mode="full",
                                              conclusion="success", source_event="merge_group"))
