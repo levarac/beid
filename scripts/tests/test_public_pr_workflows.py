@@ -69,10 +69,6 @@ class PublicPrWorkflowTests(unittest.TestCase):
             text = (WORKFLOWS / name).read_text()
             self.assertIn(f"DEVELOPER_DIR: /Applications/Xcode_{version}.app/Contents/Developer", text)
             self.assertNotIn("for app in /Applications/Xcode*.app", text)
-        self.assertIn(
-            "DEVELOPER_DIR=/Applications/Xcode_26.5.app/Contents/Developer",
-            (WORKFLOWS / "pr-ci.yml").read_text(),
-        )
 
     def test_public_pr_workflows_have_no_secrets(self):
         for path in WORKFLOWS.glob("*.yml"):

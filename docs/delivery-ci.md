@@ -7,8 +7,8 @@ dates). The contract every agent must know before touching delivery files:
 ## PR CI
 
 All pull-request jobs use literal GitHub-hosted labels: `ubuntu-24.04-arm`
-for classification/sanity, `ubuntu-24.04` for Android, `macos-26` for
-SwiftLint and the lab CLI (Xcode 26.5), and `xcode-27` for iOS simulator
+for classification, sanity and SwiftLint, `ubuntu-24.04` for Android,
+`macos-26` for the lab CLI (Xcode 26.5), and `xcode-27` for iOS simulator
 builds and tests (Xcode 27.2). No pull-request workflow receives secrets, including same-repository PRs.
 Removing persistent runner access before public cutover is a separate operator
 step; workflow edits alone cannot prevent a modified fork workflow from
@@ -64,7 +64,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     setup-gradle's PR cache remains read-only. Only `org.robolectric:android-all-instrumented`
     resolves from Google's Maven Central mirror first, then Central when absent.
 
-  - SwiftLint: `scripts/lint.sh` and `scripts/check_lint_fixtures.py`.
+  - SwiftLint runs `scripts/lint.sh` and `scripts/check_lint_fixtures.py` in
+    the digest-pinned SwiftLint 0.65.0 image with its Linux SourceKit runtime.
     The same hosted job proves both lint fixtures: SwiftLint must exit 2,
     every fail marker must match its line and rule exactly, and the pass fixture
     and application must have zero violations. The checker itself exits 0
