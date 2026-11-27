@@ -1,6 +1,7 @@
 """Authenticate optional Simulator cache payloads against their release-scoped GitHub keys."""
 import argparse
 from datetime import datetime, timezone
+from functools import lru_cache
 import hashlib
 import json
 import os
@@ -16,9 +17,42 @@ HEX = r"[0-9a-f]{64}"
 WEEK = r"[0-9]{4}-W[0-9]{2}"
 
 
-def release_keys(entries, prefix, kind):
+def archive_version(paths, compression):
+    # actions/cache 0057852b, getCacheVersion on macOS (cross-OS archives disabled).
+    return hashlib.sha256("|".join([*paths, compression, "1.0"]).encode()).hexdigest()
+
+
+@lru_cache(maxsize=1)
+def compression_method():
+    try:
+        result = subprocess.run(["zstd", "--quiet", "--version"], capture_output=True, check=False)
+    except FileNotFoundError:
+        return "gzip"
+    return "zstd-without-long" if result.stdout.strip() else "gzip"
+
+
+def dependency_paths(kind):
+    if kind == "dist":
+        return ["~/.gradle/wrapper/dists"]
+    if kind == "kmp":
+        return ["~/.gradle/caches/modules-2/files-2.1", "~/.konan/dependencies"]
+    if kind == "spm":
+        root = os.environ["SPM_SOURCE_ROOT"]
+        return [root + "/checkouts", root + "/repositories"]
+    raise ValueError("unsupported dependency cache")
+
+
+def expected_version(kind):
+    if kind in ("cas", "export"):
+        paths = [os.environ["RUNNER_TEMP"] + "/beid-release-cache/" + kind + ".tar"]
+    else:
+        paths = dependency_paths(kind)
+    return archive_version(paths, compression_method())
+
+
+def release_keys(entries, prefix, kind, version):
     suffix = (WEEK + "-" if kind == "cas" else "") + HEX
-    return [e["key"] for e in entries if e.get("ref") == RELEASE_REF
+    return [e["key"] for e in entries if e.get("ref") == RELEASE_REF and e.get("version") == version
             and re.fullmatch(re.escape(prefix) + suffix, e.get("key", ""))]
 
 
@@ -74,7 +108,7 @@ def entries_for(prefix):
 
 
 def inventory(prefix, kind):
-    return release_keys(entries_for(prefix), prefix, kind)
+    return release_keys(entries_for(prefix), prefix, kind, expected_version(kind))
 
 
 def make_plan(root):
@@ -109,13 +143,16 @@ def make_plan(root):
     return plan
 
 
-def dependencies():
+def dependencies(*, require_restore_hit=False):
     fresh = {}
     for name in ("dist", "kmp", "spm"):
         key = os.environ[name.upper()]
         if not key.startswith("beid-ios-"):
             raise ValueError("missing dependency key")
-        fresh[name] = any(entry["key"] == key for entry in entries_for(key))
+        version = expected_version(name)
+        available = any(entry["key"] == key and entry.get("version") == version for entry in entries_for(key))
+        hit = os.environ.get(name.upper() + "_HIT") == "true"
+        fresh[name] = available and (hit or not require_restore_hit)
     return fresh
 
 
@@ -147,7 +184,7 @@ def main():
     plan_file = root / "plan.json"
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as outputs:
         if args.op == "dependencies":
-            present = dependencies()
+            present = dependencies(require_restore_hit=True)
             for name, available in {**present, "all": all(present.values())}.items():
                 print(f"{name}={str(available).lower()}", file=outputs)
             return

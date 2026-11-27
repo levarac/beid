@@ -43,7 +43,8 @@ targets:
         script: |
           set -eu
           # Hosted Debug/arm64 Simulator builds may reuse a verified Release export.
-          if [ -n "${BEID_SWIFT_EXPORT_KEY:-}" ] && [ -n "${BEID_SWIFT_EXPORT_ENTRY:-}" ] &&
+          if [ "${GITHUB_ACTIONS:-}" = true ] && [ "${RUNNER_ENVIRONMENT:-}" = github-hosted ] &&
+             [ -n "${BEID_SWIFT_EXPORT_KEY:-}" ] && [ -n "${BEID_SWIFT_EXPORT_ENTRY:-}" ] &&
              [ "$CONFIGURATION" = Debug ] &&
              [ "$PLATFORM_NAME" = iphonesimulator ] && [ "$ARCHS" = arm64 ] &&
              [ "${BEID_KMP_BUILD_TYPE:-}" = Release ] &&

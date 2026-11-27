@@ -86,13 +86,11 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
-            ~/.gradle/caches
-            !~/.gradle/caches/build-cache-*
-            !~/.gradle/caches/*/executionHistory
-            ~/.konan
+            ~/.gradle/caches/modules-2/files-2.1
+            ~/.konan/dependencies
           # The Kotlin version is declared in android/build.gradle.kts today.
           # No prefix restore: a toolchain/configuration mismatch stays cold.
-          key: beid-ios-kmp-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
+          key: beid-ios-kmp-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
 
       - name: Cache SPM checkouts
         id: spm
@@ -106,6 +104,7 @@ jobs:
           key: beid-ios-spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
       - name: Prepare Gradle distribution
+        id: prepare
         working-directory: android
         shell: bash
         run: |
@@ -115,6 +114,7 @@ jobs:
 
       - name: Look up release cache entries
         id: plan
+        continue-on-error: true
         uses: ./.github/actions/ios-release-cache
         with:
           operation: plan
@@ -124,8 +124,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DIST: ${{ steps.dist.outputs.cache-primary-key }}
+          DIST_HIT: ${{ steps.dist.outputs.cache-hit }}
           KMP: ${{ steps.kmp.outputs.cache-primary-key }}
+          KMP_HIT: ${{ steps.kmp.outputs.cache-hit }}
           SPM: ${{ steps.spm.outputs.cache-primary-key }}
+          SPM_HIT: ${{ steps.spm.outputs.cache-hit }}
         run: python3 -m scripts.ios_release_cache dependencies
 
       - name: Decide whether to populate
@@ -180,6 +183,7 @@ jobs:
           printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
 
       - name: Build for testing
+        id: compile
         # Release Kotlin takes about 12 minutes on xcode-27 (Debug: about 7).
         timeout-minutes: 35
         if: steps.fill.outputs.needed == 'true'
@@ -210,32 +214,24 @@ jobs:
             BEID_KMP_BUILD_TYPE=Release \
             build-for-testing
 
-      - name: Save verified release snapshots
-        if: steps.fill.outputs.needed == 'true'
-        uses: ./.github/actions/ios-release-cache
-        with:
-          operation: save
-
       - name: Save release dist dependencies
-        if: steps.deps.outputs.dist != 'true'
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' && steps.prepare.outcome == 'success' && steps.deps.outputs.dist != 'true' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.gradle/wrapper/dists
           key: ${{ steps.dist.outputs.cache-primary-key }}
 
       - name: Save release kmp dependencies
-        if: steps.deps.outputs.kmp != 'true'
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' && steps.compile.outcome == 'success' && steps.deps.outputs.kmp != 'true' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
-            ~/.gradle/caches
-            !~/.gradle/caches/build-cache-*
-            !~/.gradle/caches/*/executionHistory
-            ~/.konan
+            ~/.gradle/caches/modules-2/files-2.1
+            ~/.konan/dependencies
           key: ${{ steps.kmp.outputs.cache-primary-key }}
 
       - name: Save release spm dependencies
-        if: steps.deps.outputs.spm != 'true'
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' && steps.compile.outcome == 'success' && steps.deps.outputs.spm != 'true' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -243,7 +239,14 @@ jobs:
             ${{ env.SPM_SOURCE_ROOT }}/repositories
           key: ${{ steps.spm.outputs.cache-primary-key }}
 
+      - name: Save verified release snapshots
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        uses: ./.github/actions/ios-release-cache
+        with:
+          operation: save
+
       - name: Confirm the release-scoped entries
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
           DIST: ${{ steps.dist.outputs.cache-primary-key }}

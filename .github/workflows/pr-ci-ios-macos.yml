@@ -335,13 +335,11 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
-            ~/.gradle/caches
-            !~/.gradle/caches/build-cache-*
-            !~/.gradle/caches/*/executionHistory
-            ~/.konan
+            ~/.gradle/caches/modules-2/files-2.1
+            ~/.konan/dependencies
           # The Kotlin version is declared in android/build.gradle.kts today.
           # No prefix restore: a toolchain/configuration mismatch stays cold.
-          key: beid-ios-kmp-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
+          key: beid-ios-kmp-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
 
       - name: Cache SPM checkouts
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4

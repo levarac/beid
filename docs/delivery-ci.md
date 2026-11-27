@@ -355,23 +355,34 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Simulator products with Release Kotlin and Swift optimization `-O`. It
     saves a separate compiler CAS snapshot at most once per toolchain and ISO
     week, and a Kotlin Swift Export snapshot for each complete input digest.
-    The seed checks all five entries against GitHub's release-ref cache index.
+    The Xcode phase permits export installation only on a GitHub-hosted
+    Actions runner. Local, device and self-hosted builds use Gradle.
+    The seed checks all five entries against GitHub's release-ref cache index,
+    including the archive version for the action's input paths and compression.
+    A dependency restore miss triggers population. Dependency saves are
+    independent of optional CAS or Swift Export packing failures.
     A snapshot key ends with the SHA-256 of its archive. Using that digest
-    requires a matching key in the release index. The export fingerprint
+    requires a matching key and compatible version in the release index.
+    The Actions restore step first extracts the outer cache archive. The digest
+    check authenticates the inner payload after that extraction. Consumers
+    belong only in disposable, unprivileged GitHub-hosted PR jobs.
+    The export fingerprint
     also covers the Gradle artifacts, shared sources, Xcode project, host tools,
     SDK and JDK. Test bundles, results and DerivedData are excluded.
 
     The benchmark stored 124,823,225 bytes of compressed CAS and 3,592,270
-    bytes of Swift Export, about 1.2% of a 10 GiB limit combined. Its Gradle
-    distribution, KMP dependencies and SwiftPM checkouts took another 1.63 GB.
+    bytes of Swift Export, about 1.2% of a 10 GiB limit combined. Its Gradle distribution,
+    broader v1 KMP cache and SwiftPM checkouts took another 1.63 GB. Record the
+    dependency-only v2 KMP size from the first release seed.
     When a measurement finishes, retain its timing and case receipts, list
     caches with `gh cache list --ref refs/heads/BRANCH --limit 100`, and
     delete the measurement branch's entries by verified cache ID. The
     measurement owner coordinates cleanup with the maintainer authorized
     to remove those entries. Release and main entries remain available to PRs.
 
-    Dependency caches are limited to `~/.gradle/caches` (excluding task build
-    caches/execution history), `~/.konan`, and SPM
+    Dependency caches are limited to downloaded Gradle module files in
+    `~/.gradle/caches/modules-2/files-2.1`, Kotlin/Native host tools in
+    `~/.konan/dependencies`, and SPM
     checkouts/repository objects under the stable runner-temporary
     `beid-spm/SourcePackages` path. KMP keys include Gradle catalog/wrapper,
     Kotlin declarations/build configuration, Xcode build, SDK build, JDK and
