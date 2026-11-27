@@ -10,10 +10,8 @@ on:
   merge_group:
     types: [checks_requested]
   push:
-    # Measure the merged result on main exactly once. Note the concurrency
-    # group below is keyed on github.ref with cancel-in-progress, so two merges
-    # landing back to back cancel the earlier main run: this guarantees a run
-    # starts per merge, not that every one finishes.
+    # Report on matching main pushes. The planner can credit a directly executed
+    # full main merge-queue run on the identical commit.
     branches: [main]
     paths:
       - ".github/workflows/pr-ci-ios-macos.yml"
@@ -198,9 +196,14 @@ jobs:
               --event-name "$EVENT_NAME" --event-path "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check for directly executed PR evidence
+      - name: Check for directly executed iOS evidence
         id: previous
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action == 'ready_for_review' || github.event.action == 'synchronize' && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui')) && needs.changes.result == 'success' && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false' && github.run_attempt == 1 }}
+        if: >-
+          ${{ github.run_attempt == 1 &&
+              ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+               (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
+                (github.event.action == 'ready_for_review' || github.event.action == 'synchronize' && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui')) &&
+                needs.changes.result == 'success' && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false')) }}
         env:
           GH_TOKEN: ${{ github.token }}
           MODE: ${{ steps.test-mode.outputs.mode }}
