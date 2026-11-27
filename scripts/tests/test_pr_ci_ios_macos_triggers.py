@@ -84,10 +84,10 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
                 found = re.findall(r'^      - "(.+)"$', section, re.MULTILINE)
                 self.assertEqual(found, EXPECTED_PATHS)
 
-    def test_nightly_schedule_has_no_pr_filter(self) -> None:
-        self.assertIn("  schedule:\n", trigger_block(workflow_text()))
-        section = event_section(trigger_block(workflow_text()), "schedule")
-        self.assertIn('- cron: "23 3 * * *"', section)
+    def test_release_nightly_replaces_the_default_branch_schedule(self) -> None:
+        self.assertNotIn("  schedule:\n", trigger_block(workflow_text()))
+        nightly = WORKFLOW_PATH.with_name("release-ios-nightly.yml").read_text()
+        self.assertIn("cron: '23 17 * * *'", nightly)
         self.assertNotIn("unlabeled", trigger_block(workflow_text()))
 
     def test_run_name_displays_payload_mode(self) -> None:

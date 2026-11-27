@@ -122,8 +122,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     The lane uses `!cancelled()` so a superseded run does not start a macOS job.
     Main pushes retain their iOS/build-input path filter (including catalogs,
     classifier and generation guard) and always run the lane; manual dispatch
-    always runs it. Nightly on main runs at 03:23 UTC, away from the busy top
-    of the hour. All three workflows' concurrency groups include event name
+    always runs it. The release nightly runs separately. All three workflows' concurrency groups include event name
     and ref (or PR number). A queue ref identifies its entry, so queue runs,
     PR synchronizations, main pushes, nightly and dispatch runs cannot cancel
     each other; same-event/ref superseded runs still cancel.
@@ -143,8 +142,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     test-without-building use `SWIFT_OPTIMIZATION_LEVEL=-O`. Every test run
     executes all `BeidTests`. Ordinary `pull_request` events also execute only
     `ios/ci/ui-smoke-tests.txt`; when the event payload's labels include
-    `ci:full-ui`, the complete `BeidUITests` suite runs. Merge groups, push,
-    nightly and manual events always run full. On `merge_group`, the optional
+    `ci:full-ui`, the complete `BeidUITests` suite runs. Merge groups, pushes and manual events always run full. On `merge_group`, the optional
     classifier is skipped and the required iOS job always executes, including
     documentation-only changes. This reuses the existing non-PR condition and
     guarantees full-suite evidence for the merge result. The existing run-name
@@ -307,3 +305,42 @@ restricted file permissions; values must never appear in logs.
   commit a team-ID change**. PRs that touch `DEVELOPMENT_TEAM`, bundle
   identifiers, or signing settings are rejected unless the maintainer
   authored them.
+
+
+### Nightly release iOS tests
+
+The scheduler runs from main at 17:23 UTC (02:23 JST). This replaces the
+former 03:23 UTC main schedule. PRs, main pushes, queue entries and manual
+checks keep their existing triggers. One concurrency group serializes the
+nightly observations. GitHub may delay a schedule or runner assignment.
+
+The Ubuntu planning job resolves `release/1.1.0` once. A 30-day observation
+artifact records the branch, commit, run ID and attempt before the decision
+or any macOS work. Even a skipped or failed test night therefore records the
+observed head. An unchanged head skips, including after a failed night. On the first scheduled run, a confirmed head change or an
+unreadable previous observation, the planner looks for a successful full pass at
+that SHA. It compares the compiled enumeration, full manifest, unit and UI
+case ledgers and the release's expected skip lists. Prior sharded runs must
+retain all evidence and successful jobs from one attempt. A previous nightly
+can prove its release SHA even though GitHub records main as the scheduled
+event SHA. The preceding scheduled run is identified by workflow run number, which is unchanged on retries.
+When the preceding run or its observation is missing, expired or unreadable, the planner
+records the reason and checks for an exact full pass before starting or skipping macOS.
+Without verified full evidence it runs the suite that night, before the next night
+can see an unchanged head.
+A retry of an observed night reuses that run's pinned commit. A retry without
+its original observation stops so that it cannot test a moved ref.
+
+On a test night a single standard hosted `xcode-27` runner builds the release,
+enumerates both compiled bundles and executes all their methods serially.
+The release PR workflow distributes full tests across jobs. The nightly uses
+the release's own validators with the same expected skip lists and verifies
+the complete runtime inventory against the result tree. The macOS job has
+a 300-minute limit, including setup, the 55-minute build/enumeration limit,
+the 210-minute test limit and evidence upload. A passing evidence artifact
+contains the pinned SHA in its name and manifest. Cancellation, a test
+failure, a case count mismatch or a failed verification prevents publication.
+The observation remains distinct from the successful execution evidence.
+
+09:00 JST is the reporting target. The first activated nightly must establish
+its actual completion time, including scheduling, runner waits and uploads.

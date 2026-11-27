@@ -43,8 +43,6 @@ class MergeGroupWorkflowTest(unittest.TestCase):
                 expected = {"pull_request", "push", "merge_group"}
                 if name != "pr-ci.yml":
                     expected.add("workflow_dispatch")
-                if name == "pr-ci-ios-macos.yml":
-                    expected.add("schedule")
                 self.assertEqual(set(re.findall(r"(?m)^  ([\w]+):", block)), expected)
                 # Explicit membership keeps a missing trigger an assertion failure.
                 self.assertIn("  merge_group:\n", block)
