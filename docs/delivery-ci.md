@@ -19,7 +19,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 - **この subsection が repository の PR CI lane 分担の正本。** 実行定義は
   `.github/workflows/pr-ci.yml` にある。現在の `pr-ci` はすべての PR と
   `main` への push、および `merge_group` の `checks_requested` で、
-  GitHub-hosted Linux/macOS 上に次の gate を実行する。
+  変更パス判定、Android build、SwiftLint、Repository sanity の4ジョブを
+  GitHub-hosted の Ubuntu で実行する。iOS シミュレータと lab CLI のビルド・テストは、
+  それぞれ別の workflow が macOS で実行する。
   All three PR build workflows accept `merge_group` without workflow-level
   path filters. In `pr-ci.yml`, Determine changed paths compares the event's
   `merge_group.base_sha...head_sha` using the existing compare/classifier path.
