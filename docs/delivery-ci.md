@@ -370,6 +370,17 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     also covers the Gradle artifacts, shared sources, Xcode project, host tools,
     SDK and JDK. Test bundles, results and DerivedData are excluded.
 
+    PR builds targeting `release/1.1.0` only restore these five cache families.
+    Compiler restore keys retain the exact toolchain prefix across weekly
+    snapshots. The Swift Export prefix additionally requires an exact
+    Kotlin input fingerprint, including resolved dependencies. Before enabling
+    either one, the build checks the selected cache key against GitHub's
+    release-scoped listing and verifies the complete archive against the SHA-256
+    in that key. A missing entry, unavailable index or digest mismatch falls
+    back to the regular build. A change to an individual Swift compiler input
+    produces a new compiler key inside CAS. The normal build-for-testing,
+    enumeration, per-case verification and required aggregate still run.
+
     The benchmark stored 124,823,225 bytes of compressed CAS and 3,592,270
     bytes of Swift Export, about 1.2% of a 10 GiB limit combined. Its Gradle distribution,
     broader v1 KMP cache and SwiftPM checkouts took another 1.63 GB. Record the

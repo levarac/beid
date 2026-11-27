@@ -181,3 +181,18 @@ class ReleaseCacheTests(unittest.TestCase):
         self.assertEqual({s["id"] for s in restores}, {"restore_cas", "restore_export"})
         for step in restores:
             self.assertIn("steps.plan.outputs.", step["if"])
+
+    def test_release_pr_only_restores_the_five_cache_families(self):
+        import yaml
+        wf = yaml.safe_load(Path(".github/workflows/pr-ci-ios-macos.yml").read_text())
+        steps = wf["jobs"]["build"]["steps"]
+        snapshots = [s for s in steps if s.get("uses") == "./.github/actions/ios-release-cache"]
+        self.assertEqual([s["with"]["operation"] for s in snapshots], ["restore"])
+        self.assertIn("github.event.pull_request.base.ref == 'release/1.1.0'", snapshots[0]["if"])
+        cache_steps = [s for s in steps if s.get("uses", "").startswith("actions/cache")]
+        self.assertEqual(sum("cache/restore@" in s["uses"] for s in cache_steps), 3)
+        saves = [s for s in cache_steps if "cache/save@" in s["uses"]]
+        self.assertEqual(len(saves), 3)
+        for s in saves:
+            self.assertIn("github.event.pull_request.base.ref != 'release/1.1.0'", s["if"])
+        self.assertFalse(any(s["uses"].startswith("actions/cache@") for s in cache_steps))

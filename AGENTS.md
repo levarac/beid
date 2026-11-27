@@ -505,7 +505,7 @@ UI exclusions in `scripts/ios-ui-iphone-skips.txt` and the Debug Simulator unit
 exclusions in `scripts/ios-unit-debug-simulator-skips.txt` must exist and report
 Skipped; a listed test that passes is a stale-list failure. Structured results and
 phase timings are uploaded in both modes. PR exceptions are an explicit classifier
-skip or a verified prior run. Merge groups always require fresh execution. Dependency-only KMP/SPM caches use
+skip or a verified prior run. Merge groups always require fresh execution. Release-targeted PRs restore the release-seeded Gradle, KMP and SwiftPM dependencies, compiler CAS and exact Kotlin export. The release cache workflow and validation rules are in `docs/delivery-ci.md`. KMP/SPM dependency caches use
 exact toolchain/lockfile keys without prefix restores; DerivedData and test
 results are never cached. A payload
 label `ci:full-ui` selects the full UI suite; merge groups, main pushes,
