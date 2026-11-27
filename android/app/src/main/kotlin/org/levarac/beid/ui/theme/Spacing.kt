@@ -50,8 +50,8 @@ object BeidRadius {
 }
 
 /**
- * Fixed component sizes. [statusDot] and [stepBadge] equal iOS `DS.Size`;
- * [glyph] and [bulletIcon] are Android-only.
+ * Fixed component sizes. Every entry except [glyph] and [bulletIcon]
+ * (Android-only) equals the iOS `DS.Size` token of the same name.
  */
 object BeidSize {
     /** `BeidGlyph`'s default icon-roundel diameter. Android-only. */
@@ -65,4 +65,50 @@ object BeidSize {
 
     /** `BeidNumberedStepList`'s filled index-badge diameter (iOS `DS.Size.stepBadge`). */
     val stepBadge: Dp = 28.dp
+
+    /** The 1 pt rule: hairlines, the neutral Sigil ring, and the radar's rings and edges (iOS `DS.Size.hairline`). */
+    val hairline: Dp = 1.dp
+
+    /** Proof row minimum height (iOS `DS.Size.proofRowMinHeight`). */
+    val proofRowMinHeight: Dp = 72.dp
+
+    /** Flat 2b 06 Sensing — Sealed Sigil slot, node 184:65 (iOS `DS.Size.sensingSealedSigil`). */
+    val sensingSealedSigil: Dp = 300.dp
+
+    /** Flat 2b 09 Proof Detail artwork slot, node 204:36 (iOS `DS.Size.proofDetailSigil`). */
+    val proofDetailSigil: Dp = 200.dp
+
+    /**
+     * Saved-record artwork in the two-column Records grid (iOS
+     * `DS.Size.recordsGridSigil`, drafts feat/ios-v2-now-records and
+     * integration/ios-1.1.1; not on iOS main yet).
+     */
+    val recordsGridSigil: Dp = 104.dp
+
+    /** Flat 2b 05 Sensing radar field (iOS `DS.Size.radarField`). */
+    val radarField: Dp = 362.dp
+
+    /** The radar's three ring-path diameters at [radarField] (iOS `DS.Size.radarRing*`). */
+    val radarRingInner: Dp = 133.22.dp
+    val radarRingMiddle: Dp = 233.12.dp
+    val radarRingOuter: Dp = 333.04.dp
+
+    /** White centre disc of the radar's "me" core (iOS `DS.Size.radarCore`). */
+    val radarCore: Dp = 38.dp
+
+    /** Ink ring separating the core from the field (iOS `DS.Size.radarCoreSeparation`). */
+    val radarCoreSeparation: Dp = 48.dp
+
+    /** Ink dot at the core's centre (iOS `DS.Size.radarCenterDot`). */
+    val radarCenterDot: Dp = 8.dp
+
+    /** Detected-only peer node diameter and its outline width (iOS `DS.Size.radarDetectedNode*`). */
+    val radarDetectedNode: Dp = 8.dp
+    val radarDetectedNodeStroke: Dp = 1.5.dp
+}
+
+/** Opacity tokens, equal to iOS `DS.Opacity`. */
+object BeidOpacity {
+    /** Retained radar nodes that have not been heard recently (iOS `DS.Opacity.radarSilentNode`, #855). */
+    const val radarSilentNode: Float = 0.45f
 }

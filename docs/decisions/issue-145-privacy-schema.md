@@ -2,6 +2,18 @@
 
 **Status:** schema audit and decision input; not a protocol decision
 
+> **Historical audit; partially superseded 2026-09-03 18:3x JST.** The later
+> maintainer ruling recorded in
+> [`issue-145-ui-scope-decisions.md`](issue-145-ui-scope-decisions.md) accepts
+> publication of raw signed Observations and the resulting within-event
+> pseudonymous graph so public replay remains possible. Statements below that
+> raw publication is forbidden or incompatible with the promise are the
+> earlier audit recommendation, not the controlling decision. Its field-level
+> risks, prohibited names/email/stable cross-event identifiers, `rpidClaim =
+> null` constraint, and still-open questions remain decision input. The
+> same decision record includes the 2026-11-26 v1.1 ruling on device counts
+> and pseudonymous relations without a minimum cohort.
+
 **Audited checkout:** 2026-08-31
 **Scope:** data that could be published for third-party verification, not the
 operator's private ingestion API

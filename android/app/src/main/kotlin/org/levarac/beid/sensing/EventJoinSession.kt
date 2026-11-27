@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.time.Instant
 import java.util.UUID
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
+import org.levarac.beid.shared.sigil.SigilInput
 
 /**
  * A nearby beacon candidate. Its name is an unauthenticated B005 announcement;
@@ -82,6 +83,8 @@ data class ScanSessionMetrics(
     val windowCount: Int = 0,
 )
 
+private val emptyRadarPeers = MutableStateFlow<List<SensingRadarPeerSignal>>(emptyList()).asStateFlow()
+
 private val emptyScanSessionMetrics = MutableStateFlow<() -> ScanSessionMetrics>({ ScanSessionMetrics() }).asStateFlow()
 
 /**
@@ -102,6 +105,36 @@ interface EventJoinSession {
     fun hasStoredProof(proofId: UUID): Boolean = false
     /** O(1) snapshots; shared aggregation is evaluated only while 05e is visible. */
     val scanSessionMetrics: StateFlow<() -> ScanSessionMetrics> get() = emptyScanSessionMetrics
+
+    /**
+     * beid#722: the stored Sigil input of record [proofId], decoded by shared
+     * and memoized, or `null` (draw the neutral ring). Read-only: hand it to
+     * `layoutSigil` only. The windows it draws equal the record's
+     * `SessionAggregate.windowCount` (iOS `observedWindowCount`).
+     */
+    fun sigilInput(proofId: UUID): SigilInput? = null
+
+    /**
+     * beid#722: the in-progress record's Sigil, or `null` before a Proof
+     * exists or when shared cannot build one. Main thread only. Its window
+     * count is [ScanSessionMetrics.windowCount] of the same session.
+     */
+    fun liveSigilInput(): SigilInput? = null
+
+    /**
+     * beid#722: every peer detected in the live session, sorted by normalized
+     * display id, with its smoothed dBm or `null` (unmeasured). Display only,
+     * in memory only; empty outside a session.
+     */
+    val radarPeers: StateFlow<List<SensingRadarPeerSignal>> get() = emptyRadarPeers
+
+    /**
+     * iOS #855/#901: when the radar peer [displayId] (normalized) was last
+     * heard in the live session, in wall-clock epoch milliseconds, or `null`.
+     * Main thread only. Display only; it moves on RSSI samples without a
+     * [radarPeers] republish, so the radar reads it on its own one-second tick.
+     */
+    fun radarPeerLastHeardAtMillis(displayId: String): Long? = null
 
     /** The latest native permission answer used by onboarding navigation. */
     val bluetoothPermissionState: BluetoothPermissionState
@@ -203,15 +236,14 @@ interface EventJoinSession {
     fun resumeSensing()
 
     /**
-     * Leaves the currently-joined event — the Account screen's "Leave Event"
-     * action (beid#126). Mirrors iOS's `SensingCoordinator.leaveEvent()`
+     * Leaves the currently-joined event after the sensing UI's Stop flow has
+     * applied its confirmation policy. Mirrors iOS's `SensingCoordinator.leaveEvent()`
      * (`engine.leaveEvent()` + resetting `joinedEventCode`), adapted for this
      * session's richer local state (a [ScanPhase] and device-accounting
      * bookkeeping iOS's simple `joinedEventCode: String?` doesn't carry): the
      * production implementation calls the SDK's `leaveEvent()` and then
      * resets native bookkeeping back to [EventJoinUiState.Idle] so the UI
-     * reflects "no active session" afterward. Callers gate this action's
-     * availability on session activity themselves — see [state].
+     * reflects "no active session" afterward.
      */
     fun leaveEvent()
 

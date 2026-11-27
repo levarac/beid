@@ -19,6 +19,9 @@ private final class ReportSubmissionRuntimeSpy: WindowReportSubmissionRuntimePro
 
   var captures: [Capture] = []
   var submitPendingCallCount = 0
+  var onFirstUploadNoticeRequired: (() -> Void)?
+  var continueAfterFirstUploadNoticeCount = 0
+  func continueAfterFirstUploadNotice() { continueAfterFirstUploadNoticeCount += 1 }
   var onStop: (() -> Void)?
   private(set) var isStopped = false
 
@@ -68,6 +71,22 @@ private final class ReportSubmissionRuntimeSpy: WindowReportSubmissionRuntimePro
 
 @MainActor
 final class ReportSubmissionWiringTests: XCTestCase {
+  func testFirstUploadNoticeIsForwardedAndOnlyContinueAdvancesRuntime() {
+    let runtime = ReportSubmissionRuntimeSpy()
+    let coordinator = makeIsolatedSensingCoordinator(for: self, reportSubmissionRuntime: runtime)
+    runtime.onFirstUploadNoticeRequired?()
+    XCTAssertTrue(coordinator.firstUploadNoticeRequested)
+    coordinator.dismissFirstUploadNotice()
+    XCTAssertFalse(coordinator.firstUploadNoticeRequested)
+    XCTAssertEqual(runtime.continueAfterFirstUploadNoticeCount, 0)
+    runtime.onFirstUploadNoticeRequired?()
+    coordinator.continueAfterFirstUploadNotice()
+    XCTAssertFalse(coordinator.firstUploadNoticeRequested)
+    XCTAssertEqual(runtime.continueAfterFirstUploadNoticeCount, 1)
+    let disabled = makeIsolatedSensingCoordinator(for: self)
+    XCTAssertFalse(disabled.firstUploadNoticeRequested)
+  }
+
   func testReturningToForegroundRetriesPendingSubmissionsWithoutStartingSensing() {
     let runtime = ReportSubmissionRuntimeSpy()
     let coordinator = makeIsolatedSensingCoordinator(for: self, reportSubmissionRuntime: runtime)

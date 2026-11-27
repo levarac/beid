@@ -1,0 +1,30 @@
+// Fingerprint the resolved Swift Export inputs without compiling shared or the app.
+import groovy.json.JsonOutput
+
+gradle.projectsEvaluated {
+    def shared = rootProject.project(':shared')
+    shared.tasks.register('fingerprintSwiftExportInputs') {
+        doLast {
+            if (!gradle.includedBuilds.empty) {
+                throw new GradleException('Local dependency substitution is not cacheable')
+            }
+            def rows = []
+            def fingerprint = { conf ->
+                conf.incoming.artifacts.artifacts.each { artifact ->
+                    def file = artifact.file
+                    if (!file.exists()) throw new GradleException("Missing resolved input in ${conf.name}")
+                    rows.add([conf.name, artifact.id.componentIdentifier.displayName, file.name, file.absolutePath])
+                }
+            }
+            rootProject.allprojects.each { fingerprint(it.buildscript.configurations.classpath) }
+            [
+                'iosSimulatorArm64CompileKlibraries', 'iosSimulatorArm64CInterop',
+                'resolvableIosSimulatorArm64CompilationApi', 'swiftExportClasspathResolvable',
+                'kotlinCompilerPluginClasspathIosSimulatorArm64Main', 'kotlinNativeCompilerPluginClasspath',
+                'kotlinNativeBundleConfiguration'
+            ].each { fingerprint(shared.configurations.getByName(it)) }
+            if (rows.empty) throw new GradleException('Empty Swift Export dependency fingerprint')
+            new File(shared.providers.gradleProperty('beidExportInputsFile').get()).text = JsonOutput.toJson(rows)
+        }
+    }
+}

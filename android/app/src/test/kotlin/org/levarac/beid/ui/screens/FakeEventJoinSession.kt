@@ -1,5 +1,6 @@
 package org.levarac.beid.ui.screens
 
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -7,6 +8,7 @@ import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.BluetoothPermissionState
 import org.levarac.beid.sensing.NearbyEventCard
+import org.levarac.beid.sensing.SensingRadarPeerSignal
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 
 /** Shared test double for [EventJoinSession] — no real `Activity`/`BarnardEngine` involved. */
@@ -15,6 +17,7 @@ internal class FakeEventJoinSession(
     nearbyEventCards: List<NearbyEventCard> = emptyList(),
     nearbyEventsOmitted: Boolean = false,
     initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.Granted,
+    override val currentProofId: UUID? = null,
 ) : EventJoinSession {
     private val mutableState = MutableStateFlow(initial)
     override val state: StateFlow<EventJoinUiState> = mutableState.asStateFlow()
@@ -25,6 +28,9 @@ internal class FakeEventJoinSession(
         mutableSearchOutcome.asStateFlow()
     private val mutableNearbyEventsOmitted = MutableStateFlow(nearbyEventsOmitted)
     override val nearbyEventsOmitted: StateFlow<Boolean> = mutableNearbyEventsOmitted.asStateFlow()
+    private val mutableRadarPeers = MutableStateFlow<List<SensingRadarPeerSignal>>(emptyList())
+    override val radarPeers: StateFlow<List<SensingRadarPeerSignal>> = mutableRadarPeers.asStateFlow()
+
     /** Settable so a test can change the runtime answer the next refresh reads. */
     override var bluetoothPermissionState: BluetoothPermissionState = initialBluetoothPermissionState
 
@@ -96,12 +102,29 @@ internal class FakeEventJoinSession(
         leaveEventCallCount += 1
     }
 
+    override fun hasStoredProof(proofId: UUID): Boolean = proofId == currentProofId
+
     override fun markRecordingCeremonyShown() {
         recordingCeremonyShown = true
     }
 
     fun emit(next: EventJoinUiState) {
         mutableState.value = next
+    }
+
+    private val radarLastHeardAtMillis = HashMap<String, Long>()
+
+    override fun radarPeerLastHeardAtMillis(displayId: String): Long? = radarLastHeardAtMillis[displayId]
+
+    /** Publishes [peers], each last heard at [heardAtMillis] (wall clock, as Barnard stamps). */
+    fun emitRadarPeers(peers: List<SensingRadarPeerSignal>, heardAtMillis: Long = System.currentTimeMillis()) {
+        peers.forEach { hearRadarPeer(it.displayId, heardAtMillis) }
+        mutableRadarPeers.value = peers
+    }
+
+    /** An RSSI-only refresh: moves lastHeard without publishing, as the coordinator does. */
+    fun hearRadarPeer(displayId: String, atMillis: Long) {
+        radarLastHeardAtMillis[displayId] = maxOf(radarLastHeardAtMillis[displayId] ?: atMillis, atMillis)
     }
 
     fun emitNearbyEventCards(cards: List<NearbyEventCard>) {

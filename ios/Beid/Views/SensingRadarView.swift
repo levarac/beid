@@ -52,23 +52,6 @@ enum SensingRadarProjection {
       .map { $0 * scale }
   }
 
-  /// Draws progress only for an observed window, using its actual clock
-  /// boundary so a late first detection does not start a new five minutes.
-  static func recordedWindowMarkDiameter(
-    observedWindowIndex: Int64?,
-    secondsSince1970: TimeInterval,
-    windowDuration: TimeInterval,
-    size: CGFloat
-  ) -> CGFloat? {
-    guard let observedWindowIndex, windowDuration > 0 else { return nil }
-    let elapsed = secondsSince1970 - Double(observedWindowIndex) * windowDuration
-    guard elapsed >= 0, elapsed <= windowDuration else { return nil }
-    let scale = scale(for: size)
-    let inner = DS.Size.radarRingInner * scale
-    let outer = DS.Size.radarRingOuter * scale
-    return inner + (outer - inner) * CGFloat(elapsed / windowDuration)
-  }
-
   /// FNV-1a 64 over UTF-8, matching `sigilPeerHash` in shared's
   /// `SigilLayout.kt`. Swift's `hashValue` is process-seeded and would rotate
   /// every peer between launches. The caller must pass a stable normalized ID.
@@ -84,24 +67,24 @@ enum SensingRadarProjection {
     Int(stablePeerHash(peerID) % 360)
   }
 
-  /// Stronger measured signals sit nearer the core. An unmeasured peer sits
-  /// outermost. Defensive handling of 0 and non-finite values ensures a
-  /// malformed producer cannot turn Barnard's never-measured sentinel into
-  /// a claim of proximity. The -40/-100 display anchors are provisional,
-  /// not hardware-verified calibration.
+  /// Nodes sit exactly on one of the three hairline rings, chosen by signal
+  /// band: the stronger third of the strong..weak display range lands on the
+  /// inner ring, the middle third on the middle ring, and the weaker third on
+  /// the outer ring. An unmeasured peer sits on the outer ring. Defensive
+  /// handling of 0, positive and non-finite values ensures a malformed
+  /// producer cannot turn Barnard's never-measured sentinel into a claim of
+  /// proximity. The -40/-100 display anchors are provisional, not
+  /// hardware-verified calibration, and the bands are display only.
   static func radius(for signal: NodeSignalStrength, size: CGFloat) -> CGFloat {
-    let scale = scale(for: size)
-    let inner = (DS.Size.radarCoreSeparation / 2 + SensingRadarMetrics.coreClearance) * scale
-    let outer = max(inner, size / 2 - SensingRadarMetrics.outerInset * scale)
+    let diameters = ringDiameters(size: size)
     guard case let .measured(dBm) = signal, dBm.isFinite, dBm < 0 else {
-      return outer
+      return diameters[2] / 2
     }
-    let fraction = min(max(
-      (SensingRadarMetrics.strongSignalDbm - dBm)
-        / (SensingRadarMetrics.strongSignalDbm - SensingRadarMetrics.weakSignalDbm),
-      0
-    ), 1)
-    return inner + (outer - inner) * CGFloat(fraction)
+    let fraction = (SensingRadarMetrics.strongSignalDbm - dBm)
+      / (SensingRadarMetrics.strongSignalDbm - SensingRadarMetrics.weakSignalDbm)
+    if fraction < 1.0 / 3.0 { return diameters[0] / 2 }
+    if fraction < 2.0 / 3.0 { return diameters[1] / 2 }
+    return diameters[2] / 2
   }
 
   static func project(_ peers: [SensingRadarPeer], size: CGFloat, showsEdges: Bool = true) -> (
@@ -159,22 +142,19 @@ struct SensingRadarView: View {
   let observedWindowCount: Int
   let showsEdges: Bool
   let size: CGFloat
-  let recordedWindowMarkDiameter: CGFloat?
 
   init(
     peers: [SensingRadarPeer],
     mutualDeviceCount: Int,
     observedWindowCount: Int,
     showsEdges: Bool = true,
-    size: CGFloat = DS.Size.radarField,
-    recordedWindowMarkDiameter: CGFloat? = nil
+    size: CGFloat = DS.Size.radarField
   ) {
     self.peers = peers
     self.mutualDeviceCount = mutualDeviceCount
     self.observedWindowCount = observedWindowCount
     self.showsEdges = showsEdges
     self.size = size
-    self.recordedWindowMarkDiameter = recordedWindowMarkDiameter
   }
 
   var body: some View {
@@ -185,12 +165,6 @@ struct SensingRadarView: View {
         Circle()
           .stroke(DS.Color.strokeHairlineOnInk, lineWidth: DS.Size.hairline)
           .frame(width: diameter, height: diameter)
-      }
-
-      if let recordedWindowMarkDiameter {
-        Circle()
-          .stroke(DS.Color.labelOnActionPrimary, lineWidth: DS.Size.hairline)
-          .frame(width: recordedWindowMarkDiameter, height: recordedWindowMarkDiameter)
       }
 
       ForEach(projection.edges, id: \.peerID) { edge in

@@ -151,6 +151,20 @@ class CollectionStepTest(unittest.TestCase):
         })
         self.assertEqual(result["output"]["files"], ["docs/new.md", "ios/Old.swift"])
 
+    def test_delivery_docs_sync_keeps_sanity_and_builds_ios_for_cumulative_ui_changes(self):
+        context = pull_request("b" * 40, "a" * 40)
+        context["payload"].update(action="synchronize", before="c" * 40, after="a" * 40)
+        doc = "docs/delivery-ci.md"
+        for paths, build_ios in (([doc], False), ([doc, "ios/BeidUITests/FlatScreenshotTourA.swift"], True)):
+            with self.subTest(paths=paths):
+                result = self.run_script("pr-ci-ios-macos.yml", {
+                    "context": context, "pages": [[{"filename": path, "status": "modified"} for path in paths]],
+                })
+                self.assertEqual(result["calls"][0]["basehead"], f"{'b' * 40}...{'a' * 40}")
+                self.assertEqual(result["output"], {"files": paths})
+                self.assertEqual(lane_runs("ios", files=paths), build_ios)
+                self.assertTrue(classify(paths)["sanity"])
+
     def test_unsafe_file_metadata_runs_ios_even_for_excluded_paths(self):
         for entry in (
             {"filename": "shared/New.kt", "previous_filename": "android/app/Old.kt", "status": "renamed"},

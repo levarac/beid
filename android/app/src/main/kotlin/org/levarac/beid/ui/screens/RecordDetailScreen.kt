@@ -29,9 +29,13 @@ import org.levarac.beid.R
 import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
+import org.levarac.beid.persistence.SigilPresenceStore
+import org.levarac.beid.shared.sigil.SigilInput
 import org.levarac.beid.ui.designsystem.BeidMetricRow
 import org.levarac.beid.ui.designsystem.BeidPanel
 import org.levarac.beid.ui.designsystem.BeidScreen
+import org.levarac.beid.ui.designsystem.RecordSigilPlacement
+import org.levarac.beid.ui.designsystem.RecordSigilSlot
 import org.levarac.beid.ui.theme.BeidSize
 import org.levarac.beid.ui.theme.BeidSpacing
 import org.levarac.beid.ui.theme.BeidTheme
@@ -49,6 +53,7 @@ object RecordDetailScreenTestTags {
     const val BINDING_VALUE = "record_detail_binding_value"
     const val MUTUAL_CONFIRMATION_VALUE = "record_detail_mutual_confirmation_value"
     const val TIME_BAND_BUILDUP_VALUE = "record_detail_time_band_buildup_value"
+    const val SIGIL = "record_detail_sigil"
 }
 
 /**
@@ -83,8 +88,22 @@ object RecordDetailScreenTestTags {
  * `ProofSignatureState`).
  */
 @Composable
-fun RecordDetailScreen(record: ProofRecord, aggregate: org.levarac.beid.shared.aggregation.SessionAggregate? = null) {
+fun RecordDetailScreen(
+    record: ProofRecord,
+    aggregate: org.levarac.beid.shared.aggregation.SessionAggregate? = null,
+    /** beid#722: the record's stored Sigil input; `null` keeps the neutral ring. Read-only. */
+    sigilInput: SigilInput? = null,
+) {
     BeidScreen(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        // iOS ItemDetailView (integration/ios-1.1.1): `.proofDetail`, a device record, centred above the title.
+        RecordSigilSlot(
+            input = sigilInput,
+            placement = RecordSigilPlacement.ProofDetail,
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .testTag(RecordDetailScreenTestTags.SIGIL),
+            isDeviceRecord = true,
+        )
         Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
             Text(
                 text = record.eventName ?: record.eventCode,
@@ -214,14 +233,24 @@ private fun AvailabilityDot(isAvailable: Boolean) {
  * [AppNavHost]'s other guarded transitions.
  */
 @Composable
-fun RecordDetailRoute(proofRecordStore: ProofRecordStore, sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null, recordId: UUID, onRecordNotFound: () -> Unit) {
+fun RecordDetailRoute(
+    proofRecordStore: ProofRecordStore,
+    sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null,
+    recordId: UUID,
+    onRecordNotFound: () -> Unit,
+    sigilPresenceStore: SigilPresenceStore? = null,
+) {
     val viewModel: RecordDetailViewModel = viewModel(
         factory = RecordDetailViewModel.Factory(proofRecordStore, recordId),
     )
     val record by viewModel.record.collectAsState()
     val currentRecord = record
     if (currentRecord != null) {
-        RecordDetailScreen(record = currentRecord, aggregate = sessionAggregateSnapshotStore?.snapshot(recordId))
+        RecordDetailScreen(
+            record = currentRecord,
+            aggregate = sessionAggregateSnapshotStore?.snapshot(recordId),
+            sigilInput = sigilPresenceStore?.sigilInput(recordId),
+        )
     } else {
         LaunchedEffect(recordId) { onRecordNotFound() }
     }

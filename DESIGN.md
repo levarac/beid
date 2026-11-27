@@ -107,8 +107,8 @@ beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
   current actions; Records owns saved records and events. On iOS, the
   primary nearby candidate card is the join control (#858, maintainer
   decision 2026-11-23). It becomes tappable after registry verification
-  and retains the 20pt `DS.Radius.nowCard`. Now's DO THIS NOW and FROM THE
-  ORGANIZER tiles use Flat 2b fills and a 12pt radius (`DS.Radius.control`).
+  and retains the 20pt `DS.Radius.nowCard`. Now's DO THIS NOW tile uses
+  Flat 2b fills and a 12pt radius (`DS.Radius.control`).
   Records shows one Attendance per event, preserving its stored recording
   sessions inside the existing detail routes.
 - The earlier Flat 2b Screens and Liquid Glass-era Fixed layouts are
@@ -2145,6 +2145,7 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   collection-home screen yet." Promoting a screen to this role is
   explicitly deferred to #141 (per `Screen.kt`/`RecordsScreen.kt`'s own
   kdoc), not something this document should describe as already true.]**
+- **Now registration period**: show the verified date range inside the nearby-event card. Organizer messaging is outside the product scope, so the standalone organizer tile shown in Figma is omitted.
 - **Sensing detail (05–07)**: push from the Now tab's `NavigationStack`.
   The native Back button and interactive pop gesture return to Now without
   ending participation, changing the live session, or stopping its radio.
@@ -2166,14 +2167,25 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   mutual count or an achievement state. Radar nodes show devices heard in
   the last 300 seconds, refreshed once per second, with the caption
   "HEARD IN THE LAST 5 MINUTES" below the radar and the same time scope in
-  its VoiceOver summary. A node dims at 30 seconds of silence using
+  its VoiceOver summary. Nodes sit on the three rings by signal
+  band (strong inner, medium middle, weak or unmeasured outer); this is
+  display only and the -40/-100 dBm anchors are provisional. A node dims at 30 seconds of silence using
   `DS.Opacity.radarSilentNode` (0.45), and disappears at 300 seconds.
   Both durations in `BeidConfig` are provisional until measured with locked
   iOS and Android peers. Each device's last detection or signal update
   restarts its rolling timer; observation-window boundaries never expire
   nodes. Expiry changes only this
   live display; DEVICES HEARD remains the session total, and earlier window
-  observations and signed records remain intact. DONE advances to the collected-record
+  observations and signed records remain intact. The window bars show the
+  last six wall-clock windows (`ClockPreflightController.barnardEngineEninSeconds`,
+  300 s), oldest on the left, with windows that had no detection kept as
+  thin 4 pt slots instead of being skipped. The current wall-clock window is
+  always the rightmost slot and always the white one: it starts at the 4 pt
+  baseline and grows 2 pt per device heard in it (capped at 40 pt), and
+  "NOW" sits under it. When a seventh window begins, every slot shifts one
+  place left and the oldest drops off. The left label is the start time of
+  the oldest visible window. The sealed Record view has no wall clock, so
+  its rightmost slot is the last observed window and the label reads "END". DONE advances to the collected-record
   screen, and View collection opens Records. After an explicit stop Now
   stays quiet: "Sensing stopped" with "Your Record is saved in Records on
   this device. You can close the app." (or "No Record was created for this
@@ -2805,11 +2817,12 @@ lives in `AGENTS.md`.
   > verbatim for history and for any future widening of the locale set;
   > the term choice itself was not overturned.
 
-- Welcome uses the exact headline "Record you were there." and subtitle
-  "Your phones say hello to each other, and keep a note anyone can verify."
-  These are the approved Welcome exception to the general presence-copy
-  caution. Other copy describes observations, explicit joining and foreground
-  sensing without promising background operation.
+- On iOS, Welcome uses the exact headline "Record you were there." and subtitle
+  "Nearby devices say hello to each other, and keep a note anyone can verify."
+  Android uses the exact line "Record you were there." (`welcome_subtitle`)
+  beneath the app name. These are the approved Welcome exceptions to the general
+  presence-copy caution. Other copy describes observations, explicit joining
+  and foreground sensing without promising background operation.
 - Vocabulary: "record", "participation record", "encounter", "event", "sense/sensing", "collect",
   "seal", "verify". A record is **collected** or **sealed**, never "minted",
   "dropped", or "claimed". **[Platform-neutral; Android's actual strings

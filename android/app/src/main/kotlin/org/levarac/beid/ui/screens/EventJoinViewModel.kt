@@ -217,9 +217,7 @@ class EventJoinViewModel(
 
     fun resumeSensing() = session.resumeSensing()
 
-    fun leaveEvent() = session.leaveEvent()
-
-    /** Scan Close mirrors iOS 05e; the independent Account leave route stays unchanged. */
+    /** Scan Close mirrors iOS 05e and is the only participant UI route that ends a live session. */
     fun requestScanClose() {
         if (_uiState.value.stopConfirmation != null) return
         val proofId = session.currentProofId

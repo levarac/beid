@@ -34,7 +34,7 @@ class WelcomeScreenTest {
 
         val context = ApplicationProvider.getApplicationContext<Context>()
         composeTestRule.onNodeWithText(context.getString(R.string.welcome_title)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(context.getString(R.string.welcome_subtitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Record you were there.").assertIsDisplayed()
 
         composeTestRule.onNodeWithTag(WelcomeScreenTestTags.GET_STARTED_BUTTON).performClick()
         assertTrue(getStartedTapped)

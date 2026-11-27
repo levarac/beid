@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -34,8 +36,12 @@ import java.util.UUID
 import org.levarac.beid.R
 import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
+import org.levarac.beid.persistence.SigilPresenceStore
+import org.levarac.beid.shared.sigil.SigilInput
 import org.levarac.beid.ui.designsystem.BeidMetricRow
 import org.levarac.beid.ui.designsystem.BeidPanel
+import org.levarac.beid.ui.designsystem.RecordSigilPlacement
+import org.levarac.beid.ui.designsystem.RecordSigilSlot
 import org.levarac.beid.ui.designsystem.BeidSecondaryButton
 import org.levarac.beid.ui.designsystem.BeidStatusPill
 import org.levarac.beid.ui.theme.BeidAppTheme
@@ -50,6 +56,7 @@ object RecordsScreenTestTags {
     const val EMPTY_STATE = "records_empty_state"
     const val TODAY_BUTTON = "records_today_button"
     fun recordRow(id: UUID): String = "records_row_$id"
+    fun recordSigil(id: UUID): String = "records_row_sigil_$id"
 }
 
 /** Read-only row model shared by the production mapper and UI fixtures. */
@@ -98,8 +105,13 @@ fun ProofRecord.toRecordListItem(): RecordListItem = RecordListItem(
  *
  * **Stated scope reductions** (mirrors the precedent iOS's own
  * `PastEventsView.swift` doc comment sets for its own reduced slice):
- * - No grouping by event and no artwork/gradient. The separate Today entry
- *   added by #342 remains available without changing these read-only rows.
+ * - No grouping by event. The separate Today entry added by #342 remains
+ *   available without changing these read-only rows.
+ * - Artwork only for a selected event's records (beid#722): there each row
+ *   leads with its session's Sigil, as iOS `EventDetailView` draws
+ *   `.eventDetailRow` with `isDeviceRecord` (integration/ios-1.1.1). The full
+ *   list under Account is iOS `PastEventsView`, which draws none, so
+ *   [sigilInput] is `null` there.
  * - Production rows use the optional name retained at verified join. Older
  *   records and joins without a name keep their event-code presentation.
  * - Production signature status is mapped from [ProofRecord.hasSelfProof]/
@@ -132,6 +144,8 @@ fun RecordsScreen(
     records: List<RecordListItem>,
     onOpenToday: () -> Unit = {},
     onOpenDetail: (UUID) -> Unit = {},
+    /** beid#722: non-null only for a selected event's records; returns `null` for the neutral ring. */
+    sigilInput: ((UUID) -> SigilInput?)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -182,7 +196,7 @@ fun RecordsScreen(
                 contentPadding = PaddingValues(bottom = BeidSpacing.l),
             ) {
                 items(records, key = { it.id.toString() }) { record ->
-                    RecordRow(record, onClick = { onOpenDetail(record.id) })
+                    RecordRow(record, onClick = { onOpenDetail(record.id) }, sigilInput = sigilInput)
                 }
             }
         }
@@ -194,36 +208,57 @@ internal val recordDateFormatter: DateTimeFormatter =
     DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault())
 
 @Composable
-private fun RecordRow(record: RecordListItem, onClick: () -> Unit) {
-    val displayLabel = record.displayLabel
+private fun RecordRow(record: RecordListItem, onClick: () -> Unit, sigilInput: ((UUID) -> SigilInput?)? = null) {
     BeidPanel(
         modifier = Modifier
             .clickable(onClick = onClick)
             .testTag(RecordsScreenTestTags.recordRow(record.id)),
     ) {
-        Text(
-            text = displayLabel,
-            style = MaterialTheme.typography.titleMedium,
-            color = BeidTheme.colors.textPrimary,
-            modifier = Modifier.semantics {
-                contentDescription = if (displayLabel == record.eventLabel) {
-                    displayLabel
-                } else {
-                    "$displayLabel. ${record.eventLabel}"
-                }
-            },
-        )
-        Text(
-            text = recordDateFormatter.format(record.createdAt),
-            style = MaterialTheme.typography.bodyMedium,
-            color = BeidTheme.colors.textSecondary,
-        )
-        BeidMetricRow(
-            label = stringResource(R.string.event_join_peers_verified_label),
-            value = record.peersVerified.toString(),
-        )
-        signatureStatusPill(record)
+        if (sigilInput == null) {
+            RecordRowContent(record)
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(BeidSpacing.m),
+            ) {
+                RecordSigilSlot(
+                    input = sigilInput(record.id),
+                    placement = RecordSigilPlacement.EventDetailRow,
+                    modifier = Modifier.testTag(RecordsScreenTestTags.recordSigil(record.id)),
+                    isDeviceRecord = true,
+                )
+                Column(Modifier.weight(1f)) { RecordRowContent(record) }
+            }
+        }
     }
+}
+
+/** The row's text, metric and pill; shared by the plain and the Sigil-led row. */
+@Composable
+private fun RecordRowContent(record: RecordListItem) {
+    val displayLabel = record.displayLabel
+    Text(
+        text = displayLabel,
+        style = MaterialTheme.typography.titleMedium,
+        color = BeidTheme.colors.textPrimary,
+        modifier = Modifier.semantics {
+            contentDescription = if (displayLabel == record.eventLabel) {
+                displayLabel
+            } else {
+                "$displayLabel. ${record.eventLabel}"
+            }
+        },
+    )
+    Text(
+        text = recordDateFormatter.format(record.createdAt),
+        style = MaterialTheme.typography.bodyMedium,
+        color = BeidTheme.colors.textSecondary,
+    )
+    BeidMetricRow(
+        label = stringResource(R.string.event_join_peers_verified_label),
+        value = record.peersVerified.toString(),
+    )
+    signatureStatusPill(record)
 }
 
 @Composable
@@ -248,6 +283,7 @@ fun RecordsRoute(
     onOpenToday: () -> Unit,
     onOpenDetail: (UUID) -> Unit,
     eventGroupAnchorId: UUID? = null,
+    sigilPresenceStore: SigilPresenceStore? = null,
 ) {
     val viewModel: RecordsViewModel = viewModel(factory = RecordsViewModel.Factory(proofRecordStore))
     val records by viewModel.records.collectAsState()
@@ -256,6 +292,7 @@ fun RecordsRoute(
             .map(ProofRecord::toRecordListItem),
         onOpenToday = onOpenToday,
         onOpenDetail = onOpenDetail,
+        sigilInput = if (eventGroupAnchorId != null) sigilPresenceStore.sigilLookup() else null,
     )
 }
 
