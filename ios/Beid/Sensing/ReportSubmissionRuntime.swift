@@ -308,6 +308,8 @@ final class ReportSubmissionRetryController {
 
 @MainActor
 protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
+  var onFirstUploadNoticeRequired: (() -> Void)? { get set }
+  func continueAfterFirstUploadNotice()
   var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)? { get set }
   var onRecoveryDeviceKeyRead: (() -> Void)? { get set }
   var onSigningKeyChange: ((String, EventSigningDiscardReason) -> Void)? { get set }
@@ -343,6 +345,11 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
 }
 
 extension WindowReportSubmissionRuntimeProtocol {
+  var onFirstUploadNoticeRequired: (() -> Void)? {
+    get { nil }
+    set {}
+  }
+  func continueAfterFirstUploadNotice() {}
   var onRecoveryDeviceKeyRead: (() -> Void)? {
     get { nil }
     set {}
@@ -386,6 +393,22 @@ extension WindowReportSubmissionRuntimeProtocol {
 /// shared HTTPS client. It does not alter the legacy WindowReport or ledger.
 @MainActor
 final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
+  private static let firstUploadNoticeKey = "firstUploadNotice.continued.v1_1"
+  private let hasViewedFirstUploadNotice: () -> Bool
+  private let markFirstUploadNoticeViewed: () -> Void
+  private var firstUploadNoticeRequested = false
+  var onFirstUploadNoticeRequired: (() -> Void)? {
+    didSet {
+      if firstUploadNoticeRequested { onFirstUploadNoticeRequired?() }
+    }
+  }
+
+  func continueAfterFirstUploadNotice() {
+    guard firstUploadNoticeRequested else { return }
+    markFirstUploadNoticeViewed()
+    firstUploadNoticeRequested = false
+    submitPendingOnNaturalTrigger()
+  }
   /// A fresh key read ends the acknowledged outage even if later recovery
   /// work cannot finish. Cached active-session snapshots do not end it.
   var onRecoveryDeviceKeyRead: (() -> Void)?
@@ -478,6 +501,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     retryScheduler: any ReportSubmissionRetryScheduler,
     now: @escaping () -> TimeInterval,
     retryJitter: @escaping () -> Double,
+    hasViewedFirstUploadNotice: @escaping () -> Bool,
+    markFirstUploadNoticeViewed: @escaping () -> Void,
     allowInsecureLoopbackForTests: Bool
   ) {
     self.eventSigningCryptography = eventSigningCryptography
@@ -491,9 +516,12 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     self.client = client
     self.retryController = ReportSubmissionRetryController(scheduler: retryScheduler, now: now, jitter: retryJitter)
     self.allowInsecureLoopbackForTests = allowInsecureLoopbackForTests
+    self.hasViewedFirstUploadNotice = hasViewedFirstUploadNotice
+    self.markFirstUploadNoticeViewed = markFirstUploadNoticeViewed
   }
 
   static func makeIfEnabled(
+    hasViewedFirstUploadNotice: (() -> Bool)? = nil,
     bundle: Bundle = .main,
     eventSigningCryptography: any SensingCryptography,
     definitionProvider: (any EventDefinitionContextProvider)? = nil,
@@ -502,6 +530,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     retryScheduler: (any ReportSubmissionRetryScheduler)? = nil,
     now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
     retryJitter: @escaping () -> Double = { Double.random(in: 0...1) },
+    markFirstUploadNoticeViewed: (() -> Void)? = nil,
+    noticeDefaults: UserDefaults = .standard,
     allowInsecureLoopbackForTests: Bool = false
   ) -> ReportSubmissionRuntime? {
     guard isEnabled(bundle: bundle), let definitionProvider else { return nil }
@@ -514,6 +544,12 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       retryScheduler: retryScheduler ?? DefaultReportSubmissionRetryScheduler(),
       now: now,
       retryJitter: retryJitter,
+      hasViewedFirstUploadNotice: hasViewedFirstUploadNotice ?? {
+        noticeDefaults.bool(forKey: firstUploadNoticeKey)
+      },
+      markFirstUploadNoticeViewed: markFirstUploadNoticeViewed ?? {
+        noticeDefaults.set(true, forKey: firstUploadNoticeKey)
+      },
       allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
     )
   }
@@ -834,6 +870,11 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       guard let configuration = makeConfiguration(for: record) else {
         Self.log.error("Skipped a persisted submission with invalid queue metadata")
         continue
+      }
+      guard hasViewedFirstUploadNotice() else {
+        firstUploadNoticeRequested = true
+        onFirstUploadNoticeRequired?()
+        return
       }
       guard retryController.beginAttempt(operatorOrigin: origin, allowEarlyProbe: allowEarlyProbe) else { continue }
       inFlight.insert(record.id)

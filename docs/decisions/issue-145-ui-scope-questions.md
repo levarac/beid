@@ -7,8 +7,17 @@ not a schema or protocol decision
 > 2026-09-03, and question 10 was ratified. See
 > [`issue-145-ui-scope-decisions.md`](issue-145-ui-scope-decisions.md) —
 > read it before writing any scope copy, because it also carries the
-> claims copy must **not** make and one parameter (the suppression
-> threshold) that is deliberately still open.
+> claims copy must **not** make and the 2026-11-26 decision that v1.1
+> has no minimum cohort.
+
+> **Later ruling note (2026-09-03 18:3x JST):** this decision-input predates
+> the maintainer's raw-public ruling. Its aggregate-only and closed-public-
+> replay recommendations are superseded. "No participant-level rows" now
+> applies to DISPLAY in the app/verification page, while the public
+> verification API retains raw signed Observations. See the decision record
+> linked above for the API/DISPLAY/pre-upload distinction and residual risk.
+> The 2026-11-26 decision also records the public verification page's
+> device counts and pseudonymous relations at all event sizes.
 
 **Read this before** `docs/decisions/issue-145-privacy-schema.md` (the audit,
 PR #306). That document's 13 open questions (§8) gate a public-blob

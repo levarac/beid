@@ -1,9 +1,12 @@
 package org.levarac.beid.venue
 
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -18,6 +21,8 @@ import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import androidx.test.core.app.ApplicationProvider
+import org.levarac.beid.R
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -40,6 +45,24 @@ class VenueLinkScreenTest {
         compose.onNodeWithTag("venue-link").performTextInput(link)
         compose.onNodeWithTag("venue-use-link").performClick()
         compose.waitForIdle()
+    }
+
+    /**
+     * TalkBack names the editable link field "Venue link" whether it is empty
+     * or holds a link, as release/1.1.0's Material `label` did. The visual
+     * caption above the field is hidden from semantics so the name is read
+     * once, on the field it labels.
+     */
+    @Test fun linkFieldKeepsItsAccessibleLabelEmptyAndPopulated() {
+        val label = ApplicationProvider.getApplicationContext<android.content.Context>().getString(R.string.venue_link_label)
+        show()
+
+        compose.onNodeWithTag("venue-link").assertContentDescriptionEquals(label)
+
+        compose.onNodeWithTag("venue-link").performTextInput("https://venue.example/#test")
+
+        compose.onNodeWithTag("venue-link").assertContentDescriptionEquals(label)
+        compose.onAllNodesWithText(label, ignoreCase = true).assertCountEquals(0)
     }
 
     @Test fun emptyPackExplainsBothInputsAndShowsQrBeforeAnyPermission() {

@@ -23,6 +23,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         val coordinator = coordinator(engine)
 
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
         engine.emitHint(
             peripheralId = "peripheral-a",
             displayName = "Community night",
@@ -50,6 +51,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
 
         engine.emitUnverifiedEnvelopeV2("peripheral-a")
 
@@ -63,6 +65,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
         engine.emitHint("p", "Event", EVENT_HASH)
         assertEquals(1, coordinator.nearbyEventCandidates.value.candidateCount)
 
@@ -80,6 +83,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
         engine.emitHint("p", "Event", EVENT_HASH)
 
         coordinator.requestBluetoothPermission {}
@@ -93,6 +97,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
 
         coordinator.stopNearbyEventDiscovery()
 
@@ -107,6 +112,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         val registry = FakeNearbyEventRegistry()
         val coordinator = coordinator(engine, registry)
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
 
         joinPromotedVectorEvent(coordinator, engine, registry)
         coordinator.leaveEvent()
@@ -125,6 +131,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
         engine.engineState = EventJoinEngineState(isScanning = true, isAdvertising = true)
 
         coordinator.stopNearbyEventDiscovery()
@@ -139,6 +146,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
 
         engine.emitHint(
             peripheralId = "",
@@ -178,6 +186,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         val registry = FakeNearbyEventRegistry()
         val coordinator = coordinator(engine, registry)
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
         joinPromotedVectorEvent(coordinator, engine, registry)
         assertEquals(1, coordinator.nearbyEventCandidates.value.candidateCount)
 
@@ -197,6 +206,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         engine.engineState = EventJoinEngineState(isScanning = false, isAdvertising = true)
 
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
 
         assertEquals(
             0,
@@ -214,6 +224,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         engine.engineState = EventJoinEngineState(isScanning = false, isAdvertising = false)
 
         coordinator.requestBluetoothPermission {}
+        coordinator.startNearbyEventDiscovery()
 
         assertEquals(
             0,

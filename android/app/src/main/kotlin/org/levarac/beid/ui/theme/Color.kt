@@ -3,103 +3,119 @@ package org.levarac.beid.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * Primitive hex anchors ported from DESIGN.md §5 "Color" / iOS
- * `Colors.xcassets`. Never referenced directly by composables — see
- * [BeidColorScheme] for the semantic (`DS`-equivalent) tokens screens use.
+ * Tier 1: the 13 Flat 2b Library colors, one per iOS
+ * `ios/Beid/DesignSystem/Colors.xcassets` colorset (DESIGN.md §4, §5).
+ * Single appearance: the Library has one value per variable and no dark
+ * variant, so neither does this palette.
+ *
+ * Never referenced directly by composables — screens read the role tokens in
+ * [BeidColorScheme] through `BeidTheme.colors`.
  */
 internal object BeidPalette {
-    val SurfaceCanvasLight = Color(0xFFF7F4EE)
-    val SurfaceCanvasDark = Color(0xFF111315)
+    /** Library `ink`. */
+    val Ink = Color(0xFF0B0B0F)
 
-    val SurfaceRaisedLight = Color(0xFFFFFFFF)
-    val SurfaceRaisedDark = Color(0xFF1B1E20)
+    /** Library `bg`. */
+    val Bg = Color(0xFFFFFFFF)
 
-    val TextPrimaryLight = Color(0xFF1A1C1E)
-    val TextPrimaryDark = Color(0xFFECEDEE)
+    /** Library `sub`. */
+    val Sub = Color(0xFF6E6E78)
 
-    val TextSecondaryLight = Color(0xFF5C6165)
-    val TextSecondaryDark = Color(0xFF9BA1A6)
+    /** Library `line`. */
+    val Line = Color(0xFFECECF1)
 
-    val ActionPrimaryLight = Color(0xFF2A2E33)
-    val ActionPrimaryDark = Color(0xFFE8EAEC)
+    /** Library `line-dashed`. */
+    val LineDashed = Color(0xFFC9C9CF)
 
-    val SignalActiveLight = Color(0xFF18C7A7)
-    val SignalActiveDark = Color(0xFF62E8D0)
+    /** Library `tile`. */
+    val Tile = Color(0xFFF2F2F4)
 
-    val SignalWarningLight = Color(0xFFC7841A)
-    val SignalWarningDark = Color(0xFFE8B562)
+    /** Library `chart-muted`. */
+    val ChartMuted = Color(0xFFD9D9DE)
 
-    val ProofSealLight = Color(0xFF6E5AEF)
-    val ProofSealDark = Color(0xFF9D8CFF)
+    /** Library `on-ink/sub`. */
+    val OnInkSub = Color(0xFF8E8E96)
 
-    val LabelOnWarningLight = Color(0xFF1A1C1E)
-    val LabelOnWarningDark = Color(0xFF111315)
+    /** Library `on-ink/line`. */
+    val OnInkLine = Color(0xFF2A2A31)
 
-    val LabelOnSealLight = Color(0xFFFFFFFF)
-    val LabelOnSealDark = Color(0xFF111315)
+    /** Library `on-ink/idle`. */
+    val OnInkIdle = Color(0xFF5C5C66)
 
-    val StrokeHairlineLight = Color(0xFFE3DFD6)
-    val StrokeHairlineDark = Color(0xFF2A2E31)
+    /** Library `semantic/red`. */
+    val SemanticRed = Color(0xFFFF453A)
 
-    /** DESIGN.md §5 "Binary on/off status, 'on'" — e.g. the Account screen's Bluetooth-active badge. */
-    val StatusOnLight = Color(0xFF1E7E34)
-    val StatusOnDark = Color(0xFF30D158)
+    /** Library `semantic/amber`. */
+    val SemanticAmber = Color(0xFFFF9F0A)
 
-    /** DESIGN.md §5 "Binary on/off status, 'off'" — e.g. the Account screen's Bluetooth-off badge. */
-    val StatusOffLight = Color(0xFF6B7075)
-    val StatusOffDark = Color(0xFF83898F)
+    /** Library `semantic/green`. */
+    val SemanticGreen = Color(0xFF30D158)
 }
 
 /**
- * Semantic color tokens — the Compose equivalent of iOS's `DS.Color.*`
- * namespace (DESIGN.md §4 "Token Architecture"). Screens read colors through
- * [org.levarac.beid.ui.theme.BeidTheme]'s `LocalBeidColors`, never through
- * [BeidPalette] directly.
+ * Tier 2: role tokens — the Compose equivalent of iOS's `DS.Color.*`
+ * (`ios/Beid/DesignSystem/Tokens.swift`), with the same names, each mapped
+ * onto the same Library primitive as iOS. Several roles may share a
+ * primitive. Roles and their allowed uses are in DESIGN.md §5.
+ *
+ * Semantic colors ([statusOn], [statusPending], [statusOff]) are indicators:
+ * on the page ground they color a dot paired with a text label, never the
+ * text itself (DESIGN.md §5, §13).
  */
 data class BeidColorScheme(
+    /** Page ground of every screen. Library `bg`. */
     val surfaceCanvas: Color,
-    val surfaceRaised: Color,
+    /** Primary text and marks (icons, neutral dots) on the page ground. Library `ink`. */
     val textPrimary: Color,
+    /** Secondary text and section labels on the page ground. Library `sub`. */
     val textSecondary: Color,
-    val actionPrimary: Color,
-    val signalActive: Color,
-    val signalWarning: Color,
-    val proofSeal: Color,
-    val labelOnWarning: Color,
-    val labelOnSeal: Color,
+    /** Row and list dividers on the page ground. Library `line`. */
     val strokeHairline: Color,
+    /** Dashed frame of the empty block (`Block/Empty`). Library `line-dashed`. */
+    val strokeEmptyState: Color,
+    /** Gray tiles and the timeline track. Library `tile`. */
+    val surfaceTile: Color,
+    /** "Detected" bars in charts. Library `chart-muted`. */
+    val chartDetected: Color,
+    /** Secondary text on an ink ground. Library `on-ink/sub`. */
+    val textSecondaryOnInk: Color,
+    /** Dividers, graph rings and future-window bars on an ink ground. Library `on-ink/line`. */
+    val strokeHairlineOnInk: Color,
+    /** Detected-only (idle) graph nodes on an ink ground. Library `on-ink/idle`. */
+    val graphNodeIdle: Color,
+    /** `Button/Primary` Tone=Primary fill; also the screen tint. Library `ink`. */
+    val actionPrimary: Color,
+    /** Label on an [actionPrimary] fill. Library `bg`. */
+    val labelOnActionPrimary: Color,
+    /** `Button/Primary` Tone=Inverse fill, for black screens and the black sheet. Library `bg`. */
+    val actionInverse: Color,
+    /** Label on an [actionInverse] fill. Library `ink`. */
+    val labelOnActionInverse: Color,
+    /** Active / on. A dot on the page ground; text only on an ink ground. Library `semantic/green`. */
     val statusOn: Color,
+    /** Verifying / pending. Same restriction as [statusOn]. Library `semantic/amber`. */
+    val statusPending: Color,
+    /** Destructive / off. Same restriction as [statusOn]. Library `semantic/red`. */
     val statusOff: Color,
 )
 
-internal val LightBeidColors = BeidColorScheme(
-    surfaceCanvas = BeidPalette.SurfaceCanvasLight,
-    surfaceRaised = BeidPalette.SurfaceRaisedLight,
-    textPrimary = BeidPalette.TextPrimaryLight,
-    textSecondary = BeidPalette.TextSecondaryLight,
-    actionPrimary = BeidPalette.ActionPrimaryLight,
-    signalActive = BeidPalette.SignalActiveLight,
-    signalWarning = BeidPalette.SignalWarningLight,
-    proofSeal = BeidPalette.ProofSealLight,
-    labelOnWarning = BeidPalette.LabelOnWarningLight,
-    labelOnSeal = BeidPalette.LabelOnSealLight,
-    strokeHairline = BeidPalette.StrokeHairlineLight,
-    statusOn = BeidPalette.StatusOnLight,
-    statusOff = BeidPalette.StatusOffLight,
-)
-
-internal val DarkBeidColors = BeidColorScheme(
-    surfaceCanvas = BeidPalette.SurfaceCanvasDark,
-    surfaceRaised = BeidPalette.SurfaceRaisedDark,
-    textPrimary = BeidPalette.TextPrimaryDark,
-    textSecondary = BeidPalette.TextSecondaryDark,
-    actionPrimary = BeidPalette.ActionPrimaryDark,
-    signalActive = BeidPalette.SignalActiveDark,
-    signalWarning = BeidPalette.SignalWarningDark,
-    proofSeal = BeidPalette.ProofSealDark,
-    labelOnWarning = BeidPalette.LabelOnWarningDark,
-    labelOnSeal = BeidPalette.LabelOnSealDark,
-    strokeHairline = BeidPalette.StrokeHairlineDark,
-    statusOn = BeidPalette.StatusOnDark,
-    statusOff = BeidPalette.StatusOffDark,
+/** The one Flat 2b color scheme. There is no dark variant (single appearance). */
+internal val BeidColors = BeidColorScheme(
+    surfaceCanvas = BeidPalette.Bg,
+    textPrimary = BeidPalette.Ink,
+    textSecondary = BeidPalette.Sub,
+    strokeHairline = BeidPalette.Line,
+    strokeEmptyState = BeidPalette.LineDashed,
+    surfaceTile = BeidPalette.Tile,
+    chartDetected = BeidPalette.ChartMuted,
+    textSecondaryOnInk = BeidPalette.OnInkSub,
+    strokeHairlineOnInk = BeidPalette.OnInkLine,
+    graphNodeIdle = BeidPalette.OnInkIdle,
+    actionPrimary = BeidPalette.Ink,
+    labelOnActionPrimary = BeidPalette.Bg,
+    actionInverse = BeidPalette.Bg,
+    labelOnActionInverse = BeidPalette.Ink,
+    statusOn = BeidPalette.SemanticGreen,
+    statusPending = BeidPalette.SemanticAmber,
+    statusOff = BeidPalette.SemanticRed,
 )

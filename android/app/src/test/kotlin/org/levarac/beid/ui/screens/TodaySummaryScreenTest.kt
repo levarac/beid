@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.dp
+import kotlin.test.assertTrue
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Rule
 import org.junit.Test
@@ -77,5 +80,17 @@ class TodaySummaryScreenTest {
 
         composeTestRule.onNodeWithText(context.getString(R.string.today_summary_submission_accepted_label)).assertIsDisplayed()
         composeTestRule.onNodeWithText(context.getString(R.string.today_summary_submission_accepted, 1)).assertIsDisplayed()
+    }
+
+    /** iOS DailySummaryView scrolls from the top; content never floats to the vertical center. */
+    @Test
+    fun contentStartsAtTheTopOfTheScreen() {
+        composeTestRule.setContent {
+            BeidAppTheme { TodaySummaryScreen(recordCount = 2) }
+        }
+
+        val titleTop = composeTestRule.onNodeWithText(context.getString(R.string.today_summary_title))
+            .getBoundsInRoot().top
+        assertTrue(titleTop <= 48.dp, "Today title starts at $titleTop, expected the top of the screen")
     }
 }

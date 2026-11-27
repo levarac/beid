@@ -3,9 +3,11 @@ package org.levarac.beid.navigation
 import android.bluetooth.BluetoothAdapter
 import android.app.Application
 import android.content.Context
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
@@ -18,6 +20,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import org.levarac.beid.R
 import org.levarac.beid.onboarding.OnboardingPreferences
 import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
@@ -54,7 +57,7 @@ import org.robolectric.shadows.ShadowBluetoothAdapter
 @Config(sdk = [34])
 class AppNavHostTest {
     @get:Rule
-    val composeTestRule = createComposeRule()
+    val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     @get:Rule
     val tempFolder = TemporaryFolder()
@@ -179,20 +182,45 @@ class AppNavHostTest {
     }
 
     @Test
-    fun openingAccountFromEventJoinAndLeavingAnActiveSessionCallsSessionLeaveEvent() {
+    fun activeAccountHasNoStopBypassAndConfirmedScanStopStillEndsTheCurrentSession() {
         OnboardingPreferences(context).hasCompletedOnboarding = true
         shadowAdapter.setEnabled(true)
-        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Sensing))
+        val proofId = UUID.randomUUID()
+        val recording = EventJoinUiState.Sensing(
+            ScanPhase.Recording(ScanEventSession("ABC123"), peersVerified = 3),
+        )
+        val session = FakeEventJoinSession(initial = recording, currentProofId = proofId)
+        session.markRecordingCeremonyShown()
 
         composeTestRule.setContent {
             BeidAppTheme { AppNavHost(session, proofRecordStore()) }
         }
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PHASE_STATUS_PILL).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.BIND_WALLET_BUTTON).assertExists()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
 
-        composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.account_leave_event_button)).assertDoesNotExist()
+        assertEquals(0, session.leaveEventCallCount)
+
+        composeTestRule.runOnUiThread { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
+        val close = composeTestRule.onNodeWithText(context.getString(R.string.scan_close))
+        val confirmation = composeTestRule.onNodeWithText(context.getString(R.string.scan_stop_heading))
+        close.assertIsDisplayed().performClick()
+        confirmation.performScrollTo().assertIsDisplayed()
+        assertEquals(0, session.leaveEventCallCount)
+
+        composeTestRule.onNodeWithText(context.getString(R.string.scan_stop_keep_sensing))
+            .performScrollTo().performClick()
+        confirmation.assertDoesNotExist()
+        close.assertIsDisplayed()
+        assertEquals(recording, session.state.value)
+        assertEquals(0, session.leaveEventCallCount)
+
+        close.performClick()
+        confirmation.performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.scan_stop_confirm))
+            .performScrollTo().performClick()
 
         assertEquals(1, session.leaveEventCallCount)
     }
@@ -283,7 +311,7 @@ class AppNavHostTest {
     }
 
     @Test
-    fun manualEventCodeEntryIsReachableOnlyThroughAccount() {
+    fun manualEventCodeEntryIsReachableThroughAccountAndAbsentFromNowBeforeTheStandbyWait() {
         OnboardingPreferences(context).hasCompletedOnboarding = true
         shadowAdapter.setEnabled(true)
         val session = FakeEventJoinSession()

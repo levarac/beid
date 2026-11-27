@@ -72,7 +72,7 @@ fun BluetoothPermissionScreen(onAllowBluetooth: () -> Unit) {
                 BeidPrimaryButton(
                     text = stringResource(R.string.bluetooth_permission_allow_button),
                     containerColor = BeidTheme.colors.actionPrimary,
-                    contentColor = BeidTheme.colors.surfaceCanvas,
+                    contentColor = BeidTheme.colors.labelOnActionPrimary,
                     onClick = onAllowBluetooth,
                     icon = null,
                     modifier = Modifier.testTag(BluetoothPermissionScreenTestTags.ALLOW_BUTTON),

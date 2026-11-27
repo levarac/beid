@@ -2,16 +2,16 @@
     <string name="app_name">beid</string>
     <!-- Screen 01: Welcome (mirrors iOS's WelcomeView). -->
     <string name="welcome_title">beid</string>
-    <string name="welcome_subtitle">Prove you were there. Automatically.</string>
+    <string name="welcome_subtitle">Record you were there.</string>
     <string name="welcome_get_started">Get Started</string>
 
     <!-- Screen 02: Bluetooth-permission explanation (mirrors iOS's BluetoothPermissionView). -->
     <string name="bluetooth_permission_title">Enable Bluetooth</string>
-    <string name="bluetooth_permission_subtitle">beid senses nearby events and people over Bluetooth Low Energy — that\'s how it proves you were really there.</string>
+    <string name="bluetooth_permission_subtitle">beid uses Bluetooth Low Energy to find nearby events and record observations of nearby devices.</string>
     <string name="bluetooth_permission_bullet_events_find_you_title">Events find you</string>
     <string name="bluetooth_permission_bullet_events_find_you_subtitle">Nearby events appear automatically — no codes, no search.</string>
     <string name="bluetooth_permission_bullet_private_title">Private by design</string>
-    <string name="bluetooth_permission_bullet_private_subtitle">Only anonymous proofs are exchanged, never your identity.</string>
+    <string name="bluetooth_permission_bullet_private_subtitle">Bluetooth uses temporary device identifiers for nearby sensing.</string>
     <string name="bluetooth_permission_bullet_zero_effort_title">Zero effort</string>
     <string name="bluetooth_permission_bullet_zero_effort_subtitle">Sensing runs quietly in the background. Nothing to tap.</string>
     <string name="bluetooth_permission_allow_button">Allow Bluetooth</string>
@@ -19,7 +19,7 @@
 
     <!-- Screen 03: Bluetooth-off recovery (mirrors iOS's BluetoothOffView). -->
     <string name="bluetooth_off_title">Bluetooth is off</string>
-    <string name="bluetooth_off_message">beid can\'t sense events or collect proofs while Bluetooth is off.</string>
+    <string name="bluetooth_off_message">beid cannot find events or record observations while Bluetooth is off.</string>
     <string name="bluetooth_off_step_open_settings">Open Settings</string>
     <string name="bluetooth_off_step_tap_bluetooth">Tap Bluetooth</string>
     <string name="bluetooth_off_step_switch_on">Switch it on</string>
@@ -32,17 +32,33 @@
     <string name="bluetooth_denied_open_settings_button">Open Settings</string>
     <string name="bluetooth_denied_check_again_button">I\'ve granted it</string>
 
-    <string name="home_title">Home</string>
-    <string name="home_collection_title">Your collection</string>
-    <string name="home_collection_empty">Recorded events appear here. Join a nearby event above to start collecting.</string>
-    <plurals name="home_record_count">
-        <item quantity="one">%d record</item>
-        <item quantity="other">%d records</item>
-    </plurals>
+    <!-- Home tabs (iOS #795 CollectionHomeView): Now / Records, Account in the top bar.
+         English copy matches ios/Beid/Localizable.xcstrings exactly. The Records tab
+         label reuses records_title ("Records", iOS records.title). -->
+    <string name="home_now_title">Now</string>
+    <string name="home_account_title">Account</string>
+    <string name="now_listening">LISTENING FOR EVENTS NEARBY</string>
+    <string name="now_do_this_now">DO THIS NOW</string>
+    <string name="now_standby_tile_title">Keep the app open and head to the venue.</string>
+    <string name="now_standby_tile_body">beid listens for nearby events over Bluetooth. Tap JOIN when your event appears.</string>
+    <string name="now_found_nearby">FOUND NEARBY</string>
+    <string name="now_name_announced_nearby">NAME ANNOUNCED NEARBY</string>
+    <string name="now_registration_checked">EVENT REGISTRATION CHECKED</string>
+    <string name="now_registration_checking">Checking event registration…</string>
+    <string name="now_join_action">JOIN</string>
+    <string name="now_also_nearby">ALSO NEARBY</string>
+    <string name="now_join_arrow">JOIN →</string>
+    <string name="now_enter_event_code">ENTER EVENT CODE</string>
+    <string name="now_enter_event_code_accessibility">Enter event code</string>
+    <string name="now_bluetooth_off_label">BLUETOOTH OFF · SENSING PAUSED</string>
+    <string name="now_bluetooth_fix">FIX</string>
+    <string name="now_bluetooth_fix_accessibility">Turn on Bluetooth</string>
+    <string name="now_bluetooth_off_tile_title">Turn Bluetooth back on.</string>
+    <string name="now_bluetooth_off_tile_body">Your records are safe. Sensing resumes when Bluetooth is back.</string>
+    <string name="now_open_settings">OPEN SETTINGS</string>
+    <string name="now_open_settings_accessibility">Open Settings</string>
     <string name="event_join_title">Join an event</string>
     <string name="event_join_account_action">Open account</string>
-    <string name="event_join_discovery_heading">Find an event nearby</string>
-    <string name="event_join_discovery_supporting">beid looks for a verified event automatically while you are nearby.</string>
     <string name="event_join_code_label">Event code</string>
     <string name="event_join_code_helper">Paste the code from the organizer if discovery is unavailable.</string>
     <string name="event_join_back_action">Back</string>
@@ -63,14 +79,6 @@
     <string name="event_join_error_empty_code">Enter an event code to continue. Ask the event organizer for it.</string>
     <string name="event_join_error_join_failed">beid couldn\'t join that event. Check the code and try again.</string>
     <string name="event_join_nearby_events_omitted">Some nearby events are not shown.</string>
-    <string name="event_join_searching_nearby">Searching for nearby events…</string>
-    <string name="event_join_no_nearby_title">No joinable event found nearby</string>
-    <!-- Shown under "Searching…" from the start. Reworded in beid#463: it used to send the participant to Account, which was the only place the code field lived. It is no longer the best route once the search gives up — a button appears here — so this no longer names a destination. -->
-    <string name="event_join_rescue_guidance">If no event appears, you can enter its code instead.</string>
-    <!-- beid#463 rescue route. Shown once the radio search has run its course without finding an event this device can join. Address the participant, not the device: they have been staring at a spinner and do not know whether the problem is the venue, their phone, or them. -->
-    <string name="event_join_rescue_prompt">No event found nearby. If you have the event code, you can enter it instead.</string>
-    <!-- Button label. "Enter" here means supplying the code by any means, including pasting it; it is not an instruction to type. -->
-    <string name="event_join_rescue_enter_code">Enter event code</string>
     <!-- Button label on the event-code screen. Pastes the code from the clipboard. The full code is 64 characters, so this is the normal way to supply one, not a shortcut. -->
     <string name="event_join_paste_code">Paste code</string>
     <!-- Join refusal, beid#463. The device could not reach the network at all, so nothing about the event could be checked. This is the one refusal whose fix is not the code: say so plainly, or the participant will keep re-entering a code that was never the problem. -->
@@ -83,28 +91,17 @@
     <string name="event_join_error_event_not_active">That event isn\'t open to join right now.</string>
     <!-- Join refusal: an answer arrived and could not be verified. Distinct from the network case on purpose: nothing here is fixed by finding a better connection. -->
     <string name="event_join_error_verification_failed">beid couldn\'t verify that event. Check the code with the event organizer.</string>
-    <string name="event_join_beacon_name_label">Name announced by nearby beacon</string>
     <string name="event_join_beacon_name_missing">No name announced by nearby beacon</string>
-    <string name="event_join_validity_period">Valid from %1$d to %2$d</string>
-    <string name="event_join_not_joinable_yet">Waiting for event verification</string>
-    <string name="event_join_selected">Selected</string>
-    <string name="event_join_candidate_verified">Ready to join</string>
-    <string name="event_join_candidate_unverified">Checking</string>
-    <!-- Card status pill: a registry read for this beacon failed and the app is still trying. Kept as short as the other pill labels because it shares their one-line row. -->
-    <string name="event_join_candidate_retrying">Retrying</string>
-    <!-- Card status pill: the operator lookup answered that this beacon's event code is not registered. Not a network problem. -->
-    <string name="event_join_candidate_not_registered">Not registered</string>
     <!-- Card body line, shown under a card that failed verification at least once. Says the app keeps trying so the user does not restart the scan. -->
     <string name="event_join_verification_retrying">Could not verify this event yet. Still trying.</string>
     <!-- Card body line: the lookup succeeded and answered that this event is unknown to the registry. The app keeps checking in case it is registered while the beacon is still nearby. -->
     <string name="event_join_verification_not_registered">This event is not registered. Still checking.</string>
-    <string name="event_join_join_affordance">Join this event</string>
 
     <!-- Peer first detected but not yet confirmed as a real event (below the confirm threshold). -->
     <string name="event_join_status_recording">Recording</string>
     <!-- "Signal lost" here is our own manual/simulated trigger, not a real Bluetooth radio outage. -->
     <string name="event_join_status_signal_lost">Signal lost — recording paused</string>
-    <string name="event_join_peers_verified_label">Peers verified</string>
+    <string name="event_join_peers_verified_label">Devices heard</string>
     <!-- Status pill dot label — sensing is actively running (mirrors iOS's BeidStatusPill.State.sensingAutomatically). -->
     <string name="event_join_status_pill_active">Sensing automatically</string>
     <!-- Status pill dot label — sensing is paused (signal lost; mirrors iOS's BeidStatusPill.State.sensingPaused). -->
@@ -170,7 +167,7 @@
     <string name="records_title">Records</string>
     <!-- Empty state, shown when this device has never recorded a proof. -->
     <string name="records_empty_title">Nothing collected yet</string>
-    <string name="records_empty_message">Proofs you collect will appear here.</string>
+    <string name="records_empty_message">Your records will appear here.</string>
     <!-- Signature status pill — no self-proof or binding evidence recorded yet for this proof. -->
     <string name="records_signature_status_not_signed">Not yet signed</string>
     <!-- Signature status pill — an owner-key self-proof has been recorded, but no wallet binding yet. -->
@@ -182,11 +179,11 @@
     <string name="records_today_button">Today</string>
     <string name="today_summary_title">Today</string>
     <plurals name="today_summary_record_count">
-        <item quantity="one">%d proof collected today</item>
-        <item quantity="other">%d proofs collected today</item>
+        <item quantity="one">%d record saved today</item>
+        <item quantity="other">%d records saved today</item>
     </plurals>
-    <string name="today_summary_empty_title">No proofs yet today</string>
-    <string name="today_summary_empty_message">Proofs you collect today will show up here.</string>
+    <string name="today_summary_empty_title">No records yet today</string>
+    <string name="today_summary_empty_message">Records you save today will appear here.</string>
     <string name="today_summary_submission_title">Sending status · All saved observations</string>
     <string name="today_summary_submission_unavailable">Sending status is unavailable.</string>
     <string name="today_summary_submission_empty">No reports waiting to be sent.</string>
@@ -264,4 +261,8 @@
     <string name="venue_bluetooth_permission">Bluetooth permission is needed to broadcast.</string>
     <string name="venue_radio_failed">The radio could not start.</string>
     <string name="venue_stopped">Broadcast stopped.</string>
+    <!-- Small uppercase caption above the "Venue broadcast" title, naming the area of the app this screen belongs to. iOS VenueSignedServingView's eyebrow without its "· iOS only" suffix, which would be false on Android. -->
+    <string name="venue_eyebrow">Organizer tools</string>
+    <!-- Supporting sentence under the "Venue broadcast" title, explaining what the screen is for. Copied from iOS VenueSignedServingView on main; draft PR #824's version asks the user to scan a QR code, which Android cannot do yet. -->
+    <string name="venue_subtitle">Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.</string>
 </resources>

@@ -1,5 +1,6 @@
 package org.levarac.beid.ui.screens
 
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +16,7 @@ internal class FakeEventJoinSession(
     nearbyEventCards: List<NearbyEventCard> = emptyList(),
     nearbyEventsOmitted: Boolean = false,
     initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.Granted,
+    override val currentProofId: UUID? = null,
 ) : EventJoinSession {
     private val mutableState = MutableStateFlow(initial)
     override val state: StateFlow<EventJoinUiState> = mutableState.asStateFlow()
@@ -25,7 +27,17 @@ internal class FakeEventJoinSession(
         mutableSearchOutcome.asStateFlow()
     private val mutableNearbyEventsOmitted = MutableStateFlow(nearbyEventsOmitted)
     override val nearbyEventsOmitted: StateFlow<Boolean> = mutableNearbyEventsOmitted.asStateFlow()
-    override val bluetoothPermissionState: BluetoothPermissionState = initialBluetoothPermissionState
+    /** Settable so a test can change the runtime answer the next refresh reads. */
+    override var bluetoothPermissionState: BluetoothPermissionState = initialBluetoothPermissionState
+
+    /** Every radio state the host forwarded, in order. */
+    val bluetoothRadioChanges = mutableListOf<Boolean>()
+
+    override fun refreshBluetoothPermissionState(): BluetoothPermissionState = bluetoothPermissionState
+
+    override fun onBluetoothRadioChanged(isOn: Boolean) {
+        bluetoothRadioChanges += isOn
+    }
 
     var joinedCode: String? = null
         private set
@@ -67,6 +79,13 @@ internal class FakeEventJoinSession(
         nearbyEventDiscoveryStartCalls += 1
     }
 
+    var nearbyEventDiscoveryStopCalls: Int = 0
+        private set
+
+    override fun stopNearbyEventDiscovery() {
+        nearbyEventDiscoveryStopCalls += 1
+    }
+
     override fun simulateSignalLost() {
         signalLostSimulated = true
     }
@@ -78,6 +97,8 @@ internal class FakeEventJoinSession(
     override fun leaveEvent() {
         leaveEventCallCount += 1
     }
+
+    override fun hasStoredProof(proofId: UUID): Boolean = proofId == currentProofId
 
     override fun markRecordingCeremonyShown() {
         recordingCeremonyShown = true

@@ -31,6 +31,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let provider = DelayedDeviceSecretDefinitionProvider()
     let bundle = try enabledBundle(in: directory)
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: bundle, eventSigningCryptography: makeCryptography(keychain), definitionProvider: provider, store: unreadable
     ))
     defer { runtime.stop() }
@@ -47,6 +48,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertEqual(reloaded.pendingCaptures.map(\.id), [capture.id])
     XCTAssertTrue(reloaded.signingKeyChangeEventCodes.isEmpty)
     let resumed = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: bundle, eventSigningCryptography: makeCryptography(keychain), definitionProvider: provider, store: reloaded
     ))
     defer { resumed.stop() }
@@ -292,6 +294,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     _ = try seedCapture(in: store, publicKey: blockParentWrite ? publicKey : nil)
     keychain.storedData = Data(repeating: 0x42, count: 32)
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
     ))
@@ -430,6 +433,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
       definitionProvider: provider, store: store, allowInsecureLoopbackForTests: true
     ))
@@ -574,6 +578,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let reloaded = ReportSubmissionStore(fileURL: fileURL)
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: reloaded
     ))
@@ -611,6 +616,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     runtime.stop()
     let relaunchedStore = ReportSubmissionStore(fileURL: fileURL)
     let relaunchedRuntime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: relaunchedStore
     ))
@@ -633,6 +639,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let capture = try seedCapture(in: store, publicKey: publicKey)
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
       definitionProvider: provider, store: store
     ))
@@ -676,6 +683,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
       definitionProvider: provider, store: store
     ))
@@ -734,6 +742,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let capture = try seedCapture(in: store, publicKey: publicKey)
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
       definitionProvider: provider, store: store
     ))
@@ -768,6 +777,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     try Data("unreadable".utf8).write(to: directory.appendingPathComponent("submissions.exclusions.json"))
     let store = ReportSubmissionStore(fileURL: fileURL)
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
     ))
@@ -794,6 +804,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     keychain.storedData = Data(repeating: 0x42, count: 32)
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
       definitionProvider: provider, store: store
     ))
@@ -860,6 +871,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     keychain.readResults = [.failure(errSecInteractionNotAllowed)]
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
       definitionProvider: provider, store: store
     ))
@@ -885,6 +897,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let provider = DelayedDeviceSecretDefinitionProvider()
     let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
       definitionProvider: provider, store: store
     ))
@@ -1074,6 +1087,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
     _ = try seedCapture(in: store, publicKey: publicKey)
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
     ))
@@ -1112,6 +1126,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     _ = try seedCapture(in: store, publicKey: publicKey)
     keychain.storedData = Data(repeating: 0x42, count: 32)
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
     ))
@@ -1127,6 +1142,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let reloaded = ReportSubmissionStore(fileURL: fileURL)
     _ = try seedCapture(in: reloaded, publicKey: publicKey)
     let relaunched = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: reloaded
     ))
@@ -1156,6 +1172,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     ))
     try store.removePendingCapture(id: capture.id)
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: ReportSubmissionStore(fileURL: fileURL)
     ))
@@ -1181,6 +1198,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let fileURL = directory.appendingPathComponent("submissions.json")
     let store = ReportSubmissionStore(fileURL: fileURL)
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
     ))
@@ -1211,6 +1229,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     _ = try seedCapture(in: store, publicKey: publicKey, eventCode: "OTHER")
     keychain.storedData = Data(repeating: 0x42, count: 32)
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
     ))
@@ -1241,6 +1260,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     keychain.readResults = [.failure(errSecInteractionNotAllowed)]
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: provider, store: store
     ))
@@ -1278,6 +1298,7 @@ final class DeviceSecretSessionTests: XCTestCase {
       ))
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: provider, store: store, allowInsecureLoopbackForTests: true
     ))
@@ -1320,6 +1341,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     if !captureKeyIsMissing { keychain.storedData = Data(repeating: 0x42, count: 32) }
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: provider, store: store
     ))
@@ -1343,6 +1365,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     runtime.submitPending()
     XCTAssertEqual(notices, 1)
     let relaunched = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: ReportSubmissionStore(fileURL: fileURL)
     ))
@@ -1460,6 +1483,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     keychain.storedData = Data(repeating: 0x42, count: 32)
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: provider, store: runtimeStore
     ))
@@ -1505,6 +1529,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let store = ReportSubmissionStore(fileURL: fileURL)
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: provider, store: store
     ))
@@ -1832,6 +1857,7 @@ final class DeviceSecretSessionTests: XCTestCase {
       ))
     let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
       definitionProvider: provider, store: store, allowInsecureLoopbackForTests: true
     ))
@@ -1872,6 +1898,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let publicKey = try makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32)))
       .eventSigningPublicKey(eventCode: "PREVIOUS")
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: provider, store: store
     ))

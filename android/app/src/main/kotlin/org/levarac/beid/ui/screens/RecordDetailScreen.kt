@@ -186,7 +186,7 @@ private fun AvailabilityRow(label: String, isAvailable: Boolean, valueModifier: 
                 if (isAvailable) R.string.record_detail_recorded else R.string.record_detail_not_yet_available,
             ),
             style = if (isAvailable) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
-            color = if (isAvailable) BeidTheme.colors.textPrimary else BeidTheme.colors.statusOff,
+            color = if (isAvailable) BeidTheme.colors.textPrimary else BeidTheme.colors.textSecondary,
             modifier = valueModifier,
         )
     }
@@ -194,7 +194,9 @@ private fun AvailabilityRow(label: String, isAvailable: Boolean, valueModifier: 
 
 @Composable
 private fun AvailabilityDot(isAvailable: Boolean) {
-    val color: Color = if (isAvailable) BeidTheme.colors.proofSeal else BeidTheme.colors.statusOff
+    // Matches iOS TransparencyView's availability mark after #628:
+    // proofSeal → textPrimary, statusOff's gray → textSecondary.
+    val color: Color = if (isAvailable) BeidTheme.colors.textPrimary else BeidTheme.colors.textSecondary
     val shapeModifier = if (isAvailable) {
         Modifier.background(color = color, shape = CircleShape)
     } else {

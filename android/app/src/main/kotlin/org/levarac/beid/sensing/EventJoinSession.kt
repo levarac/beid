@@ -135,6 +135,14 @@ interface EventJoinSession {
     /** Starts passive nearby-event discovery when the EventJoin surface becomes active. */
     fun startNearbyEventDiscovery()
 
+    /**
+     * Ends passive nearby-event discovery when Now stops being the visible,
+     * active surface (iOS #795 `stopNearbyEventDiscovery()` from
+     * `updateHomeStandby`). Never stops a joined session's scan: the caller
+     * only invokes it while no join is in flight and nothing is sensing.
+     */
+    fun stopNearbyEventDiscovery()
+
     fun joinEvent(code: String)
 
     /**
@@ -169,6 +177,15 @@ interface EventJoinSession {
     fun bindBluetoothPermissionResult(onResult: ((BluetoothPermissionState) -> Unit)?) = Unit
 
     /**
+     * Re-reads the runtime permission (Settings may have changed it while the
+     * app was away) and returns the new [bluetoothPermissionState].
+     */
+    fun refreshBluetoothPermissionState(): BluetoothPermissionState = bluetoothPermissionState
+
+    /** The host's live radio power state, forwarded on every change. */
+    fun onBluetoothRadioChanged(isOn: Boolean) = Unit
+
+    /**
      * Manual trigger for `RECORDING -> SIGNAL_LOST` (beid#120) — Android has
      * no real BLE signal-loss *detection* yet, only this explicit action,
      * mirroring iOS's `SensingCoordinator.simulateSignalLost()`. A no-op
@@ -186,15 +203,14 @@ interface EventJoinSession {
     fun resumeSensing()
 
     /**
-     * Leaves the currently-joined event — the Account screen's "Leave Event"
-     * action (beid#126). Mirrors iOS's `SensingCoordinator.leaveEvent()`
+     * Leaves the currently-joined event after the sensing UI's Stop flow has
+     * applied its confirmation policy. Mirrors iOS's `SensingCoordinator.leaveEvent()`
      * (`engine.leaveEvent()` + resetting `joinedEventCode`), adapted for this
      * session's richer local state (a [ScanPhase] and device-accounting
      * bookkeeping iOS's simple `joinedEventCode: String?` doesn't carry): the
      * production implementation calls the SDK's `leaveEvent()` and then
      * resets native bookkeeping back to [EventJoinUiState.Idle] so the UI
-     * reflects "no active session" afterward. Callers gate this action's
-     * availability on session activity themselves — see [state].
+     * reflects "no active session" afterward.
      */
     fun leaveEvent()
 

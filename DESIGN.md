@@ -67,12 +67,30 @@ weight iOS is — that weighting is exactly the open decision above.
 > immediately after it (verified against current Android source, not by
 > analogy).
 >
-> **Flat 2b (2026-09-22):** the Flat 2b authority below binds iOS now
-> (owner: iOS first). Android's theme files still implement the superseded
-> values; that is not a violation until an Android follow-up is scheduled,
-> and as of 2026-09-22 no Android Flat 2b issue exists. The bindingness
-> question in `docs/decisions/issue-339-design-md-android-scope.md` is not
-> decided by this change.
+> **Flat 2b (2026-09-22; Android foundation 2026-11-18):** the Flat 2b
+> authority below bound iOS first (owner: iOS first). Until 2026-11-18
+> Android's theme files implemented the superseded values, which was not a
+> violation while no Android follow-up was scheduled. On 2026-11-18 the
+> owner started that follow-up, design foundation first (DECISIONS.md,
+> 2026-11-18). Android's `ui/theme/` now carries the Flat 2b foundation:
+> the 13 Library colors and the 17 `DS.Color` roles under iOS's names
+> (`Color.kt`); a single appearance with no dark palette (`Theme.kt`); the
+> `DS.Space`/`DS.Radius` values, including `pageMargin` 24,
+> `emptyBlockVertical`, `emptyBlock` and `nowCard` (`Spacing.kt`); and the
+> eight iOS font files bundled byte-identical as static cuts
+> (`res/font/`, licences in `assets/licenses/`) with the 17 Library text
+> styles and 8 roles under iOS's names and values (`Type.kt`). Two
+> typography choices are Android's own, by decision (DECISIONS.md,
+> 2026-11-18): line heights take the spec value on every API level, and
+> sizes are plain `sp`, without emulating Apple's text-style curves (§6).
+> Still missing on Android: the Sigil and radar; the Flat 2b screens
+> (missing screens and Flat 2b layouts); the Flat 2b components
+> (`Button/Primary`, `Row/List`, `Row/KeyValue`, `Label/Section`,
+> `Block/Empty`); the `DS.Size`/`DS.Layout`/`DS.Onboarding`/`DS.Motion`
+> tokens that belong to those; and the behavior changes (a user-started
+> scan on Home, background sensing after Close). The bindingness question
+> in `docs/decisions/issue-339-design-md-android-scope.md` is not decided
+> by this change either.
 
 DESIGN.md documents **rules**; repo artifacts hold **values**.
 
@@ -89,8 +107,8 @@ beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
   current actions; Records owns saved records and events. On iOS, the
   primary nearby candidate card is the join control (#858, maintainer
   decision 2026-11-23). It becomes tappable after registry verification
-  and retains the 20pt `DS.Radius.nowCard`. Now's DO THIS NOW and FROM THE
-  ORGANIZER tiles use Flat 2b fills and a 12pt radius (`DS.Radius.control`).
+  and retains the 20pt `DS.Radius.nowCard`. Now's DO THIS NOW tile uses
+  Flat 2b fills and a 12pt radius (`DS.Radius.control`).
   Records shows one Attendance per event, preserving its stored recording
   sessions inside the existing detail routes.
 - The earlier Flat 2b Screens and Liquid Glass-era Fixed layouts are
@@ -186,19 +204,19 @@ ever shown as red text on `bg`, it fails AA (3.41:1, §5).
 
 **Android counterparts** (verified against
 `android/app/src/main/kotlin/org/levarac/beid/ui/theme/` and
-`ui/designsystem/`, 2026-09-07):
+`ui/designsystem/`, 2026-09-07; the theme rows rechecked 2026-11-18):
 
 - `Tokens.swift`'s `DS` namespace → split across three files rather than
   one namespace: `ui/theme/Color.kt` (`BeidPalette` primitives +
   `BeidColorScheme`), `ui/theme/Spacing.kt` (`BeidSpacing`/`BeidRadius`/
-  `BeidSize`), `ui/theme/Type.kt` (`BeidTypography`). Screens read through
-  `BeidTheme.colors.*` (`ui/theme/Theme.kt`), the Compose analogue of `DS.*`
-  usage.
-- `Colors.xcassets`'s adaptive colorsets → no asset-catalog equivalent
-  exists on Android. `BeidPalette` in `Color.kt` holds separate `*Light`/
-  `*Dark` `Color(0x...)` constants, and `BeidAppTheme` in `Theme.kt`
-  (`if (darkTheme) DarkBeidColors else LightBeidColors`) selects between
-  them at composition time — a conditional branch, not a per-asset variant.
+  `BeidSize`), `ui/theme/Type.kt` (`BeidFont.Library` styles and
+  `BeidFont` roles, mapped into Material3 as `BeidTypography`). Screens
+  read through `BeidTheme.colors.*` (`ui/theme/Theme.kt`), the Compose
+  analogue of `DS.*` usage.
+- `Colors.xcassets`'s colorsets → no asset-catalog equivalent exists on
+  Android. `BeidPalette` in `Color.kt` holds the 13 Library colors as
+  single `Color(0x...)` constants, and `BeidAppTheme` in `Theme.kt`
+  provides the one `BeidColors` scheme — no dark branch (2026-11-18).
 - `.swiftlint.yml` → **does not exist yet.** No detekt or ktlint
   configuration exists anywhere under `android/` as of this writing. See
   §16's new enforcement-asymmetry note below — this is not a missing-file
@@ -345,10 +363,11 @@ document enforces nothing.
    (`ui/theme/Spacing.kt`); same `0`/`1.dp` hairline exception.]**
 4. MUST: Corner radii use `DS.Radius.*`. **[Android counterpart:
    `BeidRadius.*` (`ui/theme/Spacing.kt`) — verified this file also carries
-   `BeidRadius.glyph` (24dp). iOS has had the same `DS.Radius.glyph` (24)
-   since #628 folded `BeidDesign.Radius.glyph` into `DS` (§8), so it is no
-   longer an Android-only addition; the two radius sets still differ in
-   iOS's `emptyBlock`/`nowCard` (§8).]**
+   `BeidRadius.glyph` (24dp). #628 folded `BeidDesign.Radius.glyph` into
+   `DS.Radius.glyph`, and #631 removed it from `Tokens.swift` with the
+   icons, so `BeidRadius.glyph` is an Android-only token; every other
+   `DS.Radius` value, `emptyBlock`/`nowCard` included, has had an equal
+   `BeidRadius` value since 2026-11-18 (§8).]**
 5. MUST: Every interactive element has a hit region ≥ 44×44 pt
    (`DS.Size.minHitTarget`). **[iOS-only as written: 44×44pt is Apple's
    Human Interface Guidelines minimum, not a unit-converted number.
@@ -370,8 +389,9 @@ document enforces nothing.
    is built on text styles, not fixed sizes). **[Android counterpart: every
    `BeidTypography` role is a Material3 `TextStyle` reached via
    `MaterialTheme.typography.*`, which scales with the user's Android font
-   size setting the same way Dynamic Type scales with iOS's — see
-   `Type.kt`'s own role-mapping table.]**
+   size setting as plain `sp` — Android does not emulate the Apple
+   text-style curves `DS.Font` scales on (DECISIONS.md, 2026-11-18; §6) —
+   see `Type.kt`'s own role-mapping table.]**
 7. MUST: Every screen renders correctly in the single Flat 2b appearance,
    whatever the OS dark-mode setting is; the app does not follow it (§14,
    #632).
@@ -548,7 +568,7 @@ Three tiers:
    is the only tier Views may use. `DS.Color` names a role, and several
    roles may point at one primitive (`textPrimary` and `actionPrimary` are
    both `ink`; §5). **[Android counterpart:
-   `BeidTheme.colors.signalActive`, `BeidSpacing.m`, `BeidTypography`'s
+   `BeidTheme.colors.statusOn`, `BeidSpacing.m`, `BeidTypography`'s
    roles via `MaterialTheme.typography.*`. Two gaps verified, not
    invented: Android has no named token equivalent to `DS.Size.minHitTarget`
    (§2 rule 5) and no motion-token namespace equivalent to `DS.Motion.*`
@@ -571,8 +591,8 @@ Rules:
   table today has no Android column (see §17's own note below).]**
 - MUST: Token names describe role, not appearance (`statusOn`, not
   `semanticGreen`). **[Platform-neutral naming principle; Android's existing
-  names already follow it (`signalActive`, `actionPrimary`, etc. —
-  verified `Color.kt`).]**
+  names already follow it (the 17 `DS.Color` role names, e.g. `statusOn`,
+  `actionPrimary` — verified `Color.kt`, 2026-11-18).]**
 - SHOULD: Prefer reusing an existing semantic token over adding a near-
   duplicate; introduce a new one only when the *role* is genuinely new.
   **[Platform-neutral.]**
@@ -586,20 +606,24 @@ Rules:
 > **Platform scope:** iOS-specific mechanism — Android counterpart named.
 > The palette direction, hex values, and role/allowed/forbidden semantics
 > are platform-neutral content; "adaptive asset colorset" is an iOS-only
-> mechanism (§0). Verified against `ui/theme/Color.kt`: Android's
-> `BeidPalette`/`BeidColorScheme` port every row's exact light/dark hex
-> pair of the superseded token table quoted below **except**
-> `DS.Color.statusCaution`, which has **no Android counterpart** — it is
-> simply absent from `BeidColorScheme`, not renamed or substituted. Since
-> #628 (2026-09-23) iOS no longer has that table: its colors are the Flat
-> 2b tokens below, and `statusCaution`, `signalActive`, `signalWarning`,
-> `proofSeal`, `labelOnWarning`, `labelOnSeal` and `surfaceRaised` exist
-> only on Android, under the superseded palette.
+> mechanism (§0). Verified against `ui/theme/Color.kt` (2026-11-18):
+> Android's `BeidPalette` holds the 13 Library colors below with the same
+> hex values, and `BeidColorScheme` the 17 `DS.Color` roles under the same
+> names, each mapped onto the same primitive as on iOS. The old roles #628
+> removed on iOS (`surfaceRaised`, `signalActive`, `signalWarning`,
+> `proofSeal`, `labelOnWarning`, `labelOnSeal`) were removed on Android on
+> 2026-11-18, their uses moved as the #628 list below says;
+> `DS.Color.statusCaution` never had an Android counterpart.
 >
-> **Flat 2b (2026-09-22):** the Flat 2b palette below binds iOS now (owner:
-> iOS first). The Android statements above describe today's Android code,
-> which still implements the superseded palette; that is not a violation
-> until an Android follow-up is scheduled (none exists as of 2026-09-22).
+> **Flat 2b (2026-09-22; Android 2026-11-18):** the Flat 2b palette below
+> bound iOS first (owner: iOS first); Android has carried it since
+> 2026-11-18 (§0). Two Android uses the #628 list did not settle were
+> decided on 2026-11-18 (DECISIONS.md): the dot of `BeidStatusPill`'s
+> Android-only `Neutral` tone is `textPrimary`, with the meaning carried
+> by its label; and the two Canvas illustrations ported from the iOS SVGs
+> (`EncounterFieldPulseGlyph`, `ProofSealMarkGlyph`) draw in
+> `actionPrimary` (ink), not the old teal and violet those SVGs still
+> carry, until the radar and screen work replaces them.
 
 **Flat 2b palette (owner decision 2026-09-22, beid#627,
 [D-627](docs/decisions/issue-627-flat-2b.md)).** Principles (spec §2):
@@ -794,9 +818,10 @@ they cite are the current ones, since #628):
   control gets an explicit `DS.Color.*` tint, and the app-level accent is
   `actionPrimary`. FORBIDDEN: `.tint(.blue)` (a retired scaffold pattern,
   not precedent). **[Android counterpart: no default Material3 blue as an
-  implicit fallback; `BeidAppTheme`'s `lightColorScheme`/`darkColorScheme`
-  already wire `primary = beidColors.actionPrimary` explicitly
-  (`Theme.kt`), consistent with this rule as verified today — not a gap.]**
+  implicit fallback; `BeidAppTheme`'s single `lightColorScheme` (built by
+  `beidMaterialColorScheme` in `Theme.kt`) wires
+  `primary = colors.actionPrimary` explicitly, consistent with this rule
+  as verified 2026-11-18 — not a gap.]**
 - MAY: System semantic colors (`.primary`, `.secondary`, `Color(.systemRed)`)
   inside `DesignSystem/` as implementation details of a token — never
   directly in Views. **[Android counterpart, as a principle: Material3
@@ -868,10 +893,12 @@ they cite are the current ones, since #628):
 > itself is an iOS namespace. `ui/theme/Type.kt`'s own kdoc already states
 > a role-for-role Material3 mapping, verified below.
 >
-> **Flat 2b (2026-09-22):** the Flat 2b ramp binds iOS now. Android's
-> `BeidTypography` (system fonts) implements the superseded ramp; not a
-> violation until an Android follow-up is scheduled (none exists as of
-> 2026-09-22).
+> **Flat 2b (2026-09-22; Android 2026-11-18):** the Flat 2b ramp bound
+> iOS first. Since 2026-11-18 Android bundles the same eight font files
+> (`res/font/`) and carries the 17 Library styles (`BeidFont.Library`) and
+> the 8 roles (`BeidFont.<role>`) with iOS's names and values in
+> `Type.kt`; the Android counterpart after the ramp gives the Material3
+> mapping and the two choices that are Android's own.
 
 **Flat 2b type (owner decision 2026-09-22, beid#627,
 [D-627](docs/decisions/issue-627-flat-2b.md)).** Three families, all
@@ -1073,18 +1100,29 @@ older systems match.
 > | `DS.Font.ledgerMono` | `.footnote` monospaced | Addresses, hashes, proof IDs | Ledger Trace motif only |
 > | `DS.Font.cta` | `.headline` | Primary CTA labels | Label color per §5's CTA-label rule (never the style default white) |
 
-**Android counterpart** (verified `ui/theme/Type.kt`, `BeidTypography`):
-`screenTitle` → `headlineLarge`, `ceremonyTitle` → `headlineMedium`,
-`sectionTitle` → `titleLarge`, `cardTitle` → `titleMedium`, `body` →
-`bodyLarge`, `supporting` → `bodyMedium`, `meta` → `labelSmall`,
-`ledgerMono` → `bodySmall` (monospace `FontFamily`), `cta` → `labelLarge`.
-Reached as `MaterialTheme.typography.*`, the same way `DS.Font.*` is
-reached on iOS. This mapping already exists in the codebase's own kdoc —
-this document did not have to invent it. *(#629, 2026-09-23: the iOS side
-of the `ceremonyTitle` → `headlineMedium` pair no longer exists — the role
-was removed as callerless. Android's `Type.kt` is unchanged and still
-names it; Android is out of #629's scope, and its Flat 2b follow-up is
-still unscheduled.)*
+**Android counterpart** (verified `ui/theme/Type.kt`, 2026-11-18): the
+17 Library styles are `BeidFont.Library.*` and the 8 roles `BeidFont.*`,
+with iOS's names and values. The roles map into Material3's
+`BeidTypography`: `screenTitle` → `headlineLarge`, `sectionTitle` →
+`titleLarge`, `cardTitle` → `titleMedium`, `body` → `bodyLarge`,
+`supporting` → `bodyMedium`, `meta` → `labelSmall`, `ledgerMono` →
+`bodySmall`, `cta` → `labelLarge`. Reached as `MaterialTheme.typography.*`,
+the same way `DS.Font.*` is reached on iOS. The seven Material3 slots with
+no `DS.Font` role were set on 2026-11-18 (DECISIONS.md) to the style of
+the iOS screen that corresponds to each caller: `headlineMedium` →
+`display52`, `headlineSmall` → `title19`, `titleSmall` → `title15`,
+`displayMedium` → `display46`, `displaySmall` → `displayNumber40`,
+`displayLarge` → `display60`, `labelMedium` → `body13`; a slot with no
+caller holds a provisional value. Unlike a plain `.font(DS.Font.role)` call
+site on iOS (the TRANSITIONAL GAP above), a slot carries the whole Library
+style, tracking and line height included; case cannot travel through a
+slot, and no slot maps to an uppercase style. Two choices are Android's
+own (DECISIONS.md, 2026-11-18): line height is the spec value on every API
+level (Compose `em` with `LineHeightStyle`), with no counterpart to the
+iOS 17–25 limit #661 records; and sizes are plain `sp`, scaled by the
+system font-size setting, without emulating the Apple text-style curves.
+`ceremonyTitle`, removed on iOS by #629, has no Android counterpart
+either.
 
 Rules:
 
@@ -1112,14 +1150,11 @@ Rules:
 ## 7. Spacing, Layout, Safe Areas
 
 > **Platform scope:** iOS-specific mechanism — Android counterpart named.
-> Verified `ui/theme/Spacing.kt`: Android's `BeidSpacing` ports the exact
-> same six values, in dp instead of pt (`xs 4.dp / s 8.dp / m 16.dp /
-> l 24.dp / xl 32.dp / xxl 48.dp`) — a direct 1:1 port of the base scale,
-> not just a same-shaped scale. It is **no longer** a 1:1 port of
-> `pageMargin`: Android's is still `32.dp`, iOS's has been 24 since #628,
-> and Android has no `emptyBlockVertical`. Per §0's Flat 2b note, Android's
-> superseded values are not a violation until an Android follow-up is
-> scheduled.
+> Verified `ui/theme/Spacing.kt` (2026-11-18): Android's `BeidSpacing`
+> carries the same values as `DS.Space`, in dp instead of pt (`xs 4.dp /
+> s 8.dp / m 16.dp / l 24.dp / xl 32.dp / xxl 48.dp`, `pageMargin 24.dp`,
+> `emptyBlockVertical 40.dp`). Until 2026-11-18 Android's `pageMargin` was
+> `32.dp` and it had no `emptyBlockVertical`.
 
 4 pt base scale in `DS.Space`: `xs 4 / s 8 / m 16 / l 24 / xl 32 / xxl 48`,
 plus `DS.Space.pageMargin` (24) for full-width content and bottom CTAs,
@@ -1253,9 +1288,9 @@ static Figma geometry when fitting the available space or preserving actions.
 > states this directly in the code).
 >
 > **Flat 2b (2026-09-22):** the Flat 2b surface rules below bind iOS now.
-> Android's `beidSurface` (matte `surfaceRaised` + hairline) is already
-> glass-free; its values are the superseded palette, not a violation until
-> an Android follow-up is scheduled (none exists as of 2026-09-22).
+> Android's `beidSurface` is glass-free; since 2026-11-18 it is a
+> `surfaceCanvas` fill plus a 1dp `strokeHairline` border, the same
+> treatment as iOS's (`surfaceRaised` was removed, §5).
 
 **Flat 2b surfaces (owner decision 2026-09-22, beid#627,
 [D-627](docs/decisions/issue-627-flat-2b.md); implementation #630):**
@@ -1341,9 +1376,10 @@ icons. The same fold moved `BeidDesign.Radius.card` (18) to
 radius (§7's token-fold note).
 
 **[Android counterpart, verified `ui/theme/Spacing.kt`'s `BeidRadius`:**
-`control 12.dp / card 16.dp / seal 28.dp / pill 999.dp / glyph 24.dp` — an
-exact 1:1 port of those five (`glyph 24.dp` is `BeidGlyph`'s icon roundel
-there too). Android has no `emptyBlock` or `nowCard`. **iOS-only as written:**
+`control 12.dp / card 16.dp / seal 28.dp / pill 999.dp / emptyBlock 16.dp /
+nowCard 20.dp` — equal to `DS.Radius` since 2026-11-18 — plus
+`glyph 24.dp`, `BeidGlyph`'s icon roundel, an Android-only token
+(`Tokens.swift` has had no `DS.Radius.glyph` since #631). **iOS-only as written:**
 `style: .continuous` names SwiftUI's continuous/squircle corner curve;
 Compose's `RoundedCornerShape` (what `BeidRadius` values are consumed
 through, e.g. `BeidSurface.kt`) is a standard circular-arc rounded
@@ -1362,10 +1398,10 @@ difference, not just an API rename.**]**
 - SHOULD: Separation via a `strokeHairline` hairline and whitespace, not
   heavy drop shadows. Beid surfaces are matte and physical, not floaty.
   **[Android counterpart, verified consistent: `Modifier.beidSurface`
-  (`BeidSurface.kt`) is exactly `surfaceRaised` background + 1dp
+  (`BeidSurface.kt`) is exactly a `surfaceCanvas` background + 1dp
   `strokeHairline` border — no shadow API used anywhere in
-  `ui/designsystem/`. Android keeps `surfaceRaised` under the superseded
-  palette (§5).]**
+  `ui/designsystem/`. Android removed `surfaceRaised` on 2026-11-18
+  (§5).]**
   *Flat 2b note (2026-09-22): "material" no longer qualifies; elevation is
   hairline and whitespace only, and shadows are FORBIDDEN (above).*
 
@@ -1760,9 +1796,10 @@ and deliberately omitted empty sections are not empty-state layouts.
   `DS.Color.statusPending` (dot). **[Android counterpart: the same roles
   by Android name — `BeidSpacing.m`/`.s`, `BeidSize.statusDot`,
   `BeidRadius.pill` via `beidSurface`, `MaterialTheme.typography.bodyMedium`,
-  `BeidTheme.colors.textSecondary`/`.signalActive`/`.signalWarning` —
-  verified 1:1 in `BeidStatusPill.kt`; the dots keep the superseded
-  palette's `signalActive`/`signalWarning` there (§5).]**
+  `BeidTheme.colors.textSecondary`/`.statusOn`/`.statusPending` —
+  verified 1:1 in `BeidStatusPill.kt` (2026-11-18). The dots of Android's
+  two extra tones are `textPrimary`: `Sealed` by #628's `proofSeal` rule,
+  `Neutral` by the 2026-11-18 decision (§5).]**
 - States: `.sensingAutomatically` (active, `statusOn` dot) /
   `.sensingPaused` (pending — waiting for the signal to return —
   `statusPending` dot; rendered in `SignalLostView`). Label color never
@@ -1860,8 +1897,8 @@ and deliberately omitted empty sections are not empty-state layouts.
   the badge fill; that would fight whatever tint the screen sets.
   **[Android counterpart: same pairing rule, enforced by the caller
   instead of an ambient tint — verified `BluetoothOffScreen` passes
-  `signalWarning`/`labelOnWarning` explicitly together (Android's
-  superseded palette, §5).]**
+  `actionPrimary`/`labelOnActionPrimary` explicitly together
+  (2026-11-18, §5).]**
 
   > **Superseded by #628 (2026-09-23).** `signalWarning` and
   > `labelOnWarning` were removed on iOS, and `BluetoothOffView` now uses
@@ -2108,6 +2145,7 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   collection-home screen yet." Promoting a screen to this role is
   explicitly deferred to #141 (per `Screen.kt`/`RecordsScreen.kt`'s own
   kdoc), not something this document should describe as already true.]**
+- **Now registration period**: show the verified date range inside the nearby-event card. Organizer messaging is outside the product scope, so the standalone organizer tile shown in Figma is omitted.
 - **Sensing detail (05–07)**: push from the Now tab's `NavigationStack`.
   The native Back button and interactive pop gesture return to Now without
   ending participation, changing the live session, or stopping its radio.
@@ -2517,8 +2555,8 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 - MUST: Contrast ≥ WCAG AA for text against its actual background in the
   single appearance (verify against `surfaceCanvas`, `surfaceTile` *and*
   the `ink` ground; measured ratios in §5). **[Platform-neutral; applies
-  against Android's own hex pairs (§5, still the superseded palette) the
-  same way.]**
+  against Android's values (§5; the same Flat 2b values since 2026-11-18)
+  the same way.]**
 
   > **Superseded by #628 (2026-09-23).** `DS.Color.surfaceRaised` was
   > removed (§5), and the Flat 2b annotation above already read this rule
@@ -2548,7 +2586,7 @@ Acceptance criteria for every component and screen, not post-hoc QA:
   motion-reduction setting, not currently read anywhere in this codebase —
   a real gap, not a mechanism gap. "Reduce Transparency" has no Android
   analogue to name yet, since Android has no glass/transparency material
-  at all (§8a) — `beidSurface` is unconditionally solid `surfaceRaised`
+  at all (§8a) — `beidSurface` is unconditionally solid `surfaceCanvas`
   already, so this half of the rule is trivially satisfied, not
   unaddressed.]**
 
@@ -2578,10 +2616,12 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 > setting, and previews show that appearance" principle is
 > platform-neutral.
 >
-> **Flat 2b (2026-09-22):** single appearance binds iOS now. Android's
-> `BeidAppTheme` still follows `isSystemInDarkTheme()`; that is not a
-> violation until an Android follow-up is scheduled (none exists as of
-> 2026-09-22).
+> **Flat 2b (2026-09-22; Android 2026-11-18):** single appearance bound
+> iOS first. Since 2026-11-18 Android has one appearance too:
+> `BeidAppTheme` has no dark scheme and does not read
+> `isSystemInDarkTheme()`, and the sensing stop confirmation is no longer
+> wrapped in a forced-dark theme — it draws its `ink` ground with the role
+> tokens iOS's `SensingStopConfirmView` uses.
 
 **Flat 2b: single appearance (owner decision 2026-09-22, beid#627,
 [D-627](docs/decisions/issue-627-flat-2b.md); implementation #632).**
@@ -2777,11 +2817,12 @@ lives in `AGENTS.md`.
   > verbatim for history and for any future widening of the locale set;
   > the term choice itself was not overturned.
 
-- Welcome uses the exact headline "Record you were there." and subtitle
-  "Your phones say hello to each other, and keep a note anyone can verify."
-  These are the approved Welcome exception to the general presence-copy
-  caution. Other copy describes observations, explicit joining and foreground
-  sensing without promising background operation.
+- On iOS, Welcome uses the exact headline "Record you were there." and subtitle
+  "Nearby devices say hello to each other, and keep a note anyone can verify."
+  Android uses the exact line "Record you were there." (`welcome_subtitle`)
+  beneath the app name. These are the approved Welcome exceptions to the general
+  presence-copy caution. Other copy describes observations, explicit joining
+  and foreground sensing without promising background operation.
 - Vocabulary: "record", "participation record", "encounter", "event", "sense/sensing", "collect",
   "seal", "verify". A record is **collected** or **sealed**, never "minted",
   "dropped", or "claimed". **[Platform-neutral; Android's actual strings
@@ -2877,9 +2918,9 @@ lives in `AGENTS.md`.
 > [D-627](docs/decisions/issue-627-flat-2b.md)):** the checklist was updated
 > for Flat 2b on iOS. The "SF Symbols" mechanism named above is superseded
 > by §12's no-icons rule, and "light and dark" by §14's single appearance;
-> Android PRs keep substituting their own counterparts, and Android's
-> superseded palette is not a violation until an Android follow-up is
-> scheduled. The pre-Flat 2b checklist is at `git show 25dec6b:DESIGN.md`
+> Android PRs keep substituting their own counterparts. Android has carried
+> the Flat 2b palette and the single appearance since 2026-11-18 (§0). The
+> pre-Flat 2b checklist is at `git show 25dec6b:DESIGN.md`
 > (lines 1488-1502).
 
 Copy-paste this into every UI PR description and check each item:
@@ -3104,46 +3145,47 @@ minimums (§6). Removed by #628: `DS.Color.surfaceRaised`, `signalActive`,
 `DS.Size.qrCode` (220 pt, `WalletConnectPairingView`); `Tokens.swift` had
 no such token at f9e9251, so the row was dropped.)
 
-**Android counterparts, verified against `ui/theme/{Color.kt,Spacing.kt,
-Type.kt}` (2026-09-07; names rechecked against `Color.kt`/`Spacing.kt`
-2026-09-23). Android's theme still implements the superseded palette and
-values, which is not a violation until an Android follow-up is scheduled
+**Android counterparts, verified against `ui/theme/{Color.kt,Theme.kt,
+Spacing.kt,Type.kt}` (2026-11-18; earlier passes 2026-09-07 and
+2026-09-23). Since 2026-11-18 Android's theme carries the Flat 2b values
 (§0):**
 
-- **Exist today**, same role and name (Android values are the superseded
-  ones): `color.surface.canvas` → `BeidTheme.colors.surfaceCanvas`;
-  `color.text.primary`/`color.text.secondary` → `.textPrimary`/
-  `.textSecondary`; `color.stroke.hairline` → `.strokeHairline`;
-  `color.action.primary` → `.actionPrimary`;
-  `color.status.on`/`color.status.off` → `.statusOn`/`.statusOff` (on
-  Android still the old green / neutral-gray pair, not `semantic/green`/
-  `semantic/red`); `space.m` → `BeidSpacing.m`; `space.page.margin` →
-  `BeidSpacing.pageMargin` (still 32dp, §7); `radius.card` →
-  `BeidRadius.card`; `radius.glyph` → `BeidRadius.glyph`;
-  `size.status.dot` → `BeidSize.statusDot`; `size.bullet.icon`/
-  `size.step.badge` → `BeidSize.bulletIcon`/`.stepBadge`;
-  `type.section.title` → `MaterialTheme.typography.titleLarge` (§6's role
-  mapping).
-- **Removed on iOS by #628, kept on Android** under the superseded
-  palette: `BeidTheme.colors.surfaceRaised`, `.signalActive`,
-  `.signalWarning`, `.proofSeal`, `.labelOnWarning`, `.labelOnSeal`.
-  (`statusCaution` never had an Android counterpart, §5.)
+- **Exist today**, same role, name and value: all 17 color rows →
+  `BeidTheme.colors.surfaceCanvas`, `.surfaceTile`, `.textPrimary`,
+  `.textSecondary`, `.textSecondaryOnInk`, `.strokeHairline`,
+  `.strokeHairlineOnInk`, `.strokeEmptyState`, `.chartDetected`,
+  `.graphNodeIdle`, `.actionPrimary`, `.labelOnActionPrimary`,
+  `.actionInverse`, `.labelOnActionInverse`, `.statusOn`,
+  `.statusPending`, `.statusOff`; `space.m` → `BeidSpacing.m`;
+  `space.page.margin` → `BeidSpacing.pageMargin` (24dp, §7);
+  `space.emptyBlock.vertical` → `BeidSpacing.emptyBlockVertical`;
+  `radius.card`/`radius.emptyBlock`/`radius.nowCard` →
+  `BeidRadius.card`/`.emptyBlock`/`.nowCard`; `size.status.dot` →
+  `BeidSize.statusDot`; `size.step.badge` → `BeidSize.stepBadge`;
+  `type.screen.title`/`type.section.title`/`type.ledger.mono` →
+  `BeidFont.screenTitle`/`.sectionTitle`/`.ledgerMono`, reached as
+  `MaterialTheme.typography.headlineLarge`/`.titleLarge`/`.bodySmall`
+  (§6's role mapping). The rest of `DS.Space`/`DS.Radius` and all 17
+  `DS.Font.Library` styles (`BeidFont.Library.*`) have equal Android
+  values too.
+- **Android-only**, no `DS` counterpart: `BeidRadius.glyph` (24dp),
+  `BeidSize.glyph` (72dp) and `BeidSize.bulletIcon` (32dp).
+- **Removed** on iOS by #628 and on Android on 2026-11-18:
+  `surfaceRaised`, `signalActive`, `signalWarning`, `proofSeal`,
+  `labelOnWarning`, `labelOnSeal`. (`statusCaution` never had an Android
+  counterpart, §5.)
 - **Do not exist yet** (honest gap, not a rename — each depends on a
-  screen or feature Android doesn't have, per §11/§9's notes, or on the
-  Android Flat 2b follow-up that is not scheduled): the ten new Flat 2b
-  colors (`color.surface.tile`, `color.text.secondary.onInk`,
-  `color.stroke.hairline.onInk`, `color.stroke.emptyState`,
-  `color.chart.detected`, `color.graph.node.idle`,
-  `color.label.onActionPrimary`, `color.action.inverse`,
-  `color.label.onActionInverse`, `color.status.pending`);
-  `space.emptyBlock.vertical`; `radius.emptyBlock`/`radius.nowCard`;
-  `size.hairline` and the `size.row.*`/`size.button.primary.*` minimums;
-  the four `layout.*` entries (no regular-width/tablet layout class exists
-  on Android at all — §7); `size.radar.field`/`size.radar.core` (no
-  `SensingView` equivalent); `size.proofCard.artwork`/
-  `size.itemDetail.artwork` (no proof-card/item-detail artwork — §5, §10);
-  `motion.proof.resolve` and `motion.screen.transition` (no
-  `DS.Motion`-equivalent namespace exists — §9).
+  screen, component or feature Android doesn't have yet, §0): the four
+  `layout.*` entries (no regular-width/tablet layout class exists on
+  Android at all — §7); every `size.*` row except `size.status.dot` and
+  `size.step.badge` — `size.hairline`, `size.emptyBlock.dash`, the
+  `size.row.*`/`size.button.primary.*` minimums, `size.observation.chart*`,
+  the `size.radar.*` rows (no `SensingView` equivalent),
+  `size.sensing.sealedSigil`/`size.proofDetail.sigil` (no Sigil), and
+  `size.proofCard.artwork`/`size.itemDetail.artwork` (no
+  proof-card/item-detail artwork — §5, §10); `motion.proof.resolve` and
+  `motion.screen.transition` (no `DS.Motion`-equivalent namespace exists —
+  §9).
 
 ### B. Historical asset inventory
 

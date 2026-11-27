@@ -483,8 +483,10 @@ runs the checked-in UI list and `BeidTests` minus the three deferred suites in t
 In full mode it uploads a tar of `Build/Products` (including `.xctestrun`), then
 **iOS full tests (${{ matrix.lane }})** runs a unit lane and duration-balanced UI
 lanes via `test-without-building`, each with fresh simulator/DerivedData/results.
-`IOS_UI_SHARDS` in the workflow is the single count setting: 5 by default, 2–4
-also supported. At most six macOS jobs run together. Product SHA, Xcode build, SDK
+`IOS_UI_SHARDS` in the workflow is the single count setting: 4 by default. Manual runs can select 4 or 5
+for a same-revision comparison. The shared manifest generator accepts 2–5 partitions,
+including the release nightly's two-part manifest on one runner. The default PR
+matrix requests five macOS test jobs including unit tests. Product SHA, Xcode build, SDK
 and architecture must match before extraction; permissions/symlinks survive tar.
 **Compare proposed UI test selection** uses full-run artifacts to compare a
 screen-based candidate list with observed UI failures. Its JSON is advisory.

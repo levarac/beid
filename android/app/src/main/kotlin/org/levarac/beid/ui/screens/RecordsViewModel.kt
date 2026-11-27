@@ -12,7 +12,7 @@ import org.levarac.beid.persistence.ProofRecordStore
 
 /**
  * Presentation layer over [ProofRecordStore] for [RecordsScreen] — same
- * thin-layer shape as [EventJoinViewModel]/[AccountViewModel]: republishes
+ * thin-layer shape as [EventJoinViewModel]: republishes
  * [ProofRecordStore.recordsFlow], sorted reverse-chronological by
  * [ProofRecord.createdAt] (newest first), the ordering [RecordsScreen]'s
  * flat list expects (beid#121; no event grouping — see [RecordsScreen]'s
