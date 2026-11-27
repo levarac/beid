@@ -129,6 +129,23 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertEqual(workflow_data(workflow_text())["on"]["push"]["paths"].count(
             "scripts/ci_simulator.py"), 1)
 
+    def test_build_overlaps_boot_and_waits_before_first_test_discovery(self) -> None:
+        steps = workflow_data(workflow_text())["jobs"]["build"]["steps"]
+        names = [step.get("name") for step in steps]
+        ordered = [
+            "Create owned simulator", "Boot owned simulator", "Restore Gradle distribution",
+            "Build for testing", "Wait for owned simulator", "Enumerate built tests and compute shards",
+            "Test without rebuilding",
+        ]
+        positions = [names.index(name) for name in ordered]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn('xcrun simctl boot "$SIMULATOR_UDID"', steps[positions[1]]["run"])
+        self.assertNotIn("bootstatus", steps[positions[1]]["run"])
+        wait = steps[positions[4]]
+        self.assertNotIn("if", wait)
+        self.assertEqual(wait["run"].strip(), 'xcrun simctl bootstatus "$SIMULATOR_UDID" -b')
+        self.assertEqual(wait["env"]["SIMULATOR_UDID"], "${{ steps.simulator.outputs.udid }}")
+
     def test_every_device_operation_uses_only_the_create_steps_output(self) -> None:
         text = workflow_text()
         creation = step_data(text, "Create owned simulator")

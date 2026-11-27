@@ -156,7 +156,10 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     The `xcode-27` image uses `/Applications/Xcode_27.2.app` and
     requires the iOS 27.0 runtime. `scripts/ci_simulator.py` creates a new
     simulator for each job and returns its UDID; only that device is booted,
-    tested and deleted, even on failure. Build-for-testing keeps Swift in
+    tested and deleted, even on failure. The build job starts its simulator
+    after selecting the toolchain. Boot overlaps dependency setup and compilation.
+    It waits for the same device before enumerating the compiled tests.
+    Build-for-testing keeps Swift in
     Debug with `SWIFT_OPTIMIZATION_LEVEL=-O` and selects Release Kotlin/Native
     with `BEID_KMP_BUILD_TYPE=Release` for the Beid target's Gradle invocation.
     Smoke runs the checked-in UI list and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`; full runs both complete bundles.
