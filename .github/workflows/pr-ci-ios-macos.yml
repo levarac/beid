@@ -241,6 +241,9 @@ jobs:
   build:
     name: Build iOS test bundles
     needs: [changes, plan]
+    permissions:
+      contents: read
+      actions: read
     # A failed/missing classifier runs the lane. Smoke builds and tests here;
     # full builds once here, then runs the artifact on independent test jobs.
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' }}
@@ -258,11 +261,17 @@ jobs:
     steps:
       - name: Initialize CI output path
         id: initialize
+        env:
+          RELEASE_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'release/1.1.0' }}
         shell: bash
         run: |
           set -euo pipefail
           printf 'attempt=%s\n' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
-          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+          output="$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [[ "$RELEASE_PR" == true ]]; then
+            output="$RUNNER_TEMP/beid-release-build"
+          fi
+          printf 'CI_OUTPUT_ROOT=%s\n' "$output" >> "$GITHUB_ENV"
           # Stable dependency-only location; never cache DerivedData/results.
           printf 'SPM_SOURCE_ROOT=%s\n' "$RUNNER_TEMP/beid-spm/SourcePackages" >> "$GITHUB_ENV"
 
@@ -325,14 +334,15 @@ jobs:
           ./gradlew --version || ./gradlew --version
 
       - name: Save Gradle distribution
-        if: ${{ steps.distribution.outputs.cache-hit != 'true' }}
+        if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.base.ref != 'release/1.1.0') && steps.distribution.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.gradle/wrapper/dists
           key: ${{ steps.distribution.outputs.cache-primary-key }}
 
       - name: Cache KMP dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: kmp
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.gradle/caches/modules-2/files-2.1
@@ -342,7 +352,8 @@ jobs:
           key: beid-ios-kmp-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
 
       - name: Cache SPM checkouts
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: spm
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           # Repository objects keep checkouts' Git alternates valid. Neither
           # SwiftPM build products nor DerivedData are included.
@@ -350,6 +361,12 @@ jobs:
             ${{ env.SPM_SOURCE_ROOT }}/checkouts
             ${{ env.SPM_SOURCE_ROOT }}/repositories
           key: beid-ios-spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
+      - name: Restore release compiler and Kotlin export caches
+        if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'release/1.1.0'
+        uses: ./.github/actions/ios-release-cache
+        with:
+          operation: restore
 
       - name: Install pinned XcodeGen
         shell: bash
@@ -417,6 +434,13 @@ jobs:
             --log "$CI_OUTPUT_ROOT/spm.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
             xcodebuild -resolvePackageDependencies -project ios/Beid.xcodeproj -scheme Beid \
             -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" -onlyUsePackageVersionsFromResolvedFile
+          cache_flags=("GITHUB_ACTIONS=${GITHUB_ACTIONS:-}" "RUNNER_ENVIRONMENT=${RUNNER_ENVIRONMENT:-}"
+                       "BEID_SWIFT_EXPORT_KEY=${BEID_SWIFT_EXPORT_KEY:-}"
+                       "BEID_SWIFT_EXPORT_ENTRY=${BEID_SWIFT_EXPORT_ENTRY:-}")
+          if [[ -n "${BEID_CAS_PATH:-}" ]]; then
+            cache_flags+=(COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES
+                            "COMPILATION_CACHE_CAS_PATH=$BEID_CAS_PATH")
+          fi
           python3 -m scripts.ios_ci_timing --phase build \
             --log "$CI_OUTPUT_ROOT/build.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
             xcodebuild -showBuildTimingSummary \
@@ -429,6 +453,7 @@ jobs:
             -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" \
             -disableAutomaticPackageResolution \
             SWIFT_OPTIMIZATION_LEVEL=-O \
+            "${cache_flags[@]}" \
             BEID_KMP_BUILD_TYPE=Release \
             build-for-testing
 
@@ -639,6 +664,24 @@ jobs:
           set -euo pipefail
           xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true
           xcrun simctl delete "$SIMULATOR_UDID"
+
+      - name: Save KMP dependencies outside release PRs
+        if: (github.event_name != 'pull_request' || github.event.pull_request.base.ref != 'release/1.1.0') && steps.kmp.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches/modules-2/files-2.1
+            ~/.konan/dependencies
+          key: ${{ steps.kmp.outputs.cache-primary-key }}
+
+      - name: Save SPM checkouts outside release PRs
+        if: (github.event_name != 'pull_request' || github.event.pull_request.base.ref != 'release/1.1.0') && steps.spm.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ env.SPM_SOURCE_ROOT }}/checkouts
+            ${{ env.SPM_SOURCE_ROOT }}/repositories
+          key: ${{ steps.spm.outputs.cache-primary-key }}
 
   tests:
     name: iOS full tests (${{ matrix.lane }})
