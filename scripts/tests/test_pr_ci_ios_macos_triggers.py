@@ -19,6 +19,7 @@ EXPECTED_PATHS = [
     'android/gradle/wrapper/**',
     'android/gradle/*.toml',
     'scripts/ci_change_filter.py',
+    'scripts/ios_pr_run_reuse.py',
     'scripts/xcodegen_generate_checked.sh',
     'scripts/resolve_kmp_java_home.sh',
     'scripts/download_xcodegen.sh',
@@ -85,7 +86,7 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
         from scripts.tests.test_merge_group_workflows import render
         data = workflow_data(workflow_text())
         concurrency = data["concurrency"]
-        self.assertEqual(concurrency["cancel-in-progress"], "true")
+        self.assertEqual(concurrency["cancel-in-progress"], "${{ github.event.action != 'ready_for_review' }}")
         self.assertIn("${{ github.event_name }}", concurrency["group"])
         pr = dict(event="pull_request", pr=42, ref="refs/pull/42/merge")
         active = render(concurrency["group"], **pr, action="synchronize")

@@ -26,6 +26,7 @@ on:
       - "android/gradle/wrapper/**"
       - "android/gradle/*.toml"
       - "scripts/ci_change_filter.py"
+      - "scripts/ios_pr_run_reuse.py"
       - "scripts/xcodegen_generate_checked.sh"
       - "scripts/resolve_kmp_java_home.sh"
       - "scripts/download_xcodegen.sh"
@@ -61,7 +62,7 @@ concurrency:
   # A merged PR's ref changes to its base. Keep close in the PR's group;
   # an unrelated label gets its own group so it cannot cancel active tests.
   group: pr-ios-macos-${{ github.event_name }}-${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.number) || github.ref }}${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:full-ui' || github.event.action == 'closed' && github.run_attempt > 1) && github.run_id || '' }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event.action != 'ready_for_review' }}
 
 jobs:
   changes:
@@ -168,10 +169,14 @@ jobs:
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'skipped') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       run: ${{ steps.plan.outputs.run }}
       mode: ${{ steps.test-mode.outputs.mode }}
       matrix: ${{ steps.plan.outputs.matrix }}
+      previous: ${{ steps.previous.outputs.previous }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -193,12 +198,30 @@ jobs:
               --event-name "$EVENT_NAME" --event-path "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check for directly executed PR evidence
+        id: previous
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action == 'synchronize' || github.event.action == 'ready_for_review') && needs.changes.result == 'success' && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false' && github.run_attempt == 1 }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ steps.test-mode.outputs.mode }}
+        run: python3 -m scripts.ios_pr_run_reuse "$MODE" >> "$GITHUB_OUTPUT"
+
+      # This step name records immutable event inputs on the source attempt.
+      - name: iOS plan v1 PR ${{ github.event.number }} base ${{ github.event.pull_request.base.sha }} head ${{ github.event.pull_request.head.sha }} mode ${{ steps.test-mode.outputs.mode }}
+        if: ${{ github.event_name == 'pull_request' && !steps.previous.outputs.previous && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false' }}
+        run: echo "Planning a fresh iOS execution"
+
+      - name: Use prior iOS execution
+        if: ${{ steps.previous.outputs.previous != '' }}
+        run: echo "The aggregate will identify the original run and tested SHA."
+
       - name: Plan bounded test matrix
         id: plan
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           CHANGES_JSON: ${{ toJSON(needs.changes) }}
+          PREVIOUS: ${{ steps.previous.outputs.previous }}
         run: |
           set -euo pipefail
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
@@ -208,7 +231,7 @@ jobs:
           if count not in (4, 5):
               raise SystemExit('IOS_UI_SHARDS must be 4 or 5')
           skip = classifier_skip(os.environ['EVENT_NAME'], {'changes': json.loads(os.environ['CHANGES_JSON'])})
-          print(f'run={str(not skip).lower()}')
+          print(f'run={str(not skip and not os.environ.get("PREVIOUS")).lower()}')
           print('matrix=' + json.dumps({'lane': ['unit'] + [f'ui-{i + 1}' for i in range(count)]}))
           PY
 

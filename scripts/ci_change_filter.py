@@ -165,6 +165,24 @@ def _requires_full_ios(path: str) -> bool:
     return not normalized.startswith(IOS_SMOKE_PREFIXES)
 
 
+def safe_ios_reuse_changes(files: object) -> bool:
+    """Prove an entire GitHub compare delta is independent of an iOS run."""
+    if not isinstance(files, list) or not 0 < len(files) < 300:
+        return False
+    for entry in files:
+        if not isinstance(entry, dict) or entry.get("status") not in ("added", "modified") or entry.get("previous_filename"):
+            return False
+        path = entry.get("filename")
+        if not isinstance(path, str) or _malformed_path(path) or _affects_ios(path):
+            return False
+        # Markdown interspersed with application or build inputs can be a
+        # bundled resource. Limit inherited evidence to known independent roots.
+        if not (path.startswith(("docs/", "android/app/src/", LAB_CLI_PREFIX))
+                or "/" not in path and path.endswith((".md", ".mdx"))):
+            return False
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=pathlib.Path)

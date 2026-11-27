@@ -113,8 +113,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     On a PR update, classification compares the event's base and head. A PR
     that only edits `docs/delivery-ci.md` skips the iOS build and still runs
     the documentation drift check in Repository sanity. If the PR also changes
-    UI tests, a final commit that only edits this document still triggers the
-    iOS build and tests on the new head.
+    UI tests, a final commit that only edits this document still requires iOS
+    evidence. On a synchronize event the planner can carry an earlier execution
+    under the rules below. Otherwise it builds and tests the new head.
     `android/settings.gradle.kts` includes only `:app` and `:shared`, with the
     latter mapped to `../shared`; `shared/build.gradle.kts` has no dependency
     on `:app`. `ios/project.yml` invokes only the shared Swift Export task,
@@ -227,15 +228,33 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     integration (not configured in CI). Both modes keep these tests selected;
     each must exist and report Skipped. A listed test that passes fails as stale.
 
-    The exact required name `iOS simulator` belongs to an `if: always()` Ubuntu
+    The exact required name `iOS simulator` belongs to the Ubuntu
     aggregate. Full requires successful plan/build/matrix jobs, every expected
     shard artifact, and no repeated or unassigned UI case. Every enumerated test
     is checked; anything not on the per-environment skip list must pass. Missing, failed,
     cancelled or unexpectedly skipped jobs/cases fail the aggregate. Smoke
     requires build/test success in its one job and its exact execution ledger.
-    Only a successful explicit PR classifier skip exempts test execution;
-    merge groups and pushes never take that exception. `cancel-in-progress`
-    remains enabled and no shard result is treated as passing after cancellation.
+    On ready-for-review the workflow waits behind any active execution and can
+    report a completed result from the same PR, head and mode. A recorded
+    failure still fails the check. Adding `ci:full-ui` requests a fresh run.
+
+    On synchronize, the planner looks up this workflow's original run and jobs
+    through the read-only Actions API. Both revisions must belong to the same
+    repository, PR and branch. The source plan must record the same base SHA,
+    its tested head and the requested mode. The first attempt must have completed
+    its build, tests and successful execution ledger. A previous inherited result
+    cannot serve as evidence. The comparison from the tested SHA to the new head
+    must prove direct ancestry and contain fewer than 300 files, all added or
+    modified. Allowed changes are independent documentation, Android app sources
+    or standalone lab CLI inputs, subject to the iOS build-input checks. PRs
+    changing build inputs or CI code use fresh execution. The cumulative PR
+    may change Swift app/test sources, shared Kotlin sources and independent
+    paths. Forks, incomplete metadata and lookup
+    failures fall back to fresh execution. The check summary names the current
+    head, tested SHA, run, attempt and mode. An explicit classifier skip remains
+    a separate outcome. Merge groups, main pushes, nightly and manual runs
+    always execute. A source run from before base provenance was recorded
+    can only satisfy an identical-head ready check.
 
     Both modes upload `ios-evidence-<attempt>-<lane>` artifacts: enumeration,
     manifest, xcresult tree/schema/summary, per-case durations, and build logs/

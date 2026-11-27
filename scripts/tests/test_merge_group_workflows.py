@@ -85,7 +85,12 @@ class MergeGroupWorkflowTest(unittest.TestCase):
                 ]
                 groups = [render(group, **context) for context in contexts]
                 self.assertEqual(len(set(groups)), len(contexts))
-                self.assertIn("  cancel-in-progress: true\n", text)
+                if name == "pr-ci-ios-macos.yml":
+                    cancel = workflow_data(text)["concurrency"]["cancel-in-progress"]
+                    self.assertEqual(render(cancel, event="pull_request", ref="pr", action="ready_for_review"), "False")
+                    self.assertEqual(render(cancel, event="pull_request", ref="pr", action="synchronize"), "True")
+                else:
+                    self.assertIn("  cancel-in-progress: true\n", text)
 
     def test_checkout_uses_merge_group_sha_and_retains_pr_head(self):
         for name in NAMES:
