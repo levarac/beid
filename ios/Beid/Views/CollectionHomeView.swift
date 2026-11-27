@@ -17,14 +17,18 @@ struct CollectionHomeView: View {
         .tabItem { Label("records.title", systemImage: "square.grid.2x2") }
         .tag(HomeTab.records)
     }
-    .sheet(isPresented: $coordinator.accountSheetPresented) {
+    .sheet(isPresented: $coordinator.accountSheetPresented, onDismiss: {
+      if !coordinator.accountSheetPresented { coordinator.accountSheetUntilDismissed = false }
+    }) {
       AccountSheetView()
         .environmentObject(coordinator)
         .presentationDragIndicator(.visible)
         .tint(DS.Color.actionPrimary)
         .presentationBackground(DS.Color.textPrimary)
     }
-    .sheet(isPresented: $coordinator.homeEventCodeSheetPresented) {
+    .sheet(isPresented: $coordinator.homeEventCodeSheetPresented, onDismiss: {
+      if !coordinator.homeEventCodeSheetPresented { coordinator.homeEventCodeSheetUntilDismissed = false }
+    }) {
       HomeEventCodeEntrySheet().environmentObject(coordinator)
     }
   }
@@ -242,9 +246,6 @@ private struct NowHomeView: View {
             .beidTextStyle(DS.Font.Library.body13)
             .foregroundStyle(DS.Color.textSecondary)
         }
-        if let card = nearby.cards.first, let registration = coordinator.homeRegistration(for: card) {
-          organizerTile(registration)
-        }
         if coordinator.homeStandby.offersCodeEntry(at: coordinator.homeStandbyNow) {
           BeidTextControl("ENTER EVENT CODE", glyph: .trailing("→", announcing: "Enter event code")) {
             coordinator.homeEventCodeSheetPresented = true
@@ -305,7 +306,8 @@ private struct NowHomeView: View {
   }
 
   private func candidateCard(_ card: NearbyEventCard) -> some View {
-    Button {
+    let period = coordinator.homeRegistration(for: card).map(registrationPeriod)
+    return Button {
       BeidDesign.haptic()
       coordinator.joinNearbyEventFromHome(card)
     } label: {
@@ -321,6 +323,12 @@ private struct NowHomeView: View {
         Text(candidateRegistrationStatus(card))
           .beidTextStyle(DS.Font.Library.labelMono10)
           .foregroundStyle(DS.Color.textSecondaryOnInk)
+        if let period {
+          Text(verbatim: period)
+            .beidTextStyle(DS.Font.Library.body13)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+        }
       }
       .foregroundStyle(DS.Color.labelOnActionPrimary)
       .padding(DS.Space.l)
@@ -331,6 +339,7 @@ private struct NowHomeView: View {
     .buttonStyle(.plain)
     .disabled(card.joinActionEventCodeHashHex == nil)
     .accessibilityLabel(candidateAccessibilityLabel(card))
+    .accessibilityValue(Text(verbatim: period ?? ""))
     .accessibilityIdentifier("home.nearby.join.\(card.eventCodeHashHex)")
   }
 
@@ -447,7 +456,6 @@ private struct NowHomeView: View {
         title: "Stay nearby. Keep the app open.",
         body: "Keeping beid open helps nearby devices observe each other and keep signed records."
       )
-      if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
     }
     .foregroundStyle(foreground)
     .accessibilityElement(children: .contain)
@@ -515,7 +523,6 @@ private struct NowHomeView: View {
         showWhatWeSend = true
       }
       .accessibilityIdentifier("home.saved.what-was-sent")
-      if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
       lookForEventsButton
     }
     .foregroundStyle(foreground)
@@ -565,21 +572,12 @@ private struct NowHomeView: View {
                 in: RoundedRectangle(cornerRadius: DS.Radius.control))
   }
 
-  private func organizerTile(_ registration: HomeEventRegistration) -> some View {
-    VStack(alignment: .leading, spacing: DS.Space.s) {
-      Text("FROM THE ORGANIZER").beidTextStyle(DS.Font.Library.labelMono10)
-      Text(verbatim: registration.name).beidTextStyle(DS.Font.Library.title17)
-      Text(String(
-        localized: "now.organizer.dates",
-        defaultValue: "\(registration.startsAt.formatted(date: .abbreviated, time: .shortened)) – \(registration.endsAt.formatted(date: .abbreviated, time: .shortened))",
-        comment: "The start and end dates in the event's registration."
-      ))
-      .beidTextStyle(DS.Font.Library.body13)
-    }
-    .padding(DS.Space.m)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(DS.Color.surfaceTile,
-                in: RoundedRectangle(cornerRadius: DS.Radius.control))
+  private func registrationPeriod(_ registration: HomeEventRegistration) -> String {
+    String(
+      localized: "now.organizer.dates",
+      defaultValue: "\(registration.startsAt.formatted(date: .abbreviated, time: .shortened)) – \(registration.endsAt.formatted(date: .abbreviated, time: .shortened))",
+      comment: "The start and end dates in the event's registration."
+    )
   }
 
   private func candidateAccessibilityLabel(_ card: NearbyEventCard) -> String {

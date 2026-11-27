@@ -7,8 +7,8 @@ dates). The contract every agent must know before touching delivery files:
 ## PR CI
 
 All pull-request jobs use literal GitHub-hosted labels: `ubuntu-24.04-arm`
-for classification/sanity, `ubuntu-24.04` for Android, `macos-26` for
-SwiftLint and the lab CLI (Xcode 26.5), and `xcode-27` for iOS simulator
+for classification, sanity and SwiftLint, `ubuntu-24.04` for Android,
+`macos-26` for the lab CLI (Xcode 26.5), and `xcode-27` for iOS simulator
 builds and tests (Xcode 27.2). No pull-request workflow receives secrets, including same-repository PRs.
 Removing persistent runner access before public cutover is a separate operator
 step; workflow edits alone cannot prevent a modified fork workflow from
@@ -19,7 +19,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 - **この subsection が repository の PR CI lane 分担の正本。** 実行定義は
   `.github/workflows/pr-ci.yml` にある。現在の `pr-ci` はすべての PR と
   `main` への push、および `merge_group` の `checks_requested` で、
-  GitHub-hosted Linux/macOS 上に次の gate を実行する。
+  変更パス判定、Android build、SwiftLint、Repository sanity の4ジョブを
+  GitHub-hosted の Ubuntu で実行する。iOS シミュレータと lab CLI のビルド・テストは、
+  それぞれ別の workflow が macOS で実行する。
   All three PR build workflows accept `merge_group` without workflow-level
   path filters. In `pr-ci.yml`, Determine changed paths compares the event's
   `merge_group.base_sha...head_sha` using the existing compare/classifier path.
@@ -64,7 +66,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     setup-gradle's PR cache remains read-only. Only `org.robolectric:android-all-instrumented`
     resolves from Google's Maven Central mirror first, then Central when absent.
 
-  - SwiftLint: `scripts/lint.sh` and `scripts/check_lint_fixtures.py`.
+  - SwiftLint runs `scripts/lint.sh` and `scripts/check_lint_fixtures.py` in
+    the digest-pinned SwiftLint 0.65.0 image with its Linux SourceKit runtime.
     The same hosted job proves both lint fixtures: SwiftLint must exit 2,
     every fail marker must match its line and rule exactly, and the pass fixture
     and application must have zero violations. The checker itself exits 0
@@ -95,9 +98,15 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
   - **`.github/workflows/pr-ci-ios-macos.yml`** — `iOS simulator` is the
     hosted iOS PR gate. `pull_request` includes `opened`, `synchronize`,
-    `reopened`, `ready_for_review`, and `labeled` (not `unlabeled`), with no
+    `reopened`, `ready_for_review`, `labeled`, and `closed`, with no
     path filter or draft guard.
-    Thus every PR creates the `iOS simulator` context for branch protection.
+    Adding `ci:full-ui` requests full coverage. Other label additions run only
+    an Ubuntu summary step in an isolated group, even when the PR already has
+    `ci:full-ui`. Closing or merging a PR cancels its outstanding iOS run by
+    entering the same PR-number concurrency group. Both inactive event types
+    expand a single matrix row named `iOS simulator (inactive)`. Only active
+    events expand a row named `iOS simulator`. The inactive row has no checkout,
+    test or artifact step.
     A `Classify paths for iOS lane` job runs the same collection step and
     `scripts/ci_change_filter.py` as `Determine changed paths`; the lane has a
     job-level `if:` driven by an independent `ios` output. Documentation-only
@@ -106,6 +115,12 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     summary only when classification succeeded with `ios=false,error=false`. The only
     non-documentation exclusions are `android/app/src/**` (after build-input
     rules) and the standalone `tools/beid-lab-cli/**`.
+    On a PR update, classification compares the event's base and head. A PR
+    that only edits `docs/delivery-ci.md` skips the iOS build and still runs
+    the documentation drift check in Repository sanity. If the PR also changes
+    UI tests, a final commit that only edits this document still requires iOS
+    evidence. On a synchronize event the planner can carry an earlier execution
+    under the rules below. Otherwise it builds and tests the new head.
     `android/settings.gradle.kts` includes only `:app` and `:shared`, with the
     latter mapped to `../shared`; `shared/build.gradle.kts` has no dependency
     on `:app`. `ios/project.yml` invokes only the shared Swift Export task,
@@ -138,8 +153,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     unchanged. Failed classification or a missing iOS output also runs iOS.
     The lane uses `!cancelled()` so a superseded run does not start a macOS job.
     Main pushes retain their iOS/build-input path filter (including catalogs,
-    classifier and generation guard) and always run the lane; manual dispatch
-    always runs it. Nightly on main runs at 03:23 UTC, away from the busy top
+    classifier and generation guard). A matching push reports the full iOS result
+    and can credit a preceding merge-queue run on the identical commit. Manual
+    dispatch executes the full suite. Nightly on main runs at 03:23 UTC, away from the busy top
     of the hour. All three workflows' concurrency groups include event name
     and ref (or PR number). A queue ref identifies its entry, so queue runs,
     PR synchronizations, main pushes, nightly and dispatch runs cannot cancel
@@ -161,8 +177,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     with `BEID_KMP_BUILD_TYPE=Release` for the Beid target's Gradle invocation.
     Smoke runs the checked-in UI list and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`; full runs both complete bundles.
     Deferred coverage paths, uncertain classifications, and the `ci:full-ui` label
-    select full mode. Merge groups, push,
-    nightly and manual events always run full. On `merge_group`, the optional
+    select full mode. Merge groups, main pushes, nightly and manual events
+    also select full mode. On `merge_group`, the optional
     classifier is skipped and the required iOS job always executes, including
     documentation-only changes. This reuses the existing non-PR condition and
     guarantees full-suite evidence for the merge result. The existing run-name
@@ -191,11 +207,16 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     absolute DerivedData/checkout references in `.xctestrun` are relocated.
     The matrix starts only after build finishes, has `fail-fast: false` and
     `max-parallel: 6`, and the iOS macOS jobs use the `xcode-27` label.
-    The default `env.IOS_UI_SHARDS` value of `5` gives one unit job and five UI
-    jobs. Set it to `4`, `3`, or `2` for smaller matrices. Values outside 2–5
-    fail planning.
+    The default `env.IOS_UI_SHARDS` value of `4` requests four UI jobs
+    and one unit job after the build. They can start together when five
+    macOS runners are free. A manual run of this workflow can choose 4 or 5
+    UI jobs with `ui_shards`. Its matrix planner rejects other counts. The current weights put the
+    longest lane at 56m48s with two jobs and 37m55s with three. Three jobs
+    leave only 2m05s for XCTest overhead within the 40-minute test step.
 
-    `scripts/ios_ui_smoke.py shards` balances methods longest-first using
+    The shared manifest generator, `scripts/ios_ui_smoke.py shards`, accepts
+    counts from 2 through 5. The single-runner release nightly uses `--count 2`
+    to build its full-suite manifest. The generator balances methods longest-first using
     `scripts/ios-ui-durations.json`. The weights use hosted iPhone
     `test-tree.json` case durations. A new or changed test may use a projected
     weight until a hosted run measures it.
@@ -213,15 +234,58 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     integration (not configured in CI). Both modes keep these tests selected;
     each must exist and report Skipped. A listed test that passes fails as stale.
 
-    The exact required name `iOS simulator` belongs to an `if: always()` Ubuntu
+    The exact required name `iOS simulator` belongs to the Ubuntu
     aggregate. Full requires successful plan/build/matrix jobs, every expected
     shard artifact, and no repeated or unassigned UI case. Every enumerated test
     is checked; anything not on the per-environment skip list must pass. Missing, failed,
     cancelled or unexpectedly skipped jobs/cases fail the aggregate. Smoke
     requires build/test success in its one job and its exact execution ledger.
-    Only a successful explicit PR classifier skip exempts test execution;
-    merge groups and pushes never take that exception. `cancel-in-progress`
-    remains enabled and no shard result is treated as passing after cancellation.
+    On ready-for-review the workflow waits behind any active execution and can
+    report a completed result from the same PR, head and mode. A recorded
+    failure still fails the check. After a carried failure, select **Re-run all
+    jobs** to run planning again and execute the tests. Retrying only the
+    aggregate keeps the original plan and reports the same failure. Adding
+    `ci:full-ui` requests a fresh run;
+    later pushes with that label also require fresh full execution.
+
+    The iOS classifier and planner check out the event's base SHA. Only the
+    trusted base supplies the receipt lookup, path policy and mode checks.
+    Pull-request changes to those tools or the iOS workflow require fresh
+    execution. The aggregate validates carried evidence with the same base
+    code. Fresh builds and tests still use the PR head.
+
+    On synchronize, the planner looks up this workflow's original run and jobs
+    through the read-only Actions API. Both revisions must belong to the same
+    repository, PR and branch. The source plan must record the same base SHA,
+    its tested head, requested mode and GitHub's synthetic PR merge SHA.
+    The planner checks the parents of both synthetic commits and requires the
+    workflow file to have the same Git blob at both revisions. The first attempt must have completed
+    its build, tests and successful execution ledger. A previous inherited result
+    cannot serve as evidence. The comparison from the tested SHA to the new head
+    must prove direct ancestry and contain fewer than 300 files, all added or
+    modified. Allowed changes are independent documentation, Android app sources
+    or standalone lab CLI inputs, subject to the iOS build-input checks. PRs
+    changing build inputs or CI code use fresh execution. The cumulative PR
+    may change Swift app/test sources, shared Kotlin sources and independent
+    paths. Forks, incomplete metadata and lookup
+    failures and base revisions without the lookup helper fall back to fresh
+    execution. The check name for unrelated labels and closed events is selected
+    solely from the webhook payload, independently of skipped jobs. The check summary names the current
+    head, tested SHA, run, attempt and mode. An explicit classifier skip remains
+    a separate outcome. Merge groups, nightly and manual runs always execute.
+    A source run from before base provenance was recorded
+    can only satisfy an identical-head ready check.
+
+    On the first attempt of an ordinary push to `main`, the planner looks up the
+    latest run of this iOS workflow for the same commit on the repository's main
+    merge queue. It must have succeeded before the push run was created. One
+    queue attempt must show a successful build-for-testing, the unit lane, every
+    UI shard and the aggregate's execution-ledger check. The push aggregate
+    links to that attempt and the push starts no macOS jobs. An unsuccessful
+    queue run, a different SHA, an older serial workflow, incomplete evidence
+    or an unavailable API causes fresh execution. **Re-run all jobs** on the
+    push also executes the suite. This takes effect on main after the release
+    workflow merges into main.
 
     Both modes upload `ios-evidence-<attempt>-<lane>` artifacts: enumeration,
     manifest, xcresult tree/schema/summary, per-case durations, and build logs/
@@ -265,8 +329,86 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     These are containment, not claimed speed; hosted full and smoke timing and
     artifact portability still need measurement on the final SHA.
 
-    Dependency caches are limited to `~/.gradle/caches` (excluding task build
-    caches/execution history), `~/.konan`, and SPM
+    ### Hosted UI query timeouts
+
+    [Issue #949](https://github.com/levarac/beid/issues/949) tracks
+    `Failed to get matching snapshot: Timed out while evaluating UI query.`
+    and the equivalent message with `snapshots`. Named XCTest activities
+    mark the demo advances, screen transitions and assertions in the reported
+    test paths. Open the original result's activity log to identify the last
+    started operation and record the query or screen in the issue.
+
+    For a release PR, the CI owner may retry a failed UI lane once on the
+    original full run. Before retrying, check that the run is complete at
+    attempt 1 on the current PR head. The build, unit lane and all other UI
+    lanes must be successful. Check that the failed lane has complete
+    structured results, its failed cases are outside the PR's changed code
+    paths, and every failure has the exact query-timeout message above.
+    Assertion failures, launch or termination errors, and missing or mixed
+    evidence follow the normal failure investigation.
+
+    Retain the first failing job link, manifest, structured result and raw
+    `.xcresult` under their original attempt-1 names. Save a copy of the first
+    failure artifacts with their SHA-256 digests before retrying, and confirm
+    the build products and successful lane evidence remain available in Actions.
+    Use **Re-run job** on the failed UI lane. To use the CLI, run
+    `gh run view RUN_ID --repo levarac/beid --attempt 1 --json jobs` and find
+    the failed lane's `databaseId` by its `name`. Pass that ID to
+    `gh run rerun RUN_ID --job FAILED_JOB_ID --repo levarac/beid`.
+    GitHub reuses the build's products and reruns the dependent checks. The
+    lane runs its full manifest on a fresh simulator with the existing limits.
+
+    Record the two job links, the first failed test IDs and both outcomes.
+    Require the retried lane and the normal aggregate check to pass. Keep a
+    passing retry visible as a recovery in #949 and leave it out of the
+    consecutive clean-run count. If the second attempt fails or is incomplete,
+    leave the run red and investigate the retained evidence.
+
+    On pushes to `release/1.1.0`, `ios-release-cache-seed.yml` populates the
+    Gradle distribution, KMP dependencies and SwiftPM checkouts with the same
+    cache keys and paths as the PR build. It also builds the arm64 Debug
+    Simulator products with Release Kotlin and Swift optimization `-O`. It
+    saves a separate compiler CAS snapshot at most once per toolchain and ISO
+    week, and a Kotlin Swift Export snapshot for each complete input digest.
+    The Xcode phase permits export installation only on a GitHub-hosted
+    Actions runner. Local, device and self-hosted builds use Gradle.
+    The seed checks all five entries against GitHub's release-ref cache index,
+    including the archive version for the action's input paths and compression.
+    A dependency restore miss triggers population. Dependency saves are
+    independent of optional CAS or Swift Export packing failures.
+    A snapshot key ends with the SHA-256 of its archive. Using that digest
+    requires a matching key and compatible version in the release index.
+    The Actions restore step first extracts the outer cache archive. The digest
+    check authenticates the inner payload after that extraction. Consumers
+    belong only in disposable, unprivileged GitHub-hosted PR jobs.
+    The export fingerprint
+    also covers the Gradle artifacts, shared sources, Xcode project, host tools,
+    SDK and JDK. Test bundles, results and DerivedData are excluded.
+
+    PR builds targeting `release/1.1.0` only restore these five cache families.
+    Compiler restore keys retain the exact toolchain prefix across weekly
+    snapshots. The Swift Export prefix additionally requires an exact
+    Kotlin input fingerprint, including resolved dependencies. Before enabling
+    either one, the build checks the selected cache key against GitHub's
+    release-scoped listing and verifies the complete archive against the SHA-256
+    in that key. A missing entry, unavailable index or digest mismatch falls
+    back to the regular build. A change to an individual Swift compiler input
+    produces a new compiler key inside CAS. The normal build-for-testing,
+    enumeration, per-case verification and required aggregate still run.
+
+    The benchmark stored 124,823,225 bytes of compressed CAS and 3,592,270
+    bytes of Swift Export, about 1.2% of a 10 GiB limit combined. Its Gradle distribution,
+    broader v1 KMP cache and SwiftPM checkouts took another 1.63 GB. Record the
+    dependency-only v2 KMP size from the first release seed.
+    When a measurement finishes, retain its timing and case receipts, list
+    caches with `gh cache list --ref refs/heads/BRANCH --limit 100`, and
+    delete the measurement branch's entries by verified cache ID. The
+    measurement owner coordinates cleanup with the maintainer authorized
+    to remove those entries. Release and main entries remain available to PRs.
+
+    Dependency caches are limited to downloaded Gradle module files in
+    `~/.gradle/caches/modules-2/files-2.1`, Kotlin/Native host tools in
+    `~/.konan/dependencies`, and SPM
     checkouts/repository objects under the stable runner-temporary
     `beid-spm/SourcePackages` path. KMP keys include Gradle catalog/wrapper,
     Kotlin declarations/build configuration, Xcode build, SDK build, JDK and

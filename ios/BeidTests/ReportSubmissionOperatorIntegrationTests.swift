@@ -65,6 +65,98 @@ private enum SubmissionTestWaitBudget {
 
 @MainActor
 final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
+  func testSavedReportDoesNotBeginSubmissionBeforeFirstUploadNotice() async throws {
+    let server = try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+      holdResponses: true
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-first-upload-notice")
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let record = try seedPendingRecords(count: 1, endpoint: endpoint, fileURL: fileURL)[0]
+    let suite = "beid-first-upload-\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let key = "firstUploadNotice.continued.v1_1"
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint, receiptPublicKeyHex: receiptKeyHex,
+      cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+      hasViewedFirstUploadNotice: nil, markFirstUploadNoticeViewed: nil,
+      noticeDefaults: defaults
+    ))
+    defer { runtime.stop() }
+    var notices = 0
+    runtime.onFirstUploadNoticeRequired = { notices += 1 }
+
+    runtime.submitPending()
+
+    XCTAssertEqual(runtime.activeSubmissionCountForTesting, 0, "no submission attempt before Continue")
+    let saved = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
+    XCTAssertEqual(saved.id, record.id)
+    XCTAssertEqual(saved.submissionState, .prepared, "the saved report must remain queued")
+    XCTAssertEqual(saved.signedObservationHex, record.signedObservationHex)
+    XCTAssertEqual(server.postCount, 0)
+    XCTAssertEqual(server.getCount, 0)
+    XCTAssertEqual(notices, 1)
+    XCTAssertFalse(defaults.bool(forKey: key))
+
+    runtime.continueAfterFirstUploadNotice()
+    XCTAssertTrue(defaults.bool(forKey: key))
+    try await server.waitFor(postCount: 1)
+    XCTAssertEqual(server.postBodies.first, Data(hexEncoded: record.signedObservationHex))
+    server.releaseResponses()
+    try await waitForSubmissionState(.accepted, at: fileURL, server: server)
+    runtime.stop()
+
+    let next = try seedPendingRecords(count: 1, endpoint: endpoint, fileURL: fileURL, creationOffset: 1)[0]
+    let relaunched = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint, receiptPublicKeyHex: receiptKeyHex,
+      cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+      hasViewedFirstUploadNotice: nil, markFirstUploadNoticeViewed: nil,
+      noticeDefaults: defaults
+    ))
+    defer { relaunched.stop() }
+    relaunched.submitPending()
+    try await server.waitFor(postCount: 2)
+    XCTAssertEqual(server.postBodies.last, Data(hexEncoded: next.signedObservationHex))
+    XCTAssertEqual(notices, 1)
+  }
+
+  func testSubmittingRecoveryWaitsForFirstUploadNotice() async throws {
+    let server = try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+      holdResponses: true
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-first-upload-recovery")
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let record = try seedPendingRecords(count: 1, endpoint: endpoint, fileURL: fileURL)[0]
+    _ = try ReportSubmissionStore(fileURL: fileURL).markSubmitting(for: record.id)
+    var viewed = false
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint, receiptPublicKeyHex: receiptKeyHex,
+      cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+      hasViewedFirstUploadNotice: { viewed }, markFirstUploadNoticeViewed: { viewed = true }
+    ))
+    defer { runtime.stop() }
+    runtime.submitPendingOnNaturalTrigger()
+    runtime.submitPending()
+    XCTAssertEqual(runtime.activeSubmissionCountForTesting, 0)
+    XCTAssertEqual(server.getCount, 0)
+    XCTAssertEqual(server.postCount, 0)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState, .submitting)
+    runtime.continueAfterFirstUploadNotice()
+    try await server.waitFor(postCount: 0, getCount: 1)
+    XCTAssertEqual(server.postCount, 0)
+    server.releaseResponses()
+    try await server.waitFor(postCount: 1, getCount: 1)
+    XCTAssertEqual(server.postBodies.first, Data(hexEncoded: record.signedObservationHex))
+  }
+
   func testStoreWriteFailuresRearmAnotherOriginsPendingRetry() async throws {
     for boundary in ["submitting", "receipt", "terminal"] {
       let failing = try StubOperatorServer(
@@ -1056,7 +1148,10 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     useDefaultProvider: Bool = true,
     retryScheduler: (any ReportSubmissionRetryScheduler)? = nil,
     now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
-    retryJitter: @escaping () -> Double = { 1 }
+    retryJitter: @escaping () -> Double = { 1 },
+    hasViewedFirstUploadNotice: (() -> Bool)? = { true },
+    markFirstUploadNoticeViewed: (() -> Void)? = {},
+    noticeDefaults: UserDefaults = .standard
   ) throws -> ReportSubmissionRuntime? {
     let configuration = try XCTUnwrap(
       ExportedKotlinPackages.org.levarac.parallax.submission
@@ -1093,6 +1188,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     try plistData.write(to: bundleDirectory.appendingPathComponent("Info.plist"))
     let bundle = try XCTUnwrap(Bundle(url: bundleDirectory))
     return ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: hasViewedFirstUploadNotice,
       bundle: bundle,
       eventSigningCryptography: cryptography,
       definitionProvider: resolvedProvider,
@@ -1100,6 +1196,8 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       retryScheduler: retryScheduler,
       now: now,
       retryJitter: retryJitter,
+      markFirstUploadNoticeViewed: markFirstUploadNoticeViewed,
+      noticeDefaults: noticeDefaults,
       allowInsecureLoopbackForTests: true
     )
   }

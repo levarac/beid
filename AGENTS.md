@@ -358,22 +358,26 @@ the same name shadows them.
 
   **A cost constraint quietly rewrote a correctness practice, and it looked
   reasonable at the time.**
-- **Require executed hosted iOS evidence on the exact validated SHA.**
+- **Identify the SHA that actually executed the hosted iOS tests.**
   The `iOS simulator` aggregate is created on every PR open, push (`synchronize`),
-  reopen, ready-for-review, and labeled event, including drafts, with no
-  workflow-level PR path exclusions. It runs on every PR except one whose changed files are
+  reopen, ready-for-review, and addition of `ci:full-ui`, including drafts, with no
+  workflow-level PR path exclusions. It normally executes on each head. A PR whose changed files are
   documentation or verified independent inputs (`android/app/src/**` after
   build-input rules, and standalone `tools/beid-lab-cli/**`, as
-  `scripts/ci_change_filter.py` defines it), which skips macOS work and reports
-  an explicit classifier skip in the successful aggregate. Renames, deletions and unsafe metadata run
+  `scripts/ci_change_filter.py` defines it) skips macOS work and reports
+  an explicit classifier skip in the successful aggregate. A ready flip can report the same
+  head's same-mode result. A synchronize event may report a directly executed ancestor's
+  same-mode result after the independent-input checks in `docs/delivery-ci.md`.
+  Renames, deletions and unsafe metadata run
   it even under those paths; a failed classification also runs it. It checks out the PR head explicitly and
   builds both bundles on a clean owned simulator. Smoke runs `ios/ci/ui-smoke-tests.txt`
   and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`.
   PRs keep smoke only when every iOS-affecting changed path is a UI or CI-selection
   path defined by `scripts/ci_change_filter.py`. Other iOS-affecting paths or failed
   classification select full mode. A `ci:full-ui` label in the event payload
-  selects the full UI suite. All other events run full, including
-  `merge_group`, main pushes, nightly and manual dispatch. With the main merge
+  selects the full UI suite. Merge groups, main pushes, nightly runs and manual
+  dispatches select full mode. A main push can credit a completed full merge-queue
+  run on the identical commit, as described in `docs/delivery-ci.md`. With the main merge
   queue (active), the merge step is to add the PR to the queue; the queue's
   completed full-mode `iOS simulator` pass on the exact merge result satisfies
   the merge requirement. The queue lane never skips for paths. For a full run
@@ -381,8 +385,8 @@ the same name shadows them.
   a run; removing the label does not). Re-runs retain their original payload
   mode. A smoke pass or classifier skip is not a full-mode pass.
   A missing, cancelled or pre-start failed run is not passing evidence, and a
-  skipped run is evidence only for a PR whose successful classification job
-  found no iOS-affecting changes. Xcode Cloud `PR Build & Test`
+  skipped build requires either successful independent-path classification
+  or validated prior execution identified in the aggregate. Xcode Cloud `PR Build & Test`
   stays paused; its former file exclusions do not apply to this hosted gate.
   Xcode Cloud Internal/Release delivery is a separate concern. Required status
   checks remain operator-managed repository settings; workflow code alone
@@ -476,15 +480,22 @@ violations, with no pass-fixture or application violations.
   environment: install it with `python3 -m pip install PyYAML==6.0.2`.
 
 The separate `.github/workflows/pr-ci-ios-macos.yml` reports **iOS simulator**
-from an always-running aggregate on `ubuntu-24.04-arm`. **Plan iOS test jobs**
+from an aggregate on `ubuntu-24.04-arm`. Its job name is
+`${{ matrix.context }}` (one context per event).
+Closed PRs and unrelated labels run one Ubuntu summary step named by the
+static matrix value `iOS simulator (inactive)`. The required `iOS simulator`
+row exists only for an active event.
+**Plan iOS test jobs**
 selects mode once from the event. **Build iOS test bundles** runs
 `build-for-testing` once, enumerates both compiled bundles, and in smoke mode
 runs the checked-in UI list and `BeidTests` minus the three deferred suites in that macOS job. Deferred coverage and uncertain changed paths select full mode.
 In full mode it uploads a tar of `Build/Products` (including `.xctestrun`), then
 **iOS full tests (${{ matrix.lane }})** runs a unit lane and duration-balanced UI
 lanes via `test-without-building`, each with fresh simulator/DerivedData/results.
-`IOS_UI_SHARDS` in the workflow is the single count setting: 5 by default, 2–4
-also supported. At most six macOS jobs run together. Product SHA, Xcode build, SDK
+`IOS_UI_SHARDS` in the workflow is the single count setting: 4 by default. Manual runs can select 4 or 5
+for a same-revision comparison. The shared manifest generator accepts 2–5 partitions,
+including the release nightly's two-part manifest on one runner. The default PR
+matrix requests five macOS test jobs including unit tests. Product SHA, Xcode build, SDK
 and architecture must match before extraction; permissions/symlinks survive tar.
 **Compare proposed UI test selection** uses full-run artifacts to compare a
 screen-based candidate list with observed UI failures. Its JSON is advisory.
@@ -494,8 +505,8 @@ checked. Anything not on the per-environment skip list must pass. The four iPhon
 UI exclusions in `scripts/ios-ui-iphone-skips.txt` and the Debug Simulator unit
 exclusions in `scripts/ios-unit-debug-simulator-skips.txt` must exist and report
 Skipped; a listed test that passes is a stale-list failure. Structured results and
-phase timings are uploaded in both modes. A successful explicit classifier skip
-is the only exception to executed evidence. Dependency-only KMP/SPM caches use
+phase timings are uploaded in both modes. PR exceptions are an explicit classifier
+skip or a verified prior run. Merge groups always require fresh execution. Release-targeted PRs restore the release-seeded Gradle, KMP and SwiftPM dependencies, compiler CAS and exact Kotlin export. The release cache workflow and validation rules are in `docs/delivery-ci.md`. KMP/SPM dependency caches use
 exact toolchain/lockfile keys without prefix restores; DerivedData and test
 results are never cached. A payload
 label `ci:full-ui` selects the full UI suite; merge groups, main pushes,
@@ -513,7 +524,8 @@ runs; merge groups always run the lane in full mode.
 `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
 `swift build -c release` and `swift test`. Both report on every PR head,
 including drafts, with `opened`, `synchronize`, `reopened`, and
-`ready_for_review`; iOS also includes `labeled`, never `unlabeled`. Neither has
+`ready_for_review`; iOS also receives `labeled` and `closed`. Only adding
+`ci:full-ui` requests tests. Closing or merging the PR cancels its outstanding iOS run. Neither has
 a PR workflow path filter, so the required contexts are always created.
 Each workflow has its own small classification
 job (**Classify paths for iOS lane**, **Classify paths for lab CLI lane**) that
@@ -542,25 +554,28 @@ also runs it. Lab CLI selection is unchanged: labcli, lint or error runs it;
 a failed classification runs both. The optional iOS/lab CLI classifiers run
 only on PRs; merge groups bypass them and always execute both lanes. This
 reuses the existing non-PR path and ensures full iOS merge-result evidence,
-without adding another classification gate. Main pushes and manual dispatch
-also always run both lanes.
+without adding another classification gate. Triggered main pushes execute the lab CLI
+lane and can credit the main queue's full iOS result on the identical SHA.
+Manual dispatch executes the selected workflow afresh.
+The iOS classifier, planner and inherited-evidence verifier use the event base SHA.
 All PR build checkouts use the explicit PR head SHA; merge groups use
 `github.sha`, which GitHub defines as the merge-group head SHA. The iOS run
 name displays full on merge groups. Concurrency groups include the event name
 and ref (or PR number); queue refs identify distinct entries, so PR updates,
 main pushes, nightly runs and other queue entries cannot cancel a queue run.
-Same-event/ref superseded runs still cancel.
+Ready-for-review waits behind an active execution for its PR; superseding updates still cancel.
 
 These three workflows remain the execution source of truth; the documentation
 drift check covers all three job lists and their distinguishing command tokens.
 
 All pull-request jobs use fixed GitHub-hosted runner labels. Determine changed
-paths and Repository sanity use `ubuntu-24.04-arm`; Android uses
-`ubuntu-24.04`; SwiftLint and the lab CLI use `macos-26` with Xcode 26.5.
+paths, Repository sanity and SwiftLint use `ubuntu-24.04-arm`. The SwiftLint
+0.65.0 image supplies Linux SourceKit for the design-contract rules.
+Android uses `ubuntu-24.04`. The lab CLI uses `macos-26` with Xcode 26.5.
 The iOS build/test jobs use `xcode-27` with Xcode 27.2 and the iOS 27.0
 Simulator runtime. iOS planning and aggregation use `ubuntu-24.04-arm`.
-SwiftLint needs Xcode SourceKit. Repository sanity
-installs pinned Python 3.12; Android installs JDK 17 and Android 36 job-locally.
+Repository sanity installs pinned Python 3.12. Android installs JDK 17 and
+Android 36 job-locally.
 All pull requests run these checks without private credentials. The private
 Parallax comparison is explicitly reported as SKIPPED, never as a passing
 comparison. All Actions use full commit SHA pins. Android delivery and private

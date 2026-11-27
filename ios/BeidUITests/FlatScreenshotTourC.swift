@@ -15,27 +15,35 @@ final class FlatScreenshotTourC: XCTestCase {
 
   func testShot_05_Sensing() { capture("05") }
 
-  func testSensingDrawsRecordedWindowMarkAtMidpoint() throws {
-    let app = launchSensingFixture("05", extraArguments: ["-beid-sensing-window-midpoint"])
-    SensingVisualOracle.assertInitialMetrics(in: app, test: self, name: "05-window-midpoint", expected: ("13", "27:30"))
-    let radar = app.descendants(matching: .any)["sensing.radar"]
-    XCTAssertTrue(radar.isHittable)
-    let image = try XCTUnwrap(radar.screenshot().image.cgImage)
-    // At halfway the white mark overlays the middle guide (233.12pt on a
-    // 362pt field). Sample its top arc, well away from the center glyph.
-    let centerX = CGFloat(image.width) / 2
-    let topArcY = CGFloat(image.height) * (1 - 233.12 / 362) / 2
-    let sample = try XCTUnwrap(image.cropping(to: CGRect(x: centerX - 12, y: topArcY - 4, width: 24, height: 8).integral))
-    var pixels = [UInt8](repeating: 0, count: sample.width * sample.height)
-    let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
-      guard let context = CGContext(data: buffer.baseAddress, width: sample.width, height: sample.height,
-        bitsPerComponent: 8, bytesPerRow: sample.width, space: CGColorSpaceCreateDeviceGray(),
-        bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
-      context.draw(sample, in: CGRect(x: 0, y: 0, width: sample.width, height: sample.height))
-      return true
+  /// TestFlight 331 reported empty space below the content after scrolling
+  /// the live Sensing screen up. Pins the settled bottom: the last control
+  /// (the "how sensing works" link) ends only the content padding (16 pt) and
+  /// the footer padding (8 pt) above the Stop control, and the steady layout
+  /// that fits the screen does not scroll at all.
+  func testSensingScrollStopsAtTheContentEnd() throws {
+    for code in ["05a", "05a3"] {
+      let app = launchSensingFixture(code)
+      let last = app.descendants(matching: .any).matching(NSPredicate(
+        format: "identifier == 'scan.first-time.about' OR identifier == 'scan.about'")).firstMatch
+      let stop = app.buttons["scan.stop-sensing"]
+      XCTAssertTrue(last.waitForExistence(timeout: 10) && stop.exists, code)
+      for _ in 0..<6 { app.swipeUp(velocity: .slow) }
+      Thread.sleep(forTimeInterval: 2)
+      let gap = stop.frame.minY - last.frame.maxY
+      XCTAssertEqual(gap, 24, accuracy: 4,
+        "\(code): content ends \(gap) pt above the Stop control after scrolling to the bottom")
+      app.terminate()
     }
-    XCTAssertTrue(rendered)
-    XCTAssertGreaterThanOrEqual(pixels.filter { $0 >= 120 }.count, 12, "The middle arc must be brighter than its guide")
+
+    let steady = launchSensingFixture("05")
+    let stop = steady.buttons["scan.stop-sensing"]
+    let top = stop.frame.minY
+    let text = steady.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Keep the app open'")).firstMatch
+    let before = text.frame.minY
+    steady.swipeUp(velocity: .slow)
+    Thread.sleep(forTimeInterval: 1)
+    XCTAssertEqual(text.frame.minY, before, accuracy: 1, "a layout that fits must not scroll")
+    XCTAssertEqual(stop.frame.minY, top, accuracy: 1)
   }
 
   func testShot_05a_Detecting() { capture("05a") }
@@ -251,32 +259,40 @@ final class FlatScreenshotTourC: XCTestCase {
 
   func testRecordDetailSeparatesLocalRecordFromExternalResults() {
     let app = launchEventDetailFixture(extraArguments: ["-beid-report-links-701"])
-    let record = app.buttons["event-detail.proof.1"]
-    record.scrollToHittable(in: app)
-    record.tap()
-    app.scrollViews["proof.detail.content"].assertExists()
-    XCTAssertTrue(app.navigationBars["ETH Tokyo 2026"].exists)
-    XCTAssertTrue(app.staticTexts["RECORDED ON THIS DEVICE"].exists)
-    XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
-    XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
-    assertSignatureUnavailable(app)
-    XCTAssertFalse(app.staticTexts["STATUS"].exists)
-    XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
-    XCTAssertFalse(app.buttons["Connect wallet"].exists)
-    XCTAssertFalse(app.staticTexts["VERIFIED"].exists)
-
-    let expectedTitles = ["RECORDED ON THIS DEVICE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"]
-    for (index, expected) in expectedTitles.enumerated() {
-      // Match the exposed row identifier and title, excluding its detail text.
-      let rung = app.staticTexts.matching(identifier: "record.ladder.\(index + 1)")
-        .matching(NSPredicate(format: "label == %@", expected)).firstMatch
-      rung.scrollToHittable(in: app)
-      XCTAssertEqual(rung.label, expected)
+    XCTContext.runActivity(named: "Open the first Record from Event Detail") { _ in
+      let record = app.buttons["event-detail.proof.1"]
+      record.scrollToHittable(in: app)
+      record.tap()
+      app.scrollViews["proof.detail.content"].assertExists()
     }
-    let unavailableResults = app.staticTexts.matching(
-      NSPredicate(format: "label == %@", "NOT YET AVAILABLE")
-    )
-    XCTAssertGreaterThanOrEqual(unavailableResults.count, 2)
+    XCTContext.runActivity(named: "Check the local record and signature state") { _ in
+      XCTAssertTrue(app.navigationBars["ETH Tokyo 2026"].exists)
+      XCTAssertTrue(app.staticTexts["RECORDED ON THIS DEVICE"].exists)
+      XCTAssertFalse(app.staticTexts["record.incomplete.title"].exists)
+      XCTAssertFalse(app.staticTexts["record.incomplete.reason"].exists)
+      assertSignatureUnavailable(app)
+      XCTAssertFalse(app.staticTexts["STATUS"].exists)
+      XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
+      XCTAssertFalse(app.buttons["Connect wallet"].exists)
+      XCTAssertFalse(app.staticTexts["VERIFIED"].exists)
+    }
+
+    XCTContext.runActivity(named: "Check record evidence rows") { _ in
+      let expectedTitles = ["RECORDED ON THIS DEVICE", "SENT TO ORGANIZER", "ACCEPTED", "THIRD-PARTY RESULT"]
+      for (index, expected) in expectedTitles.enumerated() {
+        // Match the exposed row identifier and title, excluding its detail text.
+        let rung = app.staticTexts.matching(identifier: "record.ladder.\(index + 1)")
+          .matching(NSPredicate(format: "label == %@", expected)).firstMatch
+        rung.scrollToHittable(in: app)
+        XCTAssertEqual(rung.label, expected)
+      }
+    }
+    XCTContext.runActivity(named: "Check unavailable external results") { _ in
+      let unavailableResults = app.staticTexts.matching(
+        NSPredicate(format: "label == %@", "NOT YET AVAILABLE")
+      )
+      XCTAssertGreaterThanOrEqual(unavailableResults.count, 2)
+    }
   }
 
   func testRecordDetailKeepsLongEventNameAvailable() {
@@ -772,19 +788,27 @@ final class FlatScreenshotTourC: XCTestCase {
   private func launchPastEvent(arguments: [String]) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = arguments
-    app.launch()
-    let getStarted = app.buttons["Continue"]
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
-    getStarted.tap()
-    let allowBluetooth = app.buttons["bluetooth.permission.continue"]
-    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
-    allowBluetooth.tap()
-    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 10))
-    app.openRecordsByEvent()
-    let event = app.buttons["home.past-event.ETHTOKYO2026"]
-    XCTAssertTrue(event.waitForExistence(timeout: 10))
-    event.tap()
-    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    XCTContext.runActivity(named: "Launch past-event fixture") { _ in
+      app.launch()
+    }
+    XCTContext.runActivity(named: "Complete onboarding and reach Now") { _ in
+      let getStarted = app.buttons["Continue"]
+      XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
+      getStarted.tap()
+      let allowBluetooth = app.buttons["bluetooth.permission.continue"]
+      XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
+      allowBluetooth.tap()
+      XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 10))
+    }
+    XCTContext.runActivity(named: "Open Records by event") { _ in
+      app.openRecordsByEvent()
+    }
+    XCTContext.runActivity(named: "Open the fixture Event Detail") { _ in
+      let event = app.buttons["home.past-event.ETHTOKYO2026"]
+      XCTAssertTrue(event.waitForExistence(timeout: 10))
+      event.tap()
+      XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    }
     return app
   }
 

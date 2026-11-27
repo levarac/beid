@@ -364,6 +364,7 @@ final class ReportProofLinkContainmentTests: XCTestCase {
     try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
       .write(to: bundleURL.appendingPathComponent("Info.plist"))
     return try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try XCTUnwrap(Bundle(url: bundleURL)),
       eventSigningCryptography: cryptography,
       definitionProvider: StaticEventDefinitionContextProvider(configuration: configuration),

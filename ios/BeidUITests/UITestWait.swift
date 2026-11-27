@@ -106,6 +106,7 @@ extension XCUIElement {
   /// Check its full frame as well as the accessibility hit test.
   func scrollToHittable(
     in app: XCUIApplication, within scrollView: XCUIElement,
+    ignoringBackgroundTabBar: Bool = false,
     file: StaticString = #filePath, line: UInt = #line
   ) {
     scrollView.assertExists(file: file, line: line)
@@ -114,7 +115,7 @@ extension XCUIElement {
     var drags = 0
     for _ in 0..<5 {
       let scrollFrame = scrollView.frame
-      let visible = app.visibleScrollFrame(for: scrollFrame)
+      let visible = app.visibleScrollFrame(for: scrollFrame, ignoringBackgroundTabBar: ignoringBackgroundTabBar)
       let target = frame
       guard !visible.isEmpty, !target.isEmpty, !visible.contains(target) else { break }
       scrollView.drag(in: visible, scrollFrame: scrollFrame, upward: target.minY >= visible.minY)
@@ -122,7 +123,9 @@ extension XCUIElement {
     }
 
     let (state, passed, target) = waitForState {
-      $0 && scrollView.exists && app.visibleScrollFrame(for: scrollView.frame).contains(self.frame) && self.isHittable
+      $0 && scrollView.exists && app.visibleScrollFrame(
+        for: scrollView.frame, ignoringBackgroundTabBar: ignoringBackgroundTabBar
+      ).contains(self.frame) && self.isHittable
     }
     XCTAssertTrue(
       passed,
@@ -144,14 +147,15 @@ extension XCUIElement {
 }
 
 extension XCUIApplication {
-  func visibleScrollFrame(for scrollFrame: CGRect) -> CGRect {
+  func visibleScrollFrame(for scrollFrame: CGRect, ignoringBackgroundTabBar: Bool = false) -> CGRect {
     let window = windows.firstMatch
     let viewport = scrollFrame.intersection(window.frame)
     guard !viewport.isEmpty else { return .null }
     let navigationBar = window.navigationBars.firstMatch
     let tabBar = window.tabBars.firstMatch
     let navigationFrame = navigationBar.exists ? navigationBar.frame : .null
-    let tabFrame = tabBar.exists ? tabBar.frame : .null
+    // The presenting screen can keep its tab bar in the accessibility tree behind a sheet.
+    let tabFrame = !ignoringBackgroundTabBar && tabBar.exists ? tabBar.frame : .null
 
     // Only bars on the corresponding edge can cover the central drag path.
     let top = navigationFrame.intersects(viewport) && navigationFrame.midY < viewport.midY &&

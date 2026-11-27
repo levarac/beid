@@ -437,10 +437,10 @@ class EventJoinCoordinator internal constructor(
      *   Its store writes stay off main, and ProofRecordingBridge publishes the
      *   recovered record through the thread-safe ProofRecordStore.recordsFlow.
      * - [finalizeSelfProofIfNeeded]'s two call sites are ordinary method
-     *   calls, not Barnard callbacks: [leaveEvent] is invoked from
-     *   `AccountScreen.kt`'s "Leave Event" button
-     *   (`onClick = viewModel::leaveEvent`, a Compose click handler, which
-     *   Compose always dispatches on the main thread), and [dispose] is
+     *   calls, not Barnard callbacks: [leaveEvent] is invoked from the
+     *   sensing UI's Stop path after its applicable confirmation policy (a
+     *   Compose callback, which Compose always dispatches on the main thread),
+     *   and [dispose] is
      *   invoked from the Activity session ViewModel's `onCleared()`
      *   (also on the main thread). Both confirmed by reading
      *   their actual callers, not inferred by analogy.

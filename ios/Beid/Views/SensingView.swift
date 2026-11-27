@@ -581,9 +581,17 @@ struct SensingSessionSurface: View {
             VStack(alignment: .leading, spacing: DS.Space.m) {
               BeidLiveSessionPanel {
                 VStack(alignment: .leading, spacing: DS.Space.m) {
-                  Text(presentation == .signalLost ? LocalizedStringKey("Signal lost") : LocalizedStringKey("Sensing"))
-                    .beidTextStyle(DS.Font.Library.labelMono11)
-                    .foregroundStyle(DS.Color.textSecondaryOnInk)
+                  // The status dot (as beside status text elsewhere) carries the
+                  // live state, so it does not depend on the card being near-black.
+                  HStack(spacing: DS.Space.s) {
+                    Circle()
+                      .fill(presentation == .signalLost ? DS.Color.statusPending : DS.Color.statusOn)
+                      .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+                      .accessibilityHidden(true)
+                    Text(presentation == .signalLost ? LocalizedStringKey("Signal lost") : LocalizedStringKey("Sensing"))
+                      .beidTextStyle(DS.Font.Library.labelMono11)
+                      .foregroundStyle(DS.Color.textSecondaryOnInk)
+                  }
                   if presentation == .steady || presentation == .waiting || presentation == .signalLost {
                     eventHeading
                   } else {
@@ -599,8 +607,7 @@ struct SensingSessionSurface: View {
                     mutualDeviceCount: 0,
                     observedWindowCount: observedWindowCount ?? 0,
                     showsEdges: false,
-                    size: radarSize,
-                    recordedWindowMarkDiameter: recordedWindowMarkDiameter(at: now, size: radarSize)
+                    size: radarSize
                   )
                   .frame(maxWidth: .infinity)
                   Text("HEARD IN THE LAST 5 MINUTES")
@@ -615,7 +622,10 @@ struct SensingSessionSurface: View {
                       .accessibilityIdentifier("scan.detecting.caption")
                   }
                   metrics(at: now)
-                  SensingWindowBars(aggregate: sensing.sessionAggregate, firstSightingAt: sensing.firstSightingAt)
+                  SensingWindowBars(
+                    aggregate: sensing.sessionAggregate, now: now,
+                    demoCurrentWindowIndex: sensing.demoWindowBarsIndex, firstSightingAt: sensing.demoBarsFirstSightingAt
+                  )
                     .accessibilityHidden(true)
                 }
               }
@@ -677,25 +687,6 @@ struct SensingSessionSurface: View {
         isDimmed: sensing.isDetectedDeviceDimmed(id, at: now)
       )
     }
-  }
-
-  private func recordedWindowMarkDiameter(at now: Date, size: CGFloat) -> CGFloat? {
-    guard let aggregate = sensing.sessionAggregate, aggregate.windowCount > 0,
-      let lastObservedWindow = aggregate.windowAt(index: aggregate.windowCount - 1)
-    else { return nil }
-
-    let duration = TimeInterval(ClockPreflightController.barnardEngineEninSeconds)
-    let seconds = now.timeIntervalSince1970
-    var index = lastObservedWindow.windowIndex
-    #if DEBUG
-    // Screenshot fixtures use synthetic window IDs alongside their frozen clock.
-    if sensing.sensingScreenshotFixture != nil {
-      index = Int64(floor(seconds / duration))
-    }
-    #endif
-    return SensingRadarProjection.recordedWindowMarkDiameter(
-      observedWindowIndex: index, secondsSince1970: seconds, windowDuration: duration, size: size
-    )
   }
 
   private func metrics(at now: Date) -> some View {
@@ -779,32 +770,81 @@ struct SensingMetricsView: View {
   }
 }
 
-/// Six most recently observed windows. Each column represents one actual
-/// shared aggregate row; missing future slots stay a low neutral line.
-/// Gaps in ENIN indices are not filled as if observations happened there.
+/// The last six wall-clock windows, oldest on the left. A window without a
+/// detection stays a thin slot, so a gap is visible rather than skipped. The
+/// rightmost slot is the current wall-clock window (live) or the last
+/// observed window (sealed Record, which has no clock) and is the white one.
 struct SensingWindowBars: View {
-  let aggregate: BeidSharedKit.aggregation.SessionAggregate?
-  let firstSightingAt: Date?
-  var endsSession = false
+  static let slotCount = 6
 
-  private var peerCounts: [Int] {
-    guard let aggregate else { return [] }
-    return Array((0..<Int(aggregate.windowCount))
-      .compactMap { aggregate.windowAt(index: Int32($0)).map { Int($0.peerCount) } }
-      .suffix(6))
+  let aggregate: BeidSharedKit.aggregation.SessionAggregate?
+  /// The presentation clock. Nil only for the sealed view, where the last
+  /// observed window ends the bars.
+  var now: Date? = nil
+  var endsSession = false
+  var demoCurrentWindowIndex: Int64? = nil
+  var firstSightingAt: Date? = nil
+  var sealedDemo = false
+
+  /// ENIN window index of the rightmost slot, or nil when there is nothing
+  /// to anchor on.
+  static func endWindowIndex(now: Date?, lastObservedWindowIndex: Int64?) -> Int64? {
+    SensingWindowTimeline.endIndex(
+      now: now, lastObserved: lastObservedWindowIndex, demoCurrent: nil,
+      windowSeconds: TimeInterval(ClockPreflightController.barnardEngineEninSeconds)
+    )
+  }
+
+  /// Device count per slot, oldest first. Nil marks a window with no
+  /// detection. Exactly `slotCount` entries.
+  static func slotCounts(peerCountsByWindow: [Int64: Int], endWindowIndex: Int64) -> [Int?] {
+    (0..<slotCount).map { slot in
+      peerCountsByWindow[endWindowIndex - Int64(slotCount - 1 - slot)]
+    }
+  }
+
+  static func barHeight(peerCount: Int?) -> CGFloat {
+    min(40, DS.Space.xs + CGFloat(peerCount ?? 0) * 2)
+  }
+
+  private var peerCountsByWindow: [Int64: Int] {
+    guard let aggregate else { return [:] }
+    var counts: [Int64: Int] = [:]
+    for index in 0..<Int(aggregate.windowCount) {
+      if let window = aggregate.windowAt(index: Int32(index)) {
+        counts[Int64(window.windowIndex)] = Int(window.peerCount)
+      }
+    }
+    return counts
+  }
+
+  private var endWindowIndex: Int64? {
+    var last: Int64?
+    if let aggregate, aggregate.windowCount > 0 {
+      last = aggregate.windowAt(index: aggregate.windowCount - 1).map { Int64($0.windowIndex) }
+    }
+    return SensingWindowTimeline.endIndex(
+      now: now, lastObserved: last, demoCurrent: demoCurrentWindowIndex,
+      windowSeconds: TimeInterval(ClockPreflightController.barnardEngineEninSeconds)
+    )
   }
 
   var body: some View {
+    let end = endWindowIndex
+    let slots = end.map { Self.slotCounts(peerCountsByWindow: peerCountsByWindow, endWindowIndex: $0) }
+      ?? Array(repeating: nil, count: Self.slotCount)
     VStack(spacing: DS.Space.s) {
       GeometryReader { geometry in
         let barGap = DS.Size.observationChartBarGap
         HStack(alignment: .bottom, spacing: barGap) {
-          ForEach(0..<6, id: \.self) { index in
+          ForEach(0..<Self.slotCount, id: \.self) { slot in
             Rectangle()
-              .fill(color(at: index))
+              .fill(slot == Self.slotCount - 1 && end != nil
+                ? DS.Color.labelOnActionPrimary : DS.Color.strokeHairlineOnInk)
               .frame(
-                width: max(0, (geometry.size.width - barGap * 5) / 6),
-                height: height(at: index)
+                width: max(0, (geometry.size.width - barGap * CGFloat(Self.slotCount - 1))
+                  / CGFloat(Self.slotCount)),
+                height: Self.barHeight(peerCount: slots[slot])
               )
           }
         }
@@ -813,8 +853,15 @@ struct SensingWindowBars: View {
       .frame(height: 40)
 
       HStack {
-        if let firstSightingAt {
-          Text(firstSightingAt.formatted(date: .omitted, time: .shortened))
+        if let end, let oldestStart = SensingWindowTimeline.oldestStart(
+          end: end,
+          firstObserved: aggregate?.windowAt(index: 0).map { Int64($0.windowIndex) },
+          firstSighting: firstSightingAt,
+          isDemo: demoCurrentWindowIndex != nil || sealedDemo,
+          windowSeconds: TimeInterval(ClockPreflightController.barnardEngineEninSeconds),
+          slotCount: Self.slotCount
+        ) {
+          Text(oldestStart.formatted(date: .omitted, time: .shortened))
             .foregroundStyle(DS.Color.textSecondaryOnInk)
         }
         Spacer()
@@ -827,16 +874,9 @@ struct SensingWindowBars: View {
     .accessibilityLabel("window \(Int(aggregate?.windowCount ?? 0))")
   }
 
-  private func color(at index: Int) -> Color {
-    guard index < peerCounts.count else { return DS.Color.strokeHairlineOnInk }
-    return index == peerCounts.count - 1
-      ? DS.Color.labelOnActionPrimary
-      : DS.Color.strokeHairlineOnInk
-  }
-
-  private func height(at index: Int) -> CGFloat {
-    guard index < peerCounts.count else { return DS.Space.xs }
-    return min(40, DS.Space.xs + CGFloat(peerCounts[index]) * 2)
+  static func oldestWindowStart(endWindowIndex: Int64) -> Date {
+    let seconds = TimeInterval(ClockPreflightController.barnardEngineEninSeconds)
+    return Date(timeIntervalSince1970: TimeInterval(endWindowIndex - Int64(slotCount - 1)) * seconds)
   }
 }
 

@@ -358,6 +358,7 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
     try plistData.write(to: bundleDirectory.appendingPathComponent("Info.plist"))
     let bundle = try XCTUnwrap(Bundle(url: bundleDirectory))
     return ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: bundle,
       eventSigningCryptography: cryptography,
       definitionProvider: provider,

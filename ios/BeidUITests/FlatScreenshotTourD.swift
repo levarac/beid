@@ -374,7 +374,9 @@ final class FlatScreenshotTourD: XCTestCase {
 
   func testShot_14f3_CameraCouldNotStart() {
     assertVenueFrame("14f3", outcome: "Camera could not start")
-    XCTAssertFalse(openSettingsControl.exists)
+    XCTContext.runActivity(named: "Check that the camera startup error offers no Settings link") { _ in
+      XCTAssertFalse(openSettingsControl.exists)
+    }
   }
 
   func testShot_14g_NotSaved() {
@@ -392,9 +394,15 @@ final class FlatScreenshotTourD: XCTestCase {
 
   private func assertVenueFrame(_ code: String, outcome: String) {
     openVenue(frame: code)
-    attachScreenshot(code)
-    assertVenueControls()
-    XCTAssertTrue(app.staticTexts[outcome.uppercased()].exists)
+    XCTContext.runActivity(named: "Capture the venue frame") { _ in
+      attachScreenshot(code)
+    }
+    XCTContext.runActivity(named: "Check venue control hit targets") { _ in
+      assertVenueControls()
+    }
+    XCTContext.runActivity(named: "Check the venue outcome title") { _ in
+      XCTAssertTrue(app.staticTexts[outcome.uppercased()].exists)
+    }
   }
 
   private func assertVenueControls() {
@@ -416,32 +424,42 @@ final class FlatScreenshotTourD: XCTestCase {
 
   private func openOrganizer(extraArguments: [String] = []) {
     openAccount(extraArguments: extraArguments)
-    let organizer = app.buttons["Organizer tools"]
-    XCTAssertTrue(organizer.waitForExistence(timeout: 5))
-    organizer.tap()
-    XCTAssertTrue(app.buttons["organizer.venueBroadcast"].waitForExistence(timeout: 5))
+    XCTContext.runActivity(named: "Open Organizer tools from Account") { _ in
+      let organizer = app.buttons["Organizer tools"]
+      XCTAssertTrue(organizer.waitForExistence(timeout: 5))
+      organizer.tap()
+      XCTAssertTrue(app.buttons["organizer.venueBroadcast"].waitForExistence(timeout: 5))
+    }
   }
 
   private func openVenue(frame: String) {
     openOrganizer(extraArguments: ["-beid-venue-frame", frame])
-    app.buttons["organizer.venueBroadcast"].tap()
-    let scan = app.buttons["Scan QR code"]
-    XCTAssertTrue(scan.waitForExistence(timeout: 5))
-    let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: scan)
-    XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed)
+    XCTContext.runActivity(named: "Open Venue broadcast and wait for Scan QR code") { _ in
+      app.buttons["organizer.venueBroadcast"].tap()
+      let scan = app.buttons["Scan QR code"]
+      XCTAssertTrue(scan.waitForExistence(timeout: 5))
+      let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: scan)
+      XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed)
+    }
   }
 
   private func openAccount(extraArguments: [String] = []) {
     app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture"] + extraArguments
-    app.launch()
+    XCTContext.runActivity(named: "Launch Account fixture") { _ in
+      app.launch()
+    }
 
-    app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
-    app.buttons["bluetooth.permission.continue"].tap()
-    app.tabButton("Now").assertHittable()
-    let account = app.buttons["home.account"]
-    XCTAssertTrue(account.waitForExistence(timeout: 5))
-    account.tap()
+    XCTContext.runActivity(named: "Complete onboarding and reach Now") { _ in
+      app.buttons["Continue"].tap()
+      XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+      app.buttons["bluetooth.permission.continue"].tap()
+      app.tabButton("Now").assertHittable()
+    }
+    XCTContext.runActivity(named: "Open Account from Now") { _ in
+      let account = app.buttons["home.account"]
+      XCTAssertTrue(account.waitForExistence(timeout: 5))
+      account.tap()
+    }
   }
 
   private func attachScreenshot(_ name: String) {

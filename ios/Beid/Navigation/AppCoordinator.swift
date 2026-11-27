@@ -184,6 +184,12 @@ struct SensingStopOutcome: Equatable {
 @MainActor
 final class AppCoordinator: ObservableObject {
   @Published var screen: AppScreen = .welcome
+  @Published var welcomeAboutSensingPresented = false {
+    didSet { if welcomeAboutSensingPresented { welcomeAboutSensingUntilDismissed = true } }
+  }
+  @Published var welcomeAboutSensingUntilDismissed = false
+  @Published var accountSheetUntilDismissed = false
+  @Published var homeEventCodeSheetUntilDismissed = false
   @Published var walletAddress: String?
   /// The address from this process's live connector session, if any — the
   /// only wallet-address value the former event-binding sheet was
@@ -246,6 +252,7 @@ final class AppCoordinator: ObservableObject {
   #endif
   @Published var accountSheetPresented = false {
     didSet {
+      if accountSheetPresented { accountSheetUntilDismissed = true }
       if oldValue, !accountSheetPresented {
         cancelPendingJoinAttempt()
       }
@@ -261,6 +268,7 @@ final class AppCoordinator: ObservableObject {
   /// has no attempt left to supersede.
   @Published var homeEventCodeSheetPresented = false {
     didSet {
+      if homeEventCodeSheetPresented { homeEventCodeSheetUntilDismissed = true }
       if oldValue, !homeEventCodeSheetPresented {
         cancelPendingJoinAttempt()
       }
@@ -1534,6 +1542,8 @@ final class AppCoordinator: ObservableObject {
     let detectedDeviceCount = sensingCoordinator.devicesVerified
     let firstSightingAt = sensingCoordinator.firstSightingAt
     let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
+    let isDemo = sensingCoordinator.demoWindowBarsIndex != nil
+    let demoBarsFirstSightingAt = sensingCoordinator.demoBarsFirstSightingAt
     homeDiscoveryHeldAfterStop = true
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
@@ -1565,7 +1575,9 @@ final class AppCoordinator: ObservableObject {
       aggregate: aggregate,
       detectedDeviceCount: detectedDeviceCount,
       firstSightingAt: firstSightingAt,
-      sealedAt: sealedAt
+      sealedAt: sealedAt,
+      isDemo: isDemo,
+      demoBarsFirstSightingAt: demoBarsFirstSightingAt
     )
   }
 

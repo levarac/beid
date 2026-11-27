@@ -22,7 +22,7 @@ python3 scripts/check_lint_fixtures.py
 ```
 
 The existing **SwiftLint** CI job runs this same command after application
-lint, using the pinned SwiftLint binary and its Xcode toolchain. Locally,
+lint, using the SwiftLint 0.65.0 image with Linux SourceKit. On macOS,
 set `DEVELOPER_DIR` as described in `ios/README.md` if necessary.
 
 The checker copies both fixtures under `ios/Beid`, runs

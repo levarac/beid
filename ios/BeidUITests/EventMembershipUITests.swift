@@ -195,7 +195,7 @@ final class EventMembershipUITests: XCTestCase {
       app.textFields["Event code"].typeText("ABANDONED\n")
       assertCodeLookupPending()
       assertCodeReceipt("submissions=\(index + 1) resumed=\(index)")
-      app.navigationBars.buttons.firstMatch.tap()
+      tapNativeBackFromCodeEntry()
       app.textFields["Event code"].assertDisappears()
 
       // Finish the fresh route's field-focus handshake before resolving the
@@ -207,9 +207,40 @@ final class EventMembershipUITests: XCTestCase {
       complete.tap()
       assertCodeReceipt("submissions=\(index + 1) resumed=\(index + 1)")
       assertFreshCodeEntry()
-      app.navigationBars.buttons.firstMatch.tap()
+      tapNativeBackFromCodeEntry()
+      app.textFields["Event code"].assertDisappears()
       app.navigationBars.buttons.firstMatch.tap()
       app.tabButton("Now").assertHittable()
+    }
+  }
+
+  /// Leave code entry with the native Back button. On the hosted runner a
+  /// slow Back tap registered as a long press and opened Back's history menu
+  /// instead of popping (beid#955). Only when that menu is open, dismiss it
+  /// away from its items and tap Back once more. The caller still asserts
+  /// that code entry disappeared.
+  private func tapNativeBackFromCodeEntry() {
+    let back = app.navigationBars.buttons["BackButton"]
+    back.assertHittable()
+    let field = app.textFields["Event code"]
+    // The history menu lists the previous screen under Back's own label.
+    let historyMenu = app.collectionViews.buttons[back.label]
+    back.tap()
+
+    let settled = XCTNSPredicateExpectation(
+      predicate: NSPredicate { _, _ in !field.exists || historyMenu.exists },
+      object: nil
+    )
+    _ = XCTWaiter.wait(for: [settled], timeout: UITestWait.timeout)
+    guard field.exists, historyMenu.exists else { return }
+
+    XCTContext.runActivity(named: "Back opened its history menu (beid#955); dismiss it and tap Back once") { _ in
+      // The menu hangs from Back at the top leading edge; the window centre
+      // is inert content on code entry.
+      app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+      historyMenu.assertDisappears()
+      back.assertHittable()
+      back.tap()
     }
   }
 

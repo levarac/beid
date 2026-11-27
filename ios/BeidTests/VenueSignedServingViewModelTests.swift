@@ -152,6 +152,73 @@ final class VenueSignedServingViewModelTests: XCTestCase {
                         broadcastUntilUnixSeconds: until)
   }
 
+  func testManualUpdateLoadsValidatedNewPackWithoutClearingCurrentBroadcast() async throws {
+    let viewModel = makeViewModel()
+    let old = renewalReceipt(until: now + 300)
+    let newIdentity = VenueArtifactIdentity(
+      eventIdHex: fixture.identity.eventIdHex,
+      definitionSequence: fixture.identity.definitionSequence,
+      bundleDigestHex: String(repeating: fixture.identity.bundleDigestHex.hasPrefix("a") ? "b" : "a", count: 64)
+    )
+    let updated = VenueImportedBundle(
+      identity: newIdentity, publicArtifact: fixture.artifact, broadcastUntilUnixSeconds: now + 900
+    )
+    ports.importReplies = [.immediate(.imported(old)), .immediate(.imported(updated))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    let installed = try XCTUnwrap(ports.installedPermit)
+    let clears = ports.calls.filter { $0 == .clearing }.count
+    acquisition.replies = [.artifact(fixture.artifact)]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    await viewModel.performPackAction()
+
+    XCTAssertEqual(acquisition.requestedSources.count, 2)
+    XCTAssertEqual(ports.calls.filter { $0 == .clearing }.count, clears)
+    XCTAssertTrue(ports.installedPermit === installed)
+    XCTAssertEqual(viewModel.loadedIdentity, newIdentity)
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertFalse(viewModel.noNewerPack)
+  }
+
+  func testManualUpdateReportsSameDigestAndKeepsExistingPack() async throws {
+    let viewModel = makeViewModel()
+    let old = renewalReceipt(until: now + 300)
+    let sameDigest = renewalReceipt(until: now + 900)
+    ports.importReplies = [.immediate(.imported(old)), .immediate(.imported(sameDigest))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    let installed = try XCTUnwrap(ports.installedPermit)
+    acquisition.replies = [.artifact(fixture.artifact)]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    await viewModel.performPackAction()
+
+    XCTAssertEqual(acquisition.requestedSources.count, 2)
+    XCTAssertTrue(ports.installedPermit === installed)
+    XCTAssertTrue(viewModel.noNewerPack)
+    XCTAssertNil(viewModel.refreshFailure)
+    XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 300)
+  }
+
+  func testManualUpdateFailureKeepsCurrentBroadcastUntilItsExpiry() async throws {
+    let viewModel = makeViewModel()
+    let old = renewalReceipt(until: now + 300)
+    ports.importReplies = [.immediate(.imported(old))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    let installed = try XCTUnwrap(ports.installedPermit)
+    let clears = ports.calls.filter { $0 == .clearing }.count
+    acquisition.replies = [.failure(.transportFailure)]
+
+    await viewModel.performPackAction()
+
+    XCTAssertEqual(viewModel.refreshFailure, .acquisition(.transportFailure))
+    XCTAssertEqual(ports.calls.filter { $0 == .clearing }.count, clears)
+    XCTAssertTrue(ports.installedPermit === installed)
+    XCTAssertEqual(expiry.scheduledStopAt, now + 300)
+  }
+
   func testLeaseRefreshBeforeEndKeepsValidRadioAndExtendsChainedEnd() async throws {
     let viewModel = makeViewModel()
     ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300))),
@@ -168,6 +235,11 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(acquisition.requestedSources.last?.handoff, URL(string: "https://venue.example/handoff"))
     XCTAssertEqual(ports.calls.filter { $0 == .clearing }.count, clears)
     XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(displayName: VenueServingContractFixture.displayName, stopAtUnixSeconds: now + 300),
+      "the visible serving deadline remains the currently permitted lease, not the receipt's chained end"
+    )
     XCTAssertNotNil(ports.installedPermit)
     XCTAssertNil(viewModel.refreshFailure)
   }
@@ -233,6 +305,11 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertTrue(ports.installedPermit === replacement)
     XCTAssertEqual(viewModel.loadedIdentity, identity)
     XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(displayName: "Renewed event", stopAtUnixSeconds: now + 600),
+      "the replacement permit, rather than its longer receipt chain, owns the serving deadline"
+    )
     XCTAssertEqual(expiry.scheduledStopAt, now + 600)
   }
 
@@ -382,6 +459,10 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(acquisition.requestedSources.first?.handoff, URL(string: "https://persisted.example/new-handoff"))
     XCTAssertEqual(viewModel.loadedIdentity, identity)
     XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(displayName: "Restored source renewal", stopAtUnixSeconds: now + 600)
+    )
     XCTAssertTrue(ports.installedPermit === replacement)
     XCTAssertEqual(expiry.scheduledStopAt, now + 600)
     XCTAssertNil(viewModel.refreshFailure)

@@ -4,6 +4,7 @@ import re
 import unittest
 from pathlib import Path
 
+from scripts.tests.workflow_yaml import workflow_data
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
@@ -12,7 +13,7 @@ BASE_HOSTED_RUNNERS = {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-26"}
 
 
 def allowed_hosted_runners(path: Path) -> set[str]:
-    if path.name == "pr-ci-ios-macos.yml":
+    if path.name in {"pr-ci-ios-macos.yml", "ios-release-cache-seed.yml"}:
         return BASE_HOSTED_RUNNERS | {"xcode-27"}
     return BASE_HOSTED_RUNNERS
 
@@ -39,7 +40,7 @@ class PublicPrWorkflowTests(unittest.TestCase):
         for name in ("pr-ci-ios-macos.yml", "pr-ci-lab-cli.yml"):
             text = (WORKFLOWS / name).read_text()
             pr = text.split("  pull_request:\n", 1)[1].split("  push:\n", 1)[0]
-            expected = ("types: [opened, synchronize, reopened, ready_for_review, labeled]"
+            expected = ("types: [opened, synchronize, reopened, ready_for_review, labeled, closed]"
                         if name == "pr-ci-ios-macos.yml" else
                         "types: [opened, synchronize, reopened, ready_for_review]")
             self.assertIn(expected, pr)
@@ -47,24 +48,27 @@ class PublicPrWorkflowTests(unittest.TestCase):
             self.assertNotIn("informational", text)
         for name in ("pr-ci.yml", "pr-ci-ios-macos.yml", "pr-ci-lab-cli.yml"):
             text = (WORKFLOWS / name).read_text()
-            for checkout in text.split("- uses: actions/checkout@")[1:]:
-                block = checkout.split("\n      - ", 1)[0]
-                self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", block)
-                self.assertIn("persist-credentials: false", block)
+            for job_id, job in workflow_data(text)["jobs"].items():
+                for step in (s for s in job["steps"] if s.get("uses", "").startswith("actions/checkout@")):
+                    source = step["with"]["ref"]
+                    if name == "pr-ci-ios-macos.yml" and job_id in ("changes", "plan"):
+                        self.assertEqual(source, "${{ github.event.pull_request.base.sha || github.sha }}")
+                    elif job_id == "ios-simulator":
+                        self.assertEqual(source, "${{ needs.plan.outputs.previous && github.event.pull_request.base.sha || github.event.pull_request.head.sha || github.sha }}")
+                    else:
+                        self.assertEqual(source, "${{ github.event.pull_request.head.sha || github.sha }}")
+                    self.assertIn(step["with"]["persist-credentials"], (False, "false"))
 
     def test_macos_builds_pin_the_available_xcode(self):
         for name, version in (
             ("pr-ci-ios-macos.yml", "27.2"),
+            ("ios-release-cache-seed.yml", "27.2"),
             ("main-ios-release-build.yml", "26.5"),
             ("pr-ci-lab-cli.yml", "26.5"),
         ):
             text = (WORKFLOWS / name).read_text()
             self.assertIn(f"DEVELOPER_DIR: /Applications/Xcode_{version}.app/Contents/Developer", text)
             self.assertNotIn("for app in /Applications/Xcode*.app", text)
-        self.assertIn(
-            "DEVELOPER_DIR=/Applications/Xcode_26.5.app/Contents/Developer",
-            (WORKFLOWS / "pr-ci.yml").read_text(),
-        )
 
     def test_public_pr_workflows_have_no_secrets(self):
         for path in WORKFLOWS.glob("*.yml"):
@@ -76,8 +80,13 @@ class PublicPrWorkflowTests(unittest.TestCase):
         self.assertIn("not a passing comparison", text)
 
     def test_all_actions_are_pinned_and_annotated(self):
-        for path in WORKFLOWS.glob("*.yml"):
+        composite = ROOT / ".github/actions/ios-release-cache/action.yml"
+        for path in [*WORKFLOWS.glob("*.yml"), composite]:
             for action in re.findall(r"(?m)^\s+(?:- )?uses: (.+)$", path.read_text()):
+                if action == "./.github/actions/ios-release-cache":
+                    self.assertIn(path.name, {"pr-ci-ios-macos.yml", "ios-release-cache-seed.yml"})
+                    self.assertLess(path.read_text().index("uses: actions/checkout@"), path.read_text().index(action))
+                    continue
                 self.assertRegex(action, r"^[\w/-]+@[0-9a-f]{40} # v[\w.]+$", path.name)
 
     def test_every_runner_is_hosted(self):

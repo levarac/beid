@@ -13,6 +13,8 @@ import pathlib
 import sys
 from typing import Iterable
 
+ANDROID_APP_SOURCE_PREFIX = "android/app/src/"
+
 
 def _is_documentation(path: str) -> bool:
     normalized = path[2:] if path.startswith("./") else path
@@ -149,7 +151,7 @@ def _affects_ios(path: str) -> bool:
         return True
     # No app/src input is currently read by the build scripts at configuration
     # time. If one is introduced, classify it as a build input before this rule.
-    if normalized.startswith("android/app/src/"):
+    if normalized.startswith(ANDROID_APP_SOURCE_PREFIX):
         return False
     if _is_documentation(normalized) or _is_lab_cli(normalized):
         return False
@@ -163,6 +165,24 @@ def _requires_full_ios(path: str) -> bool:
     if not _affects_ios(normalized) or normalized in IOS_SMOKE_FILES:
         return False
     return not normalized.startswith(IOS_SMOKE_PREFIXES)
+
+
+def safe_ios_reuse_changes(files: object) -> bool:
+    """Prove an entire GitHub compare delta is independent of an iOS run."""
+    if not isinstance(files, list) or not 0 < len(files) < 300:
+        return False
+    for entry in files:
+        if not isinstance(entry, dict) or entry.get("status") not in ("added", "modified") or entry.get("previous_filename"):
+            return False
+        path = entry.get("filename")
+        if not isinstance(path, str) or _malformed_path(path) or _affects_ios(path):
+            return False
+        # Markdown interspersed with application or build inputs can be a
+        # bundled resource. Limit inherited evidence to known independent roots.
+        if not (path.startswith(("docs/", ANDROID_APP_SOURCE_PREFIX, LAB_CLI_PREFIX))
+                or "/" not in path and path.endswith((".md", ".mdx"))):
+            return False
+    return True
 
 
 def main() -> int:

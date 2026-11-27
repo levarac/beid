@@ -6,14 +6,12 @@ on:
   # Always report a status for every PR head, including drafts. Workflow-level
   # path filters would leave a required context pending on unrelated changes.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, closed]
   merge_group:
     types: [checks_requested]
   push:
-    # Measure the merged result on main exactly once. Note the concurrency
-    # group below is keyed on github.ref with cancel-in-progress, so two merges
-    # landing back to back cancel the earlier main run: this guarantees a run
-    # starts per merge, not that every one finishes.
+    # Report on matching main pushes. The planner can credit a directly executed
+    # full main merge-queue run on the identical commit.
     branches: [main]
     paths:
       - ".github/workflows/pr-ci-ios-macos.yml"
@@ -26,6 +24,7 @@ on:
       - "android/gradle/wrapper/**"
       - "android/gradle/*.toml"
       - "scripts/ci_change_filter.py"
+      - "scripts/ios_pr_run_reuse.py"
       - "scripts/xcodegen_generate_checked.sh"
       - "scripts/resolve_kmp_java_home.sh"
       - "scripts/download_xcodegen.sh"
@@ -39,6 +38,11 @@ on:
   # Escape hatch: run this lane against any ref on demand. `paths` does not
   # apply to workflow_dispatch, so a manual run always executes.
   workflow_dispatch:
+    inputs:
+      ui_shards:
+        description: Number of UI test jobs for this full run
+        type: choice
+        options: ['4', '5']
   # 03:23 UTC avoids the busy top of the hour; scheduled workflows use main,
   # the default branch. Its separate group cannot cancel a main push.
   schedule:
@@ -49,13 +53,14 @@ permissions:
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
-  # Change only this value to select two through five UI shards.
-  IOS_UI_SHARDS: '5'
+  # Four UI jobs plus the unit job fit within five available macOS slots.
+  IOS_UI_SHARDS: ${{ inputs.ui_shards || '4' }}
 
 concurrency:
-  # Event and ref/PR identity isolate queue entries from PR updates and main pushes.
-  group: pr-ios-macos-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A merged PR's ref changes to its base. Keep close in the PR's group;
+  # an unrelated label gets its own group so it cannot cancel active tests.
+  group: pr-ios-macos-${{ github.event_name }}-${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.number) || github.ref }}${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:full-ui' || github.event.action == 'closed' && github.run_attempt > 1) && github.run_id || '' }}
+  cancel-in-progress: ${{ github.event.action != 'ready_for_review' }}
 
 jobs:
   changes:
@@ -63,7 +68,7 @@ jobs:
     # Pull requests only: merge groups, main pushes, nightly and manual runs bypass classification.
     # The name differs from pr-ci.yml's "Determine changed paths" on purpose:
     # required status contexts are keyed by job name.
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' && (github.event.action != 'labeled' || github.event.label.name == 'ci:full-ui') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     permissions:
@@ -77,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
 
       - name: Collect changed paths
@@ -159,17 +164,21 @@ jobs:
   plan:
     name: Plan iOS test jobs
     needs: changes
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'skipped') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       run: ${{ steps.plan.outputs.run }}
       mode: ${{ steps.test-mode.outputs.mode }}
       matrix: ${{ steps.plan.outputs.matrix }}
+      previous: ${{ steps.previous.outputs.previous }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
 
       - name: Determine test mode
@@ -187,28 +196,57 @@ jobs:
               --event-name "$EVENT_NAME" --event-path "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check for directly executed iOS evidence
+        id: previous
+        if: >-
+          ${{ github.run_attempt == 1 &&
+              ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+               (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
+                (github.event.action == 'ready_for_review' || github.event.action == 'synchronize' && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui')) &&
+                needs.changes.result == 'success' && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false')) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ steps.test-mode.outputs.mode }}
+        run: |
+          if [[ -f scripts/ios_pr_run_reuse.py ]]; then
+            python3 -m scripts.ios_pr_run_reuse "$MODE" >> "$GITHUB_OUTPUT"
+          fi
+
+      # This step name records immutable event inputs on the source attempt.
+      - name: iOS plan v2 PR ${{ github.event.number }} base ${{ github.event.pull_request.base.sha }} head ${{ github.event.pull_request.head.sha }} mode ${{ steps.test-mode.outputs.mode }} merge ${{ github.sha }}
+        if: ${{ github.event_name == 'pull_request' && !steps.previous.outputs.previous && needs.changes.outputs.ios == 'true' && needs.changes.outputs.error == 'false' }}
+        run: echo "Planning a fresh iOS execution"
+
+      - name: Use prior iOS execution
+        if: ${{ steps.previous.outputs.previous != '' }}
+        run: echo "The aggregate will identify the original run and tested SHA."
+
       - name: Plan bounded test matrix
         id: plan
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           CHANGES_JSON: ${{ toJSON(needs.changes) }}
+          PREVIOUS: ${{ steps.previous.outputs.previous }}
         run: |
           set -euo pipefail
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
-          from scripts.ios_ui_smoke import UI_SHARD_COUNTS, classifier_skip
+          from scripts.ios_ui_smoke import classifier_skip
           count = int(os.environ['IOS_UI_SHARDS'])
-          if count not in UI_SHARD_COUNTS:
-              raise SystemExit('IOS_UI_SHARDS must be 2 through 5')
+          if count not in (4, 5):
+              raise SystemExit('IOS_UI_SHARDS must be 4 or 5')
           skip = classifier_skip(os.environ['EVENT_NAME'], {'changes': json.loads(os.environ['CHANGES_JSON'])})
-          print(f'run={str(not skip).lower()}')
+          print(f'run={str(not skip and not os.environ.get("PREVIOUS")).lower()}')
           print('matrix=' + json.dumps({'lane': ['unit'] + [f'ui-{i + 1}' for i in range(count)]}))
           PY
 
   build:
     name: Build iOS test bundles
     needs: [changes, plan]
+    permissions:
+      contents: read
+      actions: read
     # A failed/missing classifier runs the lane. Smoke builds and tests here;
     # full builds once here, then runs the artifact on independent test jobs.
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' }}
@@ -226,11 +264,17 @@ jobs:
     steps:
       - name: Initialize CI output path
         id: initialize
+        env:
+          RELEASE_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'release/1.1.0' }}
         shell: bash
         run: |
           set -euo pipefail
           printf 'attempt=%s\n' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
-          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+          output="$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [[ "$RELEASE_PR" == true ]]; then
+            output="$RUNNER_TEMP/beid-release-build"
+          fi
+          printf 'CI_OUTPUT_ROOT=%s\n' "$output" >> "$GITHUB_ENV"
           # Stable dependency-only location; never cache DerivedData/results.
           printf 'SPM_SOURCE_ROOT=%s\n' "$RUNNER_TEMP/beid-spm/SourcePackages" >> "$GITHUB_ENV"
 
@@ -293,26 +337,26 @@ jobs:
           ./gradlew --version || ./gradlew --version
 
       - name: Save Gradle distribution
-        if: ${{ steps.distribution.outputs.cache-hit != 'true' }}
+        if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.base.ref != 'release/1.1.0') && steps.distribution.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.gradle/wrapper/dists
           key: ${{ steps.distribution.outputs.cache-primary-key }}
 
       - name: Cache KMP dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: kmp
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
-            ~/.gradle/caches
-            !~/.gradle/caches/build-cache-*
-            !~/.gradle/caches/*/executionHistory
-            ~/.konan
+            ~/.gradle/caches/modules-2/files-2.1
+            ~/.konan/dependencies
           # The Kotlin version is declared in android/build.gradle.kts today.
           # No prefix restore: a toolchain/configuration mismatch stays cold.
-          key: beid-ios-kmp-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
+          key: beid-ios-kmp-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.sdk }}-${{ steps.toolchain.outputs.jdk }}-${{ hashFiles('android/gradle/*.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/gradle.properties', 'shared/build.gradle.kts') }}
 
       - name: Cache SPM checkouts
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: spm
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           # Repository objects keep checkouts' Git alternates valid. Neither
           # SwiftPM build products nor DerivedData are included.
@@ -320,6 +364,12 @@ jobs:
             ${{ env.SPM_SOURCE_ROOT }}/checkouts
             ${{ env.SPM_SOURCE_ROOT }}/repositories
           key: beid-ios-spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
+      - name: Restore release compiler and Kotlin export caches
+        if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'release/1.1.0'
+        uses: ./.github/actions/ios-release-cache
+        with:
+          operation: restore
 
       - name: Install pinned XcodeGen
         shell: bash
@@ -387,6 +437,13 @@ jobs:
             --log "$CI_OUTPUT_ROOT/spm.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
             xcodebuild -resolvePackageDependencies -project ios/Beid.xcodeproj -scheme Beid \
             -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" -onlyUsePackageVersionsFromResolvedFile
+          cache_flags=("GITHUB_ACTIONS=${GITHUB_ACTIONS:-}" "RUNNER_ENVIRONMENT=${RUNNER_ENVIRONMENT:-}"
+                       "BEID_SWIFT_EXPORT_KEY=${BEID_SWIFT_EXPORT_KEY:-}"
+                       "BEID_SWIFT_EXPORT_ENTRY=${BEID_SWIFT_EXPORT_ENTRY:-}")
+          if [[ -n "${BEID_CAS_PATH:-}" ]]; then
+            cache_flags+=(COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES
+                            "COMPILATION_CACHE_CAS_PATH=$BEID_CAS_PATH")
+          fi
           python3 -m scripts.ios_ci_timing --phase build \
             --log "$CI_OUTPUT_ROOT/build.log" --timings "$CI_OUTPUT_ROOT/build-timings.jsonl" -- \
             xcodebuild -showBuildTimingSummary \
@@ -399,6 +456,7 @@ jobs:
             -clonedSourcePackagesDirPath "$SPM_SOURCE_ROOT" \
             -disableAutomaticPackageResolution \
             SWIFT_OPTIMIZATION_LEVEL=-O \
+            "${cache_flags[@]}" \
             BEID_KMP_BUILD_TYPE=Release \
             build-for-testing
 
@@ -610,6 +668,24 @@ jobs:
           xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true
           xcrun simctl delete "$SIMULATOR_UDID"
 
+      - name: Save KMP dependencies outside release PRs
+        if: (github.event_name != 'pull_request' || github.event.pull_request.base.ref != 'release/1.1.0') && steps.kmp.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches/modules-2/files-2.1
+            ~/.konan/dependencies
+          key: ${{ steps.kmp.outputs.cache-primary-key }}
+
+      - name: Save SPM checkouts outside release PRs
+        if: (github.event_name != 'pull_request' || github.event.pull_request.base.ref != 'release/1.1.0') && steps.spm.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ env.SPM_SOURCE_ROOT }}/checkouts
+            ${{ env.SPM_SOURCE_ROOT }}/repositories
+          key: ${{ steps.spm.outputs.cache-primary-key }}
+
   tests:
     name: iOS full tests (${{ matrix.lane }})
     needs: [plan, build]
@@ -619,7 +695,7 @@ jobs:
     timeout-minutes: 55
     strategy:
       fail-fast: false
-      # One unit job plus at most five UI shards start after the build.
+      # The default starts one unit job and four UI jobs after the build.
       max-parallel: 6
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
@@ -774,19 +850,31 @@ jobs:
           xcrun simctl delete "$SIMULATOR_UDID"
 
   ios-simulator:
-    name: iOS simulator
+    name: ${{ matrix.context }}
+    strategy:
+      matrix:
+        context:
+          - iOS simulator
+          - iOS simulator (inactive)
+        exclude:
+          - context: ${{ (github.event_name != 'pull_request' || github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || github.event.action == 'ready_for_review' || github.event.action == 'labeled' && github.event.label.name == 'ci:full-ui') && 'iOS simulator (inactive)' || 'iOS simulator' }}
     needs: [changes, plan, build, tests]
     if: ${{ always() }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
     steps:
+      - name: Record inactive PR event
+        if: ${{ matrix.context == 'iOS simulator (inactive)' }}
+        run: echo 'This PR event requests no iOS tests.' >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: ${{ matrix.context == 'iOS simulator' }}
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ needs.plan.outputs.previous && github.event.pull_request.base.sha || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Download structured test evidence
-        if: ${{ needs.plan.outputs.run == 'true' }}
+        if: ${{ matrix.context == 'iOS simulator' && needs.plan.outputs.run == 'true' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: ios-evidence-*
@@ -794,7 +882,7 @@ jobs:
           path: ${{ runner.temp }}/ios-evidence
 
       - name: Verify all job results and execution ledger
-        if: always()
+        if: ${{ always() && matrix.context == 'iOS simulator' }}
         shell: bash
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}

@@ -28,7 +28,7 @@ class ShardContractTest(unittest.TestCase):
         self.assertTrue(hasattr(self.tool, "shard_tests"), "duration-based sharding is missing")
         tests = [f"BeidUITests/FlowTests/test{i}" for i in range(12)]
         durations = {test: 10.0 for test in tests[:-1]}
-        for count in (4, 5):
+        for count in (2, 3, 4, 5):
             shards = self.tool.shard_tests(tests, durations, count)
             self.assertEqual(len(shards), count)
             self.assertEqual(shards, self.tool.shard_tests(list(reversed(tests)), durations, count))
@@ -38,8 +38,8 @@ class ShardContractTest(unittest.TestCase):
         for count in (0, 1, 6):
             with self.assertRaises(ValueError):
                 self.tool.shard_tests(tests, durations, count)
-        with self.assertRaises(ValueError):
-            self.tool.shard_tests([ONE, ONE], {}, 2)
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            self.tool.shard_tests(tests + [tests[0]], {}, 4)
 
     def test_runtime_enumeration_requires_both_bundles_and_no_duplicates(self):
         self.assertTrue(hasattr(self.tool, "parse_enumeration"), "runtime enumeration is missing")
@@ -113,14 +113,15 @@ class ShardContractTest(unittest.TestCase):
             unit_suites.pop()
             enum.write_text(json.dumps(payload))
             result = subprocess.run([sys.executable, "-m", "scripts.ios_ui_smoke", "shards",
-                "--enumeration", str(enum), "--output", str(manifest), "--count", "3",
+                "--enumeration", str(enum), "--output", str(manifest), "--count", "4",
                 "--mode", "full", "--sha", "a" * 40], cwd=ROOT, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0, "stale unit skip list accepted")
 
     def test_duration_weights_must_be_finite_positive_numbers(self):
+        tests = [f"BeidUITests/FlowTests/test{i}" for i in range(4)]
         for value in (-1, 0, True, float("nan"), float("inf"), "20"):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                self.tool.shard_tests([ONE, TWO], {ONE: value}, 2)
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "invalid test duration"):
+                self.tool.shard_tests(tests, {tests[0]: value}, 4)
 
 
 class AggregateContractTest(unittest.TestCase):

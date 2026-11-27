@@ -446,6 +446,42 @@ final class SigilViewTests: XCTestCase {
     assertCommandsMatchLayout(SigilDrawing.commands(for: full, ground: ground), full, ground: ground)
   }
 
+  // MARK: - Sealed-on-ink style override
+
+  func testSealedOnInkStyleRepaintsRingsSegmentsAndDetectedDotsOnly() {
+    let ground = BeidSharedKit.sigil.SigilGround.NONE
+    let layout = BeidSharedKit.sigil.layoutSigil(
+      input: makeInput(windowCount: 4, Self.mixedEntries),
+      size: 300,
+      ground: ground
+    )
+    let standard = SigilDrawing.commands(for: layout, ground: ground, page: .ink)
+    let styled = SigilDrawing.commands(for: layout, ground: ground, page: .ink, style: .sealedOnInk)
+    XCTAssertEqual(standard.count, styled.count)
+
+    var sawRing = false, sawSegment = false, sawDetectedDot = false
+    for index in 0..<Int(layout.primitiveCount) {
+      let kind = layout.primitiveAt(index: Int32(index))!.kind
+      switch (kind, styled[index]) {
+      case (.RING, let .strokeCircle(_, _, lineWidth, role)):
+        sawRing = true
+        XCTAssertEqual(role, .hairlineOnInk)
+        XCTAssertEqual(lineWidth, 1)
+      case (.DETECTED_LINE, let .strokeLine(_, _, _, role)):
+        sawSegment = true
+        XCTAssertEqual(role, .graphIdleOnInk)
+      case (.DETECTED_DOT, let .fill(_, radius, role)):
+        sawDetectedDot = true
+        XCTAssertEqual(radius, 4.5)
+        XCTAssertEqual(role, .onInk)
+      default:
+        // Everything else (mutual marks, centre dot) is untouched.
+        XCTAssertEqual(styled[index], standard[index])
+      }
+    }
+    XCTAssertTrue(sawRing && sawSegment && sawDetectedDot)
+  }
+
   // MARK: - The presence-2 / mutual paths
 
   /// An isolated mutual ring — nothing mutual next to it — is a dot in both

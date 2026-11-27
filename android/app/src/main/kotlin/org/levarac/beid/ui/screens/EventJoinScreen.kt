@@ -179,9 +179,8 @@ fun EventJoinScreen(
  * Once [EventJoinUiState.Sensing] is reached, the title and the nearby-event
  * cards give way to [ScanFlowScreen] (beid#336) — the Android equivalent of
  * iOS's `ScanFlowView` full-screen cover, except the account-entry icon
- * above stays visible in every state: it is Android's only door to the
- * Account screen (and therefore to "Leave Event"). It stays in the chrome
- * alongside the one-tap Close action while a session is active.
+ * above stays visible in every state. Account does not own session
+ * finalization; the confirmed Close/Stop action stays in the sensing chrome.
  *
  * [showEntranceCeremony]/[onCeremonyFinished] default to "skip the
  * ceremony" — read-only scenario/demo playback has no coordinator-backed

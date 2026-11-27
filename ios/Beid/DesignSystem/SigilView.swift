@@ -36,13 +36,46 @@ enum SigilInkRole: Equatable {
   /// Library `bg` — `DS.Color.surfaceCanvas`. Marks sitting *on* the filled
   /// ink disc.
   case onInk
+  /// `DS.Color.strokeHairlineOnInk` (`on-ink/line`). Only `SigilStyle` assigns it.
+  case hairlineOnInk
+  /// `DS.Color.graphNodeIdle`. Only `SigilStyle` assigns it.
+  case graphIdleOnInk
 
   var color: Color {
     switch self {
     case .ink: return DS.Color.textPrimary
     case .onInk: return DS.Color.surfaceCanvas
+    case .hairlineOnInk: return DS.Color.strokeHairlineOnInk
+    case .graphIdleOnInk: return DS.Color.graphNodeIdle
     }
   }
+}
+
+/// A Swift-side render override for one placement. The shared layout still
+/// owns every position and the draw order; a style only repaints and
+/// re-sizes the marks below, so shared Kotlin (and Android) stay untouched.
+/// `SIGIL_RING_WIDTH_K` is provisional in shared, which is why the ring width
+/// is overridden here instead of there.
+struct SigilStyle: Equatable {
+  var ringRole: SigilInkRole?
+  /// Absolute ring stroke width in points.
+  var ringLineWidth: CGFloat?
+  var detectedLineRole: SigilInkRole?
+  /// Absolute radius in points of a detected-only node dot.
+  var detectedDotRadius: CGFloat?
+
+  static let standard = SigilStyle()
+
+  /// Sealed record on the ink card (Figma 06): 1 pt `on-ink/line` rings,
+  /// `graphNodeIdle` connecting segments, and 9 pt white detected dots.
+  /// Figma draws 9 px white for a mutual dot; mutual is never known on
+  /// device, so the detected dot takes that size here.
+  static let sealedOnInk = SigilStyle(
+    ringRole: .hairlineOnInk,
+    ringLineWidth: 1,
+    detectedLineRole: .graphIdleOnInk,
+    detectedDotRadius: 4.5
+  )
 }
 
 /// The page a Sigil sits on (beid#653 OD-6). Frames 04 (the active card)
@@ -133,7 +166,8 @@ enum SigilDrawing {
   static func commands(
     for layout: BeidSharedKit.sigil.SigilLayout,
     ground: BeidSharedKit.sigil.SigilGround,
-    page: SigilPage = .canvas
+    page: SigilPage = .canvas,
+    style: SigilStyle = .standard
   ) -> [SigilDrawCommand] {
     guard layout.isSuccess else { return [] }
 
@@ -143,15 +177,25 @@ enum SigilDrawing {
     for index in 0..<Int(layout.primitiveCount) {
       guard let primitive = layout.primitiveAt(index: Int32(index)),
         let shape = markShape(for: primitive.kind),
-        let role = inkRole(for: primitive.kind, ground: ground, page: page)
+        var role = inkRole(for: primitive.kind, ground: ground, page: page)
       else { continue }
+      var lineWidth = CGFloat(primitive.lineWidth)
+      var radius = CGFloat(primitive.radius)
+      if primitive.kind == .RING {
+        role = style.ringRole ?? role
+        lineWidth = style.ringLineWidth ?? lineWidth
+      } else if primitive.kind == .DETECTED_LINE {
+        role = style.detectedLineRole ?? role
+      } else if primitive.kind == .DETECTED_DOT {
+        radius = style.detectedDotRadius ?? radius
+      }
 
       switch shape {
       case .filledCircle:
         commands.append(
           .fill(
             center: CGPoint(x: primitive.x, y: primitive.y),
-            radius: CGFloat(primitive.radius),
+            radius: radius,
             role: role
           )
         )
@@ -159,8 +203,8 @@ enum SigilDrawing {
         commands.append(
           .strokeCircle(
             center: CGPoint(x: primitive.x, y: primitive.y),
-            radius: CGFloat(primitive.radius),
-            lineWidth: CGFloat(primitive.lineWidth),
+            radius: radius,
+            lineWidth: lineWidth,
             role: role
           )
         )
@@ -169,7 +213,7 @@ enum SigilDrawing {
           .strokeLine(
             from: CGPoint(x: primitive.x, y: primitive.y),
             to: CGPoint(x: primitive.x2, y: primitive.y2),
-            lineWidth: CGFloat(primitive.lineWidth),
+            lineWidth: lineWidth,
             role: role
           )
         )
@@ -286,6 +330,7 @@ struct BeidSigilView: View {
   let ground: BeidSharedKit.sigil.SigilGround
   /// The page under the Sigil; decides mark color only (`SigilPage`).
   var page: SigilPage = .canvas
+  var style: SigilStyle = .standard
   var isDeviceRecord = false
 
   var body: some View {
@@ -294,7 +339,7 @@ struct BeidSigilView: View {
       size: Double(size),
       ground: ground
     )
-    let commands = SigilDrawing.commands(for: layout, ground: ground, page: page)
+    let commands = SigilDrawing.commands(for: layout, ground: ground, page: page, style: style)
 
     Canvas { context, _ in
       for command in commands {

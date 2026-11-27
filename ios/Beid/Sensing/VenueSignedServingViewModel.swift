@@ -114,6 +114,7 @@ enum VenueServingStatus: Equatable {
 }
 
 enum VenueRefreshFailure: Equatable {
+  case noUpdateSource
   case acquisition(VenueAcquisitionFailure)
   case rejected(VenueImportFailure)
   case anotherEvent
@@ -140,6 +141,7 @@ final class VenueSignedServingViewModel: ObservableObject {
   @Published private(set) var storedSourceDescription: String?
   @Published private(set) var refreshFailure: VenueRefreshFailure?
   @Published private(set) var isRefreshing = false
+  @Published private(set) var noNewerPack = false
 
   /// The event id the pasted link's own fragment named, published the moment the
   /// fragment decodes and before anything is fetched.
@@ -569,6 +571,20 @@ final class VenueSignedServingViewModel: ObservableObject {
     await supply(bundleSource: bundleSource, handoffSource: handoffSource, sourceDescription: sourceDescription, expectedCanonicalEventIdHex: canonicalEventIdHex)
   }
 
+  func performPackAction() async {
+    guard case .serving = status else {
+      await restoreFromStorage()
+      return
+    }
+    guard eligible, !Task.isCancelled, !isRefreshing, let owner = workflow?.id else { return }
+    noNewerPack = false
+    guard workflow?.refreshSource != nil else {
+      refreshFailure = .noUpdateSource
+      return
+    }
+    _ = await refetch(owner: owner, reportUnchanged: true)
+  }
+
   /// Reload is a new explicit selection and supersedes every older operation.
   func restoreFromStorage() async {
     guard sessionActive else { return }
@@ -867,6 +883,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     renewalID = UUID()
     scheduledRenewalEnd = nil
     isRefreshing = false
+    noNewerPack = false
   }
 
   private func scheduleRenewal(now: Int64) {
@@ -880,12 +897,13 @@ final class VenueSignedServingViewModel: ObservableObject {
     }
   }
 
-  private func refetch(owner: UUID) async -> Bool {
+  private func refetch(owner: UUID, reportUnchanged: Bool = false) async -> Bool {
     guard eligible, workflow?.id == owner, let source = workflow?.refreshSource,
       let expected = workflow?.receipt?.identity.eventIdHex else { return false }
     renewalTask?.cancel()
     let request = UUID()
     renewalID = request
+    noNewerPack = false
     isRefreshing = true
     let task = Task { [self] in
       let artifact: VenuePublicArtifact
@@ -928,9 +946,13 @@ final class VenueSignedServingViewModel: ObservableObject {
             return
           }
         }
+        refreshFailure = nil
+        if reportUnchanged, receipt.identity.bundleDigestHex == workflow?.receipt?.identity.bundleDigestHex {
+          noNewerPack = true
+          return
+        }
         workflow?.artifact = artifact
         workflow?.receipt = receipt
-        refreshFailure = nil
         store.store(VenuePublicArtifactRecord(
           bundleBytes: artifact.bundleBytes, handoffBytes: artifact.handoffBytes,
           sourceDescription: storedSourceDescription ?? "Venue pack", storedAt: Date(), refreshSource: source))
