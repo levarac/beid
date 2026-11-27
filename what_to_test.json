@@ -1,6 +1,10 @@
 [
   {
+    "language": "ja",
+    "text": "木曜の打ち合わせで出た画面の直しのうち、本線に入った分を載せた確認用ビルドです。前回のビルド 331 からの変更:\n- 計測中のレーダー: 近くの端末が電波の強さに応じて 3 本の輪の上に並ぶか。レーダーを囲む白いカウントダウンの弧がなくなっているか\n- 計測中のバー: 直近 6 つの 5 分枠が観測のない枠も含めて並び、今の枠が NOW の上の白いバーになっているか\n- SENSING の横の点: 信号が切れると琥珀色になるか\n- 保存した記録の印: 黒いカードに合わせて輪が細く、端末の点が白くなっているか\n- 計測画面が中身の終わりで止まり、その先の余白までスクロールしないか（331 で報告。シミュレータでは再現しませんでした）\n- Now: 近くのイベントのカードに登録期間が出て、主催者のタイルがなくなっているか\n- 初めて記録を送る前に、観測がどう共有されるかの説明が出て、Continue を押すまで送らないか\n- 会場で発信している間に新しい会場パックを確かめられるか。発信の許可の期限が出るか\nまだ入っていないもの: 参加前と参加中のカードの見分け、Now の次にすることの案内、複数イベントの並べ方、ナビゲーションバーの状態の色、ダークモード、完了画面の一本化。"
+  },
+  {
     "language": "en-US",
-    "text": "This build sends your signed attendance observations to the event's server while you take part, as Android already does. Join the test event from the nearby card, keep the app in front and the screen unlocked for about ten minutes next to the other test phones, and check that Recording starts and the record grows. Tell us if the app says it could not send, or if anything looks different from the last build."
+    "text": "A check build with the screen fixes from Thursday's meeting that are now in the main line. Changes since build 331:\n- Live radar: nearby devices sit on three rings by signal strength, and the white countdown arc around the radar is gone\n- Live bars: the latest six five-minute windows appear, including empty ones, and the current window is the white bar above NOW\n- The dot beside SENSING turns amber when the signal is lost\n- Sealed record mark: thinner rings and white device dots that suit the dark card\n- The Sensing screen stops scrolling at the end of its content (reported on build 331; it did not reproduce in the simulator)\n- Now: the nearby-event card shows the registration period, and the organizer tile is gone\n- Before the first upload, an explanation of how observations are shared appears, and nothing is sent until you tap Continue\n- While broadcasting at a venue, you can check for a newer venue pack, and the broadcast permit deadline is shown\nNot in this build yet: telling the before-join card from the joined card, next-step guidance on Now, the multi-event layout, the navigation bar status color, dark mode, and a single completion screen."
   }
 ]
