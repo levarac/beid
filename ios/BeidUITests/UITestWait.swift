@@ -10,6 +10,37 @@ enum UITestWait {
   static let timeout: TimeInterval = 30
 }
 
+/// Layout limits known before the app launches (beid#878). A test whose
+/// coverage needs a window this device can never give the app skips before
+/// `launch()`, so a skipped case never launches or terminates the app. Each
+/// limit only rules out geometry the app window cannot reach, so it never
+/// skips a case the post-launch guard would run; those guards stay in place.
+enum UITestLayoutLimits {
+  /// `ios/project.yml` declares landscape only under
+  /// `UISupportedInterfaceOrientations~ipad`. The runner is built for both
+  /// device families, so its idiom is the device's own.
+  static var appCanBecomeWiderThanTall: Bool {
+    UIDevice.current.userInterfaceIdiom == .pad
+  }
+
+  /// The widest window the app can have here, or nil when no limit is known.
+  /// A portrait-only app is no wider than the screen's portrait width. The
+  /// screen comes from the runner's own scene, so no other app is queried;
+  /// without exactly one screen the post-launch check alone decides.
+  static var maximumAppWindowWidth: CGFloat? {
+    guard !appCanBecomeWiderThanTall else { return nil }
+    let screens = Set(UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen })
+    guard screens.count == 1, let bounds = screens.first?.bounds, !bounds.isEmpty else { return nil }
+    return min(bounds.width, bounds.height)
+  }
+
+  /// True only when a known limit rules the width out; unknown means launch.
+  static func appWindowCannotReach(width: CGFloat) -> Bool {
+    guard let limit = maximumAppWindowWidth else { return false }
+    return limit < width
+  }
+}
+
 enum ControlledDemoPhase: String {
   case sensing, eventFound, recording
 }
