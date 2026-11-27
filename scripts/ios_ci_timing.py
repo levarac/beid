@@ -47,8 +47,11 @@ def main():
                     continue
                 if line.startswith("PhaseScriptExecution ") and "BeidSharedKit" in line:
                     record("kmp", "start")
-                if "kmp" in active and line.startswith(("BUILD SUCCESSFUL", "BUILD FAILED")):
-                    record("kmp", "end" if line.startswith("BUILD SUCCESSFUL") else "incomplete")
+                if "kmp" in active:
+                    if line.rstrip("\r\n") == "Restored Kotlin Swift Export":
+                        record("kmp", "end", restored=True)
+                    elif line.startswith(("BUILD SUCCESSFUL", "BUILD FAILED")):
+                        record("kmp", "end" if line.startswith("BUILD SUCCESSFUL") else "incomplete")
                 if line.startswith(("SwiftCompile ", "SwiftEmitModule ", "SwiftDriver ")):
                     if "swift-compile-window" not in active:
                         record("swift-compile-window", "start")
