@@ -375,8 +375,9 @@ the same name shadows them.
   PRs keep smoke only when every iOS-affecting changed path is a UI or CI-selection
   path defined by `scripts/ci_change_filter.py`. Other iOS-affecting paths or failed
   classification select full mode. A `ci:full-ui` label in the event payload
-  selects the full UI suite. All other events run full, including
-  `merge_group`, main pushes, nightly and manual dispatch. With the main merge
+  selects the full UI suite. Merge groups, main pushes, nightly runs and manual
+  dispatches select full mode. A main push can credit a completed full merge-queue
+  run on the identical commit, as described in `docs/delivery-ci.md`. With the main merge
   queue (active), the merge step is to add the PR to the queue; the queue's
   completed full-mode `iOS simulator` pass on the exact merge result satisfies
   the merge requirement. The queue lane never skips for paths. For a full run
@@ -553,8 +554,9 @@ also runs it. Lab CLI selection is unchanged: labcli, lint or error runs it;
 a failed classification runs both. The optional iOS/lab CLI classifiers run
 only on PRs; merge groups bypass them and always execute both lanes. This
 reuses the existing non-PR path and ensures full iOS merge-result evidence,
-without adding another classification gate. Main pushes and manual dispatch
-also always run both lanes.
+without adding another classification gate. Triggered main pushes execute the lab CLI
+lane and can credit the main queue's full iOS result on the identical SHA.
+Manual dispatch executes the selected workflow afresh.
 The iOS classifier, planner and inherited-evidence verifier use the event base SHA.
 All PR build checkouts use the explicit PR head SHA; merge groups use
 `github.sha`, which GitHub defines as the merge-group head SHA. The iOS run

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 import re
 import sys
@@ -188,7 +189,7 @@ def latest_evidence(root, current_attempt):
     return latest
 
 
-def validate_aggregate(event, needs, manifest, evidence, sha):
+def validate_aggregate(event, needs, manifest, evidence, sha, *, ref=None):
     if needs.get("plan", {}).get("result") != "success":
         raise ValueError("test plan did not succeed")
     plan = needs["plan"].get("outputs", {})
@@ -201,17 +202,25 @@ def validate_aggregate(event, needs, manifest, evidence, sha):
     if plan.get("previous"):
         previous = json.loads(plan["previous"])
         changes = needs.get("changes", {})
-        if (not isinstance(previous, dict) or event != "pull_request" or mode not in ("smoke", "full") or previous.get("mode") != mode
-                or changes.get("result") != "success" or changes.get("outputs", {}).get("error") != "false"
-                or changes.get("outputs", {}).get("ios") != "true" or plan.get("run") != "false"
+        if not isinstance(previous, dict):
+            raise ValueError("invalid prior iOS evidence")
+        source = previous.get("source_event", "pull_request")
+        pr_reuse = (event == source == "pull_request" and changes.get("result") == "success"
+                    and changes.get("outputs", {}).get("error") == "false"
+                    and changes.get("outputs", {}).get("ios") == "true")
+        queue_reuse = (event == "push" and ref == "refs/heads/main" and source == "merge_group"
+                       and mode == "full" and previous.get("sha") == sha and changes.get("result") == "skipped")
+        if (not (pr_reuse or queue_reuse) or mode not in ("smoke", "full")
+                or previous.get("mode") != mode or plan.get("run") != "false"
                 or any(needs.get(job, {}).get("result") != "skipped" for job in ("build", "tests"))
                 or manifest is not None or evidence or not re.fullmatch("[a-f0-9]{40}", previous["sha"])
                 or type(previous["run_id"]) is not int or previous["run_id"] <= 0
                 or type(previous["attempt"]) is not int or previous["attempt"] < 1
                 or previous["attempt"] != 1 and previous["sha"] != sha):
             raise ValueError("inconsistent prior iOS execution evidence")
+        origin = "merge_group " if queue_reuse else ""
         message = (f"{mode} check for {sha} uses execution at {previous['sha']} "
-                   f"(run {previous['run_id']}, attempt {previous['attempt']}).")
+                   f"({origin}run {previous['run_id']}, attempt {previous['attempt']}).")
         if previous.get("conclusion") != "success":
             raise ValueError(f"Prior iOS check did not pass. {message} "
                              "Select Re-run all jobs for a fresh plan and test execution.")
@@ -516,10 +525,17 @@ def main() -> int:
                     manifest = json.loads((folder / "manifest.json").read_text())
                 if (folder / "test-tree.json").exists():
                     evidence[lane] = json.loads((folder / "test-tree.json").read_text())
-            message = validate_aggregate(args.event_name, needs, manifest, evidence, args.sha)
+            message = validate_aggregate(args.event_name, needs, manifest, evidence, args.sha,
+                                         ref=os.environ.get("GITHUB_REF"))
             print(message)
             with args.summary.open("a", encoding="utf-8") as output:
                 output.write(f"\n### iOS simulator aggregate\n\n{message}\n")
+                previous = needs["plan"]["outputs"].get("previous")
+                if args.event_name == "push" and previous:
+                    source = json.loads(previous)
+                    run_url = (f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
+                               f"/actions/runs/{source['run_id']}/attempts/{source['attempt']}")
+                    output.write(f"\n[Full merge-queue execution]({run_url})\n")
             return 0
         tests = parse_smoke_list(args.list.read_text(encoding="utf-8"))
         if args.command == "arguments":

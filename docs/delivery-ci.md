@@ -153,8 +153,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     unchanged. Failed classification or a missing iOS output also runs iOS.
     The lane uses `!cancelled()` so a superseded run does not start a macOS job.
     Main pushes retain their iOS/build-input path filter (including catalogs,
-    classifier and generation guard) and always run the lane; manual dispatch
-    always runs it. Nightly on main runs at 03:23 UTC, away from the busy top
+    classifier and generation guard). A matching push reports the full iOS result
+    and can credit a preceding merge-queue run on the identical commit. Manual
+    dispatch executes the full suite. Nightly on main runs at 03:23 UTC, away from the busy top
     of the hour. All three workflows' concurrency groups include event name
     and ref (or PR number). A queue ref identifies its entry, so queue runs,
     PR synchronizations, main pushes, nightly and dispatch runs cannot cancel
@@ -176,8 +177,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     with `BEID_KMP_BUILD_TYPE=Release` for the Beid target's Gradle invocation.
     Smoke runs the checked-in UI list and `BeidTests` minus the three deferred suites in `scripts/ios_ui_smoke.py`; full runs both complete bundles.
     Deferred coverage paths, uncertain classifications, and the `ci:full-ui` label
-    select full mode. Merge groups, push,
-    nightly and manual events always run full. On `merge_group`, the optional
+    select full mode. Merge groups, main pushes, nightly and manual events
+    also select full mode. On `merge_group`, the optional
     classifier is skipped and the required iOS job always executes, including
     documentation-only changes. This reuses the existing non-PR condition and
     guarantees full-suite evidence for the merge result. The existing run-name
@@ -271,9 +272,20 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     execution. The check name for unrelated labels and closed events is selected
     solely from the webhook payload, independently of skipped jobs. The check summary names the current
     head, tested SHA, run, attempt and mode. An explicit classifier skip remains
-    a separate outcome. Merge groups, main pushes, nightly and manual runs
-    always execute. A source run from before base provenance was recorded
+    a separate outcome. Merge groups, nightly and manual runs always execute.
+    A source run from before base provenance was recorded
     can only satisfy an identical-head ready check.
+
+    On the first attempt of an ordinary push to `main`, the planner looks up the
+    latest run of this iOS workflow for the same commit on the repository's main
+    merge queue. It must have succeeded before the push run was created. One
+    queue attempt must show a successful build-for-testing, the unit lane, every
+    UI shard and the aggregate's execution-ledger check. The push aggregate
+    links to that attempt and the push starts no macOS jobs. An unsuccessful
+    queue run, a different SHA, an older serial workflow, incomplete evidence
+    or an unavailable API causes fresh execution. **Re-run all jobs** on the
+    push also executes the suite. This takes effect on main after the release
+    workflow merges into main.
 
     Both modes upload `ios-evidence-<attempt>-<lane>` artifacts: enumeration,
     manifest, xcresult tree/schema/summary, per-case durations, and build logs/

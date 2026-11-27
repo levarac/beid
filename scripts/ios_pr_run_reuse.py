@@ -1,4 +1,4 @@
-"""Find directly executed PR iOS evidence. An empty result requests normal CI."""
+"""Find directly executed iOS evidence. An empty result requests normal CI."""
 
 import json
 import os
@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -65,6 +66,57 @@ def executed_mode(jobs):
     return None
 
 
+def attempt_jobs(api, run):
+    run_id, attempt = run["id"], run["run_attempt"]
+    response = api(f"actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100")
+    jobs = {job["name"]: job for job in response["jobs"]}
+    if (len(jobs) != len(response["jobs"]) or len(jobs) != response["total_count"] or
+            any(job["head_sha"] != run["head_sha"] or job["run_id"] != run_id for job in jobs.values())):
+        return {}
+    return jobs
+
+
+def previous_queue_run(event, repo, current_id, api, sha):
+    if (event["ref"] != "refs/heads/main" or event["repository"]["full_name"] != repo
+            or event["after"] != sha or not SHA.fullmatch(sha)
+            or any(event[flag] is not False for flag in ("created", "deleted", "forced"))):
+        return None
+    push = api(f"actions/runs/{current_id}")
+    if (push["id"] != current_id or push["run_attempt"] != 1 or push["event"] != "push"
+            or push["head_branch"] != "main" or push["head_sha"] != sha or push["path"] != WORKFLOW
+            or push["repository"]["full_name"] != repo):
+        return None
+    query = urlencode({"event": "merge_group", "head_sha": sha, "per_page": 100})
+    result = api("actions/workflows/pr-ci-ios-macos.yml/runs?" + query)
+    runs = result["workflow_runs"]
+    if len(runs) != result["total_count"]:
+        return None
+    # Inspect the latest matching queue run, including failing or incomplete runs.
+    # Filtering to successes here could hide a newer negative result.
+    run = max((r for r in runs if 0 < r["id"] < current_id and r["event"] == "merge_group"
+               and r["head_sha"] == sha and r["head_branch"].startswith("gh-readonly-queue/main/")
+               and r["path"] == WORKFLOW and r["workflow_id"] == push["workflow_id"]
+               and r["repository"]["full_name"] == repo and r["head_repository"]["full_name"] == repo),
+              key=lambda r: r["id"], default=None)
+    if (not run or run["status"] != "completed" or run["conclusion"] != "success"
+            or type(run["run_attempt"]) is not int or run["run_attempt"] < 1
+            or datetime.strptime(run["updated_at"], "%Y-%m-%dT%H:%M:%SZ")
+            > datetime.strptime(push["created_at"], "%Y-%m-%dT%H:%M:%SZ")):
+        return None
+    jobs = attempt_jobs(api, run)
+    plan = jobs.get("Plan iOS test jobs", {})
+    gate = jobs.get("iOS simulator", {})
+    if (any(job["run_attempt"] != run["run_attempt"] for job in jobs.values())
+            or plan.get("conclusion") != "success" or not successful_step(plan, "Plan bounded test matrix")
+            or successful_step(plan, "Use prior iOS execution")
+            or any(job["conclusion"] != "success" for name, job in jobs.items() if name.startswith("iOS full tests ("))
+            or executed_mode(jobs) != "full" or gate.get("conclusion") != "success"
+            or not successful_step(gate, "Verify all job results and execution ledger")):
+        return None
+    return {"run_id": run["id"], "attempt": run["run_attempt"], "sha": sha, "mode": "full",
+            "conclusion": "success", "source_event": "merge_group"}
+
+
 def eligible_pr_changes(files, *, cross_head, mode):
     if not isinstance(files, list) or not 0 < len(files) < 300:
         return False
@@ -121,10 +173,8 @@ def previous_run(event, mode, repo, current_id, api, current_merge):
         if (not SHA.fullmatch(sha) or run["status"] != "completed" or type(attempt) is not int or attempt < 1
                 or run["conclusion"] not in ("success", "failure", "skipped")):
             return None
-        response = api(f"actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100")
-        jobs = {job["name"]: job for job in response["jobs"]}
-        if (len(jobs) != response["total_count"]
-                or any(job["head_sha"] != sha or job["run_id"] != run_id for job in jobs.values())):
+        jobs = attempt_jobs(api, run)
+        if not jobs:
             return None
         plan = jobs.get("Plan iOS test jobs", {})
         gate = jobs.get("iOS simulator", {})
@@ -189,7 +239,16 @@ def main():
 
     try:
         event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
-        result = previous_run(event, sys.argv[1], repo, int(os.environ["GITHUB_RUN_ID"]), api, os.environ["GITHUB_SHA"])
+        run_id, sha = int(os.environ["GITHUB_RUN_ID"]), os.environ["GITHUB_SHA"]
+        if os.environ["GITHUB_EVENT_NAME"] == "push":
+            if (sys.argv[1] != "full" or os.environ["GITHUB_REF"] != "refs/heads/main"
+                    or os.environ["GITHUB_RUN_ATTEMPT"] != "1"):
+                return
+            result = previous_queue_run(event, repo, run_id, api, sha)
+        elif os.environ["GITHUB_EVENT_NAME"] == "pull_request":
+            result = previous_run(event, sys.argv[1], repo, run_id, api, sha)
+        else:
+            return
     except (AttributeError, KeyError, TypeError, ValueError, OSError, subprocess.SubprocessError):
         print("Prior iOS evidence unavailable. Running the normal lane.", file=sys.stderr)
         return
