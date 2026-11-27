@@ -10,7 +10,8 @@ NAMES = ("pr-ci.yml", "pr-ci-ios-macos.yml", "pr-ci-lab-cli.yml")
 
 
 def expression_value(expression, *, event, ref, sha="a" * 40, pr=None, labels=None,
-                     action="", label="", run_id=314, attempt=1, changes_result="success", matrix_context="", previous=""):
+                     action="", label="", run_id=314, attempt=1, changes_result="success", matrix_context="", previous="",
+                     bindings=None):
     """Evaluate the context/boolean subset used by checkout, group and run-name."""
     values = {
         "github.event_name": event,
@@ -31,11 +32,12 @@ def expression_value(expression, *, event, ref, sha="a" * 40, pr=None, labels=No
         "github.event.pull_request.base.sha": "c" * 40 if pr else "",
         "github.event.pull_request.labels": labels,
     }
+    values.update(bindings or {})
     expression = expression.replace(
         "contains(github.event.pull_request.labels.*.name, 'ci:full-ui')",
         repr(labels is not None and any(label["name"] == "ci:full-ui" for label in labels)),
     )
-    expression = re.sub(r"(?:github|needs|matrix)(?:\.[\w]+)+", lambda m: repr(values[m[0]]), expression)
+    expression = re.sub(r"(?:github|inputs|needs|steps|matrix)(?:\.[\w-]+)+", lambda m: repr(values[m[0]]), expression)
     expression = expression.replace("null", "None").replace("&&", " and ").replace("||", " or ")
     expression = re.sub(r"!(?!=)", " not ", expression)
     return eval(expression.strip(), {"__builtins__": {}}, {"format": str.format})  # noqa: S307
