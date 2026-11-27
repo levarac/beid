@@ -1937,7 +1937,8 @@ private final class DiscoveryIsolationReportRuntimeSpy: WindowReportSubmissionRu
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
-    participantCommitment: Data?
+    participantCommitment: Data?,
+    eventSigningPublicKey: Data?
   ) {
     captureCalls += 1
   }

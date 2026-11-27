@@ -30,6 +30,14 @@ import SwiftUI
 /// — never a false zero.
 /// Separates a pre-POST SUBMITTING marker from durable receipt evidence.
 struct TransparencySubmissionDisplay {
+  static var excludedWindowLabel: String {
+    String(
+      localized: "Not submittable",
+      defaultValue: "Not submittable",
+      comment: "Count of windows excluded from submission, including count-only windows and windows discarded after a signing key change."
+    )
+  }
+
   let isSubmitting: Bool
   let isSent: Bool
 
@@ -56,8 +64,8 @@ struct TransparencyView: View {
   /// published data" below it — an honest "not yet available," never a
   /// fabricated zero.
   let recordedOnDeviceCount: Int?
-  /// Tier 2 count of legacy windows that only retained a device count and
-  /// therefore can never become a canonical report-server submission.
+  /// Tier 2 count of windows excluded from canonical submission, including
+  /// count-only inputs and unsigned inputs discarded after a key change.
   /// `nil` uses the same honest-gap treatment as the adjacent count.
   let excludedWindowCount: Int?
   /// Tier 2 (参加記録), delivery and receipt sub-states: the most-advanced
@@ -137,10 +145,7 @@ struct TransparencyView: View {
         )
         Divider()
         TierRow(
-          label: Text(
-            "Not submittable (count-only record)",
-            comment: "Sub-state row under \"Participation record\": windows recorded with only a device count and no reporter RPID can never be submitted to a report server. This row makes that exclusion explicit instead of silently dropping those windows (levarac/dispatch#3)."
-          ),
+          label: Text(verbatim: TransparencySubmissionDisplay.excludedWindowLabel),
           isAvailable: excludedWindowCount != nil,
           valueText: excludedWindowCount.map { String($0) }
         )

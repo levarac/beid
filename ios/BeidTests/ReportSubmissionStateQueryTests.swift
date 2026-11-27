@@ -276,11 +276,14 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
         enin: 6,
         peerRpids: ["peer"],
         reporterRpid: "reporter",
-        participantCommitment: nil
+        participantCommitment: nil,
+        eventSigningPublicKey: DeterministicSensingCryptography().eventSigningPublicKey(eventCode: "EARLIER")
       )
     )
     let provider = CountingEventDefinitionContextProvider()
-    let runtime = try XCTUnwrap(makeEnabledRuntime(fileURL: fileURL, provider: provider))
+    let runtime = try XCTUnwrap(makeEnabledRuntime(
+      fileURL: fileURL, provider: provider, cryptography: DeterministicSensingCryptography()
+    ))
 
     runtime.captureAndQueueWindow(
       id: UUID(),
@@ -338,7 +341,8 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
 
   private func makeEnabledRuntime(
     fileURL: URL,
-    provider: any EventDefinitionContextProvider
+    provider: any EventDefinitionContextProvider,
+    cryptography: any SensingCryptography = NeverInvokedSensingCryptography()
   ) throws -> ReportSubmissionRuntime? {
     let bundleDirectory = try makeIsolatedDirectory(named: "beid-report-submission-query-bundle")
     let plist: [String: Any] = [
@@ -355,7 +359,7 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
     let bundle = try XCTUnwrap(Bundle(url: bundleDirectory))
     return ReportSubmissionRuntime.makeIfEnabled(
       bundle: bundle,
-      eventSigningCryptography: NeverInvokedSensingCryptography(),
+      eventSigningCryptography: cryptography,
       definitionProvider: provider,
       fileURL: fileURL
     )

@@ -13,6 +13,52 @@ import XCTest
 final class DeviceSecretUnavailableTests: XCTestCase {
   private let canonicalEventIdHex = "0x\(String(repeating: "a", count: 64))"
 
+  func testChangedKeyDiscardCopyExplainsTheEstablishedCause() {
+    XCTAssertEqual(
+      EventSigningKeyFailure.changed.message,
+      "A record from an earlier session could not be saved because this device's signing key changed. It was discarded."
+    )
+  }
+
+  func testUnverifiableDiscardCopyUsesCatalogEntry() {
+    XCTAssertEqual(
+      Bundle.main.localizedString(forKey: "eventSigningKeyFailure.unverifiable", value: nil, table: nil),
+      "A record from an earlier session could not be checked and was discarded."
+    )
+  }
+
+  func testDiscardFailureCopyDescribesTheEarlierRecordWithoutRestrictingRecording() {
+    XCTAssertEqual(EventSigningKeyFailure.discardFailed.title, "Earlier record update failed")
+    XCTAssertEqual(
+      EventSigningKeyFailure.discardFailed.message,
+      "Changes to a record from an earlier session could not be saved."
+    )
+    for (key, value) in [
+      ("eventSigningKeyFailure.discardFailed.title", EventSigningKeyFailure.discardFailed.title),
+      ("eventSigningKeyFailure.discardFailed", EventSigningKeyFailure.discardFailed.message)
+    ] {
+      let localized = Bundle.main.localizedString(forKey: key, value: nil, table: nil)
+      XCTAssertNotEqual(localized, key)
+      XCTAssertEqual(value, localized)
+    }
+  }
+
+  func testSigningKeyDiscardCopyUsesCatalogEntries() {
+    XCTAssertEqual(EventSigningKeyFailure.changed.title, "Earlier record discarded")
+    for (failure, key) in [
+      (EventSigningKeyFailure.changed, "eventSigningKeyFailure.changed"),
+      (.discardFailed, "eventSigningKeyFailure.discardFailed")
+    ] {
+      let localized = Bundle.main.localizedString(forKey: key, value: nil, table: nil)
+      XCTAssertNotEqual(localized, key)
+      XCTAssertEqual(failure.message, localized)
+    }
+    XCTAssertEqual(
+      EventSigningKeyFailure.changed.title,
+      Bundle.main.localizedString(forKey: "eventSigningKeyFailure.changed.title", value: nil, table: nil)
+    )
+  }
+
   func testDeviceKeyRefusalPanelUsesTheDeviceKeyErrorCopy() throws {
     let coordinator = makeCoordinator(deviceSecretStore: DeviceSecretKeychainStore(keychain: lockedKeychain()))
     coordinator.startSensing()

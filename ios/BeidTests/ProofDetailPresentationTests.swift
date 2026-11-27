@@ -25,6 +25,15 @@ final class ProofDetailPresentationTests: XCTestCase {
     XCTAssertEqual(bindingOnly.signature, "Bound to wallet")
   }
 
+  func testDiscardedSelfProofShowsAnIncompleteRecording() {
+    let value = ProofDetailPresentation(
+      method: "Bluetooth Sensing", hasSelfProof: false, hasBinding: false,
+      deviceCount: nil, windowCount: nil, sessionCount: 1, selfProofDiscardedForKeyChange: true
+    )
+    XCTAssertEqual(value.status, "Recording incomplete")
+    XCTAssertEqual(value.signature, "Not yet available")
+  }
+
   func testMissingAggregateIsUnavailableRatherThanZero() {
     let value = makePresentation(
       selfProof: false, binding: false, devices: nil, windows: nil

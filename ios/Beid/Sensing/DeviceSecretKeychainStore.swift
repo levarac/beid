@@ -94,20 +94,61 @@ struct ResolvedDeviceSecretStorage: BarnardCoreKeyStorage, Equatable {
   func setBytes(_ bytes: [UInt8], forKey key: String) {}
 }
 
+enum EventSigningDiscardReason: String, Codable {
+  case keyChanged
+  case unverifiable
+
+  var failure: EventSigningKeyFailure {
+    self == .keyChanged ? .changed : .unverifiable
+  }
+}
+
 /// The UI reports availability without exposing storage details.
 enum EventSigningKeyFailure: String, Identifiable {
   case unavailable
+  case changed
+  case unverifiable
+  case discardFailed
 
   var id: String { rawValue }
+  var isDiscardNotice: Bool { self == .changed || self == .unverifiable }
 
   var title: String {
-    String(localized: "eventSigningKeyFailure.title", defaultValue: "Recording unavailable")
+    switch self {
+    case .changed, .unverifiable:
+      return String(localized: "eventSigningKeyFailure.changed.title", defaultValue: "Earlier record discarded")
+    case .discardFailed:
+      return String(
+        localized: "eventSigningKeyFailure.discardFailed.title", defaultValue: "Earlier record update failed"
+      )
+    case .unavailable:
+      return String(localized: "eventSigningKeyFailure.title", defaultValue: "Recording unavailable")
+    }
   }
 
   var message: String {
-    String(
-      localized: "eventSigningKeyFailure.unavailable",
-      defaultValue: "The device signing key is unavailable. Unlock your device and try again."
-    )
+    switch self {
+    case .unavailable:
+      return String(
+        localized: "eventSigningKeyFailure.unavailable",
+        defaultValue: "The device signing key is unavailable. Unlock your device and try again."
+      )
+    case .changed:
+      return String(
+        localized: "eventSigningKeyFailure.changed",
+        defaultValue:
+          "A record from an earlier session could not be saved because this device's signing key changed. It was discarded."
+      )
+    case .unverifiable:
+      return String(
+        localized: "eventSigningKeyFailure.unverifiable",
+        defaultValue: "A record from an earlier session could not be checked and was discarded."
+      )
+    case .discardFailed:
+      return String(
+        localized: "eventSigningKeyFailure.discardFailed",
+        defaultValue: "Changes to a record from an earlier session could not be saved."
+      )
+    }
   }
 }
