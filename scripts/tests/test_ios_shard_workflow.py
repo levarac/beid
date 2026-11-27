@@ -27,7 +27,7 @@ class ShardWorkflowTest(unittest.TestCase):
         sizes = workflow["on"]["workflow_dispatch"]["inputs"]["ui_shards"]
         self.assertEqual(sizes["type"], "choice")
         self.assertEqual(sizes["options"][0], "4")
-        self.assertEqual(set(sizes["options"]), {"2", "3", "4", "5"})
+        self.assertEqual(set(sizes["options"]), {"4", "5"})
         self.assertIn("os.environ['IOS_UI_SHARDS']", job_block(IOS, "plan"))
         self.assertIn('--count "$IOS_UI_SHARDS"', build)
         self.assertIn("build-for-testing", build)

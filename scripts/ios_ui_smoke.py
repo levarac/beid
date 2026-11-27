@@ -19,7 +19,7 @@ DEFAULT_LIST = Path("ios/ci/ui-smoke-tests.txt")
 DEFAULT_DURATIONS = Path("scripts/ios-ui-durations.json")
 IPHONE_SKIPS = Path("scripts/ios-ui-iphone-skips.txt")
 UNIT_SKIPS = Path("scripts/ios-unit-debug-simulator-skips.txt")
-UI_SHARD_COUNTS = (2, 3, 4, 5)
+UI_SHARD_COUNTS = (4, 5)
 SMOKE_DEFERRED_UNIT_SUITES = (
     "ReportSubmissionOperatorIntegrationTests",
     "ProductionVenueBundleVerifierTests",
@@ -70,7 +70,7 @@ def shard_tests(tests, durations, count):
     """Longest-first scheduling, with identifier and shard index as tie breakers."""
     tests = unique_tests(tests, "BeidUITests")
     if isinstance(count, bool) or count not in UI_SHARD_COUNTS:
-        raise ValueError("UI shard count must be 2 through 5")
+        raise ValueError("UI shard count must be 4 or 5")
     weights = {}
     for test in tests:
         # New methods always get a positive weight and exactly one assignment.
@@ -89,7 +89,8 @@ def shard_tests(tests, durations, count):
 
 
 def ui_shard_lanes(shards):
-    if not isinstance(shards, list) or len(shards) not in UI_SHARD_COUNTS or any(not shard for shard in shards):
+    # Archived manifests can still contain two or three UI lanes.
+    if not isinstance(shards, list) or len(shards) not in (2, 3, *UI_SHARD_COUNTS) or any(not shard for shard in shards):
         raise ValueError("missing UI shards")
     return {f"ui-{index + 1}": shard for index, shard in enumerate(shards)}
 

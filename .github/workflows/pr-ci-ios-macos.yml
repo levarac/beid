@@ -43,7 +43,7 @@ on:
       ui_shards:
         description: Number of UI test jobs for this full run
         type: choice
-        options: ['4', '5', '3', '2']
+        options: ['4', '5']
   # 03:23 UTC avoids the busy top of the hour; scheduled workflows use main,
   # the default branch. Its separate group cannot cancel a main push.
   schedule:
@@ -205,7 +205,7 @@ jobs:
           from scripts.ios_ui_smoke import UI_SHARD_COUNTS, classifier_skip
           count = int(os.environ['IOS_UI_SHARDS'])
           if count not in UI_SHARD_COUNTS:
-              raise SystemExit('IOS_UI_SHARDS must be 2 through 5')
+              raise SystemExit('IOS_UI_SHARDS must be 4 or 5')
           skip = classifier_skip(os.environ['EVENT_NAME'], {'changes': json.loads(os.environ['CHANGES_JSON'])})
           print(f'run={str(not skip).lower()}')
           print('matrix=' + json.dumps({'lane': ['unit'] + [f'ui-{i + 1}' for i in range(count)]}))

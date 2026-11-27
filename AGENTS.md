@@ -483,7 +483,7 @@ runs the checked-in UI list and `BeidTests` minus the three deferred suites in t
 In full mode it uploads a tar of `Build/Products` (including `.xctestrun`), then
 **iOS full tests (${{ matrix.lane }})** runs a unit lane and duration-balanced UI
 lanes via `test-without-building`, each with fresh simulator/DerivedData/results.
-`IOS_UI_SHARDS` in the workflow is the single count setting: 4 by default. Manual runs can select 2–5
+`IOS_UI_SHARDS` in the workflow is the single count setting: 4 by default. Manual runs can select 4 or 5
 for a same-revision comparison. The default requests five macOS test jobs including unit tests. Product SHA, Xcode build, SDK
 and architecture must match before extraction; permissions/symlinks survive tar.
 **Compare proposed UI test selection** uses full-run artifacts to compare a
