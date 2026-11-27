@@ -283,9 +283,15 @@ private struct NowHomeView: View {
 
   private var bluetoothOff: some View {
     VStack(alignment: .leading, spacing: DS.Space.s) {
-      Text("BLUETOOTH OFF · SENSING PAUSED")
-        .beidTextStyle(DS.Font.Library.labelMono11)
-        .foregroundStyle(DS.Color.statusOff)
+      HStack(spacing: DS.Space.s) {
+        Circle()
+          .fill(DS.Color.statusOff)
+          .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+          .accessibilityHidden(true)
+        Text("BLUETOOTH OFF · SENSING PAUSED")
+          .beidTextStyle(DS.Font.Library.labelMono11)
+          .foregroundStyle(foreground)
+      }
       BeidTextControl("FIX", glyph: .trailing("→", announcing: "Turn on Bluetooth")) {
         coordinator.screen = .bluetoothOff
       }
