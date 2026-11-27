@@ -304,6 +304,39 @@ as of 2026-08-19 — reverify before reusing if this doc is old):
   `testImplementation("androidx.test.ext:junit:<version>")` for the
   `@RunWith(RobolectricTestRunner::class)` + `@Config(sdk = [...])` test
   harness itself.
+- `:app:prepareRobolectricSdks` resolves the SDK jars through Gradle and
+  syncs them into `app/build/robolectric` before every app JVM test task.
+  Each SDK has its own non-transitive configuration so Gradle retains both
+  versions of the same `android-all-instrumented` module. The test JVM sets
+  `robolectric.offline=true` and `robolectric.dependency.dir` to that directory;
+  Robolectric never downloads SDK jars during tests. Missing or unreadable
+  jars fail explicitly rather than falling back to Maven Central. Gradle
+  resolves only `org.robolectric:android-all-instrumented` from Google's
+  [Maven Central mirror](https://maven-central.storage-download.googleapis.com/maven2/)
+  first, with Maven Central as the missing-module fallback. Once Gradle has
+  selected a repository, a jar download failing with HTTP 429/5xx fails
+  resolution after retries; it does not switch the jar's source.
+  CI separately caches exactly these two jars in Gradle's dependency cache,
+  keyed by `robolectricSdkVersions`. Unlike setup-gradle's read-only PR cache,
+  this cache saves after successful PR jobs and is reusable on the same PR
+  (subject to GitHub cache scope/eviction); a hit avoids downloading the jars,
+  though Gradle may still fetch metadata/checksums.
+  The pinned Robolectric **4.15.1** requires these exact artifacts:
+  - **SDK 34:** `org.robolectric:android-all-instrumented:14-robolectric-10818077-i7`.
+    Every Robolectric test class explicitly selects `@Config(sdk = [34])`;
+    there is no `robolectric.properties` override.
+  - **SDK 35:** `org.robolectric:android-all-instrumented:15-robolectric-12650502-i7`.
+    `SandboxManager` selects Robolectric's maximum supported SDK for
+    `AndroidTestEnvironment`'s compile-time system resources, even when the
+    test runs on SDK 34. This is independent of the app's compileSdk/targetSdk 36.
+  Both versions, including instrumentation suffix `i7`, come from 4.15.1's
+  `DefaultSdkProvider`. Recheck `robolectricSdkVersions` in `app/build.gradle.kts`
+  when changing Robolectric or test SDK settings. An additional SDK that has
+  not been provisioned fails with the expected jar path in the local resolver.
+  After an initial normal run resolves dependencies, verify without downloads
+  from `android/` with
+  `JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" ./gradlew :app:testDebugUnitTest --offline --rerun-tasks --no-daemon`,
+  which selects the same JDK as the other commands in this README.
 - `testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:<version
   matching kotlinx-coroutines-android>")` for `Dispatchers.setMain(...)` in
   plain (non-Robolectric) ViewModel unit tests that use `viewModelScope` —
