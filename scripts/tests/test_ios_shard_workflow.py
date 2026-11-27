@@ -1,9 +1,14 @@
 """Pin the hosted graph, bounded concurrency, and artifact-only test jobs."""
 
+import json
+import os
 import re
+import subprocess
+import tempfile
 import unittest
 
-from scripts.tests.test_pr_ci_lane_skip import IOS, job_block
+from scripts.tests.test_pr_ci_lane_skip import IOS, ROOT, job_block
+from scripts.tests.workflow_yaml import named_step, workflow_data
 
 
 class ShardWorkflowTest(unittest.TestCase):
@@ -21,9 +26,34 @@ class ShardWorkflowTest(unittest.TestCase):
             self.assertIn("runs-on: xcode-27", job)
             self.assertIn('= "Xcode 27.2"', job)
         self.assertIn('item.get("name") == "iOS 27.0"', build)
-        self.assertIn("IOS_UI_SHARDS: '5'", text)
+        workflow = workflow_data(text)
+        self.assertEqual(workflow["env"]["IOS_UI_SHARDS"], "${{ inputs.ui_shards || '4' }}")
+        sizes = workflow["on"]["workflow_dispatch"]["inputs"]["ui_shards"]
+        self.assertEqual(sizes["type"], "choice")
+        self.assertEqual(sizes["options"][0], "4")
+        self.assertEqual(set(sizes["options"]), {"4", "5"})
+        self.assertIn("os.environ['IOS_UI_SHARDS']", job_block(IOS, "plan"))
+        self.assertIn('--count "$IOS_UI_SHARDS"', build)
         self.assertIn("build-for-testing", build)
         self.assertNotIn("build-for-testing", tests)
+
+    def test_manual_matrix_rejects_two_and_three_and_accepts_four_and_five(self):
+        plan = named_step(workflow_data(IOS.read_text()), "plan", "Plan bounded test matrix")
+        for count in (2, 3, 4, 5):
+            with self.subTest(count=count), tempfile.NamedTemporaryFile(mode="r+") as output:
+                result = subprocess.run(
+                    ["bash", "-c", plan["run"]], cwd=ROOT, capture_output=True, text=True,
+                    env={**os.environ, "GITHUB_OUTPUT": output.name, "IOS_UI_SHARDS": str(count),
+                         "EVENT_NAME": "workflow_dispatch", "CHANGES_JSON": "{}"})
+                if count < 4:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("IOS_UI_SHARDS must be 4 or 5", result.stderr)
+                    self.assertEqual(output.read(), "")
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    fields = dict(line.rstrip().split("=", 1) for line in output)
+                    self.assertEqual(json.loads(fields["matrix"])["lane"],
+                                     ["unit"] + [f"ui-{i + 1}" for i in range(count)])
 
     def test_release_kmp_is_scoped_to_the_debug_test_build(self):
         build = job_block(IOS, "build")

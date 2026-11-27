@@ -304,15 +304,26 @@ struct VenueSignedServingView: View {
           }
         }
         keyValueRow("Until") {
-          Text(verbatim: fixtureCode != nil ? "THU 10/15 18:00 JST" : Self.instantText(viewModel.broadcastUntilUnixSeconds ?? stopAtUnixSeconds))
+          // This row describes the permit that is actually ready/on the radio.
+          // A receipt's chained end can be later, but it is not install authority
+          // for the next lease; renewal must fetch and verify that separately.
+          Text(verbatim: fixtureCode != nil ? "THU 10/15 18:00 JST" : Self.instantText(stopAtUnixSeconds))
             .beidTextStyle(DS.Font.Library.labelMono11Time)
             .accessibilityIdentifier("venue.until")
         }
         keyValueRow("Remaining") {
           TimelineView(.periodic(from: .now, by: 1)) { context in
-            Text(remainingText(at: context.date, until: viewModel.broadcastUntilUnixSeconds ?? stopAtUnixSeconds))
+            Text(remainingText(at: context.date, until: stopAtUnixSeconds))
               .beidTextStyle(DS.Font.Library.labelMono11Time)
               .accessibilityIdentifier("venue.remaining")
+          }
+        }
+        if fixtureCode == nil, let packEnd = viewModel.broadcastUntilUnixSeconds,
+           packEnd > stopAtUnixSeconds {
+          keyValueRow("Pack schedule ends") {
+            Text(verbatim: Self.instantText(packEnd))
+              .beidTextStyle(DS.Font.Library.labelMono11Time)
+              .accessibilityIdentifier("venue.pack-schedule-end")
           }
         }
       case .idle:

@@ -144,6 +144,7 @@ enum ReportSubmissionGoldenScenario {
     )
     let cryptography = SignatureInputRecordingCryptography(wrapping: TestSensingCryptography())
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      hasViewedFirstUploadNotice: { true },
       bundle: try makeSubmissionEnabledBundle(in: directory),
       eventSigningCryptography: cryptography,
       definitionProvider: StaticEventDefinitionContextProvider(configuration: configuration),

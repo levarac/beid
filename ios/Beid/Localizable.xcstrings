@@ -1,6 +1,66 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Before your first upload": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before your first upload"
+          }
+        }
+      }
+    },
+    "The event operator receives signed observations that participating devices make of one another with their sensors. Raw observations are available through a public verification API. Others can use them to reconstruct a graph of pseudonymous devices within the event.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The event operator receives signed observations that participating devices make of one another with their sensors. Raw observations are available through a public verification API. Others can use them to reconstruct a graph of pseudonymous devices within the event."
+          }
+        }
+      }
+    },
+    "Device counts and observed relationships are public even at small events. These records show what nearby devices observed about one another. They do not establish that a person attended.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device counts and observed relationships are public even at small events. These records show what nearby devices observed about one another. They do not establish that a person attended."
+          }
+        }
+      }
+    },
+    "Records stay on your device until you delete the local data or delete the app. Backups may retain a copy, depending on your settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Records stay on your device until you delete the local data or delete the app. Backups may retain a copy, depending on your settings."
+          }
+        }
+      }
+    },
+    "Deleting a Record on your device or deleting the app does not delete observations you already sent. The event operator has no automatic deletion period. We cannot guarantee removal of sent records, third-party copies, or records on public chains.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleting a Record on your device or deleting the app does not delete observations you already sent. The event operator has no automatic deletion period. We cannot guarantee removal of sent records, third-party copies, or records on public chains."
+          }
+        }
+      }
+    },
+    "For access or deletion requests, contact hi@levarac.org.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For access or deletion requests, contact hi@levarac.org."
+          }
+        }
+      }
+    },
     "HEARD IN THE LAST 5 MINUTES": {
       "comment": "Caption below the sensing radar. Nodes represent devices heard within a rolling five minutes; the separate DEVICES HEARD metric is the whole session total.",
       "extractionState": "manual",
@@ -1678,23 +1738,23 @@
     "Couldn't seal attendance": {},
     "beid couldn't finish sealing your attendance with this wallet.": {},
     "scan.binding.title": {
-      "comment": "Event name, e.g. 'ETH Tokyo 2026 confirmed' — heading on the wallet connect+binding prompt.",
+      "comment": "Event name, e.g. 'ETH Tokyo 2026 record linked' — heading on the wallet connect+binding prompt.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ confirmed"
+            "value": "%@ record linked"
           }
         }
       }
     },
     "scan.binding.sealedSubtitle": {
-      "comment": "Confirmation after the wallet-binding signature succeeds; event name is interpolated, e.g. 'Your attendance to ETH Tokyo 2026 is sealed.'",
+      "comment": "Confirmation after the wallet-binding signature succeeds; event name is interpolated, e.g. 'Your record for ETH Tokyo 2026 is linked.'",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your attendance to %@ is sealed."
+            "value": "Your record for %@ is linked."
           }
         }
       }
@@ -4414,6 +4474,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ left"
+          }
+        }
+      }
+    },
+    "Pack schedule ends": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pack schedule ends"
           }
         }
       }

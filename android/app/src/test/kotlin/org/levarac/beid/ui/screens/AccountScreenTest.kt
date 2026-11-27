@@ -2,8 +2,6 @@ package org.levarac.beid.ui.screens
 
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -15,11 +13,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.levarac.beid.R
-import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.CachedWalletHint
 import org.levarac.beid.sensing.WalletConnectorState
-import org.levarac.beid.sensing.ScanEventSession
-import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -39,12 +34,10 @@ class AccountScreenTest {
 
     @Test
     fun supportShareStartsOnlyAfterTheUserTaps() {
-        val viewModel = AccountViewModel(FakeEventJoinSession())
         var shareCount = 0
         composeTestRule.setContent {
             BeidAppTheme {
                 AccountScreen(
-                    viewModel = viewModel,
                     isBluetoothOn = true,
                     onOpenRecords = {},
                     onShareSupport = { shareCount++ },
@@ -58,11 +51,10 @@ class AccountScreenTest {
 
     @Test
     fun bluetoothOnRendersTheActiveStatusText() {
-        val viewModel = AccountViewModel(FakeEventJoinSession())
 
         composeTestRule.setContent {
             BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = {})
+                AccountScreen(isBluetoothOn = true, onOpenRecords = {})
             }
         }
 
@@ -71,11 +63,10 @@ class AccountScreenTest {
 
     @Test
     fun bluetoothOffRendersTheOffStatusText() {
-        val viewModel = AccountViewModel(FakeEventJoinSession())
 
         composeTestRule.setContent {
             BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = false, onOpenRecords = {})
+                AccountScreen(isBluetoothOn = false, onOpenRecords = {})
             }
         }
 
@@ -83,58 +74,23 @@ class AccountScreenTest {
     }
 
     @Test
-    fun leaveEventIsDisabledWithNoActiveSession() {
-        val viewModel = AccountViewModel(FakeEventJoinSession(EventJoinUiState.Idle))
-
+    fun accountDoesNotExposeSessionFinalization() {
         composeTestRule.setContent {
             BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = {})
+                AccountScreen(isBluetoothOn = true, onOpenRecords = {})
             }
         }
 
-        composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).assertIsNotEnabled()
-    }
-
-    @Test
-    fun leaveEventIsEnabledWithAnActiveSensingSessionAndCallsSessionLeaveEvent() {
-        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Sensing))
-        val viewModel = AccountViewModel(session)
-
-        composeTestRule.setContent {
-            BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = {})
-            }
-        }
-
-        composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).performScrollTo().assertIsEnabled()
-        composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).performClick()
-
-        assertEquals(1, session.leaveEventCallCount)
-    }
-
-    @Test
-    fun leaveEventIsEnabledDuringRecordingPhaseToo() {
-        val session1 = ScanEventSession(eventCode = "ABC123")
-        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Recording(session1, peersVerified = 2)))
-        val viewModel = AccountViewModel(session)
-
-        composeTestRule.setContent {
-            BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = {})
-            }
-        }
-
-        composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).assertIsEnabled()
+        composeTestRule.onNodeWithText(context.getString(R.string.account_leave_event_button)).assertDoesNotExist()
     }
 
     @Test
     fun recordsButtonNavigatesToRecords() {
-        val viewModel = AccountViewModel(FakeEventJoinSession())
         var openRecordsCallCount = 0
 
         composeTestRule.setContent {
             BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = { openRecordsCallCount++ })
+                AccountScreen(isBluetoothOn = true, onOpenRecords = { openRecordsCallCount++ })
             }
         }
 
@@ -146,11 +102,10 @@ class AccountScreenTest {
 
     @Test
     fun venueBroadcastEntryIsPresentedInAccount() {
-        val viewModel = AccountViewModel(FakeEventJoinSession())
 
         composeTestRule.setContent {
             BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = {})
+                AccountScreen(isBluetoothOn = true, onOpenRecords = {})
             }
         }
 
@@ -162,13 +117,11 @@ class AccountScreenTest {
 
     @Test
     fun restoredWalletIsShownImmediatelyAsReferenceOnly() {
-        val viewModel = AccountViewModel(FakeEventJoinSession())
         val hint = CachedWalletHint("0x1234567890abcdef1234567890abcdef12345678", 8453L)
 
         composeTestRule.setContent {
             BeidAppTheme {
                 AccountScreen(
-                    viewModel = viewModel,
                     isBluetoothOn = true,
                     onOpenRecords = {},
                     walletState = WalletConnectorState.Restored(hint),
@@ -185,13 +138,11 @@ class AccountScreenTest {
 
     @Test
     fun noWalletConnectedStillRendersOptionalStateAndKeepsTheAppActionsUsable() {
-        val viewModel = AccountViewModel(FakeEventJoinSession())
         var openRecordsCallCount = 0
 
         composeTestRule.setContent {
             BeidAppTheme {
                 AccountScreen(
-                    viewModel = viewModel,
                     isBluetoothOn = true,
                     onOpenRecords = { openRecordsCallCount += 1 },
                     walletState = WalletConnectorState.Idle,

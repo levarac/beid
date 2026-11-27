@@ -235,6 +235,11 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(acquisition.requestedSources.last?.handoff, URL(string: "https://venue.example/handoff"))
     XCTAssertEqual(ports.calls.filter { $0 == .clearing }.count, clears)
     XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(displayName: VenueServingContractFixture.displayName, stopAtUnixSeconds: now + 300),
+      "the visible serving deadline remains the currently permitted lease, not the receipt's chained end"
+    )
     XCTAssertNotNil(ports.installedPermit)
     XCTAssertNil(viewModel.refreshFailure)
   }
@@ -300,6 +305,11 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertTrue(ports.installedPermit === replacement)
     XCTAssertEqual(viewModel.loadedIdentity, identity)
     XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(displayName: "Renewed event", stopAtUnixSeconds: now + 600),
+      "the replacement permit, rather than its longer receipt chain, owns the serving deadline"
+    )
     XCTAssertEqual(expiry.scheduledStopAt, now + 600)
   }
 
@@ -449,6 +459,10 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(acquisition.requestedSources.first?.handoff, URL(string: "https://persisted.example/new-handoff"))
     XCTAssertEqual(viewModel.loadedIdentity, identity)
     XCTAssertEqual(viewModel.broadcastUntilUnixSeconds, now + 900)
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(displayName: "Restored source renewal", stopAtUnixSeconds: now + 600)
+    )
     XCTAssertTrue(ports.installedPermit === replacement)
     XCTAssertEqual(expiry.scheduledStopAt, now + 600)
     XCTAssertNil(viewModel.refreshFailure)

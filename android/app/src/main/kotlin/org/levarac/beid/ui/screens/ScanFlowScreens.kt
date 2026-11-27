@@ -50,7 +50,7 @@ import org.levarac.beid.ui.theme.BeidTheme
  * `NavigationStack` + toolbar), these screens are composed as a *portion*
  * of `EventJoinScreen`'s existing content — the account-entry text stays
  * visible above them alongside Close, so a user can still reach Account
- * (and "Leave Event") during an active session. Because of
+ * without gaining a second, unconfirmed session-finalization route. Because of
  * that, none of these take [org.levarac.beid.ui.designsystem.BeidScreen]/
  * `BeidStateScreen` (both call `Modifier.fillMaxSize()`, which throws when
  * measured inside `EventJoinScreen`'s existing `verticalScroll` Column,
