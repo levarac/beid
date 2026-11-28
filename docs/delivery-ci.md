@@ -211,8 +211,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     and one unit job after the build. They can start together when five
     macOS runners are free. A manual run of this workflow can choose 4 or 5
     UI jobs with `ui_shards`. Its matrix planner rejects other counts. The current weights put the
-    longest lane at 56m48s with two jobs and 37m55s with three. Three jobs
-    leave only 2m05s for XCTest overhead within the 40-minute test step.
+    longest lane at 56m48s with two jobs and 37m55s with three. Under the former
+    40-minute UI limit, three jobs left only 2m05s for XCTest overhead.
 
     The shared manifest generator, `scripts/ios_ui_smoke.py shards`, accepts
     counts from 2 through 5. The single-runner release nightly uses `--count 2`
@@ -326,12 +326,13 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     gives actual task durations. Job timeouts are 50 minutes for build/smoke and
     55 per full test job, including diagnostic upload and cleanup. Step timeouts are 35 minutes for build (the Release Kotlin
     framework alone takes about 12 minutes on `xcode-27`), 10 for smoke tests,
-    and 40 for each full-mode test lane, leaving time for evidence and cleanup.
-    UI shards plan at about 20 minutes of test-case time, but on 2026-11-25
-    single tests stalled for 2 to 5 minutes on hosted runners, and 30 minutes
-    was not enough for a shard with two stalls.
-    These are containment, not claimed speed; hosted full and smoke timing and
-    artifact portability still need measurement on the final SHA.
+    and 40 for the full-mode unit lane. PR #967's four UI shards each planned
+    about 28 minutes of test-case time. The 45-minute UI step limit is timeout
+    containment for slow hosted `xcode-27` runs like #965 ui-3 and #967 ui-4,
+    which hit 40 minutes on 2026-11-27, and leaves time for evidence and cleanup.
+    On 2026-11-25 single tests stalled for 2 to 5 minutes on hosted runners,
+    exhausting a 30-minute shard limit after two stalls. Hosted full and smoke
+    timing and artifact portability still need measurement on the final SHA.
 
     ### Hosted UI query timeouts
 

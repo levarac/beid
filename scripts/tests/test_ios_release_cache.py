@@ -6,9 +6,33 @@ import tempfile
 import unittest
 
 from scripts import ios_release_cache as cache
+from scripts.tests.test_merge_group_workflows import expression_value
+from scripts.tests.workflow_yaml import named_step, workflow_data
 
 
 class ReleaseCacheTests(unittest.TestCase):
+    def test_pr_restores_release_caches_only_when_the_head_has_the_cache_files(self):
+        workflow = workflow_data(Path(".github/workflows/pr-ci-ios-macos.yml").read_text())
+        restore = named_step(workflow, "build", "Restore release compiler and Kotlin export caches")
+        files = {".github/actions/ios-release-cache/action.yml", "scripts/ios_release_cache.py",
+                 "scripts/ios_swift_export_cache.py", "scripts/ios_swift_export_key.py"}
+        release = "release/1.1.0"
+        cases = [
+            ("pull_request", release, set(), False),  # A head from before the cache was introduced.
+            ("pull_request", release, files, True),
+            ("pull_request", "main", files, False),
+            ("push", release, files, False),
+            *(("pull_request", release, files - {missing}, False) for missing in sorted(files)),
+        ]
+        for event, base, present, expected in cases:
+            with self.subTest(event=event, base=base, missing=files - present):
+                condition = restore["if"]
+                for path in files:
+                    # hashFiles returns an empty string for a path absent from the checkout.
+                    condition = condition.replace(f"hashFiles('{path}')", repr("digest" if path in present else ""))
+                self.assertEqual(expression_value(condition, event=event, ref="refs/pull/965/merge",
+                                                  bindings={"github.event.pull_request.base.ref": base}), expected)
+
     def test_lookup_only_returns_compatible_entries_from_the_release_scope(self):
         prefix = "beid-ios-cas-v1-" + "a" * 64 + "-"
         key = prefix + "2026-W48-" + "b" * 64

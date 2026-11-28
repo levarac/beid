@@ -366,7 +366,13 @@ jobs:
           key: beid-ios-spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
       - name: Restore release compiler and Kotlin export caches
-        if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'release/1.1.0'
+        # The build checks out the PR head, which may predate the cache action.
+        if: >-
+          github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'release/1.1.0' &&
+          hashFiles('.github/actions/ios-release-cache/action.yml') != '' &&
+          hashFiles('scripts/ios_release_cache.py') != '' &&
+          hashFiles('scripts/ios_swift_export_key.py') != '' &&
+          hashFiles('scripts/ios_swift_export_cache.py') != ''
         uses: ./.github/actions/ios-release-cache
         with:
           operation: restore
@@ -755,10 +761,11 @@ jobs:
 
       - name: Execute full-mode test lane
         id: run_tests
-        # UI shards plan at about 20 minutes of test-case time, but single tests stall
-        # for 2 to 5 minutes on hosted xcode-27 runners (2026-11-25); 40 is containment
-        # until the stalls are explained, not a speed target.
-        timeout-minutes: 40
+        # PR #967 planned about 28 minutes of test-case time per UI shard.
+        # On 2026-11-27, #965 ui-3 and #967 ui-4 hit 40 minutes on hosted xcode-27.
+        # The 45-minute UI limit is timeout containment. The 55-minute job budget
+        # also covers setup, evidence collection and simulator cleanup.
+        timeout-minutes: ${{ matrix.lane == 'unit' && 40 || 45 }}
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
