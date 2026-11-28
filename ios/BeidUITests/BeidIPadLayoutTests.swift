@@ -17,6 +17,11 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   func testPrimaryFlowInLandscape() throws {
+    // Decided before rotating or launching (beid#878), so a skip leaves the
+    // device as the next case expects; checked again on the launched window.
+    if !UITestLayoutLimits.appCanBecomeWiderThanTall {
+      throw XCTSkip("The current window did not become wider than tall")
+    }
     XCUIDevice.shared.orientation = .landscapeLeft
     try capturePrimaryFlow(orientation: "landscape")
   }
@@ -30,6 +35,12 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   private func captureRecordNavigation(orientation: UIDeviceOrientation, name: String) throws {
+    // A width the device can never give the app skips before launching
+    // (beid#878). The ratio check needs the launched window, because a
+    // width limit says only what the window cannot exceed.
+    if UITestLayoutLimits.appWindowCannotReach(width: 680) {
+      throw XCTSkip("Requires regular width and at least 600 points for the wide Records checks")
+    }
     let initialOrientation = XCUIDevice.shared.orientation
     defer { XCUIDevice.shared.orientation = initialOrientation }
     XCUIDevice.shared.orientation = orientation

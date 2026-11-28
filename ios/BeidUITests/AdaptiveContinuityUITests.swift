@@ -8,6 +8,7 @@ import XCTest
 /// evidence of a physical fold, a resized UIWindowScene, or BLE continuity.
 final class AdaptiveContinuityUITests: XCTestCase {
   private let app = XCUIApplication()
+  private var launched = false
 
   private struct Receipt: Decodable {
     let command: String
@@ -35,7 +36,8 @@ final class AdaptiveContinuityUITests: XCTestCase {
 
   override func tearDownWithError() throws {
     _ = notify_post("org.levarac.beid.ui-test.adaptive.restore")
-    app.terminate()
+    // A case that skipped before launching has no app to terminate (beid#878).
+    if launched { app.terminate() }
   }
 
   func testRecordingSurvivesTraitAndWindowChanges() throws {
@@ -102,6 +104,10 @@ final class AdaptiveContinuityUITests: XCTestCase {
   }
 
   func testSystemWindowResizeKeepsRecordingWhereSupported() throws {
+    // Decided before launching (beid#878); checked again on the recorded width.
+    if UITestLayoutLimits.appWindowCannotReach(width: 600) {
+      throw XCTSkip("System window resizing requires a wide starting window")
+    }
     let initial = try startRecording()
     guard initial.width >= 600 else {
       try stopExactlyOnce(initial)
@@ -136,6 +142,7 @@ final class AdaptiveContinuityUITests: XCTestCase {
 
   private func startRecording() throws -> Receipt {
     app.launchArguments = ["-beid-ui-test", "-beid-adaptive-continuity", "-beid.sensing.firstTimeHintShown", "NO"]
+    launched = true
     app.launch()
     app.buttons["Continue"].assertHittable()
     app.buttons["Continue"].tap()
