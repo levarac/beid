@@ -138,13 +138,21 @@ Screen 14b shows three times (checked 2026-11-28 against `release/1.1.0`
 - With a pack loaded but neither ready nor serving, for example after the lease
   ended, `Until` shows the loaded schedule's end beside the pack digest.
 
-Re-fetch the exact recorded source 60 seconds before the chain ends and again
-at its end. A candidate must pass identity, signatures and current-lease checks
-before it replaces the loaded chain. A link's fragment remains pinned to its
-handoff digest: a republished bundle with another digest needs a matching
-handoff, and a fragment link cannot discover that new handoff by itself.
-The paired-URL acquisition path re-fetches both public artifacts. No path
-synthesizes a handoff or weakens digest agreement to make renewal succeed.
+Two different things happen at a deadline:
+
+- Next lease inside the loaded signed chain. When a permit reaches its
+  exclusive stop and the loaded chain continues, the radio is cleared and the
+  next lease is re-evaluated from the bundle already held. Nothing is fetched;
+  the registry is consulted as in any evaluation.
+- Renewing the chain. Re-fetch the exact recorded source 60 seconds before the
+  chain ends and again at its end. A candidate must pass identity, signatures
+  and current-lease checks before it replaces the loaded chain.
+
+A link's fragment remains pinned to its handoff digest: a republished bundle
+with another digest needs a matching handoff, and a fragment link cannot
+discover that new handoff by itself. The paired-URL acquisition path re-fetches
+both public artifacts. No path synthesizes a handoff or weakens digest
+agreement to make renewal succeed.
 
 ### Manual re-Supply after a failed refresh (iOS)
 
@@ -175,9 +183,11 @@ category `venue-refresh`:
   `VenueImportFailure` or `VenueServingBlock`, or `noUpdateSource` or
   `anotherEvent`.
 - `venue_serving stopped_at_expiry chain_ended=<true|false>
-  refresh_source=<true|false>` when a ready or serving permit reaches its
-  exclusive stop and is cleared. With `chain_ended=false` the next lease of the
-  same pack is evaluated; with `true` the expiry refetch follows.
+  refresh_source=<true|false>` when a serving permit reaches its exclusive stop
+  and is cleared. A prepared permit that never passed Start is not logged,
+  because nothing was broadcasting. With `chain_ended=false` the next lease is
+  re-evaluated from the loaded chain without a fetch; with `true` the recorded
+  source is re-fetched to renew the chain.
 
 No URL, key, event ID, digest, display name or payload byte is logged. Read it
 with `log stream --predicate 'subsystem == "org.levarac.beid" AND category ==

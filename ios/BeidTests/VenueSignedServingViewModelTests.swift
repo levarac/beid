@@ -363,6 +363,27 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     ])
   }
 
+  /// A permit prepared but never started had nothing on the radio, so its
+  /// deadline is not logged as a stop, and the next lease is still not
+  /// installed without Start.
+  func testPreparedPermitExpiringWithoutStartRecordsNoStop() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 900)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    guard case .ready = viewModel.status else { return XCTFail("a valid load waits for Start: \(viewModel.status)") }
+    XCTAssertNil(ports.installedPermit)
+
+    ports.evaluationReplies = [.immediate(.blocked(try rejection(.expired)))]
+    clockReading = .available(unixSeconds: now + 300)
+    await expiry.fireAndWait()
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertTrue(installCalls.isEmpty, "nothing was ever installed")
+    XCTAssertEqual(acquisition.requestedSources.count, 1, "the next lease is evaluated without a fetch")
+    XCTAssertEqual(diagnostics.records, [])
+  }
+
   /// The logged values are fixed names. A failure category is the raw value
   /// of a closed enum, never a message, URL or byte string.
   func testRefreshDiagnosticsUseOnlyFixedStageAndCategoryNames() {

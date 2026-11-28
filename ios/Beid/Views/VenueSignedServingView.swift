@@ -304,9 +304,10 @@ struct VenueSignedServingView: View {
           }
         }
         keyValueRow("Until") {
-          // This row describes the permit that is actually ready/on the radio.
-          // A receipt's chained end can be later, but it is not install authority
-          // for the next lease; renewal must fetch and verify that separately.
+          // Current permit end: the exclusive stop of the permit that is ready
+          // or on the radio. The loaded chain's end can be later, but the next
+          // lease is installed only after it has been evaluated, and a new
+          // chain only after it has been fetched and verified.
           Text(verbatim: fixtureCode != nil ? "THU 10/15 18:00 JST" : Self.instantText(stopAtUnixSeconds))
             .beidTextStyle(DS.Font.Library.labelMono11Time)
             .accessibilityIdentifier("venue.until")
@@ -551,7 +552,7 @@ struct VenueSignedServingView: View {
   private func remainingText(at date: Date, until end: Int64) -> String {
     let seconds = fixtureCode != nil ? 8_040 : max(0, end - Int64(date.timeIntervalSince1970.rounded(.up)))
     let duration = Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
-    return String(localized: "venue.remaining", defaultValue: "\(duration) left", comment: "Time left in the loaded valid broadcast chain.")
+    return String(localized: "venue.remaining", defaultValue: "\(duration) left", comment: "Time left until the current permit end, the exclusive stop of the announcement that is ready or on the air. Not the end of the whole pack schedule.")
   }
 
   private func shortEventId(_ value: String) -> String {

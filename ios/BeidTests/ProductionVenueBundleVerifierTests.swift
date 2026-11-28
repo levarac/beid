@@ -1052,6 +1052,7 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     await model.supply(bundleSource: Self.pairedBundleURL, handoffSource: Self.pairedHandoffURL,
                        sourceDescription: "venue.example")
     guard case .ready = model.status else { return XCTFail("a valid load waits for Start: \(model.status)") }
+    XCTAssertEqual(diagnostics.records, [], "a prepared permit records nothing")
     await model.startBroadcasting()
     XCTAssertEqual(servingStop(model), start + 300, "\(model.status)")
 

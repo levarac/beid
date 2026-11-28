@@ -154,10 +154,12 @@ enum VenueRefreshTrigger: String, CaseIterable, Hashable {
 /// event id, digest, display name or payload byte is ever part of it.
 enum VenueRefreshDiagnostic: Equatable {
   case refreshFailed(trigger: VenueRefreshTrigger, stage: VenueRefreshStage, category: String)
-  /// A permit that was ready or on the radio reached its exclusive stop and
-  /// was cleared. `chainEnded` says whether the loaded schedule ended too, in
-  /// which case a refetch follows; otherwise the next lease of the same pack
-  /// is evaluated.
+  /// A permit that was on the radio (serving) reached its exclusive stop and
+  /// was cleared. A prepared permit that never passed Start is not recorded:
+  /// nothing was broadcasting. `chainEnded` says whether the loaded signed
+  /// chain ended too, in which case the recorded source is re-fetched;
+  /// otherwise the next lease is re-evaluated from the loaded chain without a
+  /// fetch.
   case stoppedAtExpiry(chainEnded: Bool, hasRefreshSource: Bool)
 }
 
@@ -954,19 +956,17 @@ final class VenueSignedServingViewModel: ObservableObject {
     guard generation == self.generation else { return }
     let owner = workflow?.id
     let end = workflow?.receipt?.broadcastUntilUnixSeconds
-    let hadPermit: Bool
-    switch status {
-    case .serving, .ready: hadPermit = true
-    default: hadPermit = false
-    }
+    let wasServing: Bool
+    if case .serving = status { wasServing = true } else { wasServing = false }
     // Expiry clears first, irrespective of outstanding obsolete work.
     invalidate()
     status = .blocked(VenueServingRejection(reason: .expired)!)
     let chainEnded: Bool
     if let end, case .available(let now) = clock(), now >= end { chainEnded = true } else { chainEnded = false }
-    // A not-started recheck also arrives here with nothing installed; only a
-    // real stop of a ready or serving permit is recorded.
-    if hadPermit {
+    // Only a permit that was on the radio is recorded. A prepared permit that
+    // never passed Start and a not-started recheck also arrive here, and
+    // neither had anything broadcasting.
+    if wasServing {
       diagnostics.record(.stoppedAtExpiry(chainEnded: chainEnded, hasRefreshSource: workflow?.refreshSource != nil))
     }
     if chainEnded, let owner {
