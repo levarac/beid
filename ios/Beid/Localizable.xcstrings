@@ -1890,7 +1890,7 @@
       }
     },
     "Participation record": {
-      "comment": "Tier 2 of 3 on the Transparency screen: what has happened to this device's sensing data after joining (recorded on-device / sent to a report server / included in published data). Distinct from \"Verified proof\" below it, which is about third-party verification, not data handling.",
+      "comment": "Tier 2 of 3 on the Transparency screen: what has happened to this device's sensing data after joining (recorded on-device / sent to a report server / included in published data). Distinct from the third-party result below it, which is about verification by a third party, not data handling.",
       "localizations": {
         "en": {
           "stringUnit": {

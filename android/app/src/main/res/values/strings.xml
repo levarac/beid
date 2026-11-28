@@ -8,12 +8,13 @@
     <!-- Screen 02: Bluetooth-permission explanation (mirrors iOS's BluetoothPermissionView). -->
     <string name="bluetooth_permission_title">Enable Bluetooth</string>
     <string name="bluetooth_permission_subtitle">beid uses Bluetooth Low Energy to find nearby events and record observations of nearby devices.</string>
-    <string name="bluetooth_permission_bullet_events_find_you_title">Events find you</string>
-    <string name="bluetooth_permission_bullet_events_find_you_subtitle">Nearby events appear automatically — no codes, no search.</string>
+    <string name="bluetooth_permission_bullet_events_find_you_title">Find nearby events</string>
+    <string name="bluetooth_permission_bullet_events_find_you_subtitle">beid hears nearby events over Bluetooth. Tap JOIN when yours appears.</string>
     <string name="bluetooth_permission_bullet_private_title">Private by design</string>
     <string name="bluetooth_permission_bullet_private_subtitle">Bluetooth uses temporary device identifiers for nearby sensing.</string>
-    <string name="bluetooth_permission_bullet_zero_effort_title">Zero effort</string>
-    <string name="bluetooth_permission_bullet_zero_effort_subtitle">Sensing runs quietly in the background. Nothing to tap.</string>
+    <string name="bluetooth_permission_bullet_zero_effort_title">Keep beid open</string>
+    <!-- Android sensing needs beid on screen: there is no foreground service, so do not promise background operation. -->
+    <string name="bluetooth_permission_bullet_zero_effort_subtitle">Sensing runs while beid is open on your screen at the event.</string>
     <string name="bluetooth_permission_allow_button">Allow Bluetooth</string>
     <string name="bluetooth_permission_settings_note">You can change this anytime in Settings.</string>
 
@@ -102,8 +103,8 @@
     <!-- "Signal lost" here is our own manual/simulated trigger, not a real Bluetooth radio outage. -->
     <string name="event_join_status_signal_lost">Signal lost — recording paused</string>
     <string name="event_join_peers_verified_label">Devices heard</string>
-    <!-- Status pill dot label — sensing is actively running (mirrors iOS's BeidStatusPill.State.sensingAutomatically). -->
-    <string name="event_join_status_pill_active">Sensing automatically</string>
+    <!-- Status pill dot label — sensing is actively running. Shown on the Sensing and Recording screens. -->
+    <string name="event_join_status_pill_active">Sensing nearby devices</string>
     <!-- Status pill dot label — sensing is paused (signal lost; mirrors iOS's BeidStatusPill.State.sensingPaused). -->
     <string name="event_join_status_pill_paused">Sensing paused</string>
     <!-- Verb: resumes a paused recording session in place, does not restart it. -->
@@ -112,7 +113,7 @@
     <string name="event_join_simulate_signal_lost">Simulate signal lost</string>
 
     <!-- Scan flow (beid#336): Sensing/Event Found/Recording/Signal Lost full-screen bodies shown inside EventJoinScreen once a session reaches EventJoinUiState.Sensing — mirrors iOS's ScanFlowView (screens 05-07/06d). -->
-    <string name="scan_sensing_message">Walk into an event — it will show up here automatically.</string>
+    <string name="scan_sensing_message">Keep beid open at the venue. Your event appears here when beid hears it nearby.</string>
     <string name="scan_sensing_heading">Looking for a nearby event</string>
     <string name="scan_close">Close</string>
     <string name="scan_stop_heading">Stop sensing?</string>
@@ -125,17 +126,18 @@
     <string name="scan_stop_keep_sensing">Keep sensing</string>
     <string name="scan_stop_since">since %1$s</string>
     <string name="scan_event_found_title">Event Found</string>
-    <string name="scan_event_found_message">Verification starts automatically — stay nearby</string>
+    <string name="scan_event_found_message">Keep beid open and stay nearby.</string>
     <string name="scan_event_found_status">Checking event details</string>
-    <!-- One-time entrance-ceremony header shown the instant Recording begins, mirrors iOS's retired ProofCollectedView copy. -->
-    <string name="scan_recording_ceremony_title">Proof Collected</string>
-    <string name="scan_recording_ceremony_subtitle">Added to your collection.</string>
+    <!-- One-time header shown the instant Recording begins. Entering Recording already stores the initial local Record; Stop later ends the session and finalizes its self-proof when applicable. Announce only that recording started and point to Stop; do not call the Record collected, added or proven. -->
+    <string name="scan_recording_ceremony_title">Recording started</string>
+    <string name="scan_recording_ceremony_subtitle">Stop sensing when you are done.</string>
     <string name="scan_recording_heading">Recording your participation</string>
-    <string name="scan_recording_supporting">Keep beid open nearby while it collects proof from other devices.</string>
+    <!-- Same copy as iOS's Recording guidance. -->
+    <string name="scan_recording_supporting">Keep the app open nearby to help devices observe each other and keep signed records.</string>
     <string name="scan_signal_lost_title">Signal Lost</string>
     <!-- %1$s is the event code — Android's ScanEventSession has no event display name yet (see beid#336's data-gap note), unlike iOS's richer EventSession.name. -->
-    <string name="scan_signal_lost_message">beid lost the connection to %1$s. Move closer and we\'ll pick it back up automatically.</string>
-    <string name="scan_signal_lost_supporting">Your progress is saved. Move closer, then resume this session.</string>
+    <string name="scan_signal_lost_message">beid lost the connection to %1$s. Move closer, then tap Resume.</string>
+    <string name="scan_signal_lost_supporting">Your progress is saved. Resume continues this session.</string>
 
     <!-- Reused for both the nav entry-point label on EventJoinScreen (tap target that opens the Account screen) and the Account screen's own title, so both say the same word. -->
     <string name="account_title">Account</string>

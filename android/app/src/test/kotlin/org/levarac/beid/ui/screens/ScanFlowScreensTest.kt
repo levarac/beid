@@ -248,7 +248,104 @@ class ScanFlowScreensTest {
         composeTestRule.onNodeWithText(context.getString(R.string.scan_sensing_message)).assertIsDisplayed()
     }
 
+    // beid#389: literal copy per phase, so a resource edit that brings back a
+    // proof claim or an "automatically" promise fails here instead of
+    // passing through getString.
+
+    @Test
+    fun sensingScreenShowsObservationScopedCopy() {
+        composeTestRule.setContent {
+            BeidAppTheme { SensingScreen() }
+        }
+
+        composeTestRule.onNodeWithText(SENSING_PILL).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Looking for a nearby event").assertIsDisplayed()
+        composeTestRule.onNodeWithText(
+            "Keep beid open at the venue. Your event appears here when beid hears it nearby.",
+        ).assertIsDisplayed()
+        composeTestRule.assertNoForbiddenObservationCopy()
+    }
+
+    @Test
+    fun eventFoundScreenShowsObservationScopedCopy() {
+        composeTestRule.setContent {
+            BeidAppTheme { EventFoundScreen(session) }
+        }
+
+        composeTestRule.onNodeWithText("Event Found").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Keep beid open and stay nearby.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Checking event details").assertIsDisplayed()
+        composeTestRule.assertNoForbiddenObservationCopy()
+    }
+
+    @Test
+    fun recordingCeremonySaysRecordingStartedWithoutClaimingProof() {
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            BeidAppTheme {
+                RecordingScreen(
+                    session = session,
+                    peersVerified = 0,
+                    showEntranceCeremony = true,
+                    onCeremonyFinished = {},
+                    onSimulateSignalLost = {},
+                    ceremonyDwellMillis = 1000,
+                )
+            }
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+
+        composeTestRule.onNodeWithText("Recording started").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Stop sensing when you are done.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Proof Collected").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Added to your collection.").assertDoesNotExist()
+        composeTestRule.assertNoForbiddenObservationCopy()
+    }
+
+    @Test
+    fun recordingScreenShowsObservationScopedCopy() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                RecordingScreen(
+                    session = session,
+                    peersVerified = 4,
+                    showEntranceCeremony = false,
+                    onCeremonyFinished = {},
+                    onSimulateSignalLost = {},
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithText(SENSING_PILL).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Recording your participation").assertIsDisplayed()
+        composeTestRule.onNodeWithText(
+            "Keep the app open nearby to help devices observe each other and keep signed records.",
+        ).assertIsDisplayed()
+        composeTestRule.assertNoForbiddenObservationCopy()
+    }
+
+    @Test
+    fun signalLostScreenAsksForResumeInsteadOfPromisingAutomaticRecovery() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                SignalLostScreen(session = session, peersVerified = 5, onResumeSensing = {})
+            }
+        }
+
+        composeTestRule.onNodeWithText("Signal Lost").assertIsDisplayed()
+        composeTestRule.onNodeWithText("beid lost the connection to ABC123. Move closer, then tap Resume.")
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Your progress is saved. Resume continues this session.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Sensing paused").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Resume").assertIsDisplayed()
+        composeTestRule.assertNoForbiddenObservationCopy()
+    }
+
     private companion object {
+        /** `event_join_status_pill_active`, the active status pill on Sensing and Recording. */
+        const val SENSING_PILL = "Sensing nearby devices"
+
         /** iOS release/1.1.0 `Localizable.xcstrings` key and value, as drawn (labelMono11 is uppercase). */
         const val RADAR_CAPTION = "HEARD IN THE LAST 5 MINUTES"
     }

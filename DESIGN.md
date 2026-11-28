@@ -1771,15 +1771,20 @@ and deliberately omitted empty sections are not empty-state layouts.
 > `BeidStatusPill` (`ui/designsystem/BeidStatusPill.kt`) is real and in
 > production use (`EventJoinScreen`, `RecordsScreen`).
 
-- Purpose: Dot + label status indicator, e.g. "Sensing automatically" atop
-  `SensingView`.
+- Purpose: Dot + label status indicator, e.g. "Sensing paused" while a
+  session waits for the signal to return. **[Android shows "Sensing nearby
+  devices" (`event_join_status_pill_active`) on its Sensing and Recording
+  screens and "Sensing paused" on Signal Lost.]**
 - Use when: A screen needs a compact, glanceable state readout that is not
   a navigable control.
 - Don't use when: The status is interactive (use a button/toggle) or needs
   more than a dot + one line of text (use `BeidBulletRow` or a bespoke row
   instead).
 - API: `BeidStatusPill(state:)`, `state: BeidStatusPill.State` —
-  `.sensingAutomatically` / `.sensingPaused`. **[Android's actual API
+  `.sensingPaused` only. The former active state and its "Sensing
+  automatically" label were removed (2026-11-12, with the unused wallet
+  UI), and iOS has no `BeidStatusPill` call site today (checked
+  2026-11-28 on `release/1.1.0` `d7d97258`). **[Android's actual API
   diverges here on purpose, per its own kdoc: `BeidStatusPill(label:
   String, tone: Tone)` where `Tone` is `Active`/`Paused`/`Neutral`/`Sealed`
   and carries **no string** — the caller supplies `label` via
@@ -1800,9 +1805,9 @@ and deliberately omitted empty sections are not empty-state layouts.
   verified 1:1 in `BeidStatusPill.kt` (2026-11-18). The dots of Android's
   two extra tones are `textPrimary`: `Sealed` by #628's `proofSeal` rule,
   `Neutral` by the 2026-11-18 decision (§5).]**
-- States: `.sensingAutomatically` (active, `statusOn` dot) /
-  `.sensingPaused` (pending — waiting for the signal to return —
-  `statusPending` dot; rendered in `SignalLostView`). Label color never
+- States: `.sensingPaused` (pending — waiting for the signal to return —
+  `statusPending` dot). Android's `Active` tone keeps the `statusOn` dot.
+  Label color never
   changes with state — only the dot does, and the label text itself names
   the state, so color is never the only signal (§2.9). **[Android: same "label color never
   changes, only the dot" rule — verified `BeidStatusPill.kt` always uses
@@ -2832,9 +2837,18 @@ lives in `AGENTS.md`.
 - FORBIDDEN in user-facing copy: "prove", "proof of presence", "automatically",
   "no codes", "no taps", "NFT", "token", "on-chain", "gas", "mint",
   "airdrop", "web3". Wallet copy says what the wallet does for the user
-  ("associate a wallet with a record"), not what protocol it speaks. **[Platform-neutral;
-  no violation found in current Android `strings.xml` (grepped for each
-  forbidden term).]**
+  ("associate a wallet with a record"), not what protocol it speaks. **[Platform-neutral.
+  A check of Android `strings.xml` on `release/1.1.0` (`d7d97258`,
+  2026-11-28) found live violations: the Bluetooth permission bullets
+  ("automatically", "no codes", "Nothing to tap", a background promise),
+  the active status pill ("Sensing automatically"), and the Sensing, Event
+  Found, Recording and Signal Lost screens ("automatically", "Proof
+  Collected", "collects proof"). beid#389 replaced them. Android's visible
+  strings now contain no forbidden term; the remaining "Self-proof" labels
+  name the actual owner-key self-proof, and "automatic date and time" is
+  the system setting's name, as on iOS. `BluetoothPermissionScreenTest`
+  and `ScanFlowScreensTest` assert the literal copy of those screens and
+  the absence of these terms.]**
 - *Flat 2b annotation (2026-09-22,
   [D-627](docs/decisions/issue-627-flat-2b.md)): §15 stays, so these Flat 2b
   strings are **not authorized**:*
