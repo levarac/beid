@@ -56,16 +56,16 @@ final class BeidIPadLayoutTests: XCTestCase {
       throw XCTSkip("The current window did not become wider than tall")
     }
     let welcome = app.buttons["Continue"]
-    XCTAssertTrue(welcome.existsOrWait(timeout: 5))
+    XCTAssertTrue(welcome.waitForExistence(timeout: 5))
     welcome.tap()
     let permission = app.buttons["bluetooth.permission.continue"]
-    XCTAssertTrue(permission.existsOrWait(timeout: 5))
+    XCTAssertTrue(permission.waitForExistence(timeout: 5))
     permission.tap()
     let records = app.tabButton("Records")
-    XCTAssertTrue(records.existsOrWait(timeout: 5))
+    XCTAssertTrue(records.waitForExistence(timeout: 5))
     records.tap()
     let grid = app.scrollViews["records.grid"]
-    XCTAssertTrue(grid.existsOrWait(timeout: 5))
+    XCTAssertTrue(grid.waitForExistence(timeout: 5))
     let window = app.windows.firstMatch
     XCTAssertEqual(window.frame.width > window.frame.height, orientation == .landscapeLeft)
 
@@ -120,8 +120,8 @@ final class BeidIPadLayoutTests: XCTestCase {
       assertVisibleInWindow(card)
       card.tap()
       let navigation = app.navigationBars[title]
-      XCTAssertTrue(navigation.existsOrWait(timeout: 5))
-      XCTAssertTrue(app.scrollViews["proof.detail.content"].existsOrWait(timeout: 5))
+      XCTAssertTrue(navigation.waitForExistence(timeout: 5))
+      XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
       XCTAssertEqual(navigation.staticTexts[title].label, title)
       let fullID = app.staticTexts["Record ID \(recordID)"]
       fullID.scrollToHittable(in: app)
@@ -130,7 +130,7 @@ final class BeidIPadLayoutTests: XCTestCase {
       assertVisibleInWindow(back)
       captureRecordState("record-\(name)-\(index)-detail")
       back.tap()
-      XCTAssertTrue(grid.existsOrWait(timeout: 5))
+      XCTAssertTrue(grid.waitForExistence(timeout: 5))
       assertVisibleInWindow(heading)
       for original in selectedCards {
         let returned = app.buttons[original.0]
@@ -145,12 +145,12 @@ final class BeidIPadLayoutTests: XCTestCase {
     captureRecordState("records-\(name)-before-account")
     account.tap()
     let done = app.navigationBars["Account"].buttons["Done"]
-    XCTAssertTrue(done.existsOrWait(timeout: 5))
+    XCTAssertTrue(done.waitForExistence(timeout: 5))
     assertVisibleInWindow(done)
     captureRecordState("account-\(name)-open")
     done.tap()
     XCTAssertTrue(done.waitForNonExistence(timeout: 5))
-    XCTAssertTrue(grid.existsOrWait(timeout: 5))
+    XCTAssertTrue(grid.waitForExistence(timeout: 5))
     assertVisibleInWindow(heading)
     for original in selectedCards { assertVisibleInWindow(app.buttons[original.0]) }
     captureRecordState("records-\(name)-after-account")
@@ -191,32 +191,32 @@ final class BeidIPadLayoutTests: XCTestCase {
     // OnboardingMode.current is .guestFirst (event-first, the default — see
     // OnboardingFlagTests): Welcome's CTA routes straight to the
     // Bluetooth-permission screen, with no wallet-connect/event-code step.
-    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
     capture(named: "bluetooth-permission-\(orientation)")
 
     app.buttons["bluetooth.permission.continue"].tap()
     let senseEvent = app.buttons["home.demo.join"]
-    XCTAssertTrue(senseEvent.existsOrWait(timeout: 5))
+    XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-empty-\(orientation)")
 
     app.buttons["home.account"].tap()
-    XCTAssertTrue(app.navigationBars["Account"].buttons["Done"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Account"].buttons["Done"].waitForExistence(timeout: 5))
     capture(named: "account-\(orientation)")
     app.navigationBars["Account"].buttons["Done"].tap()
 
     let resumedSenseEvent = app.buttons["home.demo.join"]
-    XCTAssertTrue(resumedSenseEvent.existsOrWait(timeout: 5))
+    XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
     app.advanceDemo(to: .sensing)
     XCTAssertTrue(
-      app.descendants(matching: .any)["scan.sensing"].existsOrWait(timeout: 30),
+      app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30),
       "Expected the transient sensing screen in \(orientation).\n\(app.debugDescription)"
     )
     capture(named: "sensing-\(orientation)")
 
     app.advanceDemo(to: .eventFound)
     XCTAssertTrue(
-      app.staticTexts["scan.event-found"].existsOrWait(timeout: 30),
+      app.staticTexts["scan.event-found"].waitForExistence(timeout: 30),
       "Expected the transient event-found screen in \(orientation).\n\(app.debugDescription)"
     )
     capture(named: "event-found-\(orientation)")
@@ -226,7 +226,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     // affordance existing is the earliest reliable signal that happened.
     let signalLost = app.buttons["Simulate Signal Lost"]
     app.advanceDemo(to: .recording)
-    XCTAssertTrue(signalLost.existsOrWait(timeout: 30))
+    XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     dismissBindingSheetToReachLiveRecording()
     if checksSensingFit {
       assertSensingFooterVisibleInPortrait()
@@ -236,54 +236,54 @@ final class BeidIPadLayoutTests: XCTestCase {
     // CLOSE confirms the real Proof, DONE advances through persistent 07,
     // then View records dismisses to Home.
     app.buttons["scan.stop-sensing"].tap()
-    XCTAssertTrue(app.staticTexts["Stop sensing?"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     capture(named: "stop-confirm-\(orientation)")
     // Cancelling must leave the existing sensing session live.
     app.alerts.buttons["Cancel"].tap()
     XCTAssertTrue(app.buttons["scan.stop-sensing"].isHittable)
     XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
     app.buttons["scan.stop-sensing"].tap()
-    XCTAssertTrue(app.staticTexts["Stop sensing?"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     app.alerts.buttons["Stop sensing"].tap()
-    XCTAssertTrue(app.buttons["Done"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     capture(named: "sealed-\(orientation)")
     app.buttons["Done"].tap()
-    XCTAssertTrue(app.buttons["View records"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))
     assertProofCollectedHeader()
     capture(named: "proof-collected-\(orientation)")
     app.buttons["View records"].tap()
 
-    XCTAssertTrue(app.scrollViews["records.grid"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     capture(named: "collection-with-proof-\(orientation)")
     app.openRecordsByEvent()
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
-    XCTAssertTrue(app.staticTexts["event-detail.heading"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()
-    XCTAssertTrue(app.scrollViews["proof.detail.content"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
     capture(named: "proof-detail-\(orientation)")
     app.navigationBars.buttons.firstMatch.tap()
-    XCTAssertTrue(app.staticTexts["event-detail.heading"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.navigationBars.buttons.firstMatch.tap()
     app.scrollViews["records.events"].assertExists()
     app.selectRecordsGrouping("All records")
-    XCTAssertTrue(app.scrollViews["records.grid"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     app.tabButton("Now").tap()
     // After an explicit stop, Now stays quiet until Look for events reopens discovery.
     app.buttons["home.look-for-events"].assertHittable()
     app.buttons["home.look-for-events"].tap()
 
-    XCTAssertTrue(resumedSenseEvent.existsOrWait(timeout: 5))
+    XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
     app.advanceDemo(to: .recording)
     // Generous timeout: re-entering the scan flow a second time in one test
     // run has been observed to take noticeably longer than the first entry
     // (accumulated simulator/accessibility-tree overhead from the
     // intervening Collection/Proof Detail navigation), not a hang.
-    XCTAssertTrue(signalLost.existsOrWait(timeout: 30))
+    XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     dismissBindingSheetToReachLiveRecording()
     signalLost.tap()
     XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "signal lost"))
-      .firstMatch.existsOrWait(timeout: 30))
+      .firstMatch.waitForExistence(timeout: 30))
     capture(named: "signal-lost-\(orientation)")
   }
 
@@ -540,7 +540,7 @@ final class BeidIPadLayoutTests: XCTestCase {
 
   private func dismissBindingSheetToReachLiveRecording() {
     XCTAssertFalse(app.buttons["Cancel"].exists, "Recording must not present a wallet sheet")
-    XCTAssertTrue(app.buttons["Simulate Signal Lost"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["scan.stop-sensing"].isHittable)
   }
 
@@ -589,7 +589,7 @@ final class BeidIPadLayoutTests: XCTestCase {
 
   private func assertProofCollectedHeader() {
     let recordID = app.staticTexts["proof-collected.record-id"]
-    XCTAssertTrue(recordID.existsOrWait(timeout: 5))
+    XCTAssertTrue(recordID.waitForExistence(timeout: 5))
     XCTAssertTrue(recordID.label.hasPrefix("Record ID "))
     XCTAssertEqual(recordID.label.count, "Record ID ".count + 36, "VoiceOver needs the full UUID")
     XCTAssertGreaterThan(recordID.frame.width, 100, "The visible record label must not truncate")
@@ -599,7 +599,7 @@ final class BeidIPadLayoutTests: XCTestCase {
   private func assertWelcomeLayout(named name: String) {
     let getStarted = app.buttons["Continue"]
     let appWindow = app.windows.firstMatch
-    XCTAssertTrue(getStarted.existsOrWait(timeout: 5), "Expected Welcome CTA: \(name)")
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 5), "Expected Welcome CTA: \(name)")
     XCTAssertTrue(appWindow.exists, "Expected an app window: \(name)")
     XCTAssertLessThan(
       getStarted.frame.width,
