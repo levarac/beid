@@ -130,8 +130,8 @@ Screen 14b shows three times (checked 2026-11-28 against `release/1.1.0`
 
 - While a pack is ready or serving, `Until` is the current permit's exclusive
   stop instant, and `Remaining` counts down to that same instant once a second.
-  Neither row shows the chain's end, because the next lease is not install
-  authority until it has been fetched and verified.
+  Both rows describe the current permit. A later lease in the loaded pack can
+  be installed only after a new serving evaluation.
 - `Pack schedule ends` is the end of the imported complete schedule
   (`broadcastUntilUnixSeconds`). It appears only while ready or serving, and
   only when it is later than `Until`.
@@ -142,8 +142,8 @@ Two different things happen at a deadline:
 
 - Next lease inside the loaded signed chain. When a permit reaches its
   exclusive stop and the loaded chain continues, the radio is cleared and the
-  next lease is re-evaluated from the bundle already held. Nothing is fetched;
-  the registry is consulted as in any evaluation.
+  next lease is re-evaluated from the bundle already held. No bundle or
+  handoff is re-fetched; the registry is consulted as in any evaluation.
 - Renewing the chain. Re-fetch the exact recorded source 60 seconds before the
   chain ends and again at its end. A candidate must pass identity, signatures
   and current-lease checks before it replaces the loaded chain.
