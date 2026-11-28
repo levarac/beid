@@ -125,15 +125,86 @@ digest. Only the explicit Start action installs the checked permit; starting
 within its interval requires no acquisition or registry request. Foregrounding
 or loading a replacement cannot supply that first confirmation.
 
-The imported complete schedule supplies the chain's end for UNTIL/REMAINING;
-the current permit still supplies the radio's shorter, exclusive stop instant.
-Re-fetch the exact recorded source 60 seconds before the chain ends and again
-at its end. A candidate must pass identity, signatures and current-lease checks
-before it replaces the loaded chain. A link's fragment remains pinned to its
-handoff digest: a republished bundle with another digest needs a matching
-handoff, and a fragment link cannot discover that new handoff by itself.
-The paired-URL acquisition path re-fetches both public artifacts. No path
-synthesizes a handoff or weakens digest agreement to make renewal succeed.
+Screen 14b shows three times (checked 2026-11-28 against `release/1.1.0`
+`d7d97258`, `VenueSignedServingView`):
+
+- While a pack is ready or serving, `Until` is the current permit's exclusive
+  stop instant, and `Remaining` counts down to that same instant once a second.
+  Both rows describe the current permit. A later lease in the loaded pack can
+  be installed only after a new serving evaluation.
+- `Pack schedule ends` is the end of the imported complete schedule
+  (`broadcastUntilUnixSeconds`). It appears only while ready or serving, and
+  only when it is later than `Until`.
+- With a pack loaded but neither ready nor serving, for example after the lease
+  ended, `Until` shows the loaded schedule's end beside the pack digest.
+
+Two different things happen at a deadline:
+
+- Next lease inside the loaded signed chain. When a permit reaches its
+  exclusive stop and the loaded chain continues, the radio is cleared and the
+  next lease is re-evaluated from the bundle already held. No bundle or
+  handoff is re-fetched; the registry is consulted as in any evaluation.
+- Renewing the chain. When a source is recorded, re-fetch that exact source
+  60 seconds before the chain ends and again at its end. A candidate must pass
+  identity, signatures and current-lease checks before it replaces the loaded
+  chain. A saved pack without a recorded source is not re-fetched: at the
+  chain's end the radio is cleared and broadcasting stays stopped until a
+  current pack is supplied.
+
+A link's fragment remains pinned to its handoff digest: a republished bundle
+with another digest needs a matching handoff, and a fragment link cannot
+discover that new handoff by itself. The paired-URL acquisition path re-fetches
+both public artifacts. No path synthesizes a handoff or weakens digest
+agreement to make renewal succeed.
+
+### Manual re-Supply after a failed refresh (iOS)
+
+1. `Pack refresh failed` while broadcasting means the current lease continues
+   only until the `Until` time. Ask the organizer for a current pack.
+2. When the chain ends, the radio is cleared before the refetch. If the refetch
+   fails, the screen shows `Lease ended` and "The lease ended and the pack could
+   not be refreshed. Broadcasting stopped. Load a current pack."
+3. Supply the organizer's current link in one of two ways:
+   - Paste the link and press `Use this link`.
+   - Use `Scan QR code`. A successful scan loads the pack at once, without
+     `Use this link`.
+
+   On `release/1.1.0` no screen control calls the two-URL supply
+   (`supply(bundleSource:handoffSource:)` or `supplyConfigured`); only tests
+   do, so on a device the link is the manual path. A link stays pinned to its
+   handoff digest, so it needs the organizer's new link after a republish.
+4. Check the event ID, registrar and pack digest. The pack settles at `ready`;
+   press `Start broadcasting`. A replacement never starts without this action.
+5. `Load saved pack` re-verifies the saved bytes and cannot restart an ended
+   chain. While broadcasting, `Check for pack update` refetches the recorded
+   source; "No newer pack is available." means the same digest verified again.
+
+### Refresh diagnostics
+
+The view model logs to the unified log, subsystem `org.levarac.beid`,
+category `venue-refresh`:
+
+- `venue_refresh failed trigger=<scheduled|expiry|recovery|manual>
+  stage=<source|acquisition|import|event_match|evaluation> category=<name>`.
+  The category is the raw value of `VenueAcquisitionFailure`,
+  `VenueImportFailure` or `VenueServingBlock`, or `noUpdateSource` or
+  `anotherEvent`.
+- `venue_serving stopped_at_expiry chain_ended=<true|false>
+  refresh_source=<true|false>` when a serving permit reaches its exclusive stop
+  and is cleared. A prepared permit that never passed Start is not logged,
+  because nothing was broadcasting. With `chain_ended=false`, the
+  app first re-evaluates the next lease from the loaded pack, without a fetch;
+  if that evaluation requires recovery and a source is recorded, it may
+  refetch. With `chain_ended=true` and `refresh_source=true`, it refetches the
+  recorded source. With `chain_ended=true` and `refresh_source=false`, the stop
+  stands and no refresh-failure record follows for that expiry.
+- `noUpdateSource` (stage `source`, trigger `manual`) is logged only when the
+  operator presses `Check for pack update` while serving a pack that has no
+  recorded source.
+
+No URL, key, event ID, digest, display name or payload byte is logged. Read it
+with `log stream --predicate 'subsystem == "org.levarac.beid" AND category ==
+"venue-refresh"'`, or with Console on a connected device.
 
 This update covers the native iOS venue-broadcast flow. Android's existing
 `VenueController` owns its platform lifecycle and renewal effects; attendee
@@ -175,6 +246,17 @@ The consumer must exercise all these scenarios against its real view model:
 copied into the native test bundle by XcodeGen. Its source SHA and literal
 expected identity/digests/current ENIN/exclusive stop instant are fixed; the
 deadline assertion does not refer to a production constant.
+
+Lease refresh over one Bundle/Handoff URL pair (beid#589) runs the real signed
+full-schedule pack, a chain of 300-second leases, through
+`ProductionVenueBundleVerifier` and the recorded registry:
+`ProductionVenueBundleVerifierTests.testSignedLeasesFromOnePairedSourceContinueThenStopAtChainEndWithDiagnostics`
+covers the next lease taking over, a manual and a failed scheduled refetch, the
+stop at the chain's end and a refused re-Supply of the ended chain, and
+`testStopAtLeaseEndRecoversThroughManualResupplyFromTheSamePair` covers recovery
+after a stop. The repository holds one real signed pack, so adopting a newer
+pack from the same pair uses the scripted ports:
+`VenueSignedServingViewModelTests.testFailedRefreshStopsAtExpiryAndManualResupplyFromSamePairAdoptsNewerPack`.
 
 `assertVenueOutcomeCoverage` accepts **observed** outcome sets and compares
 them to synthesized `allCases`. The real verification provider must exercise

@@ -49,6 +49,11 @@ final class FirstUploadNoticeUITests: XCTestCase {
     let notice = requireNotice(app)
     let link = policyLink(in: app)
     link.scrollToHittable(in: app, within: notice, ignoringBackgroundTabBar: true)
+    // Still a link, announced by its title, drawn as the design-system text
+    // control rather than as body text.
+    XCTAssertEqual(link.elementType, .link)
+    XCTAssertEqual(link.label, "Privacy Policy")
+    XCTAssertGreaterThanOrEqual(link.frame.height, 44)
     link.tap()
     await assertQuiet(receiver)
     closeNotice(app)
