@@ -128,9 +128,9 @@
     <string name="scan_event_found_title">Event Found</string>
     <string name="scan_event_found_message">Keep beid open and stay nearby.</string>
     <string name="scan_event_found_status">Checking event details</string>
-    <!-- One-time header shown the instant Recording begins. It announces that recording started; no Record exists yet, so do not say one was collected or added. -->
+    <!-- One-time header shown the instant Recording begins. Entering Recording already stores the initial local Record; Stop later ends the session and finalizes its self-proof when applicable. Announce only that recording started and point to Stop; do not call the Record collected, added or proven. -->
     <string name="scan_recording_ceremony_title">Recording started</string>
-    <string name="scan_recording_ceremony_subtitle">Stop sensing when you are done to keep your Record.</string>
+    <string name="scan_recording_ceremony_subtitle">Stop sensing when you are done.</string>
     <string name="scan_recording_heading">Recording your participation</string>
     <!-- Same copy as iOS's Recording guidance. -->
     <string name="scan_recording_supporting">Keep the app open nearby to help devices observe each other and keep signed records.</string>

@@ -279,7 +279,7 @@ class ScanFlowScreensTest {
     }
 
     @Test
-    fun recordingCeremonySaysRecordingStartedWithoutClaimingARecord() {
+    fun recordingCeremonySaysRecordingStartedWithoutClaimingProof() {
         composeTestRule.mainClock.autoAdvance = false
         composeTestRule.setContent {
             BeidAppTheme {
@@ -296,7 +296,7 @@ class ScanFlowScreensTest {
         composeTestRule.mainClock.advanceTimeByFrame()
 
         composeTestRule.onNodeWithText("Recording started").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Stop sensing when you are done to keep your Record.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Stop sensing when you are done.").assertIsDisplayed()
         composeTestRule.onNodeWithText("Proof Collected").assertDoesNotExist()
         composeTestRule.onNodeWithText("Added to your collection.").assertDoesNotExist()
         composeTestRule.assertNoForbiddenObservationCopy()
