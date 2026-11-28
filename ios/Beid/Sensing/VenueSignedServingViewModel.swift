@@ -3,6 +3,7 @@
 
 import BeidSharedKit
 import Foundation
+import os
 
 enum VenueBundleURLTemplate {
   static let placeholder = "{eventId}"
@@ -121,6 +122,93 @@ enum VenueRefreshFailure: Equatable {
   case blocked(VenueServingBlock)
 }
 
+// MARK: - Refresh diagnostics (beid#589)
+
+/// Which step of a pack refresh failed.
+enum VenueRefreshStage: String, CaseIterable, Hashable {
+  /// The selected pack has no recorded source to fetch again.
+  case source
+  /// Fetching the public artifacts from the recorded source.
+  case acquisition
+  /// Identity verification of the fetched artifacts.
+  case importing = "import"
+  /// The fetched pack verified, but for a different event.
+  case eventMatch = "event_match"
+  /// The fetched pack has no permit for the current time.
+  case evaluation
+}
+
+/// What started a refresh.
+enum VenueRefreshTrigger: String, CaseIterable, Hashable {
+  /// The renewal timer, 60 seconds before the loaded chain ends.
+  case scheduled
+  /// The loaded chain reached its end.
+  case expiry
+  /// The registry replaced the loaded definition before its chain ended.
+  case recovery
+  /// The operator pressed Check for pack update.
+  case manual
+}
+
+/// One diagnostic record. Every value is a fixed category: no URL, key,
+/// event id, digest, display name or payload byte is ever part of it.
+enum VenueRefreshDiagnostic: Equatable {
+  case refreshFailed(trigger: VenueRefreshTrigger, stage: VenueRefreshStage, category: String)
+  /// A permit that was ready or on the radio reached its exclusive stop and
+  /// was cleared. `chainEnded` says whether the loaded schedule ended too, in
+  /// which case a refetch follows; otherwise the next lease of the same pack
+  /// is evaluated.
+  case stoppedAtExpiry(chainEnded: Bool, hasRefreshSource: Bool)
+}
+
+extension VenueRefreshFailure {
+  var diagnosticStage: VenueRefreshStage {
+    switch self {
+    case .noUpdateSource: .source
+    case .acquisition: .acquisition
+    case .rejected: .importing
+    case .anotherEvent: .eventMatch
+    case .blocked: .evaluation
+    }
+  }
+
+  var diagnosticCategory: String {
+    switch self {
+    case .noUpdateSource: "noUpdateSource"
+    case .acquisition(let failure): failure.rawValue
+    case .rejected(let failure): failure.rawValue
+    case .anotherEvent: "anotherEvent"
+    case .blocked(let block): block.rawValue
+    }
+  }
+}
+
+@MainActor
+protocol VenueRefreshDiagnosticsRecording: AnyObject {
+  func record(_ diagnostic: VenueRefreshDiagnostic)
+}
+
+/// Production sink: the unified log, subsystem `org.levarac.beid`, category
+/// `venue-refresh`. Read it with
+/// `log show --predicate 'subsystem == "org.levarac.beid" AND category == "venue-refresh"'`.
+@MainActor
+final class VenueRefreshLog: VenueRefreshDiagnosticsRecording {
+  private static let log = Logger(subsystem: "org.levarac.beid", category: "venue-refresh")
+
+  func record(_ diagnostic: VenueRefreshDiagnostic) {
+    switch diagnostic {
+    case let .refreshFailed(trigger, stage, category):
+      Self.log.error(
+        "venue_refresh failed trigger=\(trigger.rawValue, privacy: .public) stage=\(stage.rawValue, privacy: .public) category=\(category, privacy: .public)"
+      )
+    case let .stoppedAtExpiry(chainEnded, hasRefreshSource):
+      Self.log.notice(
+        "venue_serving stopped_at_expiry chain_ended=\(chainEnded, privacy: .public) refresh_source=\(hasRefreshSource, privacy: .public)"
+      )
+    }
+  }
+}
+
 /// Drives the signed venue-serving screen (beid#432).
 ///
 /// The rules this type exists to keep, none of which are defensive:
@@ -171,6 +259,7 @@ final class VenueSignedServingViewModel: ObservableObject {
   private let clock: () -> VenueClockReading
   private let expiry: any VenueExpiryScheduling
   private let renewal: any VenueExpiryScheduling
+  private let diagnostics: any VenueRefreshDiagnosticsRecording
   private var renewalTask: Task<Void, Never>?
   private var renewalID = UUID()
   private var scheduledRenewalEnd: Int64?
@@ -238,6 +327,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     clock: @escaping () -> VenueClockReading,
     expiry: (any VenueExpiryScheduling)? = nil,
     renewal: (any VenueExpiryScheduling)? = nil,
+    diagnostics: (any VenueRefreshDiagnosticsRecording)? = nil,
     requiresStartConfirmation: Bool = true,
     canonicalEventIdHex: String? = nil,
     bundleURLTemplate: String? = nil
@@ -260,6 +350,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     // `VenueDeviceAssignmentStore`.
     self.expiry = expiry ?? VenueExpiryTimer()
     self.renewal = renewal ?? VenueExpiryTimer()
+    self.diagnostics = diagnostics ?? VenueRefreshLog()
     // A view model starts stopped; nothing is on the air until a permit is.
     radio = VenueRadioUpdate(state: .stopped)!
     storedSourceDescription = store.record?.sourceDescription
@@ -579,10 +670,10 @@ final class VenueSignedServingViewModel: ObservableObject {
     guard eligible, !Task.isCancelled, !isRefreshing, let owner = workflow?.id else { return }
     noNewerPack = false
     guard workflow?.refreshSource != nil else {
-      refreshFailure = .noUpdateSource
+      reportRefreshFailure(.noUpdateSource, trigger: .manual)
       return
     }
-    _ = await refetch(owner: owner, reportUnchanged: true)
+    _ = await refetch(owner: owner, trigger: .manual, reportUnchanged: true)
   }
 
   /// Reload is a new explicit selection and supersedes every older operation.
@@ -621,7 +712,7 @@ final class VenueSignedServingViewModel: ObservableObject {
       case .blocked(let rejection) = status else { return }
     switch rejection.reason {
     case .staleDefinition, .expired, .noCurrentEnvelope:
-      guard await refetch(owner: owner), workflow?.id == owner, eligible, activeOperation == nil else { return }
+      guard await refetch(owner: owner, trigger: .recovery), workflow?.id == owner, eligible, activeOperation == nil else { return }
       invalidate()
       await runOperation(owner: owner) { [self] operation in
         await resumeSelected(owner: owner, operation: operation)
@@ -863,13 +954,25 @@ final class VenueSignedServingViewModel: ObservableObject {
     guard generation == self.generation else { return }
     let owner = workflow?.id
     let end = workflow?.receipt?.broadcastUntilUnixSeconds
+    let hadPermit: Bool
+    switch status {
+    case .serving, .ready: hadPermit = true
+    default: hadPermit = false
+    }
     // Expiry clears first, irrespective of outstanding obsolete work.
     invalidate()
     status = .blocked(VenueServingRejection(reason: .expired)!)
-    if let end, case .available(let now) = clock(), now >= end, let owner {
+    let chainEnded: Bool
+    if let end, case .available(let now) = clock(), now >= end { chainEnded = true } else { chainEnded = false }
+    // A not-started recheck also arrives here with nothing installed; only a
+    // real stop of a ready or serving permit is recorded.
+    if hadPermit {
+      diagnostics.record(.stoppedAtExpiry(chainEnded: chainEnded, hasRefreshSource: workflow?.refreshSource != nil))
+    }
+    if chainEnded, let owner {
       // The old bytes are already stopped, including while a network read waits.
       cancelRenewal()
-      let refreshed = await refetch(owner: owner)
+      let refreshed = await refetch(owner: owner, trigger: .expiry)
       guard workflow?.id == owner, eligible else { return }
       guard refreshed else { return }
     }
@@ -893,11 +996,16 @@ final class VenueSignedServingViewModel: ObservableObject {
     scheduledRenewalEnd = end
     // Give the bounded network fetch a minute before the last loaded lease ends.
     renewal.schedule(stopAtUnixSeconds: max(now, end - 60), now: now) { [weak self] in
-      _ = await self?.refetch(owner: owner)
+      _ = await self?.refetch(owner: owner, trigger: .scheduled)
     }
   }
 
-  private func refetch(owner: UUID, reportUnchanged: Bool = false) async -> Bool {
+  private func reportRefreshFailure(_ failure: VenueRefreshFailure, trigger: VenueRefreshTrigger) {
+    refreshFailure = failure
+    diagnostics.record(.refreshFailed(trigger: trigger, stage: failure.diagnosticStage, category: failure.diagnosticCategory))
+  }
+
+  private func refetch(owner: UUID, trigger: VenueRefreshTrigger, reportUnchanged: Bool = false) async -> Bool {
     guard eligible, workflow?.id == owner, let source = workflow?.refreshSource,
       let expected = workflow?.receipt?.identity.eventIdHex else { return false }
     renewalTask?.cancel()
@@ -916,18 +1024,18 @@ final class VenueSignedServingViewModel: ObservableObject {
         }
       } catch {
         guard acceptsRenewal(owner: owner, request: request) else { return }
-        refreshFailure = .acquisition((error as? VenueAcquisitionFailure) ?? .transportFailure)
+        reportRefreshFailure(.acquisition((error as? VenueAcquisitionFailure) ?? .transportFailure), trigger: trigger)
         return
       }
       guard acceptsRenewal(owner: owner, request: request) else { return }
       let result = await verifier.importBundle(bundleBytes: artifact.bundleBytes, handoffBytes: artifact.handoffBytes)
       guard acceptsRenewal(owner: owner, request: request) else { return }
       switch result {
-      case .rejected(let reason): refreshFailure = .rejected(reason)
+      case .rejected(let reason): reportRefreshFailure(.rejected(reason), trigger: trigger)
       case .imported(let receipt):
         guard VenueBundleURLTemplate.normalizedEventId(receipt.identity.eventIdHex)
           == VenueBundleURLTemplate.normalizedEventId(expected) else {
-          refreshFailure = .anotherEvent
+          reportRefreshFailure(.anotherEvent, trigger: trigger)
           return
         }
         // A later end alone does not establish continuity. The new pack must
@@ -937,12 +1045,12 @@ final class VenueSignedServingViewModel: ObservableObject {
         guard acceptsRenewal(owner: owner, request: request) else { return }
         switch decision {
         case .blocked(let rejection):
-          refreshFailure = .blocked(rejection.reason)
+          reportRefreshFailure(.blocked(rejection.reason), trigger: trigger)
           return
         case .permitted(let permit):
           guard case .available(let now) = clock(),
             now >= permit.startAtUnixSeconds, now < permit.stopAtUnixSeconds else {
-            refreshFailure = .blocked(.expired)
+            reportRefreshFailure(.blocked(.expired), trigger: trigger)
             return
           }
         }

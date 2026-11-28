@@ -901,6 +901,196 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     XCTAssertEqual(failure, .definitionRejected)
   }
 
+  // MARK: - Lease refresh over one paired source (beid#589)
+
+  /// The full-schedule pack is a real signed chain of 300-second leases. Its
+  /// first lease starts at ENIN 5,967,648.
+  private static let fullScheduleFirstLeaseStart: Int64 = 5_967_648 * 300
+  private static let pairedBundleURL = URL(string: "https://venue.example/event/bundle")!
+  private static let pairedHandoffURL = URL(string: "https://venue.example/event/handoff")!
+
+  private func servingStop(_ model: VenueSignedServingViewModel) -> Int64? {
+    guard case .serving(_, let stop) = model.status else { return nil }
+    return stop
+  }
+
+  private func makeFullScheduleRegistry(outage: LockedVenueTestFlag? = nil) async throws
+    -> (server: LoopbackJSONRPCServer, client: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient) {
+    let server = try LoopbackJSONRPCServer { body in
+      if outage?.get() == true {
+        return Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32000,\"message\":\"unavailable\"}}".utf8)
+      }
+      return RecordedVenueRegistryURLProtocol.responseData(
+        for: body, contextABIHex: RecordedVenueRegistryURLProtocol.fullScheduleContextABIHex)
+    }
+    let endpoint = try await server.start()
+    let client = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClientWithRpcEndpoints(
+      readerAddressHex: "0xd4852f8526a1555a1b2c34145f0ecda412a53c51",
+      primaryEndpointUrl: endpoint.absoluteString, secondaryEndpointUrl: endpoint.absoluteString))
+    return (server, client)
+  }
+
+  /// One Bundle/Handoff URL pair serves the same real signed pack throughout.
+  /// The production verifier and registry client decide every lease; only the
+  /// clock, the timers and the HTTP fetch of the pair are scripted.
+  ///
+  /// Covers, in order: the next signed lease taking over at a lease end, a
+  /// successful manual refetch of the pair, a failed scheduled refetch that
+  /// keeps the current lease until its end, the stop at the chain's end before
+  /// the expiry refetch (which also fails), and a manual re-Supply from the same
+  /// pair that re-verifies the bytes and refuses the ended chain. The
+  /// diagnostics record each failure's trigger, stage and category and each
+  /// stop, and nothing else.
+  func testSignedLeasesFromOnePairedSourceContinueThenStopAtChainEndWithDiagnostics() async throws {
+    let pack = try VenueBundleConformanceFixture.loadFullSchedule()
+    let artifact = VenuePublicArtifact(bundleBytes: pack.bundle, handoffBytes: pack.handoff)
+    let registry = try await makeFullScheduleRegistry()
+    defer { registry.server.stop(); registry.client.close() }
+    let start = Self.fullScheduleFirstLeaseStart
+    let clock = LockedVenueTestClock(.available(unixSeconds: start + 1))
+    let ports = ScriptedVenuePorts()
+    let acquisition = StubVenueArtifactAcquisition()
+    let expiry = FakeVenueExpiryScheduler()
+    let renewal = FakeVenueExpiryScheduler()
+    let diagnostics = RecordingVenueRefreshDiagnostics()
+    let model = VenueSignedServingViewModel(
+      verifier: ProductionVenueBundleVerifier(registryClient: registry.client),
+      broadcasting: ports, acquisition: acquisition, store: makeTemporaryArtifactStore(),
+      clock: { clock.get() }, expiry: expiry, renewal: renewal, diagnostics: diagnostics,
+      requiresStartConfirmation: false)
+
+    acquisition.replies = [.artifact(artifact)]
+    await model.supply(bundleSource: Self.pairedBundleURL, handoffSource: Self.pairedHandoffURL,
+                       sourceDescription: "venue.example")
+    XCTAssertEqual(servingStop(model), start + 300, "\(model.status); \(registry.server.summary)")
+    XCTAssertEqual(ports.installedPermit?.currentEnin, 5_967_648)
+    let chainEnd = try XCTUnwrap(model.broadcastUntilUnixSeconds)
+    XCTAssertEqual(chainEnd % 300, 0, "the chain ends on a lease boundary")
+    XCTAssertGreaterThan(chainEnd, start + 600)
+    XCTAssertEqual(renewal.scheduledStopAt, chainEnd - 60, "renewal is armed a minute before the chain ends")
+
+    // The lease ends; the next signed lease of the same pack takes over without a fetch.
+    clock.set(.available(unixSeconds: start + 300))
+    await expiry.fireAndWait()
+    XCTAssertEqual(servingStop(model), start + 600, "\(model.status)")
+    XCTAssertEqual(ports.installedPermit?.currentEnin, 5_967_649)
+    XCTAssertEqual(acquisition.requestedSources.count, 1)
+
+    // Jump to the chain's last lease.
+    clock.set(.available(unixSeconds: chainEnd - 60))
+    await expiry.fireAndWait()
+    XCTAssertEqual(servingStop(model), chainEnd, "\(model.status)")
+
+    // Check for pack update refetches the pair; the same digest verifies again.
+    acquisition.replies = [.artifact(artifact)]
+    await model.performPackAction()
+    XCTAssertNil(model.refreshFailure)
+    XCTAssertTrue(model.noNewerPack)
+    XCTAssertEqual(servingStop(model), chainEnd)
+
+    // The scheduled refetch fails; the current lease stays on the radio until its end.
+    acquisition.replies = [.failure(.timedOut)]
+    await renewal.fireAndWait()
+    XCTAssertEqual(model.refreshFailure, .acquisition(.timedOut))
+    XCTAssertEqual(servingStop(model), chainEnd)
+    XCTAssertNotNil(ports.installedPermit)
+
+    // The chain ends: the radio is cleared before the expiry refetch, which fails too.
+    clock.set(.available(unixSeconds: chainEnd))
+    acquisition.replies = [.failure(.transportFailure)]
+    await expiry.fireAndWait()
+    XCTAssertEqual(model.status, .blocked(try XCTUnwrap(VenueServingRejection(reason: .expired))))
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertEqual(model.refreshFailure, .acquisition(.transportFailure))
+
+    // Manual re-Supply from the same pair verifies the bytes again and cannot
+    // resurrect the ended chain.
+    acquisition.replies = [.artifact(artifact)]
+    await model.supply(bundleSource: Self.pairedBundleURL, handoffSource: Self.pairedHandoffURL,
+                       sourceDescription: "venue.example")
+    guard case .blocked = model.status else { return XCTFail("an ended chain must not serve: \(model.status)") }
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertNil(model.refreshFailure)
+
+    XCTAssertEqual(acquisition.requestedSources.count, 5)
+    for source in acquisition.requestedSources {
+      XCTAssertEqual(source.bundle, Self.pairedBundleURL)
+      XCTAssertEqual(source.handoff, Self.pairedHandoffURL)
+    }
+    XCTAssertEqual(diagnostics.records, [
+      .stoppedAtExpiry(chainEnded: false, hasRefreshSource: true),
+      .stoppedAtExpiry(chainEnded: false, hasRefreshSource: true),
+      .refreshFailed(trigger: .scheduled, stage: .acquisition, category: "timedOut"),
+      .stoppedAtExpiry(chainEnded: true, hasRefreshSource: true),
+      .refreshFailed(trigger: .expiry, stage: .acquisition, category: "transportFailure"),
+    ])
+  }
+
+  /// Recovery with real signatures: the registry is unreachable at a lease
+  /// end, so the next lease cannot be decided and the radio stops. Once the
+  /// registry answers again, a manual re-Supply from the same pair installs the
+  /// signed lease covering now, after the operator's Start.
+  func testStopAtLeaseEndRecoversThroughManualResupplyFromTheSamePair() async throws {
+    let pack = try VenueBundleConformanceFixture.loadFullSchedule()
+    let artifact = VenuePublicArtifact(bundleBytes: pack.bundle, handoffBytes: pack.handoff)
+    let outage = LockedVenueTestFlag()
+    let registry = try await makeFullScheduleRegistry(outage: outage)
+    defer { registry.server.stop(); registry.client.close() }
+    let start = Self.fullScheduleFirstLeaseStart
+    let clock = LockedVenueTestClock(.available(unixSeconds: start + 1))
+    let ports = ScriptedVenuePorts()
+    let acquisition = StubVenueArtifactAcquisition()
+    let expiry = FakeVenueExpiryScheduler()
+    let diagnostics = RecordingVenueRefreshDiagnostics()
+    let model = VenueSignedServingViewModel(
+      verifier: ProductionVenueBundleVerifier(registryClient: registry.client),
+      broadcasting: ports, acquisition: acquisition, store: makeTemporaryArtifactStore(),
+      clock: { clock.get() }, expiry: expiry, renewal: FakeVenueExpiryScheduler(), diagnostics: diagnostics,
+      requiresStartConfirmation: true)
+
+    acquisition.replies = [.artifact(artifact)]
+    await model.supply(bundleSource: Self.pairedBundleURL, handoffSource: Self.pairedHandoffURL,
+                       sourceDescription: "venue.example")
+    guard case .ready = model.status else { return XCTFail("a valid load waits for Start: \(model.status)") }
+    await model.startBroadcasting()
+    XCTAssertEqual(servingStop(model), start + 300, "\(model.status)")
+
+    outage.set(true)
+    clock.set(.available(unixSeconds: start + 300))
+    await expiry.fireAndWait()
+    guard case .blocked = model.status else { return XCTFail("no decision means no serving: \(model.status)") }
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertEqual(diagnostics.records, [.stoppedAtExpiry(chainEnded: false, hasRefreshSource: true)])
+
+    outage.set(false)
+    clock.set(.available(unixSeconds: start + 310))
+    acquisition.replies = [.artifact(artifact)]
+    await model.supply(bundleSource: Self.pairedBundleURL, handoffSource: Self.pairedHandoffURL,
+                       sourceDescription: "venue.example")
+    guard case .ready = model.status else { return XCTFail("a manual re-Supply needs Start again: \(model.status)") }
+    XCTAssertNil(ports.installedPermit)
+    await model.startBroadcasting()
+    XCTAssertEqual(servingStop(model), start + 600, "\(model.status)")
+    XCTAssertEqual(ports.installedPermit?.currentEnin, 5_967_649)
+    XCTAssertEqual(acquisition.requestedSources.map { $0.bundle }, [Self.pairedBundleURL, Self.pairedBundleURL])
+    XCTAssertEqual(acquisition.requestedSources.map { $0.handoff }, [Self.pairedHandoffURL, Self.pairedHandoffURL])
+    XCTAssertEqual(diagnostics.records.count, 1, "recovery adds no failure record")
+  }
+
+}
+
+private final class LockedVenueTestFlag: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value = false
+
+  func set(_ newValue: Bool) {
+    lock.lock(); value = newValue; lock.unlock()
+  }
+
+  func get() -> Bool {
+    lock.lock(); defer { lock.unlock() }
+    return value
+  }
 }
 
 private extension Data {
