@@ -136,6 +136,14 @@ final class StubVenueArtifactAcquisition: VenueArtifactAcquiring {
   }
 }
 
+/// Keeps every refresh diagnostic in order, so a test can assert exactly what
+/// would have been logged.
+@MainActor
+final class RecordingVenueRefreshDiagnostics: VenueRefreshDiagnosticsRecording {
+  private(set) var records: [VenueRefreshDiagnostic] = []
+  func record(_ diagnostic: VenueRefreshDiagnostic) { records.append(diagnostic) }
+}
+
 /// A store backed by a unique temporary file.
 ///
 /// Every test gets its own path. A shared default path would let one test's

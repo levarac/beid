@@ -18,6 +18,7 @@ final class VenueSignedServingViewModelTests: XCTestCase {
   private var now: Int64!
   private var clockReading: VenueClockReading!
   private var renewal: FakeVenueExpiryScheduler!
+  private var diagnostics: RecordingVenueRefreshDiagnostics!
 
   override func setUp() async throws {
     try await super.setUp()
@@ -26,6 +27,7 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     store = makeTemporaryArtifactStore()
     expiry = FakeVenueExpiryScheduler()
     renewal = FakeVenueExpiryScheduler()
+    diagnostics = RecordingVenueRefreshDiagnostics()
     fixture = try VenueServingContractFixture.load()
     now = VenueServingContractFixture.currentUnixSeconds
     clockReading = .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds)
@@ -40,6 +42,7 @@ final class VenueSignedServingViewModelTests: XCTestCase {
       clock: clock ?? { [unowned self] in self.clockReading },
       expiry: expiry,
       renewal: renewal,
+      diagnostics: diagnostics,
       requiresStartConfirmation: requiresStartConfirmation
     )
   }
@@ -311,6 +314,97 @@ final class VenueSignedServingViewModelTests: XCTestCase {
       "the replacement permit, rather than its longer receipt chain, owns the serving deadline"
     )
     XCTAssertEqual(expiry.scheduledStopAt, now + 600)
+  }
+
+  /// beid#589: a failed scheduled refetch, the stop at the chain's end and a
+  /// manual re-Supply from the same Bundle/Handoff pair that adopts the
+  /// organizer's newer pack. The diagnostics hold the two failures and the
+  /// stop, and recovery adds nothing.
+  func testFailedRefreshStopsAtExpiryAndManualResupplyFromSamePairAdoptsNewerPack() async throws {
+    let viewModel = makeViewModel()
+    let identity = VenueArtifactIdentity(eventIdHex: fixture.identity.eventIdHex, definitionSequence: 2,
+                                         bundleDigestHex: String(repeating: "bb", count: 32))
+    let newer = VenueImportedBundle(identity: identity, publicArtifact: fixture.artifact,
+                                   broadcastUntilUnixSeconds: now + 900)
+    let replacement = VenueServingContractTestFactory.permit(
+      identity: identity, container: fixture.container, displayName: "Republished event",
+      payloadDigestHex: "republished", currentEnin: 6_000_001,
+      startAtUnixSeconds: now + 300, stopAtUnixSeconds: now + 600)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 300)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    XCTAssertNotNil(ports.installedPermit)
+
+    acquisition.replies = [.failure(.transportFailure)]
+    await renewal.fireAndWait()
+    XCTAssertEqual(viewModel.refreshFailure, .acquisition(.transportFailure))
+    XCTAssertNotNil(ports.installedPermit, "a failed early refetch keeps the valid lease")
+
+    acquisition.replies = [.failure(.timedOut)]
+    clockReading = .available(unixSeconds: now + 300)
+    await expiry.fireAndWait()
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+    XCTAssertNil(ports.installedPermit)
+
+    ports.importReplies = [.immediate(.imported(newer))]
+    ports.evaluationReplies = [.immediate(.permitted(replacement))]
+    await supply(viewModel)
+    XCTAssertTrue(ports.installedPermit === replacement)
+    XCTAssertEqual(viewModel.status, .serving(displayName: "Republished event", stopAtUnixSeconds: now + 600))
+    XCTAssertEqual(viewModel.loadedIdentity, identity)
+    XCTAssertNil(viewModel.refreshFailure)
+    XCTAssertEqual(Set(acquisition.requestedSources.map { $0.bundle.absoluteString }), ["https://venue.example/bundle"])
+    XCTAssertEqual(Set(acquisition.requestedSources.map { $0.handoff?.absoluteString }), ["https://venue.example/handoff"])
+    XCTAssertEqual(acquisition.requestedSources.count, 4)
+    XCTAssertEqual(diagnostics.records, [
+      .refreshFailed(trigger: .scheduled, stage: .acquisition, category: "transportFailure"),
+      .stoppedAtExpiry(chainEnded: true, hasRefreshSource: true),
+      .refreshFailed(trigger: .expiry, stage: .acquisition, category: "timedOut"),
+    ])
+  }
+
+  /// A permit prepared but never started had nothing on the radio, so its
+  /// deadline is not logged as a stop, and the next lease is still not
+  /// installed without Start.
+  func testPreparedPermitExpiringWithoutStartRecordsNoStop() async throws {
+    let viewModel = makeViewModel(requiresStartConfirmation: true)
+    ports.importReplies = [.immediate(.imported(renewalReceipt(until: now + 900)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(viewModel)
+    guard case .ready = viewModel.status else { return XCTFail("a valid load waits for Start: \(viewModel.status)") }
+    XCTAssertNil(ports.installedPermit)
+
+    ports.evaluationReplies = [.immediate(.blocked(try rejection(.expired)))]
+    clockReading = .available(unixSeconds: now + 300)
+    await expiry.fireAndWait()
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertTrue(installCalls.isEmpty, "nothing was ever installed")
+    XCTAssertEqual(acquisition.requestedSources.count, 1, "the next lease is evaluated without a fetch")
+    XCTAssertEqual(diagnostics.records, [])
+  }
+
+  /// The logged values are fixed names. A failure category is the raw value
+  /// of a closed enum, never a message, URL or byte string.
+  func testRefreshDiagnosticsUseOnlyFixedStageAndCategoryNames() {
+    XCTAssertEqual(VenueRefreshFailure.noUpdateSource.diagnosticStage, .source)
+    XCTAssertEqual(VenueRefreshFailure.noUpdateSource.diagnosticCategory, "noUpdateSource")
+    XCTAssertEqual(VenueRefreshFailure.anotherEvent.diagnosticStage, .eventMatch)
+    XCTAssertEqual(VenueRefreshFailure.anotherEvent.diagnosticCategory, "anotherEvent")
+    for failure in VenueAcquisitionFailure.allCases {
+      XCTAssertEqual(VenueRefreshFailure.acquisition(failure).diagnosticStage, .acquisition)
+      XCTAssertEqual(VenueRefreshFailure.acquisition(failure).diagnosticCategory, failure.rawValue)
+    }
+    for failure in VenueImportFailure.allCases {
+      XCTAssertEqual(VenueRefreshFailure.rejected(failure).diagnosticStage, .importing)
+      XCTAssertEqual(VenueRefreshFailure.rejected(failure).diagnosticCategory, failure.rawValue)
+    }
+    for block in VenueServingBlock.allCases {
+      XCTAssertEqual(VenueRefreshFailure.blocked(block).diagnosticStage, .evaluation)
+      XCTAssertEqual(VenueRefreshFailure.blocked(block).diagnosticCategory, block.rawValue)
+    }
+    XCTAssertEqual(VenueRefreshStage.allCases.map(\.rawValue),
+                   ["source", "acquisition", "import", "event_match", "evaluation"])
   }
 
   func testStoppedWorkflowCannotAcceptLateRefetchAndManualResupplyStillWorks() async throws {
