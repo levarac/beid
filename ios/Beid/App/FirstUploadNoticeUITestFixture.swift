@@ -14,6 +14,11 @@ final class FirstUploadNoticeUITestFixture {
   }
 
   let mode: Mode
+  /// `BEID_FIRST_UPLOAD_UI_SYSTEM_OPEN_URL=1` leaves the system `openURL` in
+  /// place so the notice's Privacy Policy link opens Safari, for a manual or
+  /// local evidence run. Default (unset): the link's URL is intercepted and
+  /// shown in `firstUpload.fixture.policyURL`, which the UI tests assert.
+  let usesSystemOpenURL: Bool
   let coordinator: AppCoordinator
   let reportStore: ReportSubmissionStore
   private let proofStore: ProofStore
@@ -40,6 +45,7 @@ final class FirstUploadNoticeUITestFixture {
       let signed = environment["BEID_FIRST_UPLOAD_UI_OBSERVATION"],
       let defaults = UserDefaults(suiteName: "org.levarac.beid.ui.first-upload.\(run.uuidString)")
     else { throw CocoaError(.fileReadCorruptFile) }
+    usesSystemOpenURL = environment["BEID_FIRST_UPLOAD_UI_SYSTEM_OPEN_URL"] == "1"
     let endpoint = "http://127.0.0.1:\(port)"
     let publicKey = "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
     let eventId = String(repeating: "11", count: 32)
@@ -172,10 +178,7 @@ struct FirstUploadNoticeUITestRoot: View {
   var body: some View {
     RootView()
       .environmentObject(coordinator)
-      .environment(\.openURL, OpenURLAction { url in
-        policyURL = url
-        return .handled
-      })
+      .modifier(PolicyURLInterception(enabled: !fixture.usesSystemOpenURL) { policyURL = $0 })
       .safeAreaInset(edge: .bottom) {
         VStack {
           if coordinator.screen == .home {
@@ -214,6 +217,25 @@ struct FirstUploadNoticeUITestRoot: View {
     guard mode == fixture.mode, !started else { return }
     started = true
     fixture.submit()
+  }
+}
+
+/// Replaces `openURL` with a recorder unless the fixture asked for the system
+/// action.
+private struct PolicyURLInterception: ViewModifier {
+  let enabled: Bool
+  let record: (URL) -> Void
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if enabled {
+      content.environment(\.openURL, OpenURLAction { url in
+        record(url)
+        return .handled
+      })
+    } else {
+      content
+    }
   }
 }
 #endif

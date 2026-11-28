@@ -91,8 +91,13 @@ private struct FirstUploadNoticeView: View {
           Text("Records stay on your device until you delete the local data or delete the app. Backups may retain a copy, depending on your settings.")
           Text("Deleting a Record on your device or deleting the app does not delete observations you already sent. The event operator has no automatic deletion period. We cannot guarantee removal of sent records, third-party copies, or records on public chains.")
           Text("For access or deletion requests, contact hi@levarac.org.")
-          Link("Privacy Policy", destination: URL(string: "https://levarac.org/privacy")!)
-            .accessibilityIdentifier("firstUpload.privacyPolicy")
+          // The design-system text control (mono uppercase with a trailing
+          // arrow and a 44 pt hit region), so the link no longer reads as body
+          // text. It stays a SwiftUI Link and opens the system browser.
+          Link(destination: URL(string: "https://levarac.org/privacy")!) {
+            BeidTextControlLabel("Privacy Policy", glyph: .trailing("→", announcing: "Privacy Policy"))
+          }
+          .accessibilityIdentifier("firstUpload.privacyPolicy")
           Button("Continue") {
             sensingCoordinator.continueAfterFirstUploadNotice()
             dismiss()
