@@ -2,11 +2,11 @@
 
 import json
 import os
-import re
 import subprocess
 import tempfile
 import unittest
 
+from scripts.tests.test_merge_group_workflows import render
 from scripts.tests.test_pr_ci_lane_skip import IOS, ROOT, job_block
 from scripts.tests.workflow_yaml import named_step, workflow_data
 
@@ -120,19 +120,26 @@ class ShardWorkflowTest(unittest.TestCase):
         self.assertIn("--lane build", build)
         self.assertNotIn("simctl erase", text)
 
-    def test_long_steps_leave_time_for_evidence_and_cleanup(self):
-        for job, names in (("build", ("Build for testing", "Test without rebuilding")),
-                           ("tests", ("Execute full-mode test lane",))):
-            block = job_block(IOS, job)
-            job_limit = int(re.search(r"^    timeout-minutes: (\d+)$", block, re.M)[1])
-            step_limits = []
-            for name in names:
-                step = re.search(rf"^      - name: {re.escape(name)}\n(?:(?!      - ).*\n)*", block, re.M)[0]
-                limit = re.search(r"^        timeout-minutes: (\d+)$", step, re.M)
-                self.assertIsNotNone(limit, f"unbounded step: {name}")
-                step_limits.append(int(limit[1]))
-                self.assertGreater(step_limits[-1], 0)
-            self.assertLessEqual(sum(step_limits), job_limit - 5)
+    def test_build_steps_leave_time_for_evidence_and_cleanup(self):
+        workflow = workflow_data(IOS.read_text())
+        limits = [int(named_step(workflow, "build", name)["timeout-minutes"])
+                  for name in ("Build for testing", "Test without rebuilding")]
+        self.assertGreater(min(limits), 0)
+        self.assertLessEqual(sum(limits), int(workflow["jobs"]["build"]["timeout-minutes"]) - 5)
+
+    def test_full_mode_execute_timeout_for_each_lane(self):
+        workflow = workflow_data(IOS.read_text())
+        self.assertEqual(int(workflow["jobs"]["tests"]["timeout-minutes"]), 55)
+        step = named_step(workflow, "tests", "Execute full-mode test lane")
+        default = {"unit": 40, "ui-1": 45, "ui-2": 45, "ui-3": 45, "ui-4": 45}
+        for event, ref, lanes in (
+            ("pull_request", "refs/pull/42/merge", default),
+            ("workflow_dispatch", "refs/heads/release/1.1.0", {**default, "ui-5": 45}),
+        ):
+            for lane, expected in lanes.items():
+                with self.subTest(event=event, lane=lane):
+                    limit = render(step["timeout-minutes"], event=event, ref=ref, bindings={"matrix.lane": lane})
+                    self.assertEqual(int(limit), expected)
 
     def test_dependency_caches_have_exact_toolchain_and_lockfile_keys(self):
         build = job_block(IOS, "build")
