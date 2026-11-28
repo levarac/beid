@@ -46,9 +46,14 @@ enum ControlledDemoPhase: String {
 }
 
 extension XCUIElement {
+  /// XCTest starts polling after a delay. Only incur it when the element is absent.
+  func existsOrWait(timeout: TimeInterval) -> Bool {
+    exists || waitForExistence(timeout: timeout)
+  }
+
   func assertExists(file: StaticString = #filePath, line: UInt = #line) {
     XCTAssertTrue(
-      waitForExistence(timeout: UITestWait.timeout),
+      existsOrWait(timeout: UITestWait.timeout),
       "Element did not appear within \(UITestWait.timeout)s: \(exists ? identifier : "<absent>")",
       file: file, line: line
     )

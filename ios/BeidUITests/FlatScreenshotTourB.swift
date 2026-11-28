@@ -52,7 +52,7 @@ final class FlatScreenshotTourB: XCTestCase {
 
   func testShot_04_Events() {
     launchHome(arguments: ["-beid-home-frame-04"])
-    XCTAssertTrue(app.otherElements["home.active-event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.otherElements["home.active-event"].existsOrWait(timeout: 5))
     assertNavigationTitleDrawn("Now")
     let title = app.navigationBars.staticTexts["Now"]
     let activeContent = app.otherElements["home.active-event"]
@@ -118,7 +118,7 @@ final class FlatScreenshotTourB: XCTestCase {
     app.buttons["home.open-details"].tap()
 
     let heading = app.staticTexts[eventName]
-    XCTAssertTrue(heading.waitForExistence(timeout: 5))
+    XCTAssertTrue(heading.existsOrWait(timeout: 5))
     XCTAssertGreaterThan(heading.frame.height, 40, "The event name should wrap without truncation")
     XCTAssertLessThan(heading.frame.height, 180, "A long event name should not dominate the sensing screen")
     XCTAssertLessThanOrEqual(heading.frame.maxX, app.windows.firstMatch.frame.maxX)
@@ -126,7 +126,7 @@ final class FlatScreenshotTourB: XCTestCase {
     capture("sensing-long-event-name")
 
     app.buttons["scan.stop-sensing"].tap()
-    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.alerts.firstMatch.existsOrWait(timeout: 5))
     capture("stop-confirm-long-event-name")
     XCTAssertTrue(app.alerts.firstMatch.buttons["Stop sensing"].isHittable)
   }
@@ -140,13 +140,13 @@ final class FlatScreenshotTourB: XCTestCase {
     app.buttons["home.open-details"].scrollToHittable(in: app)
     app.buttons["home.open-details"].tap()
     let heading = app.staticTexts[eventName]
-    XCTAssertTrue(heading.waitForExistence(timeout: 5))
+    XCTAssertTrue(heading.existsOrWait(timeout: 5))
     XCTAssertLessThanOrEqual(heading.frame.maxX, app.windows.firstMatch.frame.maxX)
     XCTAssertTrue(app.buttons["scan.stop-sensing"].isHittable)
     capture("sensing-japanese-accessibility")
     app.buttons["scan.stop-sensing"].tap()
     let alert = app.alerts["Stop sensing?"]
-    XCTAssertTrue(alert.waitForExistence(timeout: 5))
+    XCTAssertTrue(alert.existsOrWait(timeout: 5))
     XCTAssertTrue(alert.buttons["Cancel"].isHittable)
     XCTAssertTrue(alert.buttons["Stop sensing"].isHittable)
     capture("sensing-japanese-accessibility-alert")
@@ -171,20 +171,20 @@ final class FlatScreenshotTourB: XCTestCase {
 
   func testShot_04b_Empty() {
     launchHome(arguments: ["-beid-now-standby-fixture"])
-    XCTAssertTrue(app.staticTexts["home.listening"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["home.listening"].existsOrWait(timeout: 5))
     app.buttons["fixture.now.advance29"].tap()
     XCTAssertFalse(app.buttons["home.enter-code"].exists)
     app.buttons["fixture.now.advance1"].tap()
     capture("04b")
     app.buttons["home.enter-code"].tap()
-    XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["eventCode.title"].existsOrWait(timeout: 5))
     app.buttons["Cancel"].tap()
   }
 
   func testShot_04c_ClockWarning() {
     launchHome(arguments: ["-beid-home-frame-04c"])
     XCTAssertTrue(
-      app.staticTexts["CLOCK OUT OF SYNC"].waitForExistence(timeout: 10)
+      app.staticTexts["CLOCK OUT OF SYNC"].existsOrWait(timeout: 10)
     )
     XCTAssertFalse(app.staticTexts["CLOCK CHECK UNAVAILABLE"].exists)
     capture("04c")
@@ -206,12 +206,12 @@ final class FlatScreenshotTourB: XCTestCase {
 
   func testHomeTabsUseNavigationTitles() {
     launchHome(arguments: ["-beid-home-frame-04b"])
-    XCTAssertTrue(app.navigationBars.staticTexts["Now"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars.staticTexts["Now"].existsOrWait(timeout: 5))
     assertNavigationTitleDrawn("Now")
     XCTAssertTrue(app.buttons["home.account"].isHittable)
     capture("now-navigation")
     app.tabButton("Records").tap()
-    XCTAssertTrue(app.navigationBars.staticTexts["Records"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars.staticTexts["Records"].existsOrWait(timeout: 5))
     assertNavigationTitleDrawn("Records")
     XCTAssertTrue(app.navigationBars.buttons["records.grouping"].isHittable)
     XCTAssertTrue(app.buttons["home.account"].isHittable)
@@ -222,9 +222,9 @@ final class FlatScreenshotTourB: XCTestCase {
     launchHome(arguments: ["-beid-event-detail-frame-08"])
     app.openRecordsByEvent()
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
-    XCTAssertTrue(event.waitForExistence(timeout: 5))
+    XCTAssertTrue(event.existsOrWait(timeout: 5))
     event.tap()
-    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].existsOrWait(timeout: 5))
     XCTAssertTrue(app.navigationBars["Event"].exists)
     XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "event-detail.report.")).firstMatch.exists)
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "receipt stored")).firstMatch.exists)
@@ -232,9 +232,9 @@ final class FlatScreenshotTourB: XCTestCase {
 
     let proof = app.buttons["event-detail.proof.1"]
     if !proof.isHittable { app.swipeUp() }
-    XCTAssertTrue(proof.waitForExistence(timeout: 5))
+    XCTAssertTrue(proof.existsOrWait(timeout: 5))
     proof.tap()
-    XCTAssertTrue(app.scrollViews["proof.detail.content"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["proof.detail.content"].existsOrWait(timeout: 5))
   }
 
   func testRecordsByEventSeparatesRecordsFromSessionsAndReturnsToGrid() {
@@ -278,9 +278,9 @@ final class FlatScreenshotTourB: XCTestCase {
     launchHome(arguments: ["-beid-event-detail-frame-08c"])
     app.openRecordsByEvent()
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
-    XCTAssertTrue(event.waitForExistence(timeout: 5))
+    XCTAssertTrue(event.existsOrWait(timeout: 5))
     event.tap()
-    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].existsOrWait(timeout: 5))
     XCTAssertFalse(app.staticTexts["NO REPORTS YET"].exists)
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "prepared")).firstMatch.exists)
     XCTAssertTrue(app.staticTexts["Measurements unavailable"].exists)
@@ -292,12 +292,12 @@ final class FlatScreenshotTourB: XCTestCase {
     app.launchArguments = ["-beid-ui-test"] + arguments
     app.launch()
     let getStarted = app.buttons["Continue"]
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
+    XCTAssertTrue(getStarted.existsOrWait(timeout: 5))
     getStarted.tap()
     let allowBluetooth = app.buttons["bluetooth.permission.continue"]
-    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
+    XCTAssertTrue(allowBluetooth.existsOrWait(timeout: 5))
     allowBluetooth.tap()
-    XCTAssertTrue(app.tabButton("Now").waitForExistence(timeout: 5))
+    XCTAssertTrue(app.tabButton("Now").existsOrWait(timeout: 5))
   }
 
   private func capture(_ name: String) {
@@ -314,7 +314,7 @@ final class FlatScreenshotTourB: XCTestCase {
   private func assertNavigationForegroundDrawn(
     _ element: XCUIElement, name: String, insetFraction: CGFloat = 0, file: StaticString = #filePath, line: UInt = #line
   ) {
-    XCTAssertTrue(element.waitForExistence(timeout: 5), file: file, line: line)
+    XCTAssertTrue(element.existsOrWait(timeout: 5), file: file, line: line)
     let window = app.windows.firstMatch
     guard let image = window.screenshot().image.cgImage else {
       return XCTFail("Cannot inspect \(name) in the navigation bar", file: file, line: line)

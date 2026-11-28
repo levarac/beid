@@ -33,12 +33,12 @@ final class EventMembershipUITests: XCTestCase {
     app.launch()
 
     app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].existsOrWait(timeout: 5))
     app.buttons["bluetooth.permission.continue"].tap()
-    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.demo.join"].existsOrWait(timeout: 5))
 
     app.buttons["home.account"].tap()
-    XCTAssertTrue(app.navigationBars["Account"].buttons["Done"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Account"].buttons["Done"].existsOrWait(timeout: 5))
 
     // Lower rows can exist in the accessibility tree while sitting behind
     // the footer. Scroll until the whole tappable row is unobstructed.
@@ -54,7 +54,7 @@ final class EventMembershipUITests: XCTestCase {
     joinEventRow.tap()
 
     let codeField = app.textFields["Event code"]
-    XCTAssertTrue(codeField.waitForExistence(timeout: 5))
+    XCTAssertTrue(codeField.existsOrWait(timeout: 5))
     codeField.tap()
     // Submit via the keyboard's Join return-key action (onSubmit) rather
     // than tapping a button labeled "Join event" — this avoids the label
@@ -67,7 +67,7 @@ final class EventMembershipUITests: XCTestCase {
     let codeSheetGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: codeField)
     wait(for: [codeSheetGone], timeout: 15)
     XCTAssertTrue(
-      app.buttons["scan.stop-sensing"].waitForExistence(timeout: 10),
+      app.buttons["scan.stop-sensing"].existsOrWait(timeout: 10),
       "joining from the Account sheet must start sensing and show the sensing screen"
     )
   }

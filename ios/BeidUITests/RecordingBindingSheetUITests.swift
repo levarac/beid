@@ -39,13 +39,13 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testCancelStopThenGoBackKeepsSensing() {
     reachRecording()
     app.buttons["scan.stop-sensing"].tap()
-    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].existsOrWait(timeout: 5))
     app.alerts.buttons["Cancel"].tap()
     app.navigationBars.buttons.firstMatch.tap()
     let details = app.buttons["home.open-details"]
-    XCTAssertTrue(details.waitForExistence(timeout: 5))
+    XCTAssertTrue(details.existsOrWait(timeout: 5))
     details.tap()
-    XCTAssertTrue(app.buttons["scan.stop-sensing"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["scan.stop-sensing"].existsOrWait(timeout: 5))
     XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
   }
@@ -53,19 +53,19 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testConfirmedStopSavesRecordAndOpensRecords() {
     reachRecording()
     app.buttons["scan.stop-sensing"].tap()
-    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].existsOrWait(timeout: 5))
     app.alerts.buttons["Stop sensing"].tap()
-    XCTAssertTrue(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].existsOrWait(timeout: 5))
     XCTAssertTrue(app.staticTexts["Your record is saved on this device. You'll find it in Records."].exists)
     XCTAssertTrue(app.staticTexts["A Record lets you revisit what this device observed during a sensing session at an event."].exists)
-    XCTAssertTrue(app.staticTexts[SensingVisualOracle.savedCaption].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts[SensingVisualOracle.savedCaption].existsOrWait(timeout: 5))
     SensingVisualOracle.assertSavedCaption(in: app, test: self, name: "saved-live")
     app.buttons["Done"].tap()
-    XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["View records"].existsOrWait(timeout: 5))
     app.buttons["View records"].tap()
-    XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["records.grid"].existsOrWait(timeout: 5))
     app.tabButton("Now").tap()
-    XCTAssertTrue(app.staticTexts["Sensing stopped"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Sensing stopped"].existsOrWait(timeout: 5))
     XCTAssertTrue(app.staticTexts["Your Record is saved in Records on this device. You can close the app."].exists)
     XCTAssertTrue(app.buttons["home.saved.view-record"].exists)
     XCTAssertFalse(app.staticTexts["home.listening"].exists, "Now stays quiet after an explicit stop")
@@ -85,7 +85,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertEqual(app.alerts.count, 0, "The save fault has no signing alert to explain STOP")
 
     let message = app.staticTexts["stop.outcome.message"]
-    XCTAssertTrue(message.waitForExistence(timeout: UITestWait.timeout),
+    XCTAssertTrue(message.existsOrWait(timeout: UITestWait.timeout),
                   "Confirmed STOP must explain that this session has no saved Record")
     let text = message.label.lowercased()
     XCTAssertTrue(text.contains("record") && (text.contains("not saved") || text.contains("could not be saved")))
@@ -268,11 +268,11 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-threshold-override", "1"]
     app.launch()
     app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].existsOrWait(timeout: 5))
     app.buttons["bluetooth.permission.continue"].tap()
-    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.demo.join"].existsOrWait(timeout: 5))
     app.buttons["home.demo.join"].tap()
-    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].existsOrWait(timeout: 30))
   }
 }
 

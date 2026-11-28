@@ -17,11 +17,11 @@ final class EventIdentityVerificationUITests: XCTestCase {
     app.launchControlledDemo()
 
     app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].existsOrWait(timeout: 5))
     app.buttons["bluetooth.permission.continue"].tap()
 
     let senseEvent = app.buttons["home.demo.join"]
-    XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
+    XCTAssertTrue(senseEvent.existsOrWait(timeout: 5))
     XCTAssertFalse(app.descendants(matching: .any)["scan.sensing"].exists, "the fixture must still require JOIN")
     XCTAssertEqual(app.buttons.matching(NSPredicate(
       format: "identifier BEGINSWITH %@", "demo.advance."
@@ -32,12 +32,12 @@ final class EventIdentityVerificationUITests: XCTestCase {
     XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].exists)
     XCTAssertFalse(app.staticTexts["scan.event-found"].exists)
     app.advanceDemo(to: .eventFound)
-    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["scan.event-found"].existsOrWait(timeout: 30))
     XCTAssertFalse(identityVerificationRow.exists)
 
     app.advanceDemo(to: .recording)
     let simulateSignalLost = app.buttons["Simulate Signal Lost"]
-    XCTAssertTrue(simulateSignalLost.waitForExistence(timeout: 30))
+    XCTAssertTrue(simulateSignalLost.existsOrWait(timeout: 30))
     XCTAssertFalse(identityVerificationRow.exists)
     XCTAssertFalse(app.buttons["Cancel"].exists, "Recording must not present a wallet sheet")
     XCTAssertTrue(simulateSignalLost.isHittable, "Live recording must expose Signal Lost")
@@ -45,7 +45,7 @@ final class EventIdentityVerificationUITests: XCTestCase {
     simulateSignalLost.tap()
 
     XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "signal lost"))
-      .firstMatch.waitForExistence(timeout: 5))
+      .firstMatch.existsOrWait(timeout: 5))
     XCTAssertFalse(identityVerificationRow.exists)
   }
 

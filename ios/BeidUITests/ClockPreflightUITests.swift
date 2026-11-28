@@ -19,18 +19,18 @@ final class ClockPreflightUITests: XCTestCase {
     app.launch()
 
     let getStarted = app.buttons["Continue"]
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
+    XCTAssertTrue(getStarted.existsOrWait(timeout: 10))
     getStarted.tap()
     let allowBluetooth = app.buttons["bluetooth.permission.continue"]
-    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
+    XCTAssertTrue(allowBluetooth.existsOrWait(timeout: 10))
     allowBluetooth.tap()
 
     let senseEvent = app.buttons["home.demo.join"]
-    XCTAssertTrue(senseEvent.waitForExistence(timeout: 10))
+    XCTAssertTrue(senseEvent.existsOrWait(timeout: 10))
     senseEvent.tap()
 
     let title = app.staticTexts["Couldn't check this device's clock"]
-    XCTAssertTrue(title.waitForExistence(timeout: 10))
+    XCTAssertTrue(title.existsOrWait(timeout: 10))
     XCTAssertTrue(
       app.staticTexts[
         "beid couldn't compare the clock with the network, so event times can't be trusted yet. Check your connection, then try again."

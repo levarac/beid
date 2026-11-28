@@ -10,12 +10,12 @@ final class SupportBundleUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
     app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].existsOrWait(timeout: 5))
     app.buttons["bluetooth.permission.continue"].tap()
-    XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.account"].existsOrWait(timeout: 5))
     app.buttons["home.account"].tap()
-    XCTAssertTrue(app.navigationBars["Account"].buttons["Done"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.buttons["Organizer tools"].waitForExistence(timeout: 5), "the Account sheet must be open")
+    XCTAssertTrue(app.navigationBars["Account"].buttons["Done"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.buttons["Organizer tools"].existsOrWait(timeout: 5), "the Account sheet must be open")
     XCTAssertFalse(app.buttons["Connect Wallet"].exists)
     XCTAssertFalse(app.buttons["Connect with MetaMask"].exists)
     XCTAssertFalse(app.buttons["Disconnect wallet"].exists)
@@ -28,7 +28,7 @@ final class SupportBundleUITests: XCTestCase {
     XCTAssertTrue(isUnobstructed(share, in: list, app: app))
     XCTAssertFalse(app.otherElements["ActivityListView"].exists)
     share.tap()
-    XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.otherElements["ActivityListView"].existsOrWait(timeout: 10))
     let attachment = XCTAttachment(screenshot: app.screenshot())
     attachment.name = "support-share-sheet"
     attachment.lifetime = .keepAlways

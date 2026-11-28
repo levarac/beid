@@ -196,7 +196,7 @@ final class FirstUploadNoticeUITests: XCTestCase {
   private func assertAccepted(_ app: XCUIApplication) {
     let state = app.staticTexts.matching(identifier: "firstUpload.fixture.state")
       .matching(NSPredicate(format: "label == %@", "ACCEPTED")).firstMatch
-    XCTAssertTrue(state.waitForExistence(timeout: 45), "The normal runtime did not accept the fixture receipt")
+    XCTAssertTrue(state.existsOrWait(timeout: 45), "The normal runtime did not accept the fixture receipt")
   }
 
   private func sendToBackgroundAndReturn(_ app: XCUIApplication) {

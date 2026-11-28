@@ -21,7 +21,7 @@ final class FlatScreenshotTourA: XCTestCase {
     )
     XCTAssertTrue(
       app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "beid")).firstMatch
-        .waitForExistence(timeout: 5),
+        .existsOrWait(timeout: 5),
       "Welcome must retain its brand label"
     )
     XCTAssertTrue(app.buttons["Continue"].exists)
@@ -43,7 +43,7 @@ final class FlatScreenshotTourA: XCTestCase {
       "beid needs Bluetooth to find your event and exchange signals with nearby devices. These observations help create your Record.",
       message: "Bluetooth permission must describe device observation"
     )
-    XCTAssertTrue(app.staticTexts["bluetooth.permission.purpose"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["bluetooth.permission.purpose"].existsOrWait(timeout: 5))
     XCTAssertFalse(app.staticTexts["Setup · 1 / 1"].exists)
     XCTAssertFalse(app.buttons["Connect Wallet"].exists)
     let continueButton = app.buttons["bluetooth.permission.continue"]
@@ -52,14 +52,14 @@ final class FlatScreenshotTourA: XCTestCase {
     assertBluetoothPrimaryAction(continueButton)
     capture("02 Bluetooth")
     continueButton.tap()
-    XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.account"].existsOrWait(timeout: 5))
   }
 
   func testShot_03_BluetoothOff() {
     launch(bluetoothOff: true)
     showBluetoothPermission()
     app.buttons["bluetooth.permission.continue"].tap()
-    XCTAssertTrue(app.staticTexts["Bluetooth is off"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Bluetooth is off"].existsOrWait(timeout: 5))
     let checkAgain = app.buttons["bluetooth.off.check-again"]
     XCTAssertTrue(checkAgain.isHittable)
     XCTAssertEqual(checkAgain.label, "Check again")
@@ -78,7 +78,7 @@ final class FlatScreenshotTourA: XCTestCase {
     add(accessibilityTree)
 
     let field = app.textFields["Event code"]
-    XCTAssertTrue(field.waitForExistence(timeout: 5))
+    XCTAssertTrue(field.existsOrWait(timeout: 5))
     XCTAssertEqual(field.value as? String, "ETH-TOKYO-26")
     XCTAssertFalse(app.keyboards.firstMatch.exists)
     XCTAssertTrue(app.buttons["Cancel"].exists)
@@ -93,7 +93,7 @@ final class FlatScreenshotTourA: XCTestCase {
     keepScreenshot(named: "13b Enter Event Code Error")
 
     let field = app.textFields["Event code"]
-    XCTAssertTrue(field.waitForExistence(timeout: 5))
+    XCTAssertTrue(field.existsOrWait(timeout: 5))
     XCTAssertEqual(field.value as? String, "ETH-TOKY0-26")
     let errorLabel = app.staticTexts.matching(
       NSPredicate(format: "label == %@", "COULD NOT JOIN EVENT")
@@ -118,13 +118,13 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTContext.runActivity(named: "Open Bluetooth permission and reach Now") { _ in
       app.buttons["Continue"].tap()
       let allowBluetooth = app.buttons["bluetooth.permission.continue"]
-      XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
+      XCTAssertTrue(allowBluetooth.existsOrWait(timeout: 5))
       allowBluetooth.tap()
     }
 
     XCTContext.runActivity(named: "Open Account") { _ in
       let account = app.buttons["home.account"]
-      XCTAssertTrue(account.waitForExistence(timeout: 5))
+      XCTAssertTrue(account.existsOrWait(timeout: 5))
       account.tap()
     }
 
@@ -138,7 +138,7 @@ final class FlatScreenshotTourA: XCTestCase {
       }
       XCTAssertTrue(joinEvent.exists, "Account's Join event row was not reachable")
       joinEvent.tap()
-      XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.staticTexts["eventCode.title"].existsOrWait(timeout: 5))
     }
   }
 
@@ -160,11 +160,11 @@ final class FlatScreenshotTourA: XCTestCase {
   private func showBluetoothPermission() {
     let getStarted = app.buttons["Continue"]
     XCTAssertTrue(
-      getStarted.waitForExistence(timeout: 5),
+      getStarted.existsOrWait(timeout: 5),
       "Welcome must offer its primary action before Bluetooth permission"
     )
     getStarted.tap()
-    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].existsOrWait(timeout: 5))
   }
 
   private func capture(_ frameCode: String) {
@@ -202,16 +202,16 @@ final class FlatScreenshotTourA: XCTestCase {
     launch()
     let version = app.staticTexts["welcome.version"]
     XCTAssertTrue(
-      version.waitForExistence(timeout: 5),
+      version.existsOrWait(timeout: 5),
       "Welcome must expose the actual app short version"
     )
     let welcomeVersion = version.label
     showBluetoothPermission()
     app.buttons["bluetooth.permission.continue"].tap()
-    XCTAssertTrue(app.buttons["home.account"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.account"].existsOrWait(timeout: 5))
     app.buttons["home.account"].tap()
     let accountVersion = app.staticTexts["account.version.value"]
-    XCTAssertTrue(accountVersion.waitForExistence(timeout: 5))
+    XCTAssertTrue(accountVersion.existsOrWait(timeout: 5))
     XCTAssertTrue(accountVersion.label.hasPrefix("beid "))
     let metadata = String(accountVersion.label.dropFirst("beid ".count))
     let shortVersion = metadata.components(separatedBy: " (").first ?? ""
@@ -227,7 +227,7 @@ final class FlatScreenshotTourA: XCTestCase {
         message: "Event code entry must describe organizer-supplied paste input"
       )
       let field = app.textFields["Event code"]
-      XCTAssertTrue(field.waitForExistence(timeout: 5))
+      XCTAssertTrue(field.existsOrWait(timeout: 5))
       XCTAssertEqual(field.placeholderValue, "Paste event code")
       XCTAssertTrue(app.buttons["eventCode.paste"].exists)
       XCTAssertFalse(app.buttons["Connect wallet instead"].exists)
@@ -235,7 +235,7 @@ final class FlatScreenshotTourA: XCTestCase {
     }
     XCTContext.runActivity(named: "Cancel event-code entry and return to Account") { _ in
       app.buttons["Cancel"].tap()
-      XCTAssertTrue(app.buttons["account.aboutSensing"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.buttons["account.aboutSensing"].existsOrWait(timeout: 5))
     }
   }
 
@@ -243,7 +243,7 @@ final class FlatScreenshotTourA: XCTestCase {
     launch()
     app.buttons["welcome.howItWorks"].tap()
     let scroll = app.scrollViews["aboutSensing.scroll"]
-    XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+    XCTAssertTrue(scroll.existsOrWait(timeout: 5))
     let capability = app.staticTexts.matching(
       NSPredicate(format: "label CONTAINS %@", "Sending is on.")
     ).firstMatch
@@ -271,7 +271,7 @@ final class FlatScreenshotTourA: XCTestCase {
     app.launch()
     app.buttons["welcome.howItWorks"].tap()
     let scroll = app.scrollViews["aboutSensing.scroll"]
-    XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+    XCTAssertTrue(scroll.existsOrWait(timeout: 5))
     let capability = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", expected)).firstMatch
     for _ in 0..<5 where !capability.isHittable { scroll.swipeUp() }
     XCTAssertTrue(capability.isHittable)
@@ -295,13 +295,13 @@ final class FlatScreenshotTourA: XCTestCase {
 
   private func assertExactText(_ text: String, message: String = "Expected complete screen copy") {
     let element = app.staticTexts.matching(NSPredicate(format: "label == %@", text)).firstMatch
-    XCTAssertTrue(element.waitForExistence(timeout: 5), message)
+    XCTAssertTrue(element.existsOrWait(timeout: 5), message)
     XCTAssertEqual(element.label, text, message)
   }
 
   private func assertContainsText(_ text: String, message: String = "Expected complete explanation copy") {
     let element = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
-    XCTAssertTrue(element.waitForExistence(timeout: 5), message)
+    XCTAssertTrue(element.existsOrWait(timeout: 5), message)
     XCTAssertTrue(element.label.contains(text), message)
   }
 
@@ -311,26 +311,26 @@ final class FlatScreenshotTourA: XCTestCase {
   func testWelcomeHowItWorksOpensAboutSensingAndWhatWeSend() {
     launch()
     let howItWorks = app.buttons["welcome.howItWorks"]
-    XCTAssertTrue(howItWorks.waitForExistence(timeout: 5))
+    XCTAssertTrue(howItWorks.existsOrWait(timeout: 5))
     assertMinimumHitTarget(howItWorks)
     howItWorks.tap()
-    XCTAssertTrue(app.navigationBars["About sensing"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["About sensing"].existsOrWait(timeout: 5))
     let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
-    XCTAssertTrue(whatWeSend.waitForExistence(timeout: 5))
+    XCTAssertTrue(whatWeSend.existsOrWait(timeout: 5))
     assertExplainerCopy()
     whatWeSend.tap()
-    XCTAssertTrue(app.descendants(matching: .any)["whatWeSend.firstRow"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.navigationBars["What we send"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.descendants(matching: .any)["whatWeSend.firstRow"].existsOrWait(timeout: 5))
+    XCTAssertTrue(app.navigationBars["What we send"].existsOrWait(timeout: 5))
     app.navigationBars.buttons.firstMatch.tap()
-    XCTAssertTrue(whatWeSend.waitForExistence(timeout: 5))
+    XCTAssertTrue(whatWeSend.existsOrWait(timeout: 5))
     app.navigationBars.buttons.firstMatch.tap()
-    XCTAssertTrue(howItWorks.waitForExistence(timeout: 5))
+    XCTAssertTrue(howItWorks.existsOrWait(timeout: 5))
   }
 
   func testShot_16_WhatWeSend() {
     openAboutSensing()
     let aboutTitle = app.navigationBars.staticTexts["About sensing"]
-    XCTAssertTrue(aboutTitle.waitForExistence(timeout: 5) && aboutTitle.isHittable)
+    XCTAssertTrue(aboutTitle.existsOrWait(timeout: 5) && aboutTitle.isHittable)
     assertVisibleDarkText(aboutTitle)
     let aboutSection = app.staticTexts["HOW IT WORKS"]
     XCTAssertEqual(aboutSection.frame.minX, aboutTitle.frame.minX, accuracy: 1.0,
@@ -343,9 +343,9 @@ final class FlatScreenshotTourA: XCTestCase {
     whatWeSend.tap()
 
     let scroll = app.scrollViews["whatWeSend.scroll"]
-    XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+    XCTAssertTrue(scroll.existsOrWait(timeout: 5))
     let title = app.navigationBars.staticTexts["What we send"]
-    XCTAssertTrue(title.waitForExistence(timeout: 5) && title.isHittable)
+    XCTAssertTrue(title.existsOrWait(timeout: 5) && title.isHittable)
     assertVisibleDarkText(title)
     let firstSection = app.staticTexts["WHAT WE SEND"]
     XCTAssertEqual(firstSection.frame.minX, title.frame.minX, accuracy: 1.0,
@@ -374,13 +374,13 @@ final class FlatScreenshotTourA: XCTestCase {
     app.launch()
 
     let getStarted = app.buttons["Continue"]
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
+    XCTAssertTrue(getStarted.existsOrWait(timeout: 5))
     getStarted.tap()
     let allowBluetooth = app.buttons["bluetooth.permission.continue"]
-    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
+    XCTAssertTrue(allowBluetooth.existsOrWait(timeout: 5))
     allowBluetooth.tap()
     let account = app.buttons["home.account"]
-    XCTAssertTrue(account.waitForExistence(timeout: 5))
+    XCTAssertTrue(account.existsOrWait(timeout: 5))
     account.tap()
 
     let aboutSensing = app.buttons["account.aboutSensing"]
@@ -393,7 +393,7 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(aboutSensing.isHittable)
     assertMinimumHitTarget(aboutSensing)
     aboutSensing.tap()
-    XCTAssertTrue(app.buttons["aboutSensing.whatWeSend"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["aboutSensing.whatWeSend"].existsOrWait(timeout: 5))
   }
 
   private func assertMinimumHitTarget(_ control: XCUIElement) {

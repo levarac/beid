@@ -15,7 +15,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testAccountNavigationBarShowsTitleAndDoneDismisses() {
     openAccount()
     let bar = app.navigationBars["Account"]
-    XCTAssertTrue(bar.waitForExistence(timeout: 5))
+    XCTAssertTrue(bar.existsOrWait(timeout: 5))
     XCTAssertTrue(bar.staticTexts["Account"].exists)
     let done = bar.buttons["Done"]
     done.assertHittable()
@@ -29,7 +29,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testAccountPushedScreenUsesNativeBackInTheSameBar() {
     openAccount()
     let accountBar = app.navigationBars["Account"]
-    XCTAssertTrue(accountBar.waitForExistence(timeout: 5))
+    XCTAssertTrue(accountBar.existsOrWait(timeout: 5))
     let originalFrame = accountBar.frame
     app.buttons["Organizer tools"].tap()
     app.buttons["organizer.venueBroadcast"].assertHittable()
@@ -55,7 +55,7 @@ final class FlatScreenshotTourD: XCTestCase {
     pastEvents.assertHittable()
     pastEvents.tap()
     let pastBar = app.navigationBars["Past events"]
-    XCTAssertTrue(pastBar.waitForExistence(timeout: 5))
+    XCTAssertTrue(pastBar.existsOrWait(timeout: 5))
     XCTAssertFalse(pastBar.buttons["Done"].exists)
     pastBar.buttons.firstMatch.tap()
     app.navigationBars["Account"].buttons["Done"].assertHittable()
@@ -65,7 +65,7 @@ final class FlatScreenshotTourD: XCTestCase {
     about.assertHittable()
     about.tap()
     let aboutBar = app.navigationBars["About sensing"]
-    XCTAssertTrue(aboutBar.waitForExistence(timeout: 5))
+    XCTAssertTrue(aboutBar.existsOrWait(timeout: 5))
     XCTAssertFalse(aboutBar.buttons["Done"].exists)
     aboutBar.buttons.firstMatch.tap()
     app.navigationBars["Account"].buttons["Done"].assertHittable()
@@ -118,15 +118,15 @@ final class FlatScreenshotTourD: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-event-detail-frame-08"]
     app.launch()
     let getStarted = app.buttons["Continue"]
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
+    XCTAssertTrue(getStarted.existsOrWait(timeout: 5))
     getStarted.tap()
     let allowBluetooth = app.buttons["bluetooth.permission.continue"]
-    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
+    XCTAssertTrue(allowBluetooth.existsOrWait(timeout: 5))
     allowBluetooth.tap()
 
     app.openRecordsByEvent()
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
-    XCTAssertTrue(event.waitForExistence(timeout: 5))
+    XCTAssertTrue(event.existsOrWait(timeout: 5))
     event.tap()
     let session = app.buttons["event-detail.observation.1"]
     session.scrollToHittable(in: app)
@@ -134,12 +134,12 @@ final class FlatScreenshotTourD: XCTestCase {
     app.staticTexts["observation-detail.title"].assertExists()
     let report = app.buttons["observation-detail.unassigned-report.00000000-0000-4000-8000-000000000639"]
     for _ in 0..<5 where !report.isHittable { app.swipeUp() }
-    XCTAssertTrue(report.waitForExistence(timeout: 5))
+    XCTAssertTrue(report.existsOrWait(timeout: 5))
     XCTAssertTrue(report.isHittable)
     report.tap()
 
     let heading = app.staticTexts["report-detail.heading"]
-    _ = heading.waitForExistence(timeout: 5)
+    _ = heading.existsOrWait(timeout: 5)
     attachScreenshot("12")
     XCTAssertEqual(heading.label, "Report #1")
     XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS DEVICE"))
@@ -165,7 +165,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_14_OrganizerTools() {
     openOrganizer()
     let route = app.buttons["organizer.venueBroadcast"]
-    _ = route.waitForExistence(timeout: 5)
+    _ = route.existsOrWait(timeout: 5)
     attachScreenshot("14")
     assertMinimumHitTarget(route)
     XCTAssertEqual(route.value as? String, "Not broadcasting")
@@ -186,7 +186,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_14_OrganizerTools_SavedPack() {
     openOrganizer(extraArguments: ["-beid-organizer-frame", "14-saved"])
     let status = app.staticTexts["organizer.savedPack.status"]
-    _ = status.waitForExistence(timeout: 5)
+    _ = status.existsOrWait(timeout: 5)
     attachScreenshot("14-saved")
     XCTAssertTrue(status.exists, "the STATUS value must be on 14")
     XCTAssertEqual(status.label.uppercased(), "SAVED ON THIS DEVICE")
@@ -203,7 +203,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_14_OrganizerTools_NotSaved() {
     openOrganizer(extraArguments: ["-beid-organizer-frame", "14-not-saved"])
     let status = app.staticTexts["organizer.savedPack.status"]
-    _ = status.waitForExistence(timeout: 5)
+    _ = status.existsOrWait(timeout: 5)
     attachScreenshot("14-not-saved")
     XCTAssertTrue(status.exists, "the STATUS value must be on 14")
     XCTAssertEqual(status.label.uppercased(), "NOT SAVED")
@@ -310,7 +310,7 @@ final class FlatScreenshotTourD: XCTestCase {
     app.buttons["Scan QR code"].tap()
     // A native navigation title (#856): the bar exposes it as its static text.
     let title = app.navigationBars.staticTexts["Scan QR code"]
-    XCTAssertTrue(title.waitForExistence(timeout: 5))
+    XCTAssertTrue(title.existsOrWait(timeout: 5))
     attachScreenshot("14d")
     // The OS's close item (DESIGN.md §12, #732): its size is the OS's, so this
     // pins that it sits in the real navigation bar and can be tapped.
@@ -426,9 +426,9 @@ final class FlatScreenshotTourD: XCTestCase {
     openAccount(extraArguments: extraArguments)
     XCTContext.runActivity(named: "Open Organizer tools from Account") { _ in
       let organizer = app.buttons["Organizer tools"]
-      XCTAssertTrue(organizer.waitForExistence(timeout: 5))
+      XCTAssertTrue(organizer.existsOrWait(timeout: 5))
       organizer.tap()
-      XCTAssertTrue(app.buttons["organizer.venueBroadcast"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.buttons["organizer.venueBroadcast"].existsOrWait(timeout: 5))
     }
   }
 
@@ -437,7 +437,7 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTContext.runActivity(named: "Open Venue broadcast and wait for Scan QR code") { _ in
       app.buttons["organizer.venueBroadcast"].tap()
       let scan = app.buttons["Scan QR code"]
-      XCTAssertTrue(scan.waitForExistence(timeout: 5))
+      XCTAssertTrue(scan.existsOrWait(timeout: 5))
       let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: scan)
       XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed)
     }
@@ -451,13 +451,13 @@ final class FlatScreenshotTourD: XCTestCase {
 
     XCTContext.runActivity(named: "Complete onboarding and reach Now") { _ in
       app.buttons["Continue"].tap()
-      XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.buttons["bluetooth.permission.continue"].existsOrWait(timeout: 5))
       app.buttons["bluetooth.permission.continue"].tap()
       app.tabButton("Now").assertHittable()
     }
     XCTContext.runActivity(named: "Open Account from Now") { _ in
       let account = app.buttons["home.account"]
-      XCTAssertTrue(account.waitForExistence(timeout: 5))
+      XCTAssertTrue(account.existsOrWait(timeout: 5))
       account.tap()
     }
   }

@@ -67,7 +67,7 @@ final class JoinRefusalUITests: XCTestCase {
     // failure before tapping the nearby card.
     let alert = app.alerts["Recording unavailable"]
     let message = "The device signing key is unavailable. Unlock your device and try again."
-    XCTAssertTrue(alert.waitForExistence(timeout: UITestWait.timeout))
+    XCTAssertTrue(alert.existsOrWait(timeout: UITestWait.timeout))
     alert.assertHittable()
     alert.staticTexts[message].assertHittable()
     XCTAssertEqual(app.alerts.count, 1)

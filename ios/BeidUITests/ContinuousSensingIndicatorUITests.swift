@@ -16,18 +16,18 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
     app.launch()
 
     app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].existsOrWait(timeout: 5))
     app.buttons["bluetooth.permission.continue"].tap()
 
     let senseEvent = app.buttons["home.demo.join"]
-    XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
+    XCTAssertTrue(senseEvent.existsOrWait(timeout: 5))
     senseEvent.tap()
-    XCTAssertTrue(app.scrollViews["scan.sensing"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.scrollViews["scan.sensing"].existsOrWait(timeout: 30))
 
     app.navigationBars.buttons.element(boundBy: 0).tap()
 
     let indicator = app.buttons["home.open-details"]
-    XCTAssertTrue(indicator.waitForExistence(timeout: 5))
+    XCTAssertTrue(indicator.existsOrWait(timeout: 5))
     XCTAssertTrue(app.staticTexts["Sensing continues"].exists)
     XCTAssertFalse(app.staticTexts["SENSING"].exists)
     XCTAssertFalse(app.staticTexts["DO THIS NOW"].exists)
@@ -36,11 +36,11 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
     let details = app.buttons["home.open-details"]
     XCTAssertTrue(details.isHittable)
     details.tap()
-    XCTAssertTrue(app.scrollViews["scan.sensing"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["scan.sensing"].existsOrWait(timeout: 5))
     XCTAssertTrue(app.navigationBars["Sensing"].staticTexts["Sensing"].exists)
     XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
     app.navigationBars.buttons.element(boundBy: 0).tap()
-    XCTAssertTrue(indicator.waitForExistence(timeout: 5))
+    XCTAssertTrue(indicator.existsOrWait(timeout: 5))
   }
 }

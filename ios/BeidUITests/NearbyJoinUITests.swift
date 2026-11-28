@@ -68,13 +68,13 @@ final class NearbyJoinUITests: XCTestCase {
     app.launch()
 
     app.buttons["Continue"].tap()
-    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.permission.continue"].existsOrWait(timeout: 5))
     app.buttons["bluetooth.permission.continue"].tap()
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
-    XCTAssertTrue(receipt.waitForExistence(timeout: 5))
+    XCTAssertTrue(receipt.existsOrWait(timeout: 5))
     XCTAssertEqual(receipt.label, "joins=0 event=none")
     let card = app.buttons["home.nearby.join.9adc61d60dda843e"]
-    XCTAssertTrue(card.waitForExistence(timeout: 5))
+    XCTAssertTrue(card.existsOrWait(timeout: 5))
     XCTAssertTrue(card.isEnabled)
     XCTAssertTrue(card.isHittable)
     XCTAssertGreaterThan(card.frame.width, 180, "The button must span the card, including the trailing padding")
@@ -133,7 +133,7 @@ final class NowNavigationUITests: XCTestCase {
     app.buttons["home.pending-fixture.advance60"].tap()
     XCTAssertFalse(notice.exists, "Exactly 60 seconds is still inside the grace period")
     app.buttons["home.pending-fixture.advance1"].tap()
-    XCTAssertTrue(notice.waitForExistence(timeout: 5))
+    XCTAssertTrue(notice.existsOrWait(timeout: 5))
     XCTAssertTrue(app.staticTexts["NOT SENT YET"].exists)
     XCTAssertTrue(app.staticTexts[
       "Part of your Record is saved on this device but not sent yet. beid sends it when the app is open and online."
@@ -167,20 +167,20 @@ final class NowNavigationUITests: XCTestCase {
 
   func testRecordsTabOwnsSavedRecordsAndEventList() {
     launchHome(["-beid-home-frame-04"])
-    XCTAssertTrue(app.otherElements["home.active-event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.otherElements["home.active-event"].existsOrWait(timeout: 5))
     XCTAssertFalse(app.buttons["collection.stop-sensing"].exists)
     XCTAssertFalse(app.staticTexts["PAST"].exists)
     XCTAssertFalse(app.buttons["home.scan"].exists)
     XCTAssertTrue(app.buttons["home.account"].exists)
     app.tabButton("Records").tap()
-    XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["records.grid"].existsOrWait(timeout: 5))
     app.selectRecordsGrouping("By event")
     app.scrollViews["records.events"].assertExists()
     XCTAssertTrue(app.navigationBars.staticTexts["Records"].exists)
     XCTAssertTrue(app.buttons["home.account"].isHittable)
     XCTAssertTrue(app.buttons["home.past-event.ACTIVE-EVENT"].exists)
     app.tabButton("Now").tap()
-    XCTAssertTrue(app.otherElements["home.active-event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.otherElements["home.active-event"].existsOrWait(timeout: 5))
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "mutual")).firstMatch.exists)
     capture("now-active")
   }
@@ -230,7 +230,7 @@ final class NowNavigationUITests: XCTestCase {
   private func launchSealedDemoRecord() {
     launchHome([])
     app.buttons["home.demo.join"].tap()
-    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].existsOrWait(timeout: 30))
     app.buttons["scan.stop-sensing"].tap()
     app.alerts.buttons["Stop sensing"].assertHittable()
     app.alerts.buttons["Stop sensing"].tap()
@@ -412,15 +412,15 @@ final class NowNavigationUITests: XCTestCase {
     app.buttons["fixture.now.advance29"].tap()
     XCTAssertFalse(fallback.exists, "29 seconds is below the fallback boundary")
     app.buttons["fixture.now.advance1"].tap()
-    XCTAssertTrue(fallback.waitForExistence(timeout: 5))
+    XCTAssertTrue(fallback.existsOrWait(timeout: 5))
     app.buttons["fixture.now.add-candidate"].tap()
-    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.demo.join"].existsOrWait(timeout: 5))
     XCTAssertFalse(fallback.exists, "a candidate cancels the empty-discovery interval")
     app.buttons["fixture.now.remove-candidate"].tap()
     app.buttons["fixture.now.advance29"].tap()
     XCTAssertFalse(fallback.exists)
     app.buttons["fixture.now.advance1"].tap()
-    XCTAssertTrue(fallback.waitForExistence(timeout: 5))
+    XCTAssertTrue(fallback.existsOrWait(timeout: 5))
     capture("now-fallback")
   }
 
@@ -434,15 +434,15 @@ final class NowNavigationUITests: XCTestCase {
     app.buttons["fixture.now.advance1"].tap()
     XCTAssertFalse(fallback.exists, "time from the previous visible interval is discarded")
     app.buttons["fixture.now.advance29"].tap()
-    XCTAssertTrue(fallback.waitForExistence(timeout: 5))
+    XCTAssertTrue(fallback.existsOrWait(timeout: 5))
     XCUIDevice.shared.press(.home)
     app.activate()
-    XCTAssertTrue(app.staticTexts["home.listening"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["home.listening"].existsOrWait(timeout: 5))
     XCTAssertFalse(fallback.exists, "background discovery time must not show a fallback")
     app.buttons["fixture.now.advance29"].tap()
     XCTAssertFalse(fallback.exists)
     app.buttons["fixture.now.advance1"].tap()
-    XCTAssertTrue(fallback.waitForExistence(timeout: 5))
+    XCTAssertTrue(fallback.existsOrWait(timeout: 5))
   }
 
   func testNearbyJoinIsExplicitAndAdditionalCandidatesKeepTheirOrder() {
@@ -471,24 +471,24 @@ final class NowNavigationUITests: XCTestCase {
     XCTAssertFalse(app.staticTexts["home.listening"].exists)
     XCTAssertFalse(app.buttons["home.enter-code"].exists)
     app.buttons["home.bluetooth.fix"].tap()
-    XCTAssertTrue(app.buttons["bluetooth.off.check-again"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["bluetooth.off.check-again"].existsOrWait(timeout: 5))
     capture("now-bluetooth-off")
   }
 
   func testDemoStartsOnlyAfterJoinAndSavesARecordInRecords() {
     launchHome([])
     app.staticTexts["Tap JOIN to start the demo."].assertExists()
-    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.demo.join"].existsOrWait(timeout: 5))
     XCTAssertFalse(app.otherElements["home.active-event"].exists)
     XCTAssertTrue(
       app.staticTexts["DEMO EVENT · SAMPLE DATA"].exists,
       "The demo must identify sample data before explicit JOIN"
     )
     app.buttons["home.demo.join"].tap()
-    XCTAssertTrue(app.scrollViews["scan.sensing-session"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.scrollViews["scan.sensing-session"].existsOrWait(timeout: 30))
     XCTAssertFalse(app.buttons["Cancel"].exists, "Recording must not present a wallet sheet")
     let recording = app.buttons["Simulate Signal Lost"]
-    XCTAssertTrue(recording.waitForExistence(timeout: 30))
+    XCTAssertTrue(recording.existsOrWait(timeout: 30))
     app.buttons["scan.stop-sensing"].tap()
     app.alerts.buttons["Stop sensing"].assertHittable()
     app.alerts.buttons["Stop sensing"].tap()
@@ -510,7 +510,7 @@ final class NowNavigationUITests: XCTestCase {
     app.buttons["Continue"].tap()
     app.buttons["bluetooth.permission.continue"].assertHittable()
     app.buttons["bluetooth.permission.continue"].tap()
-    XCTAssertTrue(app.tabButton("Now").waitForExistence(timeout: 5))
+    XCTAssertTrue(app.tabButton("Now").existsOrWait(timeout: 5))
   }
 
   private func capture(_ name: String) {
