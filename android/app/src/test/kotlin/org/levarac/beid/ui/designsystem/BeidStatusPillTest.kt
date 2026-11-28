@@ -28,14 +28,14 @@ class BeidStatusPillTest {
         composeTestRule.setContent {
             BeidAppTheme {
                 BeidStatusPill(
-                    label = "Sensing automatically",
+                    label = "Sensing nearby devices",
                     tone = BeidStatusPill.Tone.Active,
                     modifier = Modifier.testTag("status_pill"),
                 )
             }
         }
 
-        composeTestRule.onNodeWithText("Sensing automatically").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Sensing nearby devices").assertIsDisplayed()
     }
 
     @Test

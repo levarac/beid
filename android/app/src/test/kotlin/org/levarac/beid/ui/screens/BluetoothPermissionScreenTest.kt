@@ -51,4 +51,31 @@ class BluetoothPermissionScreenTest {
         composeTestRule.onNodeWithTag(BluetoothPermissionScreenTestTags.ALLOW_BUTTON).performClick()
         assertTrue(allowTapped)
     }
+
+    /**
+     * beid#389: the bullets describe finding events over Bluetooth, explicit
+     * joining and sensing while beid is on screen. Literal strings, so a
+     * resource edit that reintroduces a background or "automatically"
+     * promise fails here rather than passing through `getString`.
+     */
+    @Test
+    fun bulletsShowObservationScopedCopyWithoutForbiddenPromises() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                BluetoothPermissionScreen(onAllowBluetooth = {})
+            }
+        }
+
+        for (copy in listOf(
+            "Find nearby events",
+            "beid hears nearby events over Bluetooth. Tap JOIN when yours appears.",
+            "Private by design",
+            "Bluetooth uses temporary device identifiers for nearby sensing.",
+            "Keep beid open",
+            "Sensing runs while beid is open on your screen at the event.",
+        )) {
+            composeTestRule.onNodeWithText(copy).performScrollTo().assertIsDisplayed()
+        }
+        composeTestRule.assertNoForbiddenObservationCopy()
+    }
 }

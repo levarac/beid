@@ -249,7 +249,7 @@ interface EventJoinSession {
 
     /**
      * Whether this session's Recording-phase entrance ceremony
-     * ("Proof Collected") has already been shown — mirrors iOS's
+     * ("Recording started") has already been shown — mirrors iOS's
      * `SensingCoordinator.recordingCeremonyShown`
      * (`ios/Beid/Sensing/SensingCoordinator.swift`). `false` for a fresh
      * session; set once via [markRecordingCeremonyShown] and never reset by
