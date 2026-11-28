@@ -144,9 +144,12 @@ Two different things happen at a deadline:
   exclusive stop and the loaded chain continues, the radio is cleared and the
   next lease is re-evaluated from the bundle already held. No bundle or
   handoff is re-fetched; the registry is consulted as in any evaluation.
-- Renewing the chain. Re-fetch the exact recorded source 60 seconds before the
-  chain ends and again at its end. A candidate must pass identity, signatures
-  and current-lease checks before it replaces the loaded chain.
+- Renewing the chain. When a source is recorded, re-fetch that exact source
+  60 seconds before the chain ends and again at its end. A candidate must pass
+  identity, signatures and current-lease checks before it replaces the loaded
+  chain. A saved pack without a recorded source is not re-fetched: at the
+  chain's end the radio is cleared and broadcasting stays stopped until a
+  current pack is supplied.
 
 A link's fragment remains pinned to its handoff digest: a republished bundle
 with another digest needs a matching handoff, and a fragment link cannot
@@ -161,11 +164,15 @@ agreement to make renewal succeed.
 2. When the chain ends, the radio is cleared before the refetch. If the refetch
    fails, the screen shows `Lease ended` and "The lease ended and the pack could
    not be refreshed. Broadcasting stopped. Load a current pack."
-3. Paste the organizer's current link, or use `Scan QR code`, and press
-   `Use this link`. On `release/1.1.0` no screen control calls the two-URL
-   supply (`supply(bundleSource:handoffSource:)` or `supplyConfigured`); only
-   tests do, so on a device the link is the manual path. A link stays pinned to
-   its handoff digest, so it needs the organizer's new link after a republish.
+3. Supply the organizer's current link in one of two ways:
+   - Paste the link and press `Use this link`.
+   - Use `Scan QR code`. A successful scan loads the pack at once, without
+     `Use this link`.
+
+   On `release/1.1.0` no screen control calls the two-URL supply
+   (`supply(bundleSource:handoffSource:)` or `supplyConfigured`); only tests
+   do, so on a device the link is the manual path. A link stays pinned to its
+   handoff digest, so it needs the organizer's new link after a republish.
 4. Check the event ID, registrar and pack digest. The pack settles at `ready`;
    press `Start broadcasting`. A replacement never starts without this action.
 5. `Load saved pack` re-verifies the saved bytes and cannot restart an ended
@@ -186,8 +193,14 @@ category `venue-refresh`:
   refresh_source=<true|false>` when a serving permit reaches its exclusive stop
   and is cleared. A prepared permit that never passed Start is not logged,
   because nothing was broadcasting. With `chain_ended=false` the next lease is
-  re-evaluated from the loaded chain without a fetch; with `true` the recorded
-  source is re-fetched to renew the chain.
+  re-evaluated from the loaded chain without a fetch. With `chain_ended=true`,
+  the recorded source is re-fetched to renew the chain when a source is
+  recorded (`refresh_source=true`). With `refresh_source=false` nothing is
+  fetched, no `venue_refresh failed` line follows, and broadcasting stays
+  stopped.
+- `noUpdateSource` (stage `source`, trigger `manual`) is logged only when the
+  operator presses `Check for pack update` while serving a pack that has no
+  recorded source.
 
 No URL, key, event ID, digest, display name or payload byte is logged. Read it
 with `log stream --predicate 'subsystem == "org.levarac.beid" AND category ==
