@@ -437,7 +437,10 @@ final class NowNavigationUITests: XCTestCase {
     XCTAssertTrue(fallback.existsOrWait(timeout: 5))
     XCUIDevice.shared.press(.home)
     app.activate()
-    XCTAssertTrue(app.staticTexts["home.listening"].existsOrWait(timeout: 5))
+    // The listening strip can already exist while the foreground transition
+    // is still restarting the standby interval. Keep the native waiter here
+    // before advancing the fixture clock.
+    XCTAssertTrue(app.staticTexts["home.listening"].waitForExistence(timeout: 5))
     XCTAssertFalse(fallback.exists, "background discovery time must not show a fallback")
     app.buttons["fixture.now.advance29"].tap()
     XCTAssertFalse(fallback.exists)
