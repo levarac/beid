@@ -192,12 +192,12 @@ category `venue-refresh`:
 - `venue_serving stopped_at_expiry chain_ended=<true|false>
   refresh_source=<true|false>` when a serving permit reaches its exclusive stop
   and is cleared. A prepared permit that never passed Start is not logged,
-  because nothing was broadcasting. With `chain_ended=false` the next lease is
-  re-evaluated from the loaded chain without a fetch. With `chain_ended=true`,
-  the recorded source is re-fetched to renew the chain when a source is
-  recorded (`refresh_source=true`). With `refresh_source=false` nothing is
-  fetched, no `venue_refresh failed` line follows, and broadcasting stays
-  stopped.
+  because nothing was broadcasting. With `chain_ended=false`, the
+  app first re-evaluates the next lease from the loaded pack, without a fetch;
+  if that evaluation requires recovery and a source is recorded, it may
+  refetch. With `chain_ended=true` and `refresh_source=true`, it refetches the
+  recorded source. With `chain_ended=true` and `refresh_source=false`, the stop
+  stands and no refresh-failure record follows for that expiry.
 - `noUpdateSource` (stage `source`, trigger `manual`) is logged only when the
   operator presses `Check for pack update` while serving a pack that has no
   recorded source.
