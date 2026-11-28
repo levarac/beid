@@ -741,6 +741,13 @@ jobs:
           cp "$CI_OUTPUT_ROOT/DerivedData/manifest.json" "$CI_OUTPUT_ROOT/manifest.json"
           printf 'xctestrun=%s\n' "$xctestrun" >> "$GITHUB_OUTPUT"
 
+      # Join UTC samples to the existing boot/test/result step timestamps and xcresult.
+      - name: Start UI lane load sampling
+        if: startsWith(matrix.lane, 'ui-')
+        shell: bash
+        run: |
+          python3 -m scripts.ios_lane_load collect "$CI_OUTPUT_ROOT" </dev/null >/dev/null 2>&1 &
+
       - name: Create shard-owned simulator
         id: simulator
         shell: bash
@@ -855,6 +862,13 @@ jobs:
           set -euo pipefail
           xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true
           xcrun simctl delete "$SIMULATOR_UDID"
+
+      # The downloadable job log retains this JSONL separately from required evidence.
+      - name: Record UI lane load samples
+        if: ${{ !cancelled() && startsWith(matrix.lane, 'ui-') && env.CI_OUTPUT_ROOT != '' }}
+        shell: bash
+        run: |
+          python3 -m scripts.ios_lane_load finish "$CI_OUTPUT_ROOT" 2>/dev/null || echo 'BEID_UI_LOAD {"sampling_error":1}'
 
   ios-simulator:
     name: ${{ matrix.context }}
