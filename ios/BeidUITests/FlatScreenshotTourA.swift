@@ -154,7 +154,7 @@ final class FlatScreenshotTourA: XCTestCase {
     if bluetoothOff {
       app.launchArguments.append("-beid-bluetooth-off-fixture")
     }
-    app.launch()
+    launchFixture(app)
   }
 
   private func showBluetoothPermission() {

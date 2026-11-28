@@ -165,7 +165,7 @@ final class FirstUploadNoticeUITests: XCTestCase {
         "BEID_FIRST_UPLOAD_UI_RECORD": sample.id,
         "BEID_FIRST_UPLOAD_UI_OBSERVATION": sample.hex
       ]
-      app.launch()
+      launchFixture(app)
       return (app, receiver)
     } catch {
       receiver.stop()

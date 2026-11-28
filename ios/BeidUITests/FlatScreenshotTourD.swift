@@ -446,7 +446,7 @@ final class FlatScreenshotTourD: XCTestCase {
   private func openAccount(extraArguments: [String] = []) {
     app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture"] + extraArguments
     XCTContext.runActivity(named: "Launch Account fixture") { _ in
-      app.launch()
+      launchFixture(app)
     }
 
     XCTContext.runActivity(named: "Complete onboarding and reach Now") { _ in

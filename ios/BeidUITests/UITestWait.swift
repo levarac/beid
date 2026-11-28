@@ -45,6 +45,20 @@ enum ControlledDemoPhase: String {
   case sensing, eventFound, recording
 }
 
+extension XCTestCase {
+  /// End the fixture process in the test that launched it. Otherwise the next
+  /// test's fresh launch must first terminate the preceding test's process.
+  func launchFixture(_ app: XCUIApplication) {
+    app.launch()
+    addTeardownBlock {
+      guard app.state != .notRunning else { return }
+      app.terminate()
+      XCTAssertTrue(app.wait(for: .notRunning, timeout: UITestWait.timeout),
+                    "The fixture app must exit before the next test launches it")
+    }
+  }
+}
+
 extension XCUIElement {
   func assertExists(file: StaticString = #filePath, line: UInt = #line) {
     XCTAssertTrue(

@@ -290,7 +290,7 @@ final class FlatScreenshotTourB: XCTestCase {
 
   private func launchHome(arguments: [String]) {
     app.launchArguments = ["-beid-ui-test"] + arguments
-    app.launch()
+    launchFixture(app)
     let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
     getStarted.tap()
