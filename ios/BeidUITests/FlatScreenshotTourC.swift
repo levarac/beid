@@ -819,6 +819,8 @@ final class FlatScreenshotTourC: XCTestCase {
     add(attachment)
   }
 
+  // Screenshot fixtures inspect a changing accessibility tree after navigation.
+  // Preserve their original sequence of waits before capturing it.
   private func launchSensingFixture(
     _ code: String, extraArguments: [String] = [], file: StaticString = #filePath, line: UInt = #line
   ) -> XCUIApplication {
@@ -827,18 +829,18 @@ final class FlatScreenshotTourC: XCTestCase {
     app.launch()
 
     let getStarted = app.buttons["Continue"]
-    XCTAssertTrue(getStarted.existsOrWait(timeout: 10), file: file, line: line)
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 10), file: file, line: line)
     getStarted.tap()
 
     let allowBluetooth = app.buttons["bluetooth.permission.continue"]
-    XCTAssertTrue(allowBluetooth.existsOrWait(timeout: 10), file: file, line: line)
+    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10), file: file, line: line)
     allowBluetooth.tap()
 
     let senseEvent = app.buttons["home.demo.join"]
-    XCTAssertTrue(senseEvent.existsOrWait(timeout: 10), file: file, line: line)
+    XCTAssertTrue(senseEvent.waitForExistence(timeout: 10), file: file, line: line)
     senseEvent.tap()
 
-    XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].existsOrWait(timeout: 10), file: file, line: line)
+    XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].waitForExistence(timeout: 10), file: file, line: line)
     return app
   }
 

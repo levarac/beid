@@ -53,7 +53,7 @@ extension XCUIElement {
 
   func assertExists(file: StaticString = #filePath, line: UInt = #line) {
     XCTAssertTrue(
-      existsOrWait(timeout: UITestWait.timeout),
+      waitForExistence(timeout: UITestWait.timeout),
       "Element did not appear within \(UITestWait.timeout)s: \(exists ? identifier : "<absent>")",
       file: file, line: line
     )

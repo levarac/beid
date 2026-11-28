@@ -74,7 +74,7 @@ final class SingleAppearanceUITests: XCTestCase {
     launchHome(["-beid-threshold-override", "1"])
     app.buttons["home.demo.join"].tap()
     let loseSignal = app.buttons["Simulate Signal Lost"]
-    XCTAssertTrue(loseSignal.existsOrWait(timeout: 30))
+    XCTAssertTrue(loseSignal.waitForExistence(timeout: 30))
     try assertLightPage()
     try assertInkPanel("scan.live-panel")
     loseSignal.tap()
