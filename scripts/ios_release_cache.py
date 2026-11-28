@@ -1,5 +1,6 @@
 """Authenticate optional Simulator cache payloads against their release-scoped GitHub keys."""
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
 import hashlib
@@ -111,33 +112,51 @@ def inventory(prefix, kind):
     return release_keys(entries_for(prefix), prefix, kind, expected_version(kind))
 
 
+@contextmanager
+def plan_phase(number):
+    """Log only the phase number and elapsed milliseconds, including on failure.
+
+    1 = host toolchain, 2 = Gradle resolution, 3 = Swift Export fingerprint,
+    4 = CAS inventory, 5 = export inventory. Skipped phases have no line.
+    """
+    start = time.monotonic_ns()
+    try:
+        yield
+    finally:
+        print(number, (time.monotonic_ns() - start) // 1_000_000, flush=True)
+
+
 def make_plan(root):
     from scripts.ios_swift_export_key import host_toolchain, add_record
 
     host = hashlib.sha256()
-    for item in host_toolchain(Path(os.environ["JAVA_HOME"])):
-        add_record(host, item)
+    with plan_phase(1):
+        for item in host_toolchain(Path(os.environ["JAVA_HOME"])):
+            add_record(host, item)
     week = datetime.now(timezone.utc).strftime("%G-W%V")
     toolchain = host.hexdigest()
     export_digest = ""
     resolved = root / "inputs.json"
     try:
-        subprocess.run(["./gradlew", "-q", "-I", "../scripts/ios_swift_export_inputs.gradle",
-                        ":shared:fingerprintSwiftExportInputs", "-PbeidExportInputsFile=" + str(resolved)],
-                       cwd="android", check=True, env={k: v for k, v in os.environ.items() if k != "GH_TOKEN"})
+        with plan_phase(2):
+            subprocess.run(["./gradlew", "-q", "-I", "../scripts/ios_swift_export_inputs.gradle",
+                            ":shared:fingerprintSwiftExportInputs", "-PbeidExportInputsFile=" + str(resolved)],
+                           cwd="android", check=True, env={k: v for k, v in os.environ.items() if k != "GH_TOKEN"})
         from scripts.ios_swift_export_key import cache_key
-        export_digest = cache_key(Path.cwd(), resolved, Path.home() / ".konan/dependencies", [toolchain])
+        with plan_phase(3):
+            export_digest = cache_key(Path.cwd(), resolved, Path.home() / ".konan/dependencies", [toolchain])
     except (OSError, ValueError, subprocess.SubprocessError):
         print("Swift Export fingerprint unavailable. Use the normal Kotlin build.")
     plan = {"export_digest": export_digest}
-    for kind in ("cas", "export"):
+    for phase, kind in enumerate(("cas", "export"), start=4):
         if kind == "export" and not export_digest:
             continue
         prefix = f"beid-ios-{kind}-v1-{toolchain}-"
         if kind == "export":
             prefix += export_digest + "-"
         write_prefix = prefix + (week + "-" if kind == "cas" else "")
-        trusted = inventory(prefix, kind)
+        with plan_phase(phase):
+            trusted = inventory(prefix, kind)
         plan[kind] = dict(prefix=prefix, write_prefix=write_prefix, keys=trusted,
                           fresh=any(k.startswith(write_prefix) for k in trusted))
     return plan
