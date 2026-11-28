@@ -319,6 +319,36 @@ jobs:
             printf 'jdk=%s\n' "$("$kmp_java_home/bin/java" -version 2>&1 | shasum -a 256 | awk '{print $1}')"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Create smoke simulator
+        id: smoke_simulator
+        if: ${{ needs.plan.outputs.mode == 'smoke' }}
+        shell: bash
+        run: &create_build_simulator |
+          set -euo pipefail
+          simulator_udid="$(python3 scripts/ci_simulator.py \
+            --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB")"
+          printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
+
+      - name: Request smoke simulator boot
+        if: ${{ needs.plan.outputs.mode == 'smoke' }}
+        env:
+          SIMULATOR_UDID: ${{ steps.smoke_simulator.outputs.udid }}
+        run: |
+          python3 - <<'PY'
+          import fcntl, os, subprocess
+          from pathlib import Path
+
+          udid = os.environ["SIMULATOR_UDID"]
+          status = Path(os.environ["RUNNER_TEMP"]) / f"boot-{udid}.status"
+          with status.open("x") as result, status.with_suffix(".log").open("x") as log:
+              # The child inherits the lock on stdout and releases it on exit, even if killed.
+              fcntl.flock(result, fcntl.LOCK_EX)
+              subprocess.Popen(
+                  ["sh", "-c", 'rc=0; xcrun simctl boot "$1" >&2 || rc=$?; echo "$rc"', "boot", udid],
+                  stdin=subprocess.DEVNULL, stdout=result, stderr=log, start_new_session=True,
+              )
+          PY
+
       # The checked-in wrapper verifies the distribution SHA on download.
       # Its distribution survives unrelated Xcode, SDK and KMP cache misses.
       - name: Restore Gradle distribution
@@ -412,16 +442,14 @@ jobs:
 
       - name: Create owned simulator
         id: simulator
+        if: ${{ needs.plan.outputs.mode != 'smoke' }}
         shell: bash
-        run: |
-          set -euo pipefail
-          simulator_udid="$(python3 scripts/ci_simulator.py \
-            --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB")"
-          printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
+        run: *create_build_simulator
 
       # A newly created device is already clean. Never erase or reuse one
       # found in the host's device list: it may belong to another job or seat.
       - name: Boot owned simulator
+        if: ${{ needs.plan.outputs.mode != 'smoke' }}
         shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
@@ -435,7 +463,7 @@ jobs:
         timeout-minutes: 35
         shell: bash
         env:
-          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          SIMULATOR_UDID: ${{ steps.smoke_simulator.outputs.udid || steps.simulator.outputs.udid }}
         run: |
           set -euo pipefail
           mkdir -p "$CI_OUTPUT_ROOT"
@@ -466,11 +494,36 @@ jobs:
             BEID_KMP_BUILD_TYPE=Release \
             build-for-testing
 
+      - name: Check smoke boot request
+        # Join even after a restore or build failure so deletion cannot race boot.
+        if: ${{ always() && steps.smoke_simulator.outputs.udid != '' }}
+        env:
+          SIMULATOR_UDID: ${{ steps.smoke_simulator.outputs.udid }}
+        run: |
+          python3 - <<'PY'
+          import fcntl, os, sys
+          from pathlib import Path
+
+          status = Path(os.environ["RUNNER_TEMP"]) / f"boot-{os.environ['SIMULATOR_UDID']}.status"
+          with status.open() as result:
+              fcntl.flock(result, fcntl.LOCK_SH)
+              code = result.read().strip()
+          if code != "0":
+              print(status.with_suffix(".log").read_text(errors="replace"), file=sys.stderr)
+              sys.exit(f"Simulator boot failed (exit status: {code or 'missing'})")
+          PY
+
+      - name: Wait for smoke simulator readiness
+        if: ${{ needs.plan.outputs.mode == 'smoke' }}
+        env:
+          SIMULATOR_UDID: ${{ steps.smoke_simulator.outputs.udid }}
+        run: xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
       - name: Enumerate built tests and compute shards
         id: enumerate
         shell: bash
         env:
-          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          SIMULATOR_UDID: ${{ steps.smoke_simulator.outputs.udid || steps.simulator.outputs.udid }}
           TEST_MODE: ${{ needs.plan.outputs.mode }}
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
@@ -515,7 +568,7 @@ jobs:
         shell: bash
         env:
           TEST_MODE: ${{ needs.plan.outputs.mode }}
-          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          SIMULATOR_UDID: ${{ steps.smoke_simulator.outputs.udid || steps.simulator.outputs.udid }}
           XCTESTRUN: ${{ steps.enumerate.outputs.xctestrun }}
         run: |
           set -euo pipefail
@@ -665,10 +718,10 @@ jobs:
           retention-days: 14
 
       - name: Delete owned simulator
-        if: ${{ always() && steps.simulator.outputs.udid != '' }}
+        if: ${{ always() && (steps.smoke_simulator.outputs.udid != '' || steps.simulator.outputs.udid != '') }}
         shell: bash
         env:
-          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          SIMULATOR_UDID: ${{ steps.smoke_simulator.outputs.udid || steps.simulator.outputs.udid }}
         run: |
           set -euo pipefail
           xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true

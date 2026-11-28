@@ -132,16 +132,100 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
     def test_every_device_operation_uses_only_the_create_steps_output(self) -> None:
         text = workflow_text()
         creation = step_data(text, "Create owned simulator")
+        early = step_data(text, "Create smoke simulator")
         self.assertEqual(creation["id"], "simulator")
+        self.assertEqual(early["id"], "smoke_simulator")
+        self.assertEqual(early["run"], creation["run"])
         self.assertIn('--name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"', creation["run"])
         self.assertIn('printf \'udid=%s\\n\' "$simulator_udid" >> "$GITHUB_OUTPUT"', creation["run"])
-        for name in ("Boot owned simulator", "Build for testing",
+        self.assertEqual(step_data(text, "Boot owned simulator")["env"]["SIMULATOR_UDID"],
+                         "${{ steps.simulator.outputs.udid }}")
+        for name in ("Request smoke simulator boot", "Check smoke boot request", "Wait for smoke simulator readiness"):
+            self.assertEqual(step_data(text, name)["env"]["SIMULATOR_UDID"],
+                             "${{ steps.smoke_simulator.outputs.udid }}")
+        for name in ("Build for testing", "Enumerate built tests and compute shards",
                      "Test without rebuilding", "Delete owned simulator"):
             with self.subTest(step=name):
                 self.assertEqual(step_data(text, name)["env"]["SIMULATOR_UDID"],
-                                 "${{ steps.simulator.outputs.udid }}")
+                                 "${{ steps.smoke_simulator.outputs.udid || steps.simulator.outputs.udid }}")
         cleanup = step_data(text, "Delete owned simulator")
-        self.assertEqual(cleanup["if"], "${{ always() && steps.simulator.outputs.udid != '' }}")
+        self.assertEqual(cleanup["if"], "${{ always() && (steps.smoke_simulator.outputs.udid != '' || "
+                                        "steps.simulator.outputs.udid != '') }}")
+
+    def test_smoke_boots_before_restores_and_requires_readiness_before_enumeration(self):
+        steps = workflow_data(workflow_text())["jobs"]["build"]["steps"]
+        names = [step.get("name") for step in steps]
+        toolchain = next(i for i, step in enumerate(steps) if step.get("id") == "toolchain")
+        create, boot = "Create smoke simulator", "Request smoke simulator boot"
+        wait, enumerate_tests = "Wait for smoke simulator readiness", "Enumerate built tests and compute shards"
+        self.assertEqual(names[toolchain + 1:toolchain + 4], [create, boot, "Restore Gradle distribution"])
+        join = "Check smoke boot request"
+        self.assertEqual(names[names.index(enumerate_tests) - 3:names.index(enumerate_tests)],
+                         ["Build for testing", join, wait])
+        self.assertEqual(steps[names.index(join)]["if"], "${{ always() && steps.smoke_simulator.outputs.udid != '' }}")
+        full = names.index("Create owned simulator")
+        self.assertEqual(names[full - 1:full + 3], ["Verify XcodeGen pin and generated project",
+                                                   "Create owned simulator", "Boot owned simulator", "Build for testing"])
+        for name in (create, boot, wait):
+            self.assertEqual(steps[names.index(name)]["if"], "${{ needs.plan.outputs.mode == 'smoke' }}")
+        for name in ("Create owned simulator", "Boot owned simulator"):
+            self.assertEqual(steps[names.index(name)]["if"], "${{ needs.plan.outputs.mode != 'smoke' }}")
+        self.assertNotIn("if", steps[names.index(enumerate_tests)])
+        for name in (boot, join, wait):
+            self.assertNotIn("continue-on-error", steps[names.index(name)])
+
+    def test_slow_smoke_boot_can_overlap_work_and_its_exit_status_is_checked(self):
+        text = workflow_text()
+        request = step_data(text, "Request smoke simulator boot")["run"]
+        join = step_data(text, "Check smoke boot request")["run"]
+        wait = step_data(text, "Wait for smoke simulator readiness")["run"]
+        for boot_code, ready_code in ((0, 0), (17, 0), (0, 23)):
+            with self.subTest(boot=boot_code, readiness=ready_code), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                fake = root / "xcrun"
+                fake.write_text(f"#!{sys.executable}\n" + textwrap.dedent("""\
+                    import os, sys, time
+                    from pathlib import Path
+                    root = Path(os.environ["RUNNER_TEMP"])
+                    with (root / "calls").open("a") as log:
+                        print(*sys.argv[1:], file=log)
+                    if sys.argv[2] == "boot":
+                        deadline = time.monotonic() + 8
+                        while not (root / "release-boot").exists():
+                            if time.monotonic() > deadline:
+                                sys.exit(91)
+                            time.sleep(0.02)
+                        sys.exit(int(os.environ["BOOT_EXIT"]))
+                    sys.exit(int(os.environ["READY_EXIT"]))
+                    """))
+                fake.chmod(0o755)
+                env = dict(os.environ, PATH=temp + os.pathsep + os.environ["PATH"],
+                           RUNNER_TEMP=temp, SIMULATOR_UDID="owned", BOOT_EXIT=str(boot_code),
+                           READY_EXIT=str(ready_code))
+
+                def run(command):
+                    return subprocess.run(["bash", "-e", "-c", command], env=env, capture_output=True,
+                                          text=True, timeout=10)
+
+                # The launch step must return before the fake boot is allowed to finish.
+                result = run(request)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual((root / "boot-owned.status").read_bytes(), b"")
+                (root / "release-boot").touch()
+                result = run(join)
+                expected = ["simctl boot owned"]
+                if boot_code:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(f"exit status: {boot_code}", result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(run(wait).returncode, ready_code)
+                    expected.append("simctl bootstatus owned -b")
+                self.assertEqual((root / "calls").read_text().splitlines(), expected)
+
+                # A terminated worker releases the lock without publishing a status.
+                (root / "boot-owned.status").write_text("")
+                self.assertNotEqual(run(join).returncode, 0)
 
     def test_cleanup_deletes_only_owned_udid_even_when_shutdown_fails(self) -> None:
         block = step_data(workflow_text(), "Delete owned simulator")
